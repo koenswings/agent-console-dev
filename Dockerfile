@@ -25,13 +25,3 @@ RUN pnpm setup
 
 # Replace sh by bash so that the terminal window in Docker Desktop starts with bash
 RUN ln -sf /bin/bash /bin/sh
-
-# ------------------------------------------------------------------------------
-# base_with_source
-# ------------------------------------------------------------------------------
-
-FROM base as base_with_source
-
-# Add the source code
-COPY . /console
-WORKDIR /console
