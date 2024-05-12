@@ -1,0 +1,10 @@
+# This file is used by Docker Dev Environment to create the dev container
+services:
+  app:
+    entrypoint:
+    - sleep
+    - infinity
+    build: 
+      context: .
+      target: base
+    init: true
