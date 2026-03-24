@@ -1,5 +1,19 @@
 # TOOLS.md — Console UI Developer
 
+## API Credentials
+
+- `BASE_URL=http://172.18.0.1:8000`
+- `AUTH_TOKEN` — load from `.env` in this directory (gitignored, never committed)
+- `AGENT_NAME=Pixel`
+- `AGENT_ID=bd2b264f-4727-4799-8522-66114cc59a1c`
+- `BOARD_ID=ac508766-e9e3-48a0-b6a5-54c6ffcdc1a3`
+- `WORKSPACE_ROOT=/home/node/workspace`
+- `WORKSPACE_PATH=/home/node/workspace/agents/agent-console-dev`
+- Required tools: `curl`, `jq`
+
+See the **mc-api** shared skill for OpenAPI refresh, discovery policy, and usage examples:
+`/home/node/workspace/skills/mc-api/SKILL.md`
+
 ## Environment
 
 - **Projects root (container):** `/home/node/workspace/`
