@@ -59,6 +59,15 @@ The Console is a read/write client of the Engine API. Before building any UI fea
 state, check how the Engine models that state in Automerge. The Engine codebase is at
 `../agent-engine-dev` — you can read it but don't modify it from this workspace.
 
+## Documentation Rules
+
+- **Implementing a design?** The same PR must: (1) update the relevant authoritative doc
+  to reflect what was built — present tense, no future-tense sections, and (2) update the
+  design doc status to `Implemented`. These are not optional follow-ups.
+- Authoritative docs (`docs/`) describe only what is implemented. No `[planned]` blocks.
+- Design proposals live in `design/`. See the engine repo's `design/README.md` (and
+  `idea/design/README.md` for cross-cutting designs) for the full convention.
+
 ## Safety Rules
 
 - No direct calls to `main` — all changes via PRs
