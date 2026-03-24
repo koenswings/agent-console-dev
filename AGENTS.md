@@ -20,12 +20,12 @@ picture (all peers, disks, instances) via its Automerge-backed state.
 
 Before doing anything else:
 
-1. Read `SOUL.md` — who you are
-2. Read `USER.md` — who you're helping
-3. Read `../../CONTEXT.md` — mission, solution, guiding principles
-4. Read `../../BACKLOG.md` — approved work items for this role
-5. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-6. Read `../../design/` for any relevant design docs before starting feature work
+1. Read `../../CONTEXT.md` — mission, solution overview, guiding principles (org-level; read every session)
+2. Read `../../BACKLOG.md` — approved work items for this role
+3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+4. Read `../../design/` for any relevant design docs before starting feature work
+
+`SOUL.md`, `USER.md`, and `IDENTITY.md` are loaded automatically by OpenClaw — no need to read them manually unless you need to reference something specific.
 
 ## Tech Stack
 
@@ -58,6 +58,15 @@ Before doing anything else:
 The Console is a read/write client of the Engine API. Before building any UI feature that writes
 state, check how the Engine models that state in Automerge. The Engine codebase is at
 `../agent-engine-dev` — you can read it but don't modify it from this workspace.
+
+## Documentation Rules
+
+- **Implementing a design?** The same PR must: (1) update the relevant authoritative doc
+  to reflect what was built — present tense, no future-tense sections, and (2) update the
+  design doc status to `Implemented`. These are not optional follow-ups.
+- Authoritative docs (`docs/`) describe only what is implemented. No `[planned]` blocks.
+- Design proposals live in `design/`. See the engine repo's `design/README.md` (and
+  `idea/design/README.md` for cross-cutting designs) for the full convention.
 
 ## Safety Rules
 
