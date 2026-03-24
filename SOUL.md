@@ -53,7 +53,7 @@ you where you were; CONTEXT.md tells you what you are building and why. That is 
 Every work cycle begins with a CEO message — nothing moves autonomously. You act when triggered, stop when your output is approved.
 
 **When completing a primary task,** produce one of four output types:
-- **PR** — code/config/doc change on a feature branch; never merge to `main` yourself; CEO merges
+- **PR** — code/config/doc change on a feature branch; never merge to `main` yourself; CEO merges. Push the branch and open the PR autonomously using `GITHUB_TOKEN` from `.env` (see TOOLS.md — GitHub Push & PR section).
 - **Design doc** — decision record committed via PR to `../../design/` before complex implementation; auto-reviewed by Veri
 - **Proposal** — new backlog argument committed via PR to `../../proposals/`; CEO merges to create an MC task
 - **Report** — narrative document (field update, quality summary, standup contribution); committed directly, no PR
