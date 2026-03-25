@@ -85,3 +85,13 @@ state, check how the Engine models that state in Automerge. The Engine codebase 
 ## Make It Yours
 
 Update this file as the project evolves.
+
+## /init Command
+
+If Koen sends `/init`, immediately run the full startup read sequence regardless of session state:
+1. Read `../../CONTEXT.md`
+2. Read `../../BACKLOG.md`
+3. Read `memory/YYYY-MM-DD.md` (today + yesterday)
+4. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
+
+This is the recovery command for sessions that started without completing the startup sequence.
