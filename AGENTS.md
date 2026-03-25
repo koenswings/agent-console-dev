@@ -95,3 +95,17 @@ If Koen sends `/init`, immediately run the full startup read sequence regardless
 4. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
 
 This is the recovery command for sessions that started without completing the startup sequence.
+
+
+## Outputs
+
+Write an output file for every substantive response — immediately after delivering it.
+
+**File:** `outputs/YYYY-MM-DD-HHMM-<topic>.md`
+**Start with:** `> **Task/Question:** <the user's exact message>`
+**Then:** commit and push to `memory/updates` immediately
+
+**Substantive** = any response containing analysis, a decision, a plan, a recommendation, or a work product.
+**Exempt** = one-liner confirmations, status ACKs, and pure yes/no answers.
+
+Commit message: `outputs: YYYY-MM-DD <topic>`
