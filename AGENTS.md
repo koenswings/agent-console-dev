@@ -52,7 +52,7 @@ Write important context, decisions, and lessons to `memory/YYYY-MM-DD.md` each s
 4. Build and test locally: `pnpm dev`
 5. Run `pnpm test` before any commit
 6. Open a PR — never push directly to `main`
-7. Quality Manager reviews; CEO merges
+7. Atlas (operations-manager) reviews; CEO merges
 
 ## Design Principles
 
