@@ -1,7 +1,7 @@
 # TOOLS.md — Pixel, Console UI Developer
 
 ## API Credentials
-- `BASE_URL=http://172.18.0.1:8000`
+- `BASE_URL=http://mission-control-backend:8000`
 - `AUTH_TOKEN` — load from `.env` in this directory (gitignored, never committed)
 - `AGENT_NAME=Pixel`
 - `AGENT_ID=bd2b264f-4727-4799-8522-66114cc59a1c`
@@ -12,7 +12,7 @@
 
 ## API Credentials
 
-- `BASE_URL=http://172.18.0.1:8000`
+- `BASE_URL=http://mission-control-backend:8000`
 - `AUTH_TOKEN` — load from `.env` in this directory (gitignored, never committed)
 - `AGENT_NAME=Pixel`
 - `AGENT_ID=bd2b264f-4727-4799-8522-66114cc59a1c`
@@ -34,7 +34,7 @@ See the **mc-api** shared skill for OpenAPI refresh, discovery policy, and usage
 
 ```bash
 mkdir -p api
-curl -fsS "http://172.18.0.1:8000/openapi.json" -o api/openapi.json
+curl -fsS "http://mission-control-backend:8000/openapi.json" -o api/openapi.json
 jq -r '
   .paths | to_entries[] as $p
   | $p.value | to_entries[]
