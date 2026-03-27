@@ -88,7 +88,22 @@ Update this file as the project evolves.
 
 ## Cross-Agent Requests
 
-To request a review, answer, opinion, or feasibility check from another agent, create a task on their MC board tagged `cross-agent`. Use a typed title prefix: `Review:`, `Question:`, `Opinion:`, or `Feasibility:`. The description must be fully self-contained. End with: `⚠ This is a depth-1 cross-agent request. Do not create further tasks.`
+To request a review, answer, opinion, or feasibility check from another agent, create a task on their MC board:
+- **Title:** `[From <YourName>] <Type>: <short description>` — the `[From X]` prefix is mandatory; it is the primary identification signal visible on the Kanban board
+- **Type:** `Review` | `Question` | `Opinion` | `Feasibility`
+- **Tag:** `cross-agent`
+- **Description** must open with:
+  ```
+  **From:** <YourName> <emoji>
+  **Type:** <type>
+  **Date:** YYYY-MM-DD
+
+  ---
+
+  <fully self-contained body: what to do, where to find it, what to respond with>
+
+  ⚠ Depth-1 cross-agent task. Do not create further tasks.
+  ```
 
 | Agent | When to use | Board ID |
 |-------|------------|----------|
