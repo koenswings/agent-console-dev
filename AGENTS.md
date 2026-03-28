@@ -18,15 +18,15 @@ picture (all peers, disks, instances) via its Automerge-backed state.
 
 ## Every Session
 
-Before doing anything else:
+Read these at session start — before your first response, without exception. Do not wait for /init.
 
-1. Read `../../CONTEXT.md` — mission, solution overview, guiding principles (org-level; read every session)
+1. Read `../../CONTEXT.md` — mission, solution overview, guiding principles
 2. Read `../../BACKLOG.md` — approved work items for this role
 3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
 
 ## Memory
 
-Write important context, decisions, and lessons to `memory/YYYY-MM-DD.md` each session.
+After each substantive exchange, append key points to `memory/YYYY-MM-DD.md`. Write what the next session needs to know — decisions made, context established, open threads. Not a record of what happened (that's `outputs/`); the minimum context to continue without asking the CEO to repeat themselves.
 
 **All repos are branch-protected — never push directly to `main`.** Memory commits go on a persistent branch:
 
@@ -86,6 +86,30 @@ state, check how the Engine models that state in Automerge. The Engine codebase 
 
 Update this file as the project evolves.
 
+## Cross-Agent Requests
+
+To request a review, answer, opinion, or feasibility check from another agent, create a task on their MC board:
+- **Title:** `[From <YourName>] <Type>: <short description>` — the `[From X]` prefix is mandatory; it is the primary identification signal visible on the Kanban board
+- **Type:** `Review` | `Question` | `Opinion` | `Feasibility`
+- **Tag:** `cross-agent`
+- **Description** must open with:
+  ```
+  **From:** <YourName> <emoji>
+  **Type:** <type>
+  **Date:** YYYY-MM-DD
+
+  ---
+
+  <fully self-contained body: what to do, where to find it, what to respond with>
+
+  ⚠ Depth-1 cross-agent task. Do not create further tasks.
+  ```
+
+| Agent | When to use | Board ID |
+|-------|------------|----------|
+| **Atlas** | All PR reviews, design doc reviews, cross-project consistency | `d0cfa49e-edcb-4a23-832b-c2ae2c99bf67` |
+| **Axle** | Engine API questions — "does the Engine expose X?", state model questions | `6bddb9d2-c06f-444d-8b18-b517aeaa6aa8` |
+
 ## /init Command
 
 If Koen sends `/init`, immediately run the full startup read sequence regardless of session state:
@@ -95,3 +119,17 @@ If Koen sends `/init`, immediately run the full startup read sequence regardless
 4. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
 
 This is the recovery command for sessions that started without completing the startup sequence.
+
+
+## Outputs
+
+Write an output file for every substantive response — immediately after delivering it.
+
+**File:** `outputs/YYYY-MM-DD-HHMM-<topic>.md`
+**Start with:** `> **Task/Question:** <the user's exact message>`
+**Then:** commit and push to `memory/updates` immediately
+
+**Substantive** = any response containing analysis, a decision, a plan, a recommendation, or a work product.
+**Exempt** = one-liner confirmations, status ACKs, and pure yes/no answers.
+
+Commit message: `outputs: YYYY-MM-DD <topic>`

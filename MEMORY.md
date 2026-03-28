@@ -105,3 +105,9 @@ You have a **dedicated Telegram group** for direct communication with the CEO.
 - **CEO Telegram ID:** `8320646468`
 - **Your group:** IDEA - Pixel · **Chat ID:** `-5187034968`
 - **How it works:** The OpenClaw gateway binds your group to this agent exclusively via a `peer` filter in `openclaw.json`. Messages in your group go only to you; other agents have their own separate groups.
+
+## Communication Standards
+
+**No markdown tables or ASCII art tables in Telegram.** Both render poorly (Mac desktop / iPhone).
+Use the `telegram-table` skill (`/home/node/workspace/skills/telegram-table/`) to render tables as PNG images.
+For simple label/value lists, use plain bullets instead.
