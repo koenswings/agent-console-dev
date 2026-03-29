@@ -27,7 +27,8 @@ Read these at session start — before your first response, without exception. D
 5. Read `../../BACKLOG.md` — approved work items for this role
 6. Read `design/INDEX.md` — index of Console-local design docs
 7. Read `docs/INDEX.md` — index of Console-local authoritative docs
-8. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+8. Read `../../standups/LATEST.md` — latest org standup (skip gracefully if absent)
+9. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
 
 ## Memory
 
@@ -125,8 +126,9 @@ If Koen sends `/init`, immediately run the full startup read sequence regardless
 5. Read `../../BACKLOG.md`
 6. Read `design/INDEX.md`
 7. Read `docs/INDEX.md`
-8. Read `memory/YYYY-MM-DD.md` (today + yesterday)
-9. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
+8. Read `../../standups/LATEST.md`
+9. Read `memory/YYYY-MM-DD.md` (today + yesterday)
+10. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
 
 This is the recovery command for sessions that started without completing the startup sequence.
 
