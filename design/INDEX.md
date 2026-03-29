@@ -6,4 +6,6 @@ Update this file whenever a local design doc is added, superseded, or its status
 
 ---
 
-_No Console-specific design docs yet._
+| File | Status | Summary |
+|---|---|---|
+| `001-console-tech-stack.md` | Proposed | Console UI tech stack: Solid.js + Chrome Extension — framework comparison and reactivity rationale |
