@@ -145,3 +145,5 @@ Write an output file for every substantive response — immediately after delive
 **Exempt** = one-liner confirmations, status ACKs, and pure yes/no answers.
 
 Commit message: `outputs: YYYY-MM-DD <topic>`
+**When reporting a PR or task, always include the clickable URL** inline — GitHub PR link, MC task URL, or both. The CEO reviews on mobile; one tap to open beats searching every time.
+
