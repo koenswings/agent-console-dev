@@ -5,24 +5,19 @@ import InstanceList from './components/InstanceList';
 import { setStoreSignal } from './store/signals';
 import { setSendCommandFn } from './store/commands';
 import { createMockConnection } from './mock/mockStore';
+import { readStoredHostname } from './components/Onboarding';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
-
-const STORAGE_KEY_HOSTNAME = 'engineHostname';
-
-// ---------------------------------------------------------------------------
-// Detect whether a hostname has been configured
-// ---------------------------------------------------------------------------
-const getStoredHostname = (): string => localStorage.getItem(STORAGE_KEY_HOSTNAME) ?? '';
 
 // ---------------------------------------------------------------------------
 // App component
 // ---------------------------------------------------------------------------
 const App: Component = () => {
-  const [hostname, setHostname] = createSignal(getStoredHostname());
+  const [hostname, setHostname] = createSignal(readStoredHostname());
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
   const [selection, setSelection] = createSignal<Selection>({ type: 'network', id: '' });
+  const [showSettings, setShowSettings] = createSignal(false);
 
   // Initialise store connection once the hostname is known
   const initConnection = async (host: string) => {
@@ -39,10 +34,8 @@ const App: Component = () => {
       connection = await createEngineConnection();
     }
 
-    // Bridge connection signals to the module-level signals
     setSendCommandFn(connection.sendCommand);
 
-    // Keep module-level signals in sync with the connection
     createEffect(() => {
       const s = connection.store();
       setStore(s);
@@ -55,15 +48,15 @@ const App: Component = () => {
   };
 
   onMount(async () => {
-    // Also try chrome.storage.local (extension mode)
-    let host = getStoredHostname();
+    // Also check chrome.storage.local in extension mode
+    let host = readStoredHostname();
     if (!host) {
       try {
-        const result = await chrome.storage.local.get(STORAGE_KEY_HOSTNAME);
-        host = (result[STORAGE_KEY_HOSTNAME] as string) ?? '';
+        const result = await chrome.storage.local.get('engineHostname');
+        host = (result['engineHostname'] as string) ?? '';
         if (host) setHostname(host);
       } catch {
-        // Not in extension context
+        // not in extension context
       }
     }
 
@@ -73,15 +66,14 @@ const App: Component = () => {
   });
 
   const handleOnboardingComplete = async () => {
-    const host = getStoredHostname();
+    const host = readStoredHostname();
     setHostname(host);
+    setShowSettings(false);
     await initConnection(host);
   };
 
-  const displayHostname = () => {
-    const host = hostname();
-    return host || 'Not connected';
-  };
+  // Show onboarding if: no hostname configured, OR settings explicitly opened
+  const shouldShowOnboarding = () => !hostname() || showSettings();
 
   return (
     <div class="app">
@@ -96,17 +88,27 @@ const App: Component = () => {
           />
           <span>
             {connected()
-              ? displayHostname()
+              ? hostname()
               : hostname()
               ? 'Connecting…'
               : 'Not configured'}
           </span>
         </div>
+        {/* Settings button — always visible once a hostname is configured */}
+        <Show when={hostname()}>
+          <button
+            class="status-bar__settings-btn"
+            title="Change engine settings"
+            onClick={() => setShowSettings((v) => !v)}
+          >
+            {showSettings() ? '✕' : '⚙'}
+          </button>
+        </Show>
       </div>
 
       {/* ── Main content ──────────────────────────────────────────── */}
       <Show
-        when={hostname()}
+        when={!shouldShowOnboarding()}
         fallback={<Onboarding onComplete={handleOnboardingComplete} />}
       >
         <div class="main-layout">

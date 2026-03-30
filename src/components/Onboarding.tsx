@@ -1,7 +1,23 @@
-import { createSignal, type Component } from 'solid-js';
+import { createSignal, onMount, type Component } from 'solid-js';
 
-const STORAGE_KEY_HOSTNAME = 'engineHostname';
-const STORAGE_KEY_STORE_URL = 'storeUrl';
+export const STORAGE_KEY_HOSTNAME = 'engineHostname';
+export const STORAGE_KEY_STORE_URL = 'storeUrl';
+
+export const readStoredHostname = (): string =>
+  localStorage.getItem(STORAGE_KEY_HOSTNAME) ?? '';
+
+export const readStoredStoreUrl = (): string =>
+  localStorage.getItem(STORAGE_KEY_STORE_URL) ?? '';
+
+export const clearStoredSettings = (): void => {
+  localStorage.removeItem(STORAGE_KEY_HOSTNAME);
+  localStorage.removeItem(STORAGE_KEY_STORE_URL);
+  try {
+    chrome.storage.local.remove([STORAGE_KEY_HOSTNAME, STORAGE_KEY_STORE_URL]);
+  } catch {
+    // not in extension context
+  }
+};
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -12,6 +28,29 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   const [storeUrl, setStoreUrl] = createSignal('');
   const [saving, setSaving] = createSignal(false);
 
+  // Pre-fill with whatever is already stored
+  onMount(async () => {
+    let h = readStoredHostname();
+    let u = readStoredStoreUrl();
+
+    // Also check chrome.storage.local (extension mode)
+    if (!h) {
+      try {
+        const result = await chrome.storage.local.get([
+          STORAGE_KEY_HOSTNAME,
+          STORAGE_KEY_STORE_URL,
+        ]);
+        h = (result[STORAGE_KEY_HOSTNAME] as string) ?? '';
+        u = (result[STORAGE_KEY_STORE_URL] as string) ?? '';
+      } catch {
+        // not in extension context
+      }
+    }
+
+    setHostname(h);
+    setStoreUrl(u);
+  });
+
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
     const h = hostname().trim();
@@ -19,20 +58,26 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
     setSaving(true);
     try {
-      // Persist to localStorage (web mode fallback)
+      // Persist to localStorage (web mode)
       localStorage.setItem(STORAGE_KEY_HOSTNAME, h);
       if (storeUrl().trim()) {
         localStorage.setItem(STORAGE_KEY_STORE_URL, storeUrl().trim());
+      } else {
+        localStorage.removeItem(STORAGE_KEY_STORE_URL);
       }
 
       // Persist to chrome.storage.local (extension mode)
       try {
         await chrome.storage.local.set({ [STORAGE_KEY_HOSTNAME]: h });
         if (storeUrl().trim()) {
-          await chrome.storage.local.set({ [STORAGE_KEY_STORE_URL]: storeUrl().trim() });
+          await chrome.storage.local.set({
+            [STORAGE_KEY_STORE_URL]: storeUrl().trim(),
+          });
+        } else {
+          await chrome.storage.local.remove(STORAGE_KEY_STORE_URL);
         }
       } catch {
-        // Not in extension context — localStorage is already set above
+        // not in extension context
       }
 
       props.onComplete();
@@ -73,7 +118,8 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
           <div class="form-field">
             <label class="form-field__label" for="store-url">
-              Store URL <span style="color: var(--colour-text-dim)">(optional)</span>
+              Store URL{' '}
+              <span style="color: var(--colour-text-dim)">(optional)</span>
             </label>
             <input
               id="store-url"
@@ -95,7 +141,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             type="submit"
             disabled={!hostname().trim() || saving()}
           >
-            {saving() ? 'Connecting…' : 'Save & Connect'}
+            {saving() ? 'Saving…' : 'Save & Connect'}
           </button>
         </form>
       </div>
