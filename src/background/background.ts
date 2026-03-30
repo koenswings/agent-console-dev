@@ -1,55 +1,62 @@
 /**
  * IDEA Console — Chrome Extension background service worker (Manifest V3).
  *
- * Handles three display modes, switchable at runtime via the settings screen:
- *   - sidePanel   (default) — docked panel on the right of the browser
- *   - popup                 — small popup window on toolbar icon click
- *   - window                — standalone Chrome window (app-style)
+ * Three display modes, switchable at runtime via the settings screen:
+ *   - sidePanel  (default) — Chrome opens the panel natively on icon click
+ *   - popup                — standard extension popup
+ *   - window               — standalone Chrome window
  */
 
 type DisplayMode = 'sidePanel' | 'popup' | 'window';
 const STORAGE_KEY_MODE = 'displayMode';
 const CONSOLE_URL = 'index.html';
 
-const applyMode = (mode: DisplayMode): void => {
-  if (mode === 'popup') {
-    // Popup mode: let Chrome handle opening; disable onClicked
-    chrome.action.setPopup({ popup: CONSOLE_URL }).catch(console.error);
-  } else {
-    // Side panel or window: clear popup so onClicked fires
-    chrome.action.setPopup({ popup: '' }).catch(console.error);
+const applyMode = async (mode: DisplayMode): Promise<void> => {
+  if (mode === 'sidePanel') {
+    // Let Chrome open the side panel directly on icon click — most reliable,
+    // does not depend on the service worker being awake.
+    await chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: true })
+      .catch(console.error);
+    await chrome.action.setPopup({ popup: '' }).catch(console.error);
+  } else if (mode === 'popup') {
+    await chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: false })
+      .catch(console.error);
+    await chrome.action.setPopup({ popup: CONSOLE_URL }).catch(console.error);
+  } else if (mode === 'window') {
+    await chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: false })
+      .catch(console.error);
+    await chrome.action.setPopup({ popup: '' }).catch(console.error);
   }
 };
 
-// Apply the current mode on install / service worker restart
-chrome.runtime.onInstalled.addListener(async () => {
+// Apply mode on install and on every service worker startup
+const initMode = async (): Promise<void> => {
   const result = await chrome.storage.local.get(STORAGE_KEY_MODE);
   const mode: DisplayMode = (result[STORAGE_KEY_MODE] as DisplayMode) ?? 'sidePanel';
-  applyMode(mode);
+  await applyMode(mode);
 
-  // Ensure side panel is configured
-  chrome.sidePanel
+  await chrome.sidePanel
     .setOptions({ enabled: true, path: CONSOLE_URL })
     .catch(console.error);
+};
+
+chrome.runtime.onInstalled.addListener(() => {
+  initMode();
 });
 
-// Re-apply mode when service worker restarts (not just on install)
-(async () => {
-  const result = await chrome.storage.local.get(STORAGE_KEY_MODE);
-  const mode: DisplayMode = (result[STORAGE_KEY_MODE] as DisplayMode) ?? 'sidePanel';
-  applyMode(mode);
-})();
+// Run on every service worker startup (not just install)
+initMode();
 
-// Handle toolbar icon click (fires only when popup is NOT set)
-chrome.action.onClicked.addListener(async (tab) => {
+// Handle toolbar icon click — only fires for 'window' mode
+// (sidePanel uses setPanelBehavior; popup uses setPopup)
+chrome.action.onClicked.addListener(async () => {
   const result = await chrome.storage.local.get(STORAGE_KEY_MODE);
   const mode: DisplayMode = (result[STORAGE_KEY_MODE] as DisplayMode) ?? 'sidePanel';
 
-  if (mode === 'sidePanel') {
-    if (tab.windowId) {
-      chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.error);
-    }
-  } else if (mode === 'window') {
+  if (mode === 'window') {
     chrome.windows
       .create({
         url: chrome.runtime.getURL(CONSOLE_URL),
@@ -60,7 +67,6 @@ chrome.action.onClicked.addListener(async (tab) => {
       })
       .catch(console.error);
   }
-  // 'popup' mode is handled by setPopup above — onClicked won't fire in that case
 });
 
 // React to mode changes saved from the settings screen
