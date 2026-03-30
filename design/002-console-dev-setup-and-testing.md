@@ -69,14 +69,35 @@ See `design/001-console-tech-stack.md` for full rationale.
 
 ---
 
+## Pi Path
+
+The Console project lives at:
+
+```
+/home/pi/idea/agents/agent-console-dev
+```
+
+All commands in this document should be run from that directory.
+
 ## Development Workflow
 
 ### Prerequisites
 
 ```bash
-cd /home/node/workspace/agents/agent-console-dev
+cd /home/pi/idea/agents/agent-console-dev
 pnpm install
 ```
+
+> **Note:** If `node_modules` was previously created by a different user (e.g. by the
+> sandbox agent), the `pi` user may get a permission error when Vite tries to write to
+> `node_modules/.vite/`. Fix with:
+> ```bash
+> sudo chown -R pi:pi node_modules
+> ```
+> Or do a clean install:
+> ```bash
+> rm -rf node_modules && pnpm install
+> ```
 
 ### Running in dev mode (web app)
 
@@ -91,8 +112,10 @@ accessible at:
 http://<pi-tailscale-ip>:5173
 ```
 
-Open this URL in Chrome on any machine connected to the Tailscale network. No extension
-install required. Hot-reload is active — changes in `src/` reflect immediately.
+The Tailscale IP for the Pi can be found in the Vite startup output (the `100.x.x.x`
+network address). Open this URL in Chrome on any machine connected to the Tailscale
+network. No extension install required. Hot-reload is active — changes in `src/`
+reflect immediately.
 
 **By default, dev mode connects to the mock Engine** (see Testing section below).
 To connect to the real Engine, set the engine hostname in the onboarding screen or
@@ -249,6 +272,8 @@ This step requires Koen to:
 
 ## Commands Reference
 
+Run all commands from `/home/pi/idea/agents/agent-console-dev`.
+
 | Command | What it does |
 |---|---|
 | `pnpm install` | Install dependencies |
@@ -259,6 +284,9 @@ This step requires Koen to:
 | `pnpm test` | Run all unit + component tests (Vitest) |
 | `pnpm test:e2e` | Run Playwright E2E tests headlessly on Pi |
 | `pnpm typecheck` | TypeScript strict type check |
+
+> **Permissions note:** If you see `EACCES: permission denied` on `node_modules/.vite/`,
+> run `sudo chown -R pi:pi node_modules` then retry.
 
 ---
 
