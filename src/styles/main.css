@@ -10,28 +10,28 @@
   /* Layout */
   --sidebar-width: 280px;
 
-  /* Colours */
-  --colour-bg: #0f172a;
-  --colour-surface: #1e293b;
-  --colour-surface-hover: #273449;
-  --colour-border: #334155;
-  --colour-text: #e2e8f0;
-  --colour-text-muted: #94a3b8;
-  --colour-text-dim: #64748b;
+  /* Colours — light theme (default) */
+  --colour-bg: #f8fafc;
+  --colour-surface: #ffffff;
+  --colour-surface-hover: #f1f5f9;
+  --colour-border: #e2e8f0;
+  --colour-text: #0f172a;
+  --colour-text-muted: #475569;
+  --colour-text-dim: #94a3b8;
 
   /* Status colours */
-  --colour-running: #22c55e;
-  --colour-starting: #3b82f6;
-  --colour-stopped: #eab308;
-  --colour-docked: #eab308;
-  --colour-error: #ef4444;
+  --colour-running: #16a34a;
+  --colour-starting: #2563eb;
+  --colour-stopped: #ca8a04;
+  --colour-docked: #ca8a04;
+  --colour-error: #dc2626;
   --colour-undocked: #9ca3af;
-  --colour-pauzed: #f97316;
+  --colour-pauzed: #ea580c;
 
   /* Button colours */
-  --colour-btn-start: #22c55e;
-  --colour-btn-stop: #ef4444;
-  --colour-btn-open: #3b82f6;
+  --colour-btn-start: #16a34a;
+  --colour-btn-stop: #dc2626;
+  --colour-btn-open: #2563eb;
   --colour-btn-eject: #94a3b8;
 
   /* Typography */
@@ -43,6 +43,32 @@
   /* Spacing */
   --radius: 4px;
   --radius-sm: 2px;
+}
+
+/* Dark theme — applied when the OS/browser prefers dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colour-bg: #0f172a;
+    --colour-surface: #1e293b;
+    --colour-surface-hover: #273449;
+    --colour-border: #334155;
+    --colour-text: #e2e8f0;
+    --colour-text-muted: #94a3b8;
+    --colour-text-dim: #64748b;
+
+    --colour-running: #22c55e;
+    --colour-starting: #3b82f6;
+    --colour-stopped: #eab308;
+    --colour-docked: #eab308;
+    --colour-error: #ef4444;
+    --colour-undocked: #9ca3af;
+    --colour-pauzed: #f97316;
+
+    --colour-btn-start: #22c55e;
+    --colour-btn-stop: #ef4444;
+    --colour-btn-open: #3b82f6;
+    --colour-btn-eject: #94a3b8;
+  }
 }
 
 /* --------------------------------------------------------
