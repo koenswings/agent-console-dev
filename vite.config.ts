@@ -12,6 +12,7 @@ export default defineConfig({
   server: {
     host: true, // binds to 0.0.0.0 for Tailscale access
     port: 5173,
+    allowedHosts: true, // allow all hostnames (Tailscale, local IP, .local)
   },
   build: {
     outDir: 'dist',
