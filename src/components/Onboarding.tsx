@@ -1,7 +1,10 @@
-import { createSignal, onMount, type Component } from 'solid-js';
+import { createSignal, onMount, Show, type Component } from 'solid-js';
 
 export const STORAGE_KEY_HOSTNAME = 'engineHostname';
 export const STORAGE_KEY_STORE_URL = 'storeUrl';
+export const STORAGE_KEY_MODE = 'displayMode';
+
+export type DisplayMode = 'sidePanel' | 'popup' | 'window';
 
 export const readStoredHostname = (): string =>
   localStorage.getItem(STORAGE_KEY_HOSTNAME) ?? '';
@@ -19,6 +22,14 @@ export const clearStoredSettings = (): void => {
   }
 };
 
+const isExtension = (): boolean => {
+  try {
+    return typeof chrome !== 'undefined' && !!chrome.storage?.local;
+  } catch {
+    return false;
+  }
+};
+
 interface OnboardingProps {
   onComplete: () => void;
 }
@@ -26,22 +37,27 @@ interface OnboardingProps {
 const Onboarding: Component<OnboardingProps> = (props) => {
   const [hostname, setHostname] = createSignal('');
   const [storeUrl, setStoreUrl] = createSignal('');
+  const [displayMode, setDisplayMode] = createSignal<DisplayMode>('sidePanel');
   const [saving, setSaving] = createSignal(false);
+  const [inExtension, setInExtension] = createSignal(false);
 
   // Pre-fill with whatever is already stored
   onMount(async () => {
     let h = readStoredHostname();
     let u = readStoredStoreUrl();
 
-    // Also check chrome.storage.local (extension mode)
-    if (!h) {
+    if (isExtension()) {
+      setInExtension(true);
       try {
         const result = await chrome.storage.local.get([
           STORAGE_KEY_HOSTNAME,
           STORAGE_KEY_STORE_URL,
+          STORAGE_KEY_MODE,
         ]);
-        h = (result[STORAGE_KEY_HOSTNAME] as string) ?? '';
-        u = (result[STORAGE_KEY_STORE_URL] as string) ?? '';
+        if (!h) h = (result[STORAGE_KEY_HOSTNAME] as string) ?? '';
+        if (!u) u = (result[STORAGE_KEY_STORE_URL] as string) ?? '';
+        const mode = (result[STORAGE_KEY_MODE] as DisplayMode) ?? 'sidePanel';
+        setDisplayMode(mode);
       } catch {
         // not in extension context
       }
@@ -58,7 +74,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
     setSaving(true);
     try {
-      // Persist to localStorage (web mode)
+      // Persist hostname + store URL to localStorage (web mode)
       localStorage.setItem(STORAGE_KEY_HOSTNAME, h);
       if (storeUrl().trim()) {
         localStorage.setItem(STORAGE_KEY_STORE_URL, storeUrl().trim());
@@ -66,18 +82,23 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         localStorage.removeItem(STORAGE_KEY_STORE_URL);
       }
 
-      // Persist to chrome.storage.local (extension mode)
-      try {
-        await chrome.storage.local.set({ [STORAGE_KEY_HOSTNAME]: h });
-        if (storeUrl().trim()) {
-          await chrome.storage.local.set({
-            [STORAGE_KEY_STORE_URL]: storeUrl().trim(),
-          });
-        } else {
-          await chrome.storage.local.remove(STORAGE_KEY_STORE_URL);
+      // Persist all settings to chrome.storage.local (extension mode)
+      if (isExtension()) {
+        try {
+          const toStore: Record<string, string> = {
+            [STORAGE_KEY_HOSTNAME]: h,
+            [STORAGE_KEY_MODE]: displayMode(),
+          };
+          if (storeUrl().trim()) {
+            toStore[STORAGE_KEY_STORE_URL] = storeUrl().trim();
+          }
+          await chrome.storage.local.set(toStore);
+          if (!storeUrl().trim()) {
+            await chrome.storage.local.remove(STORAGE_KEY_STORE_URL);
+          }
+        } catch {
+          // not in extension context
         }
-      } catch {
-        // not in extension context
       }
 
       props.onComplete();
@@ -135,6 +156,57 @@ const Onboarding: Component<OnboardingProps> = (props) => {
               Paste the Automerge document URL from the Engine
             </span>
           </div>
+
+          {/* Display mode — extension only */}
+          <Show when={inExtension()}>
+            <div class="form-field">
+              <span class="form-field__label">Display mode</span>
+              <span class="form-field__hint" style="margin-bottom: 8px">
+                Takes effect next time you click the toolbar icon.
+              </span>
+              <div class="mode-options">
+                <label class="mode-option">
+                  <input
+                    type="radio"
+                    name="displayMode"
+                    value="sidePanel"
+                    checked={displayMode() === 'sidePanel'}
+                    onChange={() => setDisplayMode('sidePanel')}
+                  />
+                  <span class="mode-option__label">Side panel</span>
+                  <span class="mode-option__desc">
+                    Docked to the right of the browser. Stays open across tabs.
+                  </span>
+                </label>
+                <label class="mode-option">
+                  <input
+                    type="radio"
+                    name="displayMode"
+                    value="popup"
+                    checked={displayMode() === 'popup'}
+                    onChange={() => setDisplayMode('popup')}
+                  />
+                  <span class="mode-option__label">Popup</span>
+                  <span class="mode-option__desc">
+                    Opens on icon click, closes when you click away.
+                  </span>
+                </label>
+                <label class="mode-option">
+                  <input
+                    type="radio"
+                    name="displayMode"
+                    value="window"
+                    checked={displayMode() === 'window'}
+                    onChange={() => setDisplayMode('window')}
+                  />
+                  <span class="mode-option__label">Standalone window</span>
+                  <span class="mode-option__desc">
+                    Opens as a separate Chrome window. App-style.
+                  </span>
+                </label>
+              </div>
+            </div>
+          </Show>
 
           <button
             class="onboarding__submit"
