@@ -84,6 +84,10 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  /* Min dimensions break the circular height:100% in Chrome popup context.
+     Popup has no parent, so 100% = 0; min-height forces a usable size. */
+  min-height: 480px;
+  min-width: 380px;
 }
 
 body {
@@ -102,6 +106,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 480px;
+  min-width: 380px;
 }
 
 /* --------------------------------------------------------
