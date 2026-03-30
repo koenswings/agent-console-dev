@@ -81,23 +81,21 @@ All commands in this document should be run from that directory.
 
 ## Development Workflow
 
-### Prerequisites
+### First-time setup (run once)
 
 ```bash
 cd /home/pi/idea/agents/agent-console-dev
-pnpm install
+pnpm run setup
 ```
 
-> **Note:** If `node_modules` was previously created by a different user (e.g. by the
-> sandbox agent), the `pi` user may get a permission error when Vite tries to write to
-> `node_modules/.vite/`. Fix with:
-> ```bash
-> sudo chown -R pi:pi node_modules
-> ```
-> Or do a clean install:
-> ```bash
-> rm -rf node_modules && pnpm install
-> ```
+`pnpm run setup` runs `sudo chown -R pi:pi .` (fixes any files created by the sandbox
+agent with the wrong owner) then `pnpm install`. Run this once after the first clone or
+after any permission error. Normal `pnpm install` is sufficient after that.
+
+> **Why permissions can go wrong:** The sandbox agent runs as a different OS user. If it
+> runs `pnpm build` or `pnpm install` during development, the created files are owned by
+> that user, and the `pi` user gets `EACCES` errors. `pnpm run setup` resets ownership in
+> one command.
 
 ### Running in dev mode (web app)
 
@@ -276,17 +274,19 @@ Run all commands from `/home/pi/idea/agents/agent-console-dev`.
 
 | Command | What it does |
 |---|---|
-| `pnpm install` | Install dependencies |
+| `pnpm run setup` | Fix permissions + install deps (run once after first clone) |
+| `pnpm install` | Install dependencies (after setup is done) |
 | `pnpm dev` | Start dev server at `0.0.0.0:5173` (mock Engine) |
 | `VITE_ENGINE_HOST=<host> pnpm dev` | Dev server connected to real Engine |
 | `pnpm build` | Build extension to `dist/` |
-| `pnpm package` | Build + zip + serve at port 8080 for download |
+| `pnpm package` | Build + zip to `/tmp/idea-console-pkg/extension.zip` + serve on port 8080 |
 | `pnpm test` | Run all unit + component tests (Vitest) |
 | `pnpm test:e2e` | Run Playwright E2E tests headlessly on Pi |
 | `pnpm typecheck` | TypeScript strict type check |
 
-> **Permissions note:** If you see `EACCES: permission denied` on `node_modules/.vite/`,
-> run `sudo chown -R pi:pi node_modules` then retry.
+After running `pnpm package`, navigate to `http://<pi-tailscale-ip>:8080/extension.zip`
+to download the built extension. The root URL (`/`) shows a directory listing — click
+`extension.zip` from there if you prefer.
 
 ---
 
