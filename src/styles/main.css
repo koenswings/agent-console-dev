@@ -148,6 +148,37 @@ body {
   background: var(--colour-error);
 }
 
+.status-bar__demo-badge {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--colour-stopped);
+  letter-spacing: 0.05em;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.toggle-row__label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--colour-text);
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--colour-btn-open);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .status-bar__settings-btn {
   margin-left: auto;
   background: none;
