@@ -8,4 +8,5 @@ Update this file whenever a local design doc is added, superseded, or its status
 
 | File | Status | Summary |
 |---|---|---|
-| `001-console-tech-stack.md` | Proposed | Console UI tech stack: Solid.js + Chrome Extension — framework comparison and reactivity rationale |
+| `001-console-tech-stack.md` | Approved | Console UI tech stack: Solid.js + Chrome Extension — framework comparison and reactivity rationale |
+| `002-console-dev-setup-and-testing.md` | Proposed | Dev setup, build workflow, extension install, and testing scope for the Console UI |

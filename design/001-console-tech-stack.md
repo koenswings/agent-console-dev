@@ -1,6 +1,6 @@
 # Console UI — Technology Stack Decision
 
-**Status:** Proposed  
+**Status:** Approved  
 **Author:** Pixel (Console UI Developer)  
 **Date:** 2026-03-29
 
@@ -165,6 +165,33 @@ with the low-bandwidth, low-end-hardware requirement.
 | Offline-first | ✅ | ✅ | ✅ | ✅ | ⚠️ |
 | Ecosystem maturity | Medium | High | Medium | High | High |
 | Fit for real-time updates | ✅ Best | ⚠️ Acceptable | ✅ Good | ❌ Fragile | ❌ |
+
+---
+
+## UI Component Framework
+
+**Decision: No component library — custom CSS only.**
+
+The Console UI requires a small, well-defined set of visual elements: a two-pane layout,
+a tree list, status indicator dots, buttons, and a single onboarding dialog. This does
+not justify a component library dependency.
+
+**Rationale:**
+- Every library adds bundle weight. On low-end hardware, payload size is a first-class
+  constraint.
+- The Solid.js component library ecosystem is young. Dependency risk outweighs the benefit
+  for a UI of this complexity.
+- Custom CSS is fully auditable, has no CDN dependency, and requires no extra build step.
+- The design principle is "keep it minimal" — a component library conflicts with this
+  from day one.
+
+A small set of project-local utility CSS classes (layout, status colours, tree
+indentation, typography) covers all visual needs for v1.
+
+**If this decision should be revisited:**
+[Kobalte](https://kobalte.dev) is the best current option in the Solid.js ecosystem —
+headless (unstyled), accessible, signal-native. Appropriate if drag-and-drop or complex
+keyboard navigation is added in a later version.
 
 ---
 
