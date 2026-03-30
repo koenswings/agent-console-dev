@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "package": "pnpm build && rm -rf /tmp/idea-console-pkg && mkdir /tmp/idea-console-pkg && zip -r /tmp/idea-console-pkg/extension.zip dist/ && echo '\\n  Download: http://<pi-tailscale-ip>:8080/extension.zip\\n' && cd /tmp/idea-console-pkg && python3 -m http.server 8080",
-    "setup": "sudo chown -R $(whoami):$(whoami) . && pnpm install",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"

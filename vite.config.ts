@@ -6,6 +6,9 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [solid(), wasm(), topLevelAwait()],
+  // Store Vite's dep-optimisation cache in /tmp so it is always writable regardless
+  // of which OS user runs the build (sandbox agent vs Pi user share the same filesystem).
+  cacheDir: '/tmp/idea-console-vite-cache',
   server: {
     host: true, // binds to 0.0.0.0 for Tailscale access
     port: 5173,

@@ -81,21 +81,12 @@ All commands in this document should be run from that directory.
 
 ## Development Workflow
 
-### First-time setup (run once)
+### Prerequisites
 
 ```bash
 cd /home/pi/idea/agents/agent-console-dev
-pnpm run setup
+pnpm install
 ```
-
-`pnpm run setup` runs `sudo chown -R pi:pi .` (fixes any files created by the sandbox
-agent with the wrong owner) then `pnpm install`. Run this once after the first clone or
-after any permission error. Normal `pnpm install` is sufficient after that.
-
-> **Why permissions can go wrong:** The sandbox agent runs as a different OS user. If it
-> runs `pnpm build` or `pnpm install` during development, the created files are owned by
-> that user, and the `pi` user gets `EACCES` errors. `pnpm run setup` resets ownership in
-> one command.
 
 ### Running in dev mode (web app)
 
@@ -274,8 +265,7 @@ Run all commands from `/home/pi/idea/agents/agent-console-dev`.
 
 | Command | What it does |
 |---|---|
-| `pnpm run setup` | Fix permissions + install deps (run once after first clone) |
-| `pnpm install` | Install dependencies (after setup is done) |
+| `pnpm install` | Install dependencies |
 | `pnpm dev` | Start dev server at `0.0.0.0:5173` (mock Engine) |
 | `VITE_ENGINE_HOST=<host> pnpm dev` | Dev server connected to real Engine |
 | `pnpm build` | Build extension to `dist/` |
