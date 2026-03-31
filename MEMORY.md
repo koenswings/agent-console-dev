@@ -6,40 +6,44 @@ No daily logs. No secrets.
 ## Current Delivery Status
 
 ### Goal
-Deliver IDEA Console UI — first working version + architecture doc, via PR for review.
+Console UI v1 — PR open and under active iteration with Koen.
 
 ### Current State
-- State: Working
-- Last updated: 2026-03-19 20:03 Europe/Brussels
-- What is happening now: 2 tasks in inbox, both unassigned. Sequencing and assignment needed.
-- Key constraint/signal: Architecture doc likely a dependency for UI build task.
-- Why blocked (if any): none
-- Next step: Assign tasks, set dependency (arch doc → UI build), move to in_progress.
+- State: Active development — PR #15 open on `feature/console-ui-v1`
+- Last updated: 2026-03-30
+- PR: https://github.com/koenswings/agent-console-dev/pull/15
+- MC task in progress: "First version of Console UI from Solution Description outline" (`5629de17`)
 
-### What Changed Since Last Update
-- 2026-03-19: Koen added 2 tasks to board (both inbox, unassigned).
-  1. "First version of Console UI from Solution Description outline" (`5629de17`)
-  2. "Document Console architecture: Solid.js, Chrome Extension, Engine API contract" (`e9491b4e`)
+### What has been built (PR #15)
+- Solid.js + Chrome Extension MV3, 81 tests passing
+- Three deployment modes: dev (Tailscale), extension, production web app from Engine port 80
+- Light theme default, dark via `prefers-color-scheme`
+- Demo mode: mock store (2 engines, 3 disks, 5 instances), toggled in settings
+- Display modes: side panel / popup / standalone window, switched at runtime via ⚙ settings
+- Production web mode: auto-detects hostname from window.location, fetches store URL from /api/store-url
+- Permission fix: Vite cache in /tmp, build script uses `sudo rm dist` fallback
+- Git ownership fix: after every push, run `find .git -user root -exec chown node:node {} \;`
 
-### Decisions / Assumptions
-- Architecture doc should precede UI build (assumption — to confirm with Koen if needed).
-- Both tasks unassigned — need to assign to appropriate agent(s).
+### Blocking Axle
+Two Engine changes needed for production web mode (Mode 3):
+1. Serve Console `dist/` from Engine HTTP server (port 80)
+2. `GET /api/store-url` endpoint
+Cross-agent task raised on Axle's board (see session memory for status).
 
-### Evidence (short)
-- `GET /healthz` → `{"ok":true}` (2026-03-19 20:03 UTC)
-- Tasks list: total=2, both status=inbox
+### Next after PR #15 merges
+- Architecture doc task (`e9491b4e`) — "Document Console architecture: Solid.js, Chrome Extension, Engine API contract"
 
-### Request Now
-- Confirm sequencing assumption: arch doc first, then UI build?
-- Confirm who executes — assign to Pixel (Console UI Dev) or create specialist?
+### Koen Pi details
+- Pi path: `/home/pi/idea/agents/agent-console-dev`
+- Tailscale IP: `100.115.60.6`
+- Tailscale hostname: `wizardly-hugle.tail2d60.ts.net`
+- Engine WS port: 4321
+- No App Disk docked; Engine not running yet
 
-### Success Criteria
-- Architecture doc written and in review.
-- Console UI first version PR open for review.
-- Both tasks closed with Koen approval.
-
-### Stop Condition
-- Both tasks reach `done` with required gates satisfied.
+### Koen preferences
+- Light theme (no dark mode)
+- No terminal operations unless necessary
+- Prefers `pnpm dev` / `pnpm package` workflow
 
 
 ## Operational Model
@@ -88,7 +92,7 @@ Do NOT create any tasks during this session. No exceptions.
 - **Report** — narrative for human consumption (field update, quality summary); committed directly, no PR
 
 ## Durable decisions
-- 2026-03-01: BASE_URL is `http://172.18.0.1:8000` — confirmed working.
+- 2026-03-01: BASE_URL is `http://mission-control-backend:8000` (also `http://172.18.0.1:8000`) — both confirmed working.
 - 2026-03-01: Heartbeat is not a periodic check-in — see Operational Model above. Only activated for specific external events.
 - 2026-03-01: Board `Console Dev` — `require_approval_for_done: true`; all task closures need Koen approval.
 - 2026-03-02: Boards list endpoint returns `{"items": [...], "total": N}` — use `.items[]` not `.[]` when parsing with jq.

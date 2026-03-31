@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "IDEA Console",
+  "version": "0.1.0",
+  "description": "Real-time operator dashboard for the IDEA Engine network",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "action": {
+    "default_title": "Open IDEA Console"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "sidePanel",
+    "windows"
+  ]
+}
