@@ -6,4 +6,6 @@ Update this file whenever an authoritative doc is added or significantly revised
 
 ---
 
-_No Console-specific authoritative docs yet._
+| Doc | Description | Status |
+|---|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Console architecture: Solid.js components, Chrome Extension integration, Engine API contract | Current |
