@@ -6,6 +6,7 @@ import { setStoreSignal } from './store/signals';
 import { setSendCommandFn } from './store/commands';
 import { createMockConnection } from './mock/mockStore';
 import { readStoredHostname, readStoredDemoMode } from './components/Onboarding';
+import { isProductionWebMode } from './store/engine';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 
@@ -36,11 +37,20 @@ const App: Component = () => {
   };
 
   onMount(async () => {
+    if (isProductionWebMode()) {
+      // Served from the Engine — hostname is the URL hostname, no config needed
+      const host = window.location.hostname;
+      setHostname(host);
+      setDemo(false);
+      setReady(true);
+      await initConnection();
+      return;
+    }
+
     const host = await readStoredHostname();
     setHostname(host);
     setReady(true);
 
-    // Connect if demo mode OR hostname is configured
     const isDemo = await readStoredDemoMode();
     if (isDemo || host) {
       await initConnection();
