@@ -265,8 +265,32 @@ export const MOCK_STORE: Store = {
 // ---------------------------------------------------------------------------
 // createMockConnection — returns a StoreConnection backed by the in-memory mock
 // ---------------------------------------------------------------------------
+const DEMO_USERDB_KEY = 'ideaConsole_demoUserDB';
+
+function loadPersistedUserDB(): Store['userDB'] {
+  try {
+    const raw = localStorage.getItem(DEMO_USERDB_KEY);
+    if (raw) return JSON.parse(raw) as Store['userDB'];
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function persistUserDB(userDB: Store['userDB']): void {
+  try {
+    localStorage.setItem(DEMO_USERDB_KEY, JSON.stringify(userDB));
+  } catch {
+    // ignore — e.g. extension context without localStorage
+  }
+}
+
 export function createMockConnection(): StoreConnection {
-  const [store, setStore] = createSignal<Store | null>({ ...MOCK_STORE });
+  const initialStore: Store = {
+    ...MOCK_STORE,
+    userDB: loadPersistedUserDB(),  // restore operators across reloads
+  };
+  const [store, setStore] = createSignal<Store | null>(initialStore);
   const [connected] = createSignal(true);
   const commandLog: Array<{ engineId: string; command: string }> = [];
 
@@ -297,6 +321,8 @@ export function createMockConnection(): StoreConnection {
       // Deep clone so mutations don't affect the previous snapshot
       const copy = JSON.parse(JSON.stringify(prev)) as Store;
       fn(copy);
+      // Persist userDB so operators survive page reloads in demo mode
+      persistUserDB(copy.userDB ?? {});
       return copy;
     });
   };
