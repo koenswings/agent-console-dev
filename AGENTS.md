@@ -98,29 +98,19 @@ state, check how the Engine models that state in Automerge. The Engine codebase 
 
 Update this file as the project evolves.
 
-## Cross-Agent Requests
+## Cross-Agent Communication
 
-To request a review, answer, opinion, or feasibility check from another agent, create a task on their MC board:
-- **Title:** `[From <YourName>] <Type>: <short description>` — the `[From X]` prefix is mandatory; it is the primary identification signal visible on the Kanban board
-- **Type:** `Review` | `Question` | `Opinion` | `Feasibility`
-- **Tag:** `cross-agent`
-- **Description** must open with:
-  ```
-  **From:** <YourName> <emoji>
-  **Type:** <type>
-  **Date:** YYYY-MM-DD
+All cross-agent communication goes through Koen. Do not attempt to message another agent directly.
 
-  ---
+**To send a message to another agent** (question, review request, opinion, or response to something you received):
 
-  <fully self-contained body: what to do, where to find it, what to respond with>
+Send Koen a message in your own Telegram group:
 
-  ⚠ Depth-1 cross-agent task. Do not create further tasks.
-  ```
+> 📨 **For [AgentName]:** [your message — self-contained, include all context the recipient needs]
 
-| Agent | When to use | Board ID |
-|-------|------------|----------|
-| **Atlas** | All PR reviews, design doc reviews, cross-project consistency | `d0cfa49e-edcb-4a23-832b-c2ae2c99bf67` |
-| **Axle** | Engine API questions — "does the Engine expose X?", state model questions | `6bddb9d2-c06f-444d-8b18-b517aeaa6aa8` |
+Koen reads it and forwards it manually. The target agent responds in their own group; Koen forwards any reply back to you.
+
+**Do not create MC board tasks for cross-agent communication.** That mechanism is reserved for a future phase.
 
 ## /init Command
 
