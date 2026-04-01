@@ -1,0 +1,82 @@
+import { createSignal, type Component } from 'solid-js';
+import { login } from '../store/auth';
+import type { Store } from '../types/store';
+
+interface LoginFormProps {
+  store: Store | null;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+const LoginForm: Component<LoginFormProps> = (props) => {
+  const [username, setUsername] = createSignal('');
+  const [password, setPassword] = createSignal('');
+  const [error, setError] = createSignal('');
+  const [loading, setLoading] = createSignal(false);
+
+  const handleSubmit = async (e: Event) => {
+    e.preventDefault();
+    if (!props.store) return;
+
+    setError('');
+    setLoading(true);
+
+    const ok = await login(username(), password(), props.store);
+    setLoading(false);
+
+    if (ok) {
+      props.onSuccess();
+    } else {
+      setError('Invalid username or password.');
+    }
+  };
+
+  return (
+    <div class="modal-overlay" onClick={props.onCancel}>
+      <div class="modal" onClick={(e) => e.stopPropagation()}>
+        <div class="modal__header">
+          <span class="modal__title">Operator Login</span>
+          <button class="modal__close" onClick={props.onCancel}>✕</button>
+        </div>
+
+        <form class="modal__form" onSubmit={handleSubmit}>
+          <label class="form-field">
+            <span class="form-field__label">Username</span>
+            <input
+              class="form-field__input"
+              type="text"
+              autocomplete="username"
+              value={username()}
+              onInput={(e) => setUsername(e.currentTarget.value)}
+              required
+            />
+          </label>
+
+          <label class="form-field">
+            <span class="form-field__label">Password</span>
+            <input
+              class="form-field__input"
+              type="password"
+              autocomplete="current-password"
+              value={password()}
+              onInput={(e) => setPassword(e.currentTarget.value)}
+              required
+            />
+          </label>
+
+          {error() && <p class="form-error">{error()}</p>}
+
+          <button
+            class="btn btn--primary"
+            type="submit"
+            disabled={loading()}
+          >
+            {loading() ? 'Logging in…' : 'Log in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default LoginForm;

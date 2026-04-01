@@ -90,7 +90,7 @@ export interface Instance {
 }
 
 // ---------------------------------------------------------------------------
-// User — mirrors agent-engine-dev/src/data/User.ts (to be added by Axle)
+// User — mirrors agent-engine-dev/src/data/User.ts
 // Operators only — anonymous users are not stored.
 // ---------------------------------------------------------------------------
 export type UserID = string;
