@@ -5,16 +5,21 @@ deploying offline school computers to rural African schools.
 
 ## This Project
 
-The Console UI is the operator-facing interface for the Engine network. It gives a real-time view
-of all connected engines, inserted App Disks, and running app instances across the network — and
-lets operators send commands to manage them.
+The Console UI is the primary user interface for IDEA's offline school computers. It serves two
+audiences with two distinct modes in a single application:
+
+- **Users** (students, teachers) — browse available apps and open them with one click. No login
+  required. This is the default experience when anyone opens the Console.
+- **Operators** (authenticated users) — manage the system: start/stop instances, eject disks,
+  monitor engine health. Operators log in from within the Console, elevating their session from
+  user mode to operator mode.
 
 Two delivery targets:
 - **Web app** — served locally from the engine, accessible on the school's LAN
 - **Chrome Extension** — for operators who want a persistent panel in their browser
 
 The Console communicates with a single Engine via its API. The Engine provides the full network
-picture (all peers, disks, instances) via its Automerge-backed state.
+picture (all peers, disks, instances, users) via its Automerge-backed state.
 
 ## Every Session
 

@@ -232,6 +232,19 @@ const brokenAppInstance: Instance = {
 };
 
 // ---------------------------------------------------------------------------
+// Mock operator user
+// ---------------------------------------------------------------------------
+const MOCK_OPERATOR_ID = 'operator-001';
+
+const mockOperator = {
+  id: MOCK_OPERATOR_ID,
+  username: 'admin',
+  passwordHash: '$2b$10$mockhashmockhashmockhashmockhashmo', // not a real hash
+  role: 'operator' as const,
+  created: ONE_HOUR_AGO,
+};
+
+// ---------------------------------------------------------------------------
 // Assemble the mock Store
 // ---------------------------------------------------------------------------
 export const MOCK_STORE: Store = {
@@ -257,6 +270,9 @@ export const MOCK_STORE: Store = {
     [INST_WIKIPEDIA_ID]: wikipediaInstance,
     [INST_EMPTY_ID]: emptyDiskInstance,
     [INST_BROKEN_ID]: brokenAppInstance,
+  },
+  userDB: {
+    [MOCK_OPERATOR_ID]: mockOperator,
   },
 };
 
