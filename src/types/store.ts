@@ -90,6 +90,22 @@ export interface Instance {
 }
 
 // ---------------------------------------------------------------------------
+// User — mirrors agent-engine-dev/src/data/User.ts (to be added by Axle)
+// Operators only — anonymous users are not stored.
+// ---------------------------------------------------------------------------
+export type UserID = string;
+export type Username = string;
+export type PasswordHash = string; // bcrypt hash — never plaintext
+
+export interface User {
+  id: UserID;
+  username: Username;
+  passwordHash: PasswordHash;
+  role: 'operator';
+  created: Timestamp;
+}
+
+// ---------------------------------------------------------------------------
 // Store — mirrors agent-engine-dev/src/data/Store.ts
 // ---------------------------------------------------------------------------
 export interface Store {
@@ -97,4 +113,5 @@ export interface Store {
   diskDB: Record<DiskID, Disk>;
   appDB: Record<AppID, App>;
   instanceDB: Record<InstanceID, Instance>;
+  userDB: Record<UserID, User>;
 }
