@@ -14,12 +14,14 @@
   "dependencies": {
     "@automerge/automerge-repo": "^2.2.0",
     "@automerge/automerge-repo-network-websocket": "^2.2.0",
+    "bcryptjs": "^3.0.3",
     "solid-js": "^1.9.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^6.6.0",
+    "@types/bcryptjs": "^3.0.0",
     "@types/chrome": "^0.0.277",
     "@types/node": "^22.0.0",
     "jsdom": "^25.0.1",

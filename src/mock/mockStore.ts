@@ -15,6 +15,7 @@ export interface StoreConnection {
   store: Accessor<Store | null>;
   connected: Accessor<boolean>;
   sendCommand: (engineId: string, command: string) => void;
+  changeDoc: (fn: (doc: Store) => void) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +306,17 @@ export function createMockConnection(): StoreConnection {
     });
   };
 
-  return { store, connected, sendCommand };
+  const changeDoc = (fn: (doc: Store) => void): void => {
+    setStore((prev) => {
+      if (!prev) return prev;
+      // Deep clone so mutations don't affect the previous snapshot
+      const copy = JSON.parse(JSON.stringify(prev)) as Store;
+      fn(copy);
+      return copy;
+    });
+  };
+
+  return { store, connected, sendCommand, changeDoc };
 }
 
 // ---------------------------------------------------------------------------

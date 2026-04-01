@@ -14,6 +14,9 @@ importers:
       '@automerge/automerge-repo-network-websocket':
         specifier: ^2.2.0
         version: 2.5.4
+      bcryptjs:
+        specifier: ^3.0.3
+        version: 3.0.3
       solid-js:
         specifier: ^1.9.3
         version: 1.9.12
@@ -27,6 +30,9 @@ importers:
       '@testing-library/jest-dom':
         specifier: ^6.6.0
         version: 6.9.1
+      '@types/bcryptjs':
+        specifier: ^3.0.0
+        version: 3.0.0
       '@types/chrome':
         specifier: ^0.0.277
         version: 0.0.277
@@ -657,6 +663,10 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/bcryptjs@3.0.0':
+    resolution: {integrity: sha512-WRZOuCuaz8UcZZE4R5HXTco2goQSI2XxjGY3hbM/xDvwmqFWd4ivooImsMx65OKM6CtNKbnZ5YL+YwAwK7c1dg==}
+    deprecated: This is a stub types definition. bcryptjs provides its own type definitions, so you do not need this installed.
+
   '@types/chrome@0.0.277':
     resolution: {integrity: sha512-qoTgBcDWblSsX+jvFnpUlLUE3LAuOhZfBh9MyMWMQHDsQiYVgBvdZWu9COrdB9+aNnInEyXcFgfc2HE16sdSYQ==}
 
@@ -750,6 +760,10 @@ packages:
   baseline-browser-mapping@2.10.12:
     resolution: {integrity: sha512-qyq26DxfY4awP2gIRXhhLWfwzwI+N5Nxk6iQi8EFizIaWIjqicQTE4sLnZZVdeKPRcVNoJOkkpfzoIYuvCKaIQ==}
     engines: {node: '>=6.0.0'}
+    hasBin: true
+
+  bcryptjs@3.0.3:
+    resolution: {integrity: sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==}
     hasBin: true
 
   browserslist@4.28.1:
@@ -1823,6 +1837,10 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.0
 
+  '@types/bcryptjs@3.0.0':
+    dependencies:
+      bcryptjs: 3.0.3
+
   '@types/chrome@0.0.277':
     dependencies:
       '@types/filesystem': 0.0.36
@@ -1917,6 +1935,8 @@ snapshots:
   base-x@4.0.1: {}
 
   baseline-browser-mapping@2.10.12: {}
+
+  bcryptjs@3.0.3: {}
 
   browserslist@4.28.1:
     dependencies:
