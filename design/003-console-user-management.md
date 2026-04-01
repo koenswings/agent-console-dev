@@ -43,11 +43,10 @@ system simply starts unauthenticated.
 The Console opens in user mode when no operator session is active.
 
 **What the user sees:**
-- A grid of app cards — one per running instance on the network
-- Each card: app title, short description, category, and an **Open** button
-- Clicking **Open** navigates to the app at `http://<engine-hostname>:<port>`
+- A grid of app cards — one per instance on the network
+- Running instances: card with title, description, category, and an **Open** button
+- Stopped/unavailable instances: same card, greyed out, Open button disabled
 - A small **Log in** link in the status bar (unobtrusive — not the focus of the UI)
-- Apps that are not running are either hidden or shown as unavailable (TBD — see Open Questions)
 
 **What the user cannot see or do:**
 - Engine/disk/instance management controls
@@ -61,7 +60,7 @@ When an operator authenticates, the Console switches to operator mode in the sam
 **What the operator sees:**
 - Full current Console: NetworkTree, InstanceList, instance controls (start/stop/eject)
 - A **Log out** button in the status bar
-- Operator identity shown in the status bar
+- Operator username shown in the status bar
 
 **Switching back:** Logging out returns to user mode. The browser/extension does not need to
 reload — mode switch is reactive via a Solid.js auth signal.
@@ -94,11 +93,11 @@ export interface User {
 
 ```ts
 export interface Store {
-  engineDB:  Record<EngineID,  Engine>;
-  diskDB:    Record<DiskID,    Disk>;
-  appDB:     Record<AppID,     App>;
+  engineDB:   Record<EngineID,   Engine>;
+  diskDB:     Record<DiskID,     Disk>;
+  appDB:      Record<AppID,      App>;
   instanceDB: Record<InstanceID, Instance>;
-  userDB:    Record<UserID,   User>;   // NEW
+  userDB:     Record<UserID,     User>;   // NEW
 }
 ```
 
@@ -109,46 +108,35 @@ Engine network automatically.
 
 ## Authentication Flow
 
-Authentication uses a lightweight REST API on the Engine's HTTP server (port 80).
-The Automerge WebSocket is read-only from the Console side — auth state is managed separately.
+Authentication is **entirely local** — no API call, no server session, no token round-trip.
+The Store already contains `userDB` with bcrypt password hashes. The Console authenticates
+client-side by comparing the entered password against the stored hash.
+
+This is the correct design for an offline-first system:
+- Works even if the Engine's HTTP server is unreachable (only Automerge WebSocket needed)
+- Requires no additional server-side infrastructure
+- Operator accounts replicate automatically via the Store
 
 ### Login
 
-```
-POST /api/auth/login
-Body: { "username": "admin", "password": "..." }
-Response 200: { "token": "<session-token>", "user": { "id", "username", "role" } }
-Response 401: { "error": "Invalid credentials" }
-```
+1. Operator enters username and password in the `LoginForm`
+2. Console looks up the username in `userDB` (from the live Store signal)
+3. Console runs `bcrypt.compare(enteredPassword, user.passwordHash)` client-side
+   using `bcryptjs` (pure JavaScript, no native bindings needed)
+4. If match: set `currentUser` signal, persist to `chrome.storage.local` / `localStorage`
+   as `operatorSession: { userId, username }`
+5. Solid.js reactivity switches the UI to operator mode immediately — no page reload
 
-The Console stores the token in `chrome.storage.local` (extension) or `localStorage` (web),
-keyed as `operatorToken`. On subsequent page loads the Console checks for a stored token and
-calls `GET /api/auth/me` to restore the session without re-entering credentials.
+### Session restore on page load
 
-### Token validation
-
-```
-GET /api/auth/me
-Header: Authorization: Bearer <token>
-Response 200: { "id", "username", "role" }
-Response 401: token invalid or expired
-```
+On mount, Console reads `operatorSession` from storage. If present, it cross-checks `userId`
+against `userDB` in the current Store. If the user still exists: session restored silently.
+If the user has been removed from `userDB`: session cleared, returns to user mode.
 
 ### Logout
 
-```
-POST /api/auth/logout
-Header: Authorization: Bearer <token>
-Response 200: {}
-```
-
-Clears the stored token from local storage. Console returns to user mode.
-
-### Token handling in management requests
-
-All management API calls (future REST API for start/stop/eject, if added) include the
-`Authorization: Bearer <token>` header. The Automerge command write-back (`engine.commands[]`)
-will also need to be gated behind operator auth — see Engine requirements below.
+Clear `operatorSession` from storage and reset `currentUser` to null. The UI returns to user
+mode reactively.
 
 ---
 
@@ -158,39 +146,39 @@ will also need to be gated behind operator auth — see Engine requirements belo
 
 | Component | Purpose |
 |---|---|
-| `AppBrowser` | User mode: grid of app cards with Open buttons |
-| `AppCard` | Single app card (title, description, category, Open button) |
-| `LoginForm` | Username/password form shown as overlay or inline panel |
+| `AppBrowser` | User mode: grid of app cards (running + greyed-out stopped) |
+| `AppCard` | Single app card — title, description, category, Open button (disabled if not running) |
+| `LoginForm` | Username/password form shown as modal overlay |
 
 ### New store module
 
-`src/store/auth.ts` — manages auth state:
-- `authToken` signal (string | null)
-- `currentUser` signal (User | null)
-- `login(username, password)` — calls `POST /api/auth/login`, stores token
-- `logout()` — calls `POST /api/auth/logout`, clears token
-- `restoreSession()` — calls `GET /api/auth/me` on mount if token is present
+`src/store/auth.ts` — manages auth state entirely client-side:
+- `currentUser` signal (`User | null`)
+- `login(username, password, store)` — bcrypt compare against `userDB`, sets signal + storage
+- `logout()` — clears signal + storage
+- `restoreSession(store)` — on mount, validates stored session against current `userDB`
 - `isOperator()` derived signal — `currentUser() !== null`
 
 ### Updated `App.tsx`
 
 ```
 onMount:
-  restoreSession()  →  sets currentUser if token is valid
+  restoreSession(store)  →  sets currentUser if stored session is valid
 
 Render:
-  if !ready → null
+  if !ready              → null
   if shouldShowOnboarding → <Onboarding />
-  else if isOperator() → <OperatorLayout />   (current NetworkTree + InstanceList)
-  else → <AppBrowser />                        (new user-mode layout)
+  else if isOperator()   → <OperatorLayout />   (current NetworkTree + InstanceList)
+  else                   → <AppBrowser />        (new user-mode layout)
 ```
 
-The mode switch is fully reactive — no page reload required when login/logout fires.
+The mode switch is fully reactive — login/logout updates the signal and the UI follows
+immediately.
 
 ### Status bar
 
-- User mode: `IDEA Console` title + connection indicator + **Log in** link (small)
-- Operator mode: `IDEA Console` title + connection indicator + username + **Log out** button
+- User mode: `IDEA Console` + connection indicator + small **Log in** link
+- Operator mode: `IDEA Console` + connection indicator + username + **Log out** button
 - Demo badge shown in both modes when active
 
 ---
@@ -201,65 +189,52 @@ _Document only — do not involve Axle yet._
 
 ### 1. Add `userDB` to the Store
 
-Extend the Automerge document schema:
+Extend the Automerge document schema with `userDB: Record<UserID, User>`.
 
-```ts
-userDB: Record<UserID, User>
-```
+`User` fields: `id`, `username`, `passwordHash` (bcrypt, cost factor >= 10), `role: 'operator'`,
+`created: Timestamp`.
 
-`User` fields: `id`, `username`, `passwordHash` (bcrypt), `role: 'operator'`, `created: Timestamp`.
+Password hashes are safe to include in the replicated Store — plaintext passwords never enter
+the document.
 
-The `userDB` replicates across the network with the rest of the Store. Password hashes are
-safe to replicate — plaintext passwords never enter the Store.
+### 2. User management (Engine-side CLI or admin tool)
 
-### 2. Auth endpoints on Engine HTTP server (port 80)
+Since the Console itself does not write to `userDB` in v1 (no "create operator" UI), the
+Engine must provide a way to manage operator accounts:
 
-| Method | Path | Auth required | Description |
-|---|---|---|---|
-| POST | `/api/auth/login` | No | Validate credentials, return session token |
-| POST | `/api/auth/logout` | Bearer token | Invalidate session |
-| GET | `/api/auth/me` | Bearer token | Return current user from token |
+- Create operator: `engine user add <username>` — prompts for password, writes bcrypt hash
+  to `userDB`
+- Remove operator: `engine user remove <username>`
+- Reset password: `engine user reset-password <username>`
 
-Session tokens can be JWTs (stateless) or server-side sessions — Axle's choice, but JWT is
-preferred to avoid shared session state across Engine nodes.
+First-time setup: Engine should create a default `admin` account on first boot with a
+randomised password printed to the console log. Must be changed on first use.
 
-### 3. Protect management write paths
+### 3. No auth API endpoints required
 
-Once auth is in place, the Engine's command processing should reject `engine.commands[]`
-mutations from unauthenticated Automerge clients. The mechanism for this is TBD — the
-Automerge protocol itself does not carry auth headers, so this may require an out-of-band
-check or a separate auth-gated REST endpoint for management commands.
+Authentication is done client-side by the Console reading `userDB` from the Store. The Engine
+does not need to expose any `/api/auth/*` endpoints. This simplifies both sides.
 
-**Note:** This is a security hardening requirement, not a blocker for the first iteration.
-For v1, command write-back without auth is acceptable given the school LAN context.
+### 4. Protect management write paths (future)
 
-### 4. Serve `userDB` in the Automerge Store
-
-The Console reads `userDB` from the Store for display purposes (e.g. showing the logged-in
-username). No Console-side write to `userDB` — user management (add/remove operators) is an
-Engine-side admin operation for v1.
+For v1, command write-back via Automerge (`engine.commands[]`) is unauthenticated — acceptable
+on a trusted school LAN. In a future hardening pass, the Engine should verify that command
+mutations originate from an authenticated client. The mechanism (e.g. signed mutations or a
+separate auth-gated REST command endpoint) is TBD and not a blocker for v1.
 
 ---
 
 ## Open Questions
 
-1. **Stopped apps in user mode** — Should apps with `status !== 'Running'` be hidden entirely,
-   or shown as greyed-out ("not available right now")? Greyed-out is more transparent but may
-   confuse students. Recommendation: hide for v1.
+1. **Multi-Engine user sync** — `userDB` replicates via Automerge, so an operator account
+   created on one Engine appears on all peers. Is that intended? Assumed yes.
 
-2. **Session token TTL** — How long should an operator session last? Suggestion: 8 hours
-   (school day), with an option to extend. Schools with multiple shifts may want shorter TTL.
+2. **Session TTL** — Should the stored `operatorSession` expire? Suggestion: no automatic
+   expiry for v1 (school IT coordinators don't want to re-login daily). Can be added later.
 
-3. **Password reset** — No internet means no email reset flow. Operators should be able to
-   reset another operator's password via CLI on the Engine host, or via a local admin tool.
-   This is an Engine-side concern.
-
-4. **Multi-Engine user sync** — `userDB` replicates via Automerge, so an operator account
-   created on one Engine will appear on all peers. Is that the intended behaviour? Assumed yes.
-
-5. **First-time setup** — How is the first operator account created? Suggestion: Engine creates
-   a default admin account on first boot with a known default password, printed to the console
-   log. Must be changed on first login.
+3. **App browser scope** — Does `AppBrowser` show instances from all Engines on the network,
+   or only the Engine the Console is connected to? Assumed: all (from `instanceDB`, which
+   contains the full network view via Automerge sync).
 
 ---
 
@@ -267,11 +242,11 @@ Engine-side admin operation for v1.
 
 | Phase | Work | Owner |
 |---|---|---|
-| 1 | Engine: add `userDB` to Store, auth endpoints | Axle |
-| 1 | Console: update `Store` type, add `auth.ts`, update `App.tsx` routing | Pixel |
-| 2 | Console: build `AppBrowser` + `AppCard` components | Pixel |
-| 2 | Console: `LoginForm` component + status bar updates | Pixel |
-| 3 | Engine: protect management write paths | Axle |
-| 3 | Console: attach token to management calls | Pixel |
+| 1 | Engine: add `userDB` to Store, CLI user management, default admin account | Axle |
+| 1 | Console: `src/store/auth.ts`, update `App.tsx` routing | Pixel |
+| 2 | Console: `AppBrowser` + `AppCard` components (running + greyed-out stopped) | Pixel |
+| 2 | Console: `LoginForm` + status bar auth controls | Pixel |
+| 3 | Engine: protect management write paths (hardening, future) | Axle |
 
-Phase 1 and 2 can proceed in parallel once Axle confirms the auth API contract.
+Phase 1 (Console side) can start once the `userDB` shape is agreed — no need to wait for Axle
+to implement it, as the mock store already includes a stub `userDB`.
