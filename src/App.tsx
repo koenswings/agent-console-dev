@@ -101,9 +101,10 @@ const App: Component = () => {
     return showSettings() || (!hostname() && !demo());
   };
 
-  // Show first-time setup if: store loaded, no operators yet, not in demo
+  // Show first-time setup if: store loaded and no operators exist yet
+  // Applies in demo mode too — demo starts with empty userDB to show the real first-run flow
   const shouldShowFirstTimeSetup = () => {
-    if (!ready() || demo()) return false;
+    if (!ready()) return false;
     return isFirstTimeSetup(store());
   };
 
