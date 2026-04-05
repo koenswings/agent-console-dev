@@ -27,57 +27,57 @@ This design covers the Console side of all three.
 
 ## Engine Dependencies
 
-This design requires four additions from Axle. These are blockers before implementation.
+All four dependencies confirmed by Axle (2026-04-04). Axle will ship a standalone store-fields
+PR to unblock Console implementation before the full backup implementation lands.
 
-### 1. `Disk.diskType` field
+### 1. `Disk.diskTypes` field
 
 The Console needs to classify each docked disk without reading the filesystem. The Engine sets
 this during `processDisk`:
 
 ```typescript
-export type DiskType = 'app' | 'backup' | 'empty';
+export type DiskType = 'app' | 'backup' | 'empty' | 'upgrade' | 'files';
 
 export interface Disk {
   // ... existing fields ...
-  diskType: DiskType;         // set by Engine during processDisk
-  backupConfig: BackupDiskConfig | null;  // non-null for 'backup' disks; see below
+  diskTypes: DiskType[];      // set by Engine during processDisk; [] until processDisk runs; cleared to [] on undock
+  backupConfig: BackupDiskConfig | null;  // non-null when diskTypes.includes('backup'); see below
 }
 ```
 
-`diskType` maps directly to the existing detection logic:
+`diskTypes` is an **array** — disks can be multi-purpose (e.g. `['app', 'backup']`). The Console
+checks `disk.diskTypes.includes('backup')` for Backup Disk logic.
 
-| `isAppDisk` | `isBackupDisk` | Result |
-|---|---|---|
-| true | false | `'app'` |
-| false | true | `'backup'` |
-| false | false | `'empty'` |
-
-Multi-purpose disks (app + backup simultaneously) are out of scope for V1; set `diskType` to the
-first match in the order above.
+**Empty disk detection:** a docked disk with `diskTypes: []` (after `processDisk` has run) is a
+genuinely empty disk. Use `disk.dockedTo !== null && disk.diskTypes.length === 0` to identify
+candidates for provisioning as a Backup Disk.
 
 ### 2. `Disk.backupConfig` field
 
-When `diskType === 'backup'`, the Engine reads `BACKUP.yaml` and reflects its contents into
-the store so the Console can display links and mode without filesystem access:
+When `diskTypes.includes('backup')`, the Engine reads `BACKUP.yaml` and reflects its contents
+into the store so the Console can display links and mode without filesystem access:
 
 ```typescript
+export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
+
 export interface BackupDiskConfig {
-  mode: 'immediate' | 'on-demand';
+  mode: BackupMode;
   links: InstanceID[];         // list of linked instance IDs
 }
 ```
 
 Set by `processBackupDisk`. Cleared to `null` when the disk undocks.
 
-### 3. `Instance.lastBackup` field
+Note: `scheduled` mode is deferred in the Engine (no implementation yet). The Console does not
+need to handle it beyond displaying the label if it appears.
 
-Axle's design specifies `lastBackup: Timestamp | null`. The current Engine code has
-`lastBackedUp: Timestamp` (initialised to `0`). Axle should reconcile these:
+### 3. `Instance.lastBackup` field (rename from `lastBackedUp`)
 
-- **Preferred:** rename `lastBackedUp` → `lastBackup` and change type to `Timestamp | null`,
-  where `null` means never backed up (instead of the current sentinel `0`).
-- **If rename causes migration pain:** add `lastBackup` alongside `lastBackedUp` and deprecate
-  the old field. Console will read `lastBackup` only.
+Axle confirmed: **rename `lastBackedUp: Timestamp` → `lastBackup: Timestamp | null`**, where
+`null` means never backed up. Migration steps:
+1. Update `Instance.ts` interface
+2. Set `lastBackup: null` on initialisation
+3. Update all write/read sites
 
 The Console treats `null`, `undefined`, and `0` identically: "never backed up".
 
@@ -110,10 +110,11 @@ Update `src/types/store.ts` to mirror the Engine changes above:
 
 ```typescript
 // New types
-export type DiskType = 'app' | 'backup' | 'empty';
+export type DiskType = 'app' | 'backup' | 'empty' | 'upgrade' | 'files';
+export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
 
 export interface BackupDiskConfig {
-  mode: 'immediate' | 'on-demand';
+  mode: BackupMode;
   links: InstanceID[];
 }
 
@@ -125,8 +126,8 @@ export interface Disk {
   created: Timestamp;
   lastDocked: Timestamp;
   dockedTo: EngineID | null;
-  diskType: DiskType;                        // NEW
-  backupConfig: BackupDiskConfig | null;     // NEW — non-null when diskType === 'backup'
+  diskTypes: DiskType[];                     // NEW — [] until processDisk runs or on undock
+  backupConfig: BackupDiskConfig | null;     // NEW — non-null when diskTypes.includes('backup')
 }
 
 // Updated Instance interface
@@ -138,7 +139,7 @@ export interface Instance {
   port: PortNumber;
   serviceImages: ServiceImage[];
   created: Timestamp;
-  lastBackup: Timestamp | null;              // UPDATED — was lastBackedUp: Timestamp
+  lastBackup: Timestamp | null;              // UPDATED — renamed from lastBackedUp: Timestamp
   lastStarted: Timestamp;
   storedOn: DiskID | null;
 }
@@ -178,7 +179,7 @@ Renders three groups, each only shown if non-empty:
 ```
 📀 sdb1 (Empty)        [Configure as Backup Disk]
 ```
-- One row per empty disk (where `disk.diskType === 'empty'` and `disk.dockedTo` is non-null)
+- One row per empty disk: `disk.dockedTo !== null && disk.diskTypes.length === 0`
 - "Configure as Backup Disk" button opens `BackupDiskSetup` modal
 
 #### Backup Disks
@@ -188,8 +189,8 @@ Renders three groups, each only shown if non-empty:
      • kolibri-abc123    Last backup: 2 hours ago      [Backup Now]
      • nextcloud-def456  Last backup: Never            [Backup Now]
 ```
-- One section per backup disk (`diskType === 'backup'`)
-- Shows mode badge: `immediate` or `on-demand`
+- One section per backup disk: `disk.diskTypes.includes('backup')`
+- Shows mode badge: `immediate`, `on-demand`, or `scheduled` (scheduled = display only; no UI action)
 - For each linked instance (`backupConfig.links`): name, `lastBackup` formatted time,
   "Backup Now" button
 - "Backup Now" disabled if instance is not currently docked (i.e. `instance.storedOn === null`
@@ -200,7 +201,7 @@ Renders three groups, each only shown if non-empty:
 ```
 💿 app-disk-1 (App Disk)   3 instances
 ```
-- One row per app disk
+- One row per app disk: `disk.diskTypes.includes('app')`
 - Shows instance count; no actions here (instances managed via AppBrowser)
 
 If no disks of any type are docked, shows: *"No disks docked."*
@@ -299,7 +300,7 @@ export function formatRelativeTime(ts: Timestamp | null | undefined): string {
 export function instanceHasLinkedBackupDisk(store: Store, instanceId: InstanceID): boolean {
   return Object.values(store.diskDB).some(
     disk =>
-      disk.diskType === 'backup' &&
+      disk.diskTypes.includes('backup') &&
       disk.dockedTo !== null &&
       disk.backupConfig?.links.includes(instanceId)
   );
@@ -311,10 +312,11 @@ export function instanceHasLinkedBackupDisk(store: Store, instanceId: InstanceID
 ## Mock Store Updates
 
 `src/mock/mockStore.ts` needs:
-1. `diskType: 'app'` added to all existing mock `Disk` entries
+1. `diskTypes: ['app']` added to all existing mock `Disk` entries
 2. `backupConfig: null` added to all existing mock `Disk` entries
 3. `lastBackup: null` on all mock `Instance` entries (replacing `lastBackedUp: 0`)
-4. A mock `Backup Disk` entry with `diskType: 'backup'`, `backupConfig: { mode: 'on-demand', links: ['kolibri-...'] }` — enables rendering DiskManager in demo mode
+4. A mock `Backup Disk` entry with `diskTypes: ['backup']`, `backupConfig: { mode: 'on-demand', links: ['kolibri-...'] }` — enables rendering DiskManager in demo mode
+5. A mock `Empty Disk` entry with `diskTypes: []` and `backupConfig: null` — shows "Configure as Backup Disk" in demo mode
 
 ---
 
