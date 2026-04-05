@@ -15,12 +15,14 @@
 - GitHub repo: `koenswings/agent-console-dev`
 
 ## Current State
-- Console UI v1 — PRs #15 (console-ui-v1) and #18 (user-mode-design) merged to main
-- 81 tests passing; Solid.js + Chrome Extension MV3
+- Console UI v1 — PRs #15–#19 all merged to main
+- 111 tests passing; Solid.js + Chrome Extension MV3
 - Three deployment modes: dev (Tailscale), extension, production web from Engine port 80
 - Engine serves Console `dist/` on port 80 (Axle PR #26 merged) ✅
 - `GET /api/store-url` endpoint live ✅
 - User mode (no login, default) + Operator mode (authenticated) implemented
+- bcryptjs client-side auth; `userDB` in Automerge Store; FirstTimeSetup for empty userDB
+- Architecture doc live: `docs/ARCHITECTURE.md`
 
 ## Architecture
 - Framework: Solid.js + Chrome Extension Manifest V3
@@ -54,7 +56,14 @@
   → should reference design/001-console-tech-stack.md; start after memory/updates PR merges
 
 ## Open PRs
-- PR #17: memory/updates (open, pending merge — contains AGENTS.md + identity fixes)
+- None currently
+
+## Merged PRs
+- PR #15: console-ui-v1 (81 tests)
+- PR #16: architecture doc (docs/ARCHITECTURE.md + docs/INDEX.md) — merged 2026-04-01
+- PR #17: memory/updates (AGENTS.md + identity fixes) — merged 2026-04-01
+- PR #18: user-mode-design (design/003-console-user-management.md)
+- PR #19: user-mode-impl (111 tests, full auth + AppBrowser + FirstTimeSetup) — merged 2026-04-01
 
 ## Cross-Agent Communication
 - All cross-agent comms go through Koen (Telegram relay). Do not message agents directly.
