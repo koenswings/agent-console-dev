@@ -16,9 +16,21 @@ See the **mc-api** shared skill for OpenAPI refresh, discovery policy, and usage
 
 ## Environment
 
+- **Runtime:** OpenClaw runs **natively on the Pi as user `pi`** — no Docker container. You are running directly on the hardware.
+- **Pi hostname:** `wizardly-hugle` (Linux), `openclaw-pi` (Tailscale: `openclaw-pi.tail2d60.ts.net`)
 - **Console repo:** `/home/node/workspace/agents/agent-console-dev`
 - **Engine repo (read-only reference):** `/home/node/workspace/agents/agent-engine-dev`
 - **Org root:** `/home/node/workspace/` (CONTEXT.md, BACKLOG.md, proposals/, etc.)
+- **OpenClaw data:** `/home/pi/.openclaw/`
+
+## Native Runtime — What Changed
+
+OpenClaw was migrated from Docker to native systemd on 2026-04-06. Key implications:
+
+- **Direct hardware access** — `/dev/` and network interfaces are accessible without Docker flags. `pnpm dev` and `pnpm test` run directly on the Pi.
+- **No container UID mismatch** — files created by the agent are owned by `pi`. No more root-owned workspace files.
+- **Restart OpenClaw:** `systemctl --user restart openclaw-gateway`
+- **Vite dev server:** `pnpm dev` works as before; connect from browser via Tailscale IP.
 
 ## OpenAPI refresh (run before API-heavy work)
 

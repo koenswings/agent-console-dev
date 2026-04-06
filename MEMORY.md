@@ -13,6 +13,10 @@
 - MC_PLATFORM_TOKEN: in `.env` (admin, for cross-board writes)
 - GITHUB_TOKEN: in `.env` (gitignored, never commit)
 - GitHub repo: `koenswings/agent-console-dev`
+- **Runtime:** OpenClaw native (systemd, user `pi`) since 2026-04-06 — no Docker container
+- Pi hostname: `wizardly-hugle` (Linux), `openclaw-pi` (Tailscale: `openclaw-pi.tail2d60.ts.net`)
+- OpenClaw config: `/home/pi/.openclaw/openclaw.json`
+- **Direct hardware/network access** — `pnpm dev` runs on the Pi natively; no Docker workarounds needed
 
 ## Current State
 - Console UI v1 — PRs #15–#19 all merged to main
@@ -43,8 +47,8 @@
 - Pi path: `/home/pi/idea/agents/agent-console-dev`
 - Tailscale IP: `100.115.60.6`; hostname: `wizardly-hugle.tail2d60.ts.net`
 - Engine WS port: 4321
-- Permission fix: Vite cache in /tmp; build script uses `sudo rm dist` fallback
-- Git ownership fix: after every push, run `find .git -user root -exec chown node:node {} \;`
+- Vite cache: `/tmp` (avoids workspace permission issues)
+- Root-ownership issue resolved 2026-04-06: entire `/home/pi/idea` rechowned to `pi`; no more `sudo` workarounds needed for dist or .git
 
 ## Koen Preferences
 - Light theme (no dark mode)
@@ -56,7 +60,7 @@
   → should reference design/001-console-tech-stack.md; start after memory/updates PR merges
 
 ## Open PRs
-- None currently
+- PR #20: backup-disk-console-design (design/004) — awaiting review + Axle dependency confirmation
 
 ## Merged PRs
 - PR #15: console-ui-v1 (81 tests)

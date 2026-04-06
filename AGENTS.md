@@ -87,6 +87,14 @@ state, check how the Engine models that state in Automerge. The Engine codebase 
 - Design proposals live in `design/`. See the engine repo's `design/README.md` (and
   `idea/design/README.md` for cross-cutting designs) for the full convention.
 
+## Runtime Environment
+
+OpenClaw runs **natively on the Pi as user `pi`** (since 2026-04-06 — migrated from Docker).
+
+- You are running **directly on the Pi hardware** — no container.
+- `pnpm dev` and `pnpm test` run directly on the Pi; access the dev server from a browser via Tailscale.
+- Files you create are owned by `pi` — no more root-owned workspace issues, no `sudo` workarounds.
+
 ## Safety Rules
 
 - No direct calls to `main` — all changes via PRs
