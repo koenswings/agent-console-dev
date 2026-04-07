@@ -1,4 +1,5 @@
 import { createSignal, onMount, Show, type Component } from 'solid-js';
+import { discoverEngine } from '../store/discovery';
 
 export const STORAGE_KEY_HOSTNAME = 'engineHostname';
 export const STORAGE_KEY_STORE_URL = 'storeUrl';
@@ -40,6 +41,11 @@ export async function readStoredHostname(): Promise<string> {
   return r[STORAGE_KEY_HOSTNAME] ?? '';
 }
 
+/** Save hostname and store URL to storage (used by auto-discovery in App.tsx). */
+export async function saveHostnameAndStoreUrl(hostname: string, storeUrl: string): Promise<void> {
+  await csSet({ [STORAGE_KEY_HOSTNAME]: hostname, [STORAGE_KEY_STORE_URL]: storeUrl });
+}
+
 export async function readStoredDemoMode(): Promise<boolean> {
   const r = await csGet([STORAGE_KEY_DEMO]);
   // Default: demo mode ON when no hostname configured yet
@@ -62,6 +68,8 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   const [displayMode, setDisplayMode] = createSignal<DisplayMode>('sidePanel');
   const [demoMode, setDemoMode] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
+  const [scanning, setScanning] = createSignal(false);
+  const [scanStatus, setScanStatus] = createSignal<string | null>(null);
 
   // Pre-fill with whatever is already stored
   onMount(async () => {
@@ -125,6 +133,35 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         <p class="onboarding__subtitle">
           Configure the Engine connection and display preferences.
         </p>
+
+        {/* Scan button */}
+        <Show when={!demoMode()}>
+          <div class="onboarding__scan">
+            <button
+              type="button"
+              class="onboarding__scan-btn"
+              disabled={scanning()}
+              onClick={async () => {
+                setScanning(true);
+                setScanStatus('Scanning…');
+                const result = await discoverEngine();
+                setScanning(false);
+                if (result) {
+                  setHostname(result.hostname);
+                  setStoreUrl(result.storeUrl);
+                  setScanStatus(`Found: ${result.hostname}`);
+                } else {
+                  setScanStatus('No engine found — enter hostname manually');
+                }
+              }}
+            >
+              {scanning() ? 'Scanning…' : 'Scan for engine'}
+            </button>
+            <Show when={scanStatus()}>
+              <span class="onboarding__scan-status">{scanStatus()}</span>
+            </Show>
+          </div>
+        </Show>
         <form class="onboarding__form" onSubmit={handleSubmit}>
 
           {/* Demo mode — top of form, prominent */}

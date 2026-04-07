@@ -91,10 +91,21 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  /* Min dimensions break the circular height:100% in Chrome popup context.
-     Popup has no parent, so 100% = 0; min-height forces a usable size. */
+  /* Min dimensions needed in Chrome Extension popup context where 100% = 0.
+     On real screens/mobile these are overridden by the media query below. */
   min-height: 480px;
   min-width: 380px;
+}
+
+/* On real screens (not the Extension popup) allow the layout to shrink
+   to the actual viewport width so mobile browsers work correctly. */
+@media (max-width: 600px) {
+  html, body, #root {
+    min-width: 0;
+    min-height: 0;
+    height: 100svh;
+    overflow: auto;
+  }
 }
 
 body {
@@ -117,6 +128,14 @@ body {
   min-width: 380px;
 }
 
+@media (max-width: 600px) {
+  .app {
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+  }
+}
+
 /* --------------------------------------------------------
    Connection status bar (top)
    -------------------------------------------------------- */
@@ -131,6 +150,18 @@ body {
   color: var(--colour-text-muted);
   flex-shrink: 0;
   min-height: 36px;
+}
+
+@media (max-width: 600px) {
+  .status-bar {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .status-bar__settings-btn {
+    margin-left: auto;
+  }
 }
 
 .status-bar__title {
@@ -220,6 +251,16 @@ body {
   overflow: hidden;
 }
 
+/* Mobile: stack network tree above instance list */
+@media (max-width: 600px) {
+  .main-layout {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    flex: none;
+  }
+}
+
 /* --------------------------------------------------------
    Network Tree (left pane)
    -------------------------------------------------------- */
@@ -230,6 +271,15 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--colour-surface);
+}
+
+@media (max-width: 600px) {
+  .network-tree {
+    border-right: none;
+    border-bottom: 1px solid var(--colour-border);
+    max-height: 40vh;
+    overflow-y: auto;
+  }
 }
 
 .network-tree__header {
@@ -343,6 +393,17 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .instance-list {
+    overflow: visible;
+    flex: none;
+  }
+
+  .instance-list__body {
+    overflow-y: visible;
+  }
 }
 
 .instance-list__header {
@@ -561,6 +622,41 @@ body {
   color: var(--colour-text-muted);
   margin-bottom: 24px;
   line-height: 1.6;
+}
+
+.onboarding__scan {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.onboarding__scan-btn {
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--colour-accent);
+  color: var(--colour-accent);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.onboarding__scan-btn:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.onboarding__scan-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.onboarding__scan-status {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
 }
 
 .onboarding__form {

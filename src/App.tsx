@@ -16,8 +16,9 @@ import {
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
-import { readStoredHostname, readStoredDemoMode } from './components/Onboarding';
+import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl } from './components/Onboarding';
 import { isProductionWebMode } from './store/engine';
+import { discoverEngine } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 
@@ -32,6 +33,7 @@ const App: Component = () => {
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
+  const [discovering, setDiscovering] = createSignal(false);
 
   const initConnection = async () => {
     const isDemo = await readStoredDemoMode();
@@ -77,7 +79,21 @@ const App: Component = () => {
 
     const isDemo = await readStoredDemoMode();
     if (isDemo || host) {
+      // Has memory of a previous connection (or demo mode) — connect directly
       await initConnection();
+    } else {
+      // No previous connection — show onboarding and scan in background
+      setDiscovering(true);
+      discoverEngine().then(async (result) => {
+        setDiscovering(false);
+        if (result) {
+          // Found an engine — save and auto-connect, no form needed
+          await saveHostnameAndStoreUrl(result.hostname, result.storeUrl);
+          setHostname(result.hostname);
+          await initConnection();
+        }
+        // No result — onboarding form stays visible as fallback
+      });
     }
   });
 
@@ -118,6 +134,8 @@ const App: Component = () => {
               ? 'Demo mode'
               : connected()
               ? hostname()
+              : discovering()
+              ? 'Discovering engine…'
               : hostname()
               ? 'Connecting…'
               : 'Not configured'}

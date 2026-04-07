@@ -143,13 +143,10 @@ export async function createEngineConnection(): Promise<StoreConnection> {
     const adapter = new BrowserWebSocketClientAdapter(wsUrl);
     const repo = new Repo({ network: [adapter] });
 
+    // In automerge-repo 2.3.0-alpha+, repo.find() returns a Promise<DocHandle>.
+    // In 2.2.x it returned a DocHandle directly. We await to handle both.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handle: any = repo.find(storeUrl as any);
-
-    handle.on('change', ({ doc }: { doc: unknown }) => {
-      setStore(doc as Store);
-      setConnected(true);
-    });
+    const handle: any = await (repo.find(storeUrl as any) as unknown as Promise<any>);
 
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Connection timeout')), 10_000)
@@ -161,6 +158,12 @@ export async function createEngineConnection(): Promise<StoreConnection> {
       setStore(doc as Store);
       setConnected(true);
     }
+
+    // Subscribe to subsequent changes
+    handle.addListener?.('change', ({ doc: d }: { doc: unknown }) => {
+      setStore(d as Store);
+      setConnected(true);
+    });
 
     const sendCommand = (engineId: string, command: string): void => {
       handle.change((d: { engineDB?: { [key: string]: { commands: string[] } } }) => {
