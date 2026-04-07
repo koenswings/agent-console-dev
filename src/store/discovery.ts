@@ -59,14 +59,22 @@ async function probeHost(hostname: string): Promise<DiscoveryResult | null> {
 // ---------------------------------------------------------------------------
 
 /**
- * Probe all candidate hostnames in parallel. Returns the first successful
- * result, or null if none respond within the timeout.
+ * Probe all candidate hostnames in parallel. Returns ALL successful results
+ * in candidate order. Caller decides: 0 = form, 1 = auto-connect, 2+ = picker.
  */
-export async function discoverEngine(): Promise<DiscoveryResult | null> {
+export async function discoverAllEngines(): Promise<DiscoveryResult[]> {
   const candidates = buildCandidates();
   const results = await Promise.all(candidates.map(probeHost));
-  // Return the first hit in candidate order (lowest-index wins if multiple respond)
-  return results.find((r) => r !== null) ?? null;
+  return results.filter((r): r is DiscoveryResult => r !== null);
+}
+
+/**
+ * Convenience: probe and return the single best result, or null.
+ * Only use when you're certain at most one engine will respond.
+ */
+export async function discoverEngine(): Promise<DiscoveryResult | null> {
+  const results = await discoverAllEngines();
+  return results[0] ?? null;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { createSignal, onMount, Show, type Component } from 'solid-js';
-import { discoverEngine } from '../store/discovery';
+import { discoverAllEngines, type DiscoveryResult } from '../store/discovery';
+import EnginePickerPanel from './EnginePickerPanel';
 
 export const STORAGE_KEY_HOSTNAME = 'engineHostname';
 export const STORAGE_KEY_STORE_URL = 'storeUrl';
@@ -60,6 +61,9 @@ export async function readStoredDemoMode(): Promise<boolean> {
 
 interface OnboardingProps {
   onComplete: () => void;
+  /** Passed from App.tsx when background discovery already ran */
+  discoveryResults?: DiscoveryResult[];
+  onDiscoverySelect?: (result: DiscoveryResult) => void;
 }
 
 const Onboarding: Component<OnboardingProps> = (props) => {
@@ -70,6 +74,13 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   const [saving, setSaving] = createSignal(false);
   const [scanning, setScanning] = createSignal(false);
   const [scanStatus, setScanStatus] = createSignal<string | null>(null);
+  const [localResults, setLocalResults] = createSignal<DiscoveryResult[]>([]);
+  const [showManual, setShowManual] = createSignal(false);
+
+  // All discovery results: prefer prop (from App.tsx background scan), else local
+  const allResults = () => props.discoveryResults ?? localResults();
+  // Show picker when 2+ results and not explicitly showing manual form
+  const showPicker = () => !showManual() && !demoMode() && allResults().length >= 2;
 
   // Pre-fill with whatever is already stored
   onMount(async () => {
@@ -134,34 +145,21 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           Configure the Engine connection and display preferences.
         </p>
 
-        {/* Scan button */}
-        <Show when={!demoMode()}>
-          <div class="onboarding__scan">
-            <button
-              type="button"
-              class="onboarding__scan-btn"
-              disabled={scanning()}
-              onClick={async () => {
-                setScanning(true);
-                setScanStatus('Scanning…');
-                const result = await discoverEngine();
-                setScanning(false);
-                if (result) {
-                  setHostname(result.hostname);
-                  setStoreUrl(result.storeUrl);
-                  setScanStatus(`Found: ${result.hostname}`);
-                } else {
-                  setScanStatus('No engine found — enter hostname manually');
-                }
-              }}
-            >
-              {scanning() ? 'Scanning…' : 'Scan for engine'}
-            </button>
-            <Show when={scanStatus()}>
-              <span class="onboarding__scan-status">{scanStatus()}</span>
-            </Show>
-          </div>
+        {/* Engine picker — shown when 2+ engines found */}
+        <Show when={showPicker()}>
+          <EnginePickerPanel
+            results={allResults()}
+            onSelect={(result) => {
+              if (props.onDiscoverySelect) {
+                props.onDiscoverySelect(result);
+              }
+            }}
+            onManual={() => setShowManual(true)}
+          />
         </Show>
+
+        {/* Form — shown when picker is not active */}
+        <Show when={!showPicker()}>
         <form class="onboarding__form" onSubmit={handleSubmit}>
 
           {/* Demo mode — top of form, prominent */}
@@ -181,6 +179,37 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
           {/* Engine hostname — shown but not required in demo mode */}
           <Show when={!demoMode()}>
+            {/* Scan button */}
+            <div class="onboarding__scan">
+              <button
+                type="button"
+                class="onboarding__scan-btn"
+                disabled={scanning()}
+                onClick={async () => {
+                  setScanning(true);
+                  setScanStatus('Scanning…');
+                  setShowManual(false);
+                  const results = await discoverAllEngines();
+                  setLocalResults(results);
+                  setScanning(false);
+                  if (results.length === 1) {
+                    setHostname(results[0].hostname);
+                    setStoreUrl(results[0].storeUrl);
+                    setScanStatus(`Found: ${results[0].hostname}`);
+                  } else if (results.length === 0) {
+                    setScanStatus('No engine found — enter hostname manually');
+                  } else {
+                    setScanStatus(null); // picker takes over
+                  }
+                }}
+              >
+                {scanning() ? 'Scanning…' : 'Scan for engine'}
+              </button>
+              <Show when={scanStatus()}>
+                <span class="onboarding__scan-status">{scanStatus()}</span>
+              </Show>
+            </div>
+
             <div class="form-field">
               <label class="form-field__label" for="engine-hostname">
                 Engine hostname
@@ -280,6 +309,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           </button>
 
         </form>
+        </Show>{/* end !showPicker */}
       </div>
     </div>
   );

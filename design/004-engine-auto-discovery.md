@@ -2,7 +2,7 @@
 
 **Status:** Proposed  
 **Author:** Pixel (Console UI Developer)  
-**Date:** 2026-04-07  
+**Date:** 2026-04-07 (revised 2026-04-07)  
 **Depends on:** `design/002-console-build-deployment-testing.md`
 
 ---
@@ -18,14 +18,21 @@ plus `.local` variants for mDNS. We should try those automatically before asking
 
 ---
 
-## Proposed Solution: Auto-Discovery on First Load
+## Proposed Solution: Auto-Discovery with Engine Picker
 
-When the Console starts with no hostname configured (first-run or cleared), it runs a
-background discovery scan — probing a list of candidate hostnames in parallel. The first
-one that responds to `GET /api/store-url` wins. The result is saved and the Console
-connects automatically, with no form required.
+When the Console starts with no hostname configured (first-run, cleared, or after a
+failed connection), it runs a background discovery scan — probing all candidate
+hostnames in parallel. Results drive the UI:
 
-If discovery fails, the onboarding form is shown as a fallback (current behaviour).
+| Results found | Action |
+|---|---|
+| 0 | Show onboarding form for manual entry |
+| 1 | Auto-connect silently — no user action needed |
+| 2+ | Show engine picker — operator selects which engine to connect to |
+
+Silently picking one engine when multiple are active would be wrong: the operator
+must choose deliberately. The picker replaces the onboarding form content so it
+appears in the natural "configure connection" space and works well on mobile.
 
 ---
 
@@ -57,24 +64,35 @@ so a successful probe gives us both the hostname AND the store URL.
 
 ```
 App starts
-  └─ No hostname in storage?
-       ├─ YES → run discovery scan (parallel fetch, 2s timeout each)
-       │          ├─ Hit found → save hostname + store URL → connect → show UI
-       │          └─ No hit → show onboarding form (current behaviour)
-       └─ NO  → use stored hostname (current behaviour)
+  └─ Hostname in storage?
+       ├─ YES → connect directly
+       │          └─ Connection fails? → re-scan (same flow as below)
+       └─ NO  → show onboarding + scan in background
+                  ├─ 0 results → onboarding form (manual entry)
+                  ├─ 1 result  → auto-connect silently
+                  └─ 2+ results → show engine picker in onboarding panel
 ```
 
 During the scan, the status bar shows "Discovering engine…" instead of "Connecting…".
+
+### Reconnect after failure
+
+If the stored hostname stops responding (engine replaced, hostname changed), the
+Console detects the failed connection and automatically re-runs discovery. Results
+are handled identically to first-load: auto-connect on 1 result, picker on 2+,
+manual form on 0. The stored hostname is cleared before re-scanning.
 
 ---
 
 ## UX Details
 
-- **Discovery is silent and fast.** If it succeeds, the operator sees the connected
-  UI directly — no form, no confirmation needed.
-- **Discovery failure is graceful.** Onboarding form appears as today. Nothing breaks.
-- **Retry button.** The onboarding form gets a "Scan for engine" button that re-runs
-  discovery on demand. Useful if the Engine was off when the Console first opened.
+- **Single result: silent.** Operator sees the connected UI directly — no form, no
+  confirmation.
+- **Multiple results: picker.** Replaces onboarding form content. Each engine shown
+  as a card with hostname and a "Connect" button. One tap selects and connects.
+- **Zero results: form.** Onboarding form appears as today. Nothing breaks.
+- **Scan button.** The onboarding form has a "Scan for engine" button for manual
+  retry. Also shows picker or auto-connects if results are found.
 - **Status feedback.** During scan: "Discovering engine…" in the status bar.
   On failure: "Engine not found — enter hostname manually."
 - **Production web mode is unaffected.** Auto-discovery only runs when no hostname
@@ -100,16 +118,25 @@ export async function discoverEngine(): Promise<DiscoveryResult | null>
 - Races all `fetch` calls with `AbortSignal.timeout(2000)`
 - Returns first successful `{ hostname, storeUrl }` or null
 
-### 2. `src/components/Onboarding.tsx`
+### 2. `src/components/EnginePickerPanel.tsx` — new component
 
-- Add "Scan for engine" button → calls `discoverEngine()`, fills fields on hit
-- Show scan status inline ("Scanning…" / "Found: appdocker01" / "Not found")
+Shown inside the onboarding card when 2+ engines are found. Lists each result
+as a row with hostname and "Connect" button. Calls `onSelect(result)` on click.
 
-### 3. `src/App.tsx`
+### 3. `src/components/Onboarding.tsx`
 
-- On mount, if no hostname and not demo mode: call `discoverEngine()` before
-  deciding whether to show onboarding
-- If found: save to storage, call `initConnection()`, skip onboarding
+- Receives `discoveryResults` prop from App.tsx
+- If results.length >= 2: renders EnginePickerPanel instead of the form
+- "Scan for engine" button → calls `discoverAllEngines()`, updates results
+- Show scan status inline
+
+### 4. `src/App.tsx`
+
+- On mount, if no hostname: show onboarding + run `discoverAllEngines()` in background
+- Pass results to Onboarding via signal
+- If 1 result: auto-connect, hide onboarding
+- If 2+ results: show picker in onboarding panel
+- On connection failure: clear hostname, re-run discovery
 
 ### 4. Status bar
 
@@ -129,13 +156,13 @@ export async function discoverEngine(): Promise<DiscoveryResult | null>
 
 ---
 
-## Open Questions
+## Decisions
 
-1. Should discovery run in the background while showing the onboarding form,
-   or block the form until it completes? → Recommend: run in background, fill the
-   form if found (non-blocking).
-2. Should the candidate list be configurable? → No, for now. Keep it simple.
-   Can be extended later.
+1. Discovery runs non-blocking — onboarding form shows immediately.
+2. Multiple results → picker replaces onboarding form content (not a modal,
+   not a dropdown — the center panel is the right place).
+3. Candidate list is not configurable for now.
+4. Re-scan on connection failure — same logic as first load.
 
 ---
 

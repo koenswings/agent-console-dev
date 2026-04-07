@@ -18,7 +18,7 @@ import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
 import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl } from './components/Onboarding';
 import { isProductionWebMode } from './store/engine';
-import { discoverEngine } from './store/discovery';
+import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 
@@ -34,6 +34,7 @@ const App: Component = () => {
   const [ready, setReady] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
+  const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
 
   const initConnection = async () => {
     const isDemo = await readStoredDemoMode();
@@ -83,19 +84,57 @@ const App: Component = () => {
       await initConnection();
     } else {
       // No previous connection — show onboarding and scan in background
-      setDiscovering(true);
-      discoverEngine().then(async (result) => {
-        setDiscovering(false);
-        if (result) {
-          // Found an engine — save and auto-connect, no form needed
-          await saveHostnameAndStoreUrl(result.hostname, result.storeUrl);
-          setHostname(result.hostname);
-          await initConnection();
-        }
-        // No result — onboarding form stays visible as fallback
-      });
+      runDiscovery();
     }
   });
+
+  const runDiscovery = () => {
+    setDiscovering(true);
+    setDiscoveryResults([]);
+    discoverAllEngines().then(async (results) => {
+      setDiscovering(false);
+      if (results.length === 1) {
+        // Single engine found — auto-connect silently
+        await handleDiscoverySelect(results[0]);
+      } else {
+        // 0 = form, 2+ = picker (passed to Onboarding via signal)
+        setDiscoveryResults(results);
+      }
+    });
+  };
+
+  const handleDiscoverySelect = async (result: DiscoveryResult) => {
+    await saveHostnameAndStoreUrl(result.hostname, result.storeUrl);
+    setHostname(result.hostname);
+    setDiscoveryResults([]);
+    await initConnection();
+  };
+
+  // Reconnect after failure: clear hostname and re-scan
+  const handleConnectionFailure = async () => {
+    setHostname('');
+    localStorage.removeItem('engineHostname');
+    try { await (window as any).chrome?.storage?.local?.remove('engineHostname'); } catch {}
+    runDiscovery();
+  };
+
+  // Watch for disconnection after initial connect and trigger re-scan
+  createEffect(() => {
+    const isConn = connected();
+    const host = hostname();
+    // Only re-scan if we had a hostname, lost connection, and are not in demo/production mode
+    if (!isConn && host && !demo() && !isProductionWebMode()) {
+      // Debounce: wait 15s before re-scanning to avoid flapping on brief blips
+      const timer = setTimeout(() => {
+        if (!connected() && hostname()) {
+          handleConnectionFailure();
+        }
+      }, 15_000);
+      return () => clearTimeout(timer);
+    }
+  });
+
+
 
   const handleOnboardingComplete = async () => {
     const host = await readStoredHostname();
@@ -179,7 +218,13 @@ const App: Component = () => {
       {/* Main content */}
       <Show
         when={!shouldShowOnboarding()}
-        fallback={<Onboarding onComplete={handleOnboardingComplete} />}
+        fallback={
+          <Onboarding
+            onComplete={handleOnboardingComplete}
+            discoveryResults={discoveryResults()}
+            onDiscoverySelect={handleDiscoverySelect}
+          />
+        }
       >
         <Show
           when={!shouldShowFirstTimeSetup()}
