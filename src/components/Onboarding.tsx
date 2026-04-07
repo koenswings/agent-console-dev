@@ -61,6 +61,8 @@ export async function readStoredDemoMode(): Promise<boolean> {
 
 interface OnboardingProps {
   onComplete: () => void;
+  /** True while App.tsx background discovery is running */
+  discovering?: boolean;
   /** Passed from App.tsx when background discovery already ran */
   discoveryResults?: DiscoveryResult[];
   onDiscoverySelect?: (result: DiscoveryResult) => void;
@@ -144,6 +146,14 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         <p class="onboarding__subtitle">
           Configure the Engine connection and display preferences.
         </p>
+
+        {/* Background discovery indicator */}
+        <Show when={props.discovering && !showPicker()}>
+          <div class="onboarding__discovering">
+            <span class="onboarding__discovering-dot" />
+            <span>Searching for engine on the network…</span>
+          </div>
+        </Show>
 
         {/* Engine picker — shown when 2+ engines found */}
         <Show when={showPicker()}>

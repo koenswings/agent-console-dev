@@ -167,17 +167,24 @@ const App: Component = () => {
       <div class="status-bar">
         <span class="status-bar__title">IDEA Console</span>
         <div class="status-bar__indicator">
-          <span class={`status-bar__dot ${connected() ? 'status-bar__dot--connected' : 'status-bar__dot--disconnected'}`} />
+          <span class={`status-bar__dot ${
+            connected()
+              ? 'status-bar__dot--connected'
+              : (discovering() || (hostname() && !demo()))
+              ? 'status-bar__dot--searching'
+              : 'status-bar__dot--disconnected'
+          }`} />
           <span>
             {demo()
-              ? 'Demo mode'
+              ? 'Demo'
               : connected()
-              ? hostname()
+              ? hostname()          // connected: show what we're connected to
               : discovering()
-              ? 'Discovering engine…'
+              ? 'Searching…'       // no hostname yet, scanning the network
               : hostname()
-              ? 'Connecting…'
-              : 'Not configured'}
+              ? 'Connecting…'      // hostname known, waiting for Automerge sync
+              : 'No engine found'   // scan done, nothing responded
+            }
           </span>
         </div>
         <Show when={demo()}>
@@ -221,6 +228,7 @@ const App: Component = () => {
         fallback={
           <Onboarding
             onComplete={handleOnboardingComplete}
+            discovering={discovering()}
             discoveryResults={discoveryResults()}
             onDiscoverySelect={handleDiscoverySelect}
           />

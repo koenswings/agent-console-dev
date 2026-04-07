@@ -192,6 +192,17 @@ body {
   background: var(--colour-error);
 }
 
+/* Searching/connecting: amber pulsing dot */
+.status-bar__dot--searching {
+  background: #d97706;
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.75); }
+}
+
 .status-bar__demo-badge {
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -689,6 +700,28 @@ body {
 
 .engine-picker__manual-btn:hover {
   color: var(--colour-text-muted);
+}
+
+.onboarding__discovering {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: var(--colour-bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--colour-border);
+}
+
+.onboarding__discovering-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d97706;
+  flex-shrink: 0;
+  animation: dot-pulse 1.2s ease-in-out infinite;
 }
 
 .onboarding__scan {
