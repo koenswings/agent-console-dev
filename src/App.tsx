@@ -251,7 +251,7 @@ const App: Component = () => {
             fallback={
               <>
                 <AppBrowser
-                  store={store()}
+                  store={store}
                   onLogin={() => setShowLogin(true)}
                 />
                 <Show when={showLogin()}>

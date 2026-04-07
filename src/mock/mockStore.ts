@@ -283,7 +283,17 @@ export const MOCK_STORE: Store = {
     [INST_EMPTY_ID]: emptyDiskInstance,
     [INST_BROKEN_ID]: brokenAppInstance,
   },
-  userDB: {},
+  userDB: {
+    // Pre-provisioned demo admin — no first-time setup required in demo mode
+    'user-demo-admin': {
+      id: 'user-demo-admin',
+      username: 'admin',
+      // bcrypt hash of 'admin911!' (cost 12)
+      passwordHash: '$2b$12$0OrL1qEVSWi22JYNgbP/u.hP8ig1RjSueV8bbRpg6pPH3E/kFmssq',
+      role: 'operator' as const,
+      created: 0,
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -310,9 +320,13 @@ function persistUserDB(userDB: Store['userDB']): void {
 }
 
 export function createMockConnection(): StoreConnection {
+  const persistedUserDB = loadPersistedUserDB();
   const initialStore: Store = {
     ...MOCK_STORE,
-    userDB: loadPersistedUserDB(),  // restore operators across reloads
+    // Merge: pre-provisioned admin is always present; persisted users layer on top
+    userDB: Object.keys(persistedUserDB).length > 0
+      ? persistedUserDB
+      : MOCK_STORE.userDB,
   };
   const [store, setStore] = createSignal<Store | null>(initialStore);
   const [connected] = createSignal(true);
