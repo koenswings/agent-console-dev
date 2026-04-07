@@ -180,7 +180,7 @@ const App: Component = () => {
               : connected()
               ? hostname()          // connected: show what we're connected to
               : discovering()
-              ? 'Searching…'       // no hostname yet, scanning the network
+              ? 'Scanning…'        // no hostname yet, scanning the network
               : hostname()
               ? 'Connecting…'      // hostname known, waiting for Automerge sync
               : 'No engine found'   // scan done, nothing responded

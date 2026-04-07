@@ -151,7 +151,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         <Show when={props.discovering && !showPicker()}>
           <div class="onboarding__discovering">
             <span class="onboarding__discovering-dot" />
-            <span>Searching for engine on the network…</span>
+            <span>Scanning for engine on the network…</span>
           </div>
         </Show>
 
@@ -193,11 +193,11 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             <div class="onboarding__scan">
               <button
                 type="button"
-                class="onboarding__scan-btn"
+                class={`onboarding__scan-btn ${scanning() ? 'onboarding__scan-btn--active' : ''}`}
                 disabled={scanning()}
                 onClick={async () => {
                   setScanning(true);
-                  setScanStatus('Scanning…');
+                  setScanStatus(null);
                   setShowManual(false);
                   const results = await discoverAllEngines();
                   setLocalResults(results);
@@ -208,14 +208,16 @@ const Onboarding: Component<OnboardingProps> = (props) => {
                     setScanStatus(`Found: ${results[0].hostname}`);
                   } else if (results.length === 0) {
                     setScanStatus('No engine found — enter hostname manually');
-                  } else {
-                    setScanStatus(null); // picker takes over
                   }
+                  // 2+ results: picker takes over, no status text needed
                 }}
               >
+                <Show when={scanning()}>
+                  <span class="onboarding__scan-spinner" />
+                </Show>
                 {scanning() ? 'Scanning…' : 'Scan for engine'}
               </button>
-              <Show when={scanStatus()}>
+              <Show when={scanStatus() && !scanning()}>
                 <span class="onboarding__scan-status">{scanStatus()}</span>
               </Show>
             </div>
@@ -239,26 +241,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
                 e.g. appdocker01.local or the Tailscale IP of the Engine
               </span>
             </div>
-
-            <div class="form-field">
-              <label class="form-field__label" for="store-url">
-                Store URL{' '}
-                <span style="color: var(--colour-text-dim)">(optional)</span>
-              </label>
-              <input
-                id="store-url"
-                class="form-field__input"
-                type="text"
-                placeholder="automerge:xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                value={storeUrl()}
-                onInput={(e) => setStoreUrl(e.currentTarget.value)}
-                autocomplete="off"
-                spellcheck={false}
-              />
-              <span class="form-field__hint">
-                Paste the Automerge document URL from the Engine
-              </span>
-            </div>
+            {/* Store URL removed — fetched automatically from /api/store-url */}
           </Show>
 
           {/* Display mode — extension only, saved immediately */}

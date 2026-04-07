@@ -732,6 +732,9 @@ body {
 }
 
 .onboarding__scan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
   font-weight: 500;
@@ -752,6 +755,25 @@ body {
 .onboarding__scan-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.onboarding__scan-btn--active {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.onboarding__scan-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--colour-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .onboarding__scan-status {
