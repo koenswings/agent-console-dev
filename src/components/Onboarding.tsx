@@ -135,15 +135,16 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
-    const h = normaliseHostname(hostname());
-    if (!h) return;
-    setHostname(h); // update displayed value to the normalised form
+    const isDemo = demoMode();
+    const h = isDemo ? '' : normaliseHostname(hostname());
+    if (!isDemo && !h) return; // hostname required only when not in demo mode
+    if (h) setHostname(h); // update displayed value to the normalised form
 
     setSaving(true);
     try {
       await csSet({
-        [STORAGE_KEY_HOSTNAME]: h,
-        [STORAGE_KEY_DEMO]: String(demoMode()),
+        ...(h ? { [STORAGE_KEY_HOSTNAME]: h } : {}),
+        [STORAGE_KEY_DEMO]: String(isDemo),
         ...(storeUrl().trim() ? { [STORAGE_KEY_STORE_URL]: storeUrl().trim() } : {}),
       });
       // Remove store URL if cleared
