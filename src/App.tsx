@@ -175,14 +175,14 @@ const App: Component = () => {
               : 'status-bar__dot--disconnected'
           }`} />
           <span>
-            {demo()
-              ? 'Demo'
-              : connected()
-              ? hostname()          // connected: show what we're connected to
+            {connected()
+              ? hostname()          // connected: show hostname
+              : demo()
+              ? ''                  // demo: badge already shows it, no duplicate text
               : discovering()
-              ? 'Scanning…'        // no hostname yet, scanning the network
+              ? 'Scanning…'        // scanning the network
               : hostname()
-              ? 'Connecting…'      // hostname known, waiting for Automerge sync
+              ? 'Connecting…'      // hostname known, waiting for sync
               : 'No engine found'   // scan done, nothing responded
             }
           </span>

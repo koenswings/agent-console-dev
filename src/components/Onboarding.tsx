@@ -47,6 +47,23 @@ export async function saveHostnameAndStoreUrl(hostname: string, storeUrl: string
   await csSet({ [STORAGE_KEY_HOSTNAME]: hostname, [STORAGE_KEY_STORE_URL]: storeUrl });
 }
 
+/**
+ * Normalise a hostname entered by the user:
+ * - If it looks like an IP address (digits and dots only), return as-is
+ * - Otherwise strip any trailing .local and re-append it
+ * e.g. "appdocker01" -> "appdocker01.local"
+ *      "appdocker01.local" -> "appdocker01.local"
+ *      "100.115.60.6" -> "100.115.60.6"
+ */
+export function normaliseHostname(raw: string): string {
+  const h = raw.trim();
+  if (!h) return h;
+  // IP address: only digits and dots
+  if (/^[\d.]+$/.test(h)) return h;
+  // Strip .local if already present, then append
+  return h.replace(/\.local$/i, '') + '.local';
+}
+
 export async function readStoredDemoMode(): Promise<boolean> {
   const r = await csGet([STORAGE_KEY_DEMO]);
   // Default: demo mode ON when no hostname configured yet
@@ -118,8 +135,9 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
-    const h = hostname().trim();
+    const h = normaliseHostname(hostname());
     if (!h) return;
+    setHostname(h); // update displayed value to the normalised form
 
     setSaving(true);
     try {
@@ -203,7 +221,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
                   setLocalResults(results);
                   setScanning(false);
                   if (results.length === 1) {
-                    setHostname(results[0].hostname);
+                    setHostname(results[0].hostname); // already normalised by discovery
                     setStoreUrl(results[0].storeUrl);
                     setScanStatus(`Found: ${results[0].hostname}`);
                   } else if (results.length === 0) {
@@ -230,7 +248,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
                 id="engine-hostname"
                 class="form-field__input"
                 type="text"
-                placeholder="appdocker01.local"
+                placeholder="appdocker01 or 192.168.1.10"
                 value={hostname()}
                 onInput={(e) => setHostname(e.currentTarget.value)}
                 required
