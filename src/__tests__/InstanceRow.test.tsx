@@ -1,13 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render } from '@solidjs/testing-library';
-import InstanceRow, { isStartDisabled, isStopDisabled } from '../components/InstanceRow';
+import InstanceRow, {
+  isStartDisabled,
+  isStopDisabled,
+  isBackupDisabled,
+  formatLastBackup,
+} from '../components/InstanceRow';
 import { setSendCommandFn } from '../store/commands';
-import type { Instance, App, Engine, Status } from '../types/store';
+import type { Instance, App, Engine, Disk, Status } from '../types/store';
 
 // ---------------------------------------------------------------------------
 // Helper factories
 // ---------------------------------------------------------------------------
-const makeInstance = (status: Status): Instance => ({
+const makeInstance = (status: Status, lastBackup: number | null = null): Instance => ({
   id: 'inst-001',
   instanceOf: 'kolibri-1.0',
   name: 'kolibri',
@@ -15,7 +20,7 @@ const makeInstance = (status: Status): Instance => ({
   port: 8080,
   serviceImages: [],
   created: Date.now(),
-  lastBackedUp: 0,
+  lastBackup,
   lastStarted: Date.now(),
   storedOn: 'DISK001',
 });
@@ -44,6 +49,17 @@ const mockEngine: Engine = {
   commands: [],
 };
 
+const mockBackupDisk: Disk = {
+  id: 'BACKUP001',
+  name: 'backup-disk',
+  device: 'sdd',
+  created: Date.now(),
+  lastDocked: Date.now(),
+  dockedTo: 'ENGINE_DISK001',
+  diskTypes: ['backup'],
+  backupConfig: { mode: 'on-demand', links: ['inst-001'] },
+};
+
 // ---------------------------------------------------------------------------
 // Pure helpers: isStartDisabled / isStopDisabled
 // ---------------------------------------------------------------------------
@@ -67,8 +83,27 @@ describe('isStopDisabled', () => {
   it('enables Stop for Pauzed', () => expect(isStopDisabled('Pauzed')).toBe(false));
 });
 
+describe('isBackupDisabled', () => {
+  it('enables Backup for Running', () => expect(isBackupDisabled('Running')).toBe(false));
+  it('disables Backup for Stopped', () => expect(isBackupDisabled('Stopped')).toBe(true));
+  it('disables Backup for Docked', () => expect(isBackupDisabled('Docked')).toBe(true));
+  it('disables Backup for Starting', () => expect(isBackupDisabled('Starting')).toBe(true));
+  it('disables Backup for Error', () => expect(isBackupDisabled('Error')).toBe(true));
+});
+
+describe('formatLastBackup', () => {
+  it('returns "Never" for null', () => expect(formatLastBackup(null)).toBe('Never'));
+  it('returns "Never" for 0', () => expect(formatLastBackup(0)).toBe('Never'));
+  it('returns a non-empty string for a valid timestamp', () => {
+    const result = formatLastBackup(Date.now());
+    expect(typeof result).toBe('string');
+    expect(result).not.toBe('Never');
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
-// Component rendering — props are now accessor functions
+// Component rendering — props are accessor functions
 // ---------------------------------------------------------------------------
 describe('InstanceRow component', () => {
   it('renders instance name', () => {
@@ -101,8 +136,7 @@ describe('InstanceRow component', () => {
         engine={() => mockEngine}
       />
     ));
-    const startBtn = getByRole('button', { name: /start/i });
-    expect(startBtn).toBeDisabled();
+    expect(getByRole('button', { name: /start/i })).toBeDisabled();
   });
 
   it('Start button is disabled when status is Starting', () => {
@@ -170,8 +204,7 @@ describe('InstanceRow component', () => {
         engine={() => mockEngine}
       />
     ));
-    const link = container.querySelector('a.btn--open');
-    expect(link).toBeFalsy();
+    expect(container.querySelector('a.btn--open')).toBeFalsy();
   });
 
   it('does not show Open link when status is Docked', () => {
@@ -183,5 +216,77 @@ describe('InstanceRow component', () => {
       />
     ));
     expect(container.querySelector('a.btn--open')).toBeFalsy();
+  });
+
+  it('does not show Backup button when no backupDisk provided', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(container.querySelector('.btn--backup')).toBeFalsy();
+  });
+
+  it('shows Backup button when backupDisk is provided', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(container.querySelector('.btn--backup')).toBeTruthy();
+  });
+
+  it('Backup button is enabled when status is Running', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(getByRole('button', { name: /back up/i })).not.toBeDisabled();
+  });
+
+  it('Backup button is disabled when status is Stopped', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(getByRole('button', { name: /back up/i })).toBeDisabled();
+  });
+
+  it('shows last backup info when backupDisk is provided', () => {
+    const ts = Date.now() - 60 * 60 * 1000; // 1 hour ago
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running', ts)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(container.textContent).toContain('Last backup:');
+  });
+
+  it('shows "Never" for last backup when timestamp is null', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running', null)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(container.textContent).toContain('Never');
   });
 });

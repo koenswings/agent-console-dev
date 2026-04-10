@@ -16,14 +16,13 @@ const DISK_TYPE_LABEL: Record<DiskType, string> = {
 
 /** Returns the primary display label for a disk based on its diskTypes array. */
 const diskTypeLabel = (disk: Disk): string | null => {
-  const dt = (disk as any).diskTypes as DiskType[] | undefined;
-  if (!dt || dt.length === 0) return null;
-  return DISK_TYPE_LABEL[dt[0]] ?? null;
+  if (!disk.diskTypes || disk.diskTypes.length === 0) return null;
+  return DISK_TYPE_LABEL[disk.diskTypes[0]] ?? null;
 };
 
 /** Returns true when the eject button should be shown (never on backup disks). */
 const canEject = (disk: Disk): boolean =>
-  disk.device !== null && !((disk as any).diskTypes ?? []).includes('backup');
+  disk.device !== null && !(disk.diskTypes ?? []).includes('backup');
 
 export interface Selection {
   type: 'network' | 'engine' | 'disk';

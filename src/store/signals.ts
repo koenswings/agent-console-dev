@@ -10,7 +10,6 @@ import type {
   Engine,
   Disk,
   EngineID,
-  DiskID,
 } from '../types/store';
 
 // ---------------------------------------------------------------------------
@@ -48,7 +47,7 @@ export const getEngineTree = (store: Store): EngineTreeNode[] => {
 export const getInstancesForEngine = (store: Store, engineId: EngineID): import('../types/store').Instance[] => {
   const disks = Object.values(store.diskDB).filter((d) => d.dockedTo === engineId);
   const diskIds = new Set(disks.map((d) => d.id));
-  return Object.values(store.instanceDB).filter((inst) => inst.storedOn != null && diskIds.has(inst.storedOn as DiskID));
+  return Object.values(store.instanceDB).filter((inst) => inst.storedOn != null && diskIds.has(inst.storedOn));
 };
 
 /**

@@ -22,6 +22,15 @@ export type Command = string;
 export type AppURL = string;
 export type AppCategory = string;
 
+// Disk types — mirrors CommonTypes.ts
+export type DiskType = 'app' | 'backup' | 'empty' | 'upgrade' | 'files';
+export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
+
+export interface BackupConfig {
+  mode: BackupMode;
+  links: InstanceID[]; // instance IDs this backup disk is configured for
+}
+
 // ---------------------------------------------------------------------------
 // Engine — mirrors agent-engine-dev/src/data/Engine.ts
 // ---------------------------------------------------------------------------
@@ -47,6 +56,8 @@ export interface Disk {
   created: Timestamp;
   lastDocked: Timestamp;
   dockedTo: EngineID | null;
+  diskTypes: DiskType[];              // types detected for this disk; empty array = unknown
+  backupConfig: BackupConfig | null;  // set when disk is a Backup Disk; null otherwise
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +85,7 @@ export type Status =
   | 'Running'
   | 'Pauzed'
   | 'Stopped'
+  | 'Missing'
   | 'Error';
 
 export interface Instance {
@@ -84,7 +96,7 @@ export interface Instance {
   port: PortNumber;
   serviceImages: ServiceImage[];
   created: Timestamp;
-  lastBackedUp: Timestamp;
+  lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
   lastStarted: Timestamp;
   storedOn: DiskID | null;
 }
