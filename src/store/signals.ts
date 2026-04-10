@@ -1,86 +1,20 @@
-import { createSignal } from 'solid-js';
-import type { Accessor } from 'solid-js';
+/**
+ * Pure helper functions for deriving data from the Store.
+ *
+ * No reactive globals — all functions are pure and take a Store snapshot.
+ * Components receive the store as a prop (Accessor<Store|null>) and call
+ * these helpers inside their own reactive closures.
+ */
 import type {
   Store,
   Engine,
   Disk,
-  App,
-  Instance,
   EngineID,
   DiskID,
-  AppID,
 } from '../types/store';
 
 // ---------------------------------------------------------------------------
-// Module-level reactive store — set by App.tsx via initStoreSignal
-// ---------------------------------------------------------------------------
-const [_store, _setStore] = createSignal<Store | null>(null);
-
-/**
- * Called once at app startup by App.tsx to wire the connection's store into
- * the module-level signal that all derived accessors read from.
- */
-export function initStoreSignal(storeAccessor: Accessor<Store | null>): void {
-  // We deliberately avoid createEffect here to keep this file importable in
-  // pure-JS test environments.  App.tsx calls initStoreSignal inside a
-  // createEffect so the wiring is reactive.
-  _setStore(storeAccessor());
-}
-
-/**
- * Directly set the store value (used by App.tsx inside a createEffect and
- * exposed for tests that need to inject a store without a live connection).
- */
-export const setStoreSignal = _setStore;
-
-// ---------------------------------------------------------------------------
-// Reactive Accessors
-// ---------------------------------------------------------------------------
-
-/** All engines in the store. */
-export const engines: Accessor<Engine[]> = () => {
-  const s = _store();
-  if (!s) return [];
-  return Object.values(s.engineDB);
-};
-
-/** Engines as a raw record (for internal use). */
-export const engineDB: Accessor<Record<EngineID, Engine>> = () => {
-  const s = _store();
-  if (!s) return {};
-  return s.engineDB;
-};
-
-/** All disks docked to the given engine. */
-export const disksForEngine = (engineId: EngineID): Disk[] => {
-  const s = _store();
-  if (!s) return [];
-  return Object.values(s.diskDB).filter((d) => d.dockedTo === engineId);
-};
-
-/** All instances stored on the given disk. */
-export const instancesForDisk = (diskId: DiskID): Instance[] => {
-  const s = _store();
-  if (!s) return [];
-  return Object.values(s.instanceDB).filter((inst) => inst.storedOn === diskId);
-};
-
-/** The App that the instance was created from, looked up by instanceOf (AppID). */
-export const appForInstance = (instanceOf: AppID): App | undefined => {
-  const s = _store();
-  if (!s) return undefined;
-  return s.appDB[instanceOf];
-};
-
-/** All instances across the entire network. */
-export const allInstances: Accessor<Instance[]> = () => {
-  const s = _store();
-  if (!s) return [];
-  return Object.values(s.instanceDB);
-};
-
-// ---------------------------------------------------------------------------
-// Pure helpers (no reactive dependency — safe to test without Solid context)
+// Pure helpers — safe to call in any context, including unit tests
 // ---------------------------------------------------------------------------
 
 /**
@@ -111,10 +45,10 @@ export const getEngineTree = (store: Store): EngineTreeNode[] => {
 /**
  * Returns all instances for a given store + engineId (pure, no reactive dep).
  */
-export const getInstancesForEngine = (store: Store, engineId: EngineID): Instance[] => {
+export const getInstancesForEngine = (store: Store, engineId: EngineID): import('../types/store').Instance[] => {
   const disks = Object.values(store.diskDB).filter((d) => d.dockedTo === engineId);
   const diskIds = new Set(disks.map((d) => d.id));
-  return Object.values(store.instanceDB).filter((inst) => inst.storedOn != null && diskIds.has(inst.storedOn));
+  return Object.values(store.instanceDB).filter((inst) => inst.storedOn != null && diskIds.has(inst.storedOn as DiskID));
 };
 
 /**
@@ -124,7 +58,7 @@ export const getInstancesForEngine = (store: Store, engineId: EngineID): Instanc
 export const getInstancesForSelection = (
   store: Store,
   selection: { type: 'network' | 'engine' | 'disk'; id: string }
-): Instance[] => {
+): import('../types/store').Instance[] => {
   switch (selection.type) {
     case 'network':
       return Object.values(store.instanceDB);
@@ -133,4 +67,16 @@ export const getInstancesForSelection = (
     case 'disk':
       return Object.values(store.instanceDB).filter((inst) => inst.storedOn === selection.id);
   }
+};
+
+/**
+ * Same as getInstancesForSelection but returns instance IDs instead of objects.
+ * Use this for ID-keyed <For> loops — Solid reuses scopes for unchanged IDs
+ * and only re-renders rows whose data actually changed.
+ */
+export const getInstanceIdsForSelection = (
+  store: Store,
+  selection: { type: 'network' | 'engine' | 'disk'; id: string }
+): string[] => {
+  return getInstancesForSelection(store, selection).map((inst) => inst.id);
 };

@@ -68,26 +68,38 @@ describe('isStopDisabled', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Component rendering
+// Component rendering — props are now accessor functions
 // ---------------------------------------------------------------------------
 describe('InstanceRow component', () => {
   it('renders instance name', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(container.textContent).toContain('kolibri');
   });
 
   it('renders app title', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(container.textContent).toContain('Kolibri Learning Platform');
   });
 
   it('Start button is disabled when status is Running', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     const startBtn = getByRole('button', { name: /start/i });
     expect(startBtn).toBeDisabled();
@@ -95,35 +107,55 @@ describe('InstanceRow component', () => {
 
   it('Start button is disabled when status is Starting', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Starting')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Starting')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /start/i })).toBeDisabled();
   });
 
   it('Start button is enabled when status is Stopped', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Stopped')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /start/i })).not.toBeDisabled();
   });
 
   it('Stop button is disabled when status is Stopped', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Stopped')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /stop/i })).toBeDisabled();
   });
 
   it('Stop button is enabled when status is Running', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /stop/i })).not.toBeDisabled();
   });
 
   it('shows Open link when status is Running', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     const link = container.querySelector('a.btn--open');
     expect(link).toBeTruthy();
@@ -132,7 +164,11 @@ describe('InstanceRow component', () => {
 
   it('does not show Open link when status is Stopped', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Stopped')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     const link = container.querySelector('a.btn--open');
     expect(link).toBeFalsy();
@@ -140,7 +176,11 @@ describe('InstanceRow component', () => {
 
   it('does not show Open link when status is Docked', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Docked')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Docked')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(container.querySelector('a.btn--open')).toBeFalsy();
   });

@@ -1,6 +1,6 @@
 # Design 005 — Fine-grained Reactivity
 
-**Status:** Proposed
+**Status:** Implemented
 **Author:** Pixel
 **Date:** 2026-04-10
 

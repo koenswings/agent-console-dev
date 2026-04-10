@@ -6,7 +6,6 @@ import AppBrowser from './components/AppBrowser';
 import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
 import OperatorManagement from './components/OperatorManagement';
-import { setStoreSignal } from './store/signals';
 import { setSendCommandFn } from './store/commands';
 import {
   currentUser,
@@ -52,7 +51,6 @@ const App: Component = () => {
     createEffect(() => {
       const s = conn.store();
       setStore(s);
-      setStoreSignal(s);
     });
     createEffect(() => { setConnected(conn.connected()); });
 
@@ -200,7 +198,7 @@ const App: Component = () => {
               when={showOperatorMgmt() && store() && connection()}
               fallback={
                 <div class="main-layout">
-                  <NetworkTree selection={selection()} onSelect={setSelection} />
+                  <NetworkTree selection={selection()} onSelect={setSelection} store={store} />
                   <InstanceList selection={selection()} store={store} />
                 </div>
               }
