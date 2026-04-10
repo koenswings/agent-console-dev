@@ -63,6 +63,7 @@ const DISK_1_ID = 'DISK001';
 const DISK_2_ID = 'DISK002';
 const DISK_3_ID = 'DISK003';
 const DISK_4_ID = 'DISK004';
+const DISK_5_ID = 'DISK005';
 
 const kolibriDisk: Disk = {
   id: DISK_1_ID,
@@ -94,6 +95,18 @@ const wikipediaDisk: Disk = {
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_2_ID,
   diskTypes: ['app'],
+  backupConfig: null,
+};
+
+// Empty disk — for testing provisioning flow
+const emptyDisk: Disk = {
+  id: DISK_5_ID,
+  name: 'empty-disk',
+  device: 'sde',
+  created: ONE_HOUR_AGO,
+  lastDocked: ONE_HOUR_AGO,
+  dockedTo: ENGINE_1_ID,
+  diskTypes: ['empty'],
   backupConfig: null,
 };
 
@@ -293,6 +306,7 @@ export const MOCK_STORE: Store = {
     [DISK_2_ID]: nextcloudDisk,
     [DISK_3_ID]: wikipediaDisk,
     [DISK_4_ID]: backupDisk,
+    [DISK_5_ID]: emptyDisk,
   },
   appDB: {
     [APP_KOLIBRI_ID]: kolibriApp,
@@ -403,6 +417,7 @@ export const MOCK_IDS = {
   DISK_2_ID,
   DISK_3_ID,
   DISK_4_ID,
+  DISK_5_ID,
   APP_KOLIBRI_ID,
   APP_NEXTCLOUD_ID,
   INST_KOLIBRI_ID,

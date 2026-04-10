@@ -106,6 +106,13 @@ export const backupApp = (
   _sendCommand(engineId, buildBackupAppCommand(instanceName, backupDiskName));
 };
 
+/**
+ * Build the "createFilesDisk" command string (pure, no side effects).
+ * Format: "createFilesDisk <diskName>"
+ */
+export const buildCreateFilesDiskCommand = (diskName: string): string =>
+  `createFilesDisk ${diskName}`;
+
 /** Configure an empty disk as a Backup Disk on the given engine. */
 export const createBackupDisk = (
   engineId: string,
@@ -114,4 +121,12 @@ export const createBackupDisk = (
   instanceNames: string[]
 ): void => {
   _sendCommand(engineId, buildCreateBackupDiskCommand(diskName, mode, instanceNames));
+};
+
+/** Configure an empty disk as a Files Disk on the given engine. */
+export const createFilesDisk = (
+  engineId: string,
+  diskName: string
+): void => {
+  _sendCommand(engineId, buildCreateFilesDiskCommand(diskName));
 };
