@@ -16,8 +16,9 @@ import {
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
-import { readStoredHostname, readStoredDemoMode } from './components/Onboarding';
+import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl } from './components/Onboarding';
 import { isProductionWebMode } from './store/engine';
+import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 
@@ -32,6 +33,8 @@ const App: Component = () => {
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
   const [ready, setReady] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
+  const [discovering, setDiscovering] = createSignal(false);
+  const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
 
   const initConnection = async () => {
     const isDemo = await readStoredDemoMode();
@@ -77,9 +80,61 @@ const App: Component = () => {
 
     const isDemo = await readStoredDemoMode();
     if (isDemo || host) {
+      // Has memory of a previous connection (or demo mode) — connect directly
       await initConnection();
+    } else {
+      // No previous connection — show onboarding and scan in background
+      runDiscovery();
     }
   });
+
+  const runDiscovery = () => {
+    setDiscovering(true);
+    setDiscoveryResults([]);
+    discoverAllEngines().then(async (results) => {
+      setDiscovering(false);
+      if (results.length === 1) {
+        // Single engine found — auto-connect silently
+        await handleDiscoverySelect(results[0]);
+      } else {
+        // 0 = form, 2+ = picker (passed to Onboarding via signal)
+        setDiscoveryResults(results);
+      }
+    });
+  };
+
+  const handleDiscoverySelect = async (result: DiscoveryResult) => {
+    await saveHostnameAndStoreUrl(result.hostname, result.storeUrl);
+    setHostname(result.hostname);
+    setDiscoveryResults([]);
+    await initConnection();
+  };
+
+  // Reconnect after failure: clear hostname and re-scan
+  const handleConnectionFailure = async () => {
+    setHostname('');
+    localStorage.removeItem('engineHostname');
+    try { await (window as any).chrome?.storage?.local?.remove('engineHostname'); } catch {}
+    runDiscovery();
+  };
+
+  // Watch for disconnection after initial connect and trigger re-scan
+  createEffect(() => {
+    const isConn = connected();
+    const host = hostname();
+    // Only re-scan if we had a hostname, lost connection, and are not in demo/production mode
+    if (!isConn && host && !demo() && !isProductionWebMode()) {
+      // Debounce: wait 15s before re-scanning to avoid flapping on brief blips
+      const timer = setTimeout(() => {
+        if (!connected() && hostname()) {
+          handleConnectionFailure();
+        }
+      }, 15_000);
+      return () => clearTimeout(timer);
+    }
+  });
+
+
 
   const handleOnboardingComplete = async () => {
     const host = await readStoredHostname();
@@ -112,15 +167,24 @@ const App: Component = () => {
       <div class="status-bar">
         <span class="status-bar__title">IDEA Console</span>
         <div class="status-bar__indicator">
-          <span class={`status-bar__dot ${connected() ? 'status-bar__dot--connected' : 'status-bar__dot--disconnected'}`} />
+          <span class={`status-bar__dot ${
+            connected()
+              ? 'status-bar__dot--connected'
+              : (discovering() || (hostname() && !demo()))
+              ? 'status-bar__dot--searching'
+              : 'status-bar__dot--disconnected'
+          }`} />
           <span>
-            {demo()
-              ? 'Demo mode'
-              : connected()
-              ? hostname()
+            {connected()
+              ? hostname()          // connected: show hostname
+              : demo()
+              ? ''                  // demo: badge already shows it, no duplicate text
+              : discovering()
+              ? 'Scanning…'        // scanning the network
               : hostname()
-              ? 'Connecting…'
-              : 'Not configured'}
+              ? 'Connecting…'      // hostname known, waiting for sync
+              : 'No engine found'   // scan done, nothing responded
+            }
           </span>
         </div>
         <Show when={demo()}>
@@ -161,7 +225,14 @@ const App: Component = () => {
       {/* Main content */}
       <Show
         when={!shouldShowOnboarding()}
-        fallback={<Onboarding onComplete={handleOnboardingComplete} />}
+        fallback={
+          <Onboarding
+            onComplete={handleOnboardingComplete}
+            discovering={discovering()}
+            discoveryResults={discoveryResults()}
+            onDiscoverySelect={handleDiscoverySelect}
+          />
+        }
       >
         <Show
           when={!shouldShowFirstTimeSetup()}
@@ -180,7 +251,7 @@ const App: Component = () => {
             fallback={
               <>
                 <AppBrowser
-                  store={store()}
+                  store={store}
                   onLogin={() => setShowLogin(true)}
                 />
                 <Show when={showLogin()}>
