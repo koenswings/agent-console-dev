@@ -75,3 +75,43 @@ export const stopInstance = (
 export const ejectDisk = (engineId: string, diskName: string): void => {
   _sendCommand(engineId, buildEjectDiskCommand(diskName));
 };
+
+// ---------------------------------------------------------------------------
+// Backup commands
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the "backupApp" command string (pure, no side effects).
+ * Format: "backupApp <instanceName> <backupDiskName>"
+ */
+export const buildBackupAppCommand = (instanceName: string, backupDiskName: string): string =>
+  `backupApp ${instanceName} ${backupDiskName}`;
+
+/**
+ * Build the "createBackupDisk" command string (pure, no side effects).
+ * Format: "createBackupDisk <diskName> <mode> <instanceName1> [instanceName2...]"
+ */
+export const buildCreateBackupDiskCommand = (
+  diskName: string,
+  mode: string,
+  instanceNames: string[]
+): string => `createBackupDisk ${diskName} ${mode} ${instanceNames.join(' ')}`;
+
+/** Trigger an on-demand backup of an instance to a named backup disk. */
+export const backupApp = (
+  engineId: string,
+  instanceName: string,
+  backupDiskName: string
+): void => {
+  _sendCommand(engineId, buildBackupAppCommand(instanceName, backupDiskName));
+};
+
+/** Configure an empty disk as a Backup Disk on the given engine. */
+export const createBackupDisk = (
+  engineId: string,
+  diskName: string,
+  mode: string,
+  instanceNames: string[]
+): void => {
+  _sendCommand(engineId, buildCreateBackupDiskCommand(diskName, mode, instanceNames));
+};

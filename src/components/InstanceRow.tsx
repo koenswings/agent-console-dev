@@ -132,7 +132,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
       <Show when={hasBackupDisk()}>
         <div class="instance-row__backup-info">
-          Last backup: {formatLastBackup(props.instance()?.lastBackedUp)}
+          Last backup: {formatLastBackup(props.instance()?.lastBackup)}
         </div>
       </Show>
     </div>

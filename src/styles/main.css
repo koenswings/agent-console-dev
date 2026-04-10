@@ -1105,3 +1105,59 @@ body {
   color: var(--colour-text-dim);
   margin: 0;
 }
+
+/* Disk type badge in tree */
+.tree-item__type-badge {
+  font-size: var(--font-size-xs);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+
+.tree-item__type-badge--app {
+  color: #2563eb;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.tree-item__type-badge--backup {
+  color: #7c3aed;
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+}
+
+.tree-item__type-badge--empty {
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.tree-item__type-badge--upgrade {
+  color: #d97706;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.tree-item__type-badge--files {
+  color: #0891b2;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+/* Last backup info below instance actions */
+.instance-row__backup-info {
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-muted);
+  padding: 2px 0 4px 24px;
+}
+
+.btn--backup {
+  color: #7c3aed;
+}
+
+.btn--backup:not(:disabled):hover {
+  background: rgba(124, 58, 237, 0.1);
+}

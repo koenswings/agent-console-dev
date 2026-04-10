@@ -54,7 +54,7 @@ describe('NetworkTree component', () => {
     expect(engineItems).toHaveLength(2);
   });
 
-  it('renders all 3 disks as sub-nodes', () => {
+  it('renders all 4 disks as sub-nodes', () => {
     const { container } = render(() => (
       <NetworkTree
         store={() => MOCK_STORE}
@@ -63,7 +63,7 @@ describe('NetworkTree component', () => {
       />
     ));
     const diskItems = container.querySelectorAll('.tree-item--disk');
-    expect(diskItems).toHaveLength(3);
+    expect(diskItems).toHaveLength(4);
   });
 
   it('shows disk names', () => {
@@ -77,6 +77,7 @@ describe('NetworkTree component', () => {
     expect(container.textContent).toContain('kolibri-disk');
     expect(container.textContent).toContain('nextcloud-disk');
     expect(container.textContent).toContain('wikipedia-disk');
+    expect(container.textContent).toContain('backup-disk');
   });
 
   it('shows online badges for online engines', () => {

@@ -41,8 +41,8 @@ const resolveBackupDisk = (store: Store | null, instance: Instance | undefined):
     (d) =>
       d.dockedTo === engineId &&
       d.device !== null &&
-      (d as any).diskTypes?.includes('backup') &&
-      (d as any).backupConfig?.links.includes(instance.id)
+      d.diskTypes?.includes('backup') &&
+      d.backupConfig?.links.includes(instance.id)
   );
 };
 

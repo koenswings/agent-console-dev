@@ -6,6 +6,7 @@ import type {
   Disk,
   App,
   Instance,
+  BackupMode,
 } from '../types/store';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ const engine2: Engine = {
 const DISK_1_ID = 'DISK001';
 const DISK_2_ID = 'DISK002';
 const DISK_3_ID = 'DISK003';
+const DISK_4_ID = 'DISK004';
 
 const kolibriDisk: Disk = {
   id: DISK_1_ID,
@@ -69,6 +71,8 @@ const kolibriDisk: Disk = {
   created: ONE_HOUR_AGO,
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_1_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
 };
 
 const nextcloudDisk: Disk = {
@@ -78,6 +82,8 @@ const nextcloudDisk: Disk = {
   created: ONE_HOUR_AGO,
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_2_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
 };
 
 const wikipediaDisk: Disk = {
@@ -87,6 +93,23 @@ const wikipediaDisk: Disk = {
   created: ONE_HOUR_AGO,
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_2_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
+};
+
+// Backup disk — linked to kolibri instance
+const backupDisk: Disk = {
+  id: DISK_4_ID,
+  name: 'backup-disk',
+  device: 'sdd',
+  created: ONE_HOUR_AGO,
+  lastDocked: ONE_HOUR_AGO,
+  dockedTo: ENGINE_1_ID,
+  diskTypes: ['backup'],
+  backupConfig: {
+    mode: 'on-demand' as BackupMode,
+    links: ['kolibri-inst-001'], // = INST_KOLIBRI_ID (forward ref workaround)
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -175,7 +198,7 @@ const kolibriInstance: Instance = {
   port: 8080,
   serviceImages: ['learningequality/kolibri:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: TWO_MINS_AGO,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_1_ID,
 };
@@ -188,7 +211,7 @@ const nextcloudInstance: Instance = {
   port: 8081,
   serviceImages: ['nextcloud:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
 };
@@ -201,7 +224,7 @@ const wikipediaInstance: Instance = {
   port: 8082,
   serviceImages: ['kiwix/kiwix-serve:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: TWO_MINS_AGO,
   storedOn: DISK_3_ID,
 };
@@ -214,7 +237,7 @@ const emptyDiskInstance: Instance = {
   port: 0,
   serviceImages: [],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: 0,
   storedOn: DISK_3_ID,
 };
@@ -227,7 +250,7 @@ const brokenAppInstance: Instance = {
   port: 8083,
   serviceImages: ['broken/image:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
 };
@@ -244,6 +267,7 @@ export const MOCK_STORE: Store = {
     [DISK_1_ID]: kolibriDisk,
     [DISK_2_ID]: nextcloudDisk,
     [DISK_3_ID]: wikipediaDisk,
+    [DISK_4_ID]: backupDisk,
   },
   appDB: {
     [APP_KOLIBRI_ID]: kolibriApp,
@@ -339,6 +363,7 @@ export const MOCK_IDS = {
   DISK_1_ID,
   DISK_2_ID,
   DISK_3_ID,
+  DISK_4_ID,
   APP_KOLIBRI_ID,
   APP_NEXTCLOUD_ID,
   INST_KOLIBRI_ID,
