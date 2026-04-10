@@ -81,43 +81,46 @@ const makeStore = (): Store => ({
 });
 
 describe('AppBrowser', () => {
-  it('renders app cards for all instances', () => {
-    render(() => <AppBrowser store={makeStore()} onLogin={vi.fn()} />);
+  it('renders app cards for running instances only (Kolibri running, Nextcloud stopped)', () => {
+    render(() => <AppBrowser store={() => makeStore()} onLogin={vi.fn()} />);
     expect(screen.getByText('Kolibri')).toBeInTheDocument();
-    expect(screen.getByText('Nextcloud')).toBeInTheDocument();
+    // Nextcloud is Stopped — filtered out in user mode
+    expect(screen.queryByText('Nextcloud')).not.toBeInTheDocument();
   });
 
   it('shows Open button for running instance', () => {
-    render(() => <AppBrowser store={makeStore()} onLogin={vi.fn()} />);
+    render(() => <AppBrowser store={() => makeStore()} onLogin={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
   });
 
-  it('shows Not available for stopped instance', () => {
-    render(() => <AppBrowser store={makeStore()} onLogin={vi.fn()} />);
-    expect(screen.getByText('Not available')).toBeInTheDocument();
-  });
-
   it('shows empty message when store is null', () => {
-    render(() => <AppBrowser store={null} onLogin={vi.fn()} />);
+    render(() => <AppBrowser store={() => null} onLogin={vi.fn()} />);
     expect(screen.getByText(/No apps available/)).toBeInTheDocument();
   });
 
   it('shows empty message when instanceDB is empty', () => {
     const store = makeStore();
     store.instanceDB = {};
-    render(() => <AppBrowser store={store} onLogin={vi.fn()} />);
+    render(() => <AppBrowser store={() => store} onLogin={vi.fn()} />);
+    expect(screen.getByText(/No apps available/)).toBeInTheDocument();
+  });
+
+  it('shows empty message when no instances are Running', () => {
+    const store = makeStore();
+    store.instanceDB['inst-1'].status = 'Stopped';
+    render(() => <AppBrowser store={() => store} onLogin={vi.fn()} />);
     expect(screen.getByText(/No apps available/)).toBeInTheDocument();
   });
 
   it('calls onLogin when Log in button is clicked', () => {
     const onLogin = vi.fn();
-    render(() => <AppBrowser store={makeStore()} onLogin={onLogin} />);
+    render(() => <AppBrowser store={() => makeStore()} onLogin={onLogin} />);
     fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
     expect(onLogin).toHaveBeenCalledOnce();
   });
 
   it('shows Apps heading', () => {
-    render(() => <AppBrowser store={makeStore()} onLogin={vi.fn()} />);
+    render(() => <AppBrowser store={() => makeStore()} onLogin={vi.fn()} />);
     expect(screen.getByRole('heading', { name: 'Apps' })).toBeInTheDocument();
   });
 });
