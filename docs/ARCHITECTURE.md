@@ -85,6 +85,7 @@ src/
 ├── main.tsx                     Solid.js mount point
 ├── components/
 │   ├── Onboarding.tsx           Settings form — hostname, store URL, demo mode, display mode
+│   ├── EnginePickerPanel.tsx    Engine picker — shown when auto-discovery finds multiple engines
 │   ├── AppBrowser.tsx           User mode — grid of app cards
 │   ├── AppCard.tsx              Single app card (running / greyed-out stopped)
 │   ├── LoginForm.tsx            Operator login modal overlay
@@ -92,12 +93,13 @@ src/
 │   ├── OperatorManagement.tsx   Add/remove operators, change own password
 │   ├── NetworkTree.tsx          Operator mode — engine/disk tree with selection state
 │   ├── InstanceList.tsx         Operator mode — instances filtered by selection
-│   ├── InstanceRow.tsx          Single instance row with start/stop/eject actions
+│   ├── InstanceRow.tsx          Single instance row with start/stop/backup/eject actions
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
-│   ├── signals.ts               Solid.js reactive accessors derived from the store
+│   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher
+│   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
 │   └── auth.ts                  Client-side authentication and operator management
 ├── mock/
 │   └── mockStore.ts             In-memory mock store + StoreConnection interface
@@ -116,11 +118,16 @@ src/
 ```
 onMount:
   read storage (hostname, demoMode)
-  initConnection() → createMockConnection() or createEngineConnection()
+  if demo or hostname known → initConnection() immediately
+  else → runDiscovery() — probe LAN for engines
+    0 found  → show Onboarding form
+    1 found  → auto-connect (saveHostname + initConnection)
+    2+ found → show EnginePickerPanel
+  initConnection() → createMockConnection() (demo) or createEngineConnection() (real)
   restoreSession(store) → set currentUser if stored session is still valid
 
 Render:
-  shouldShowOnboarding?   → <Onboarding />
+  shouldShowOnboarding?   → <Onboarding /> (with discovery results passed in)
   isFirstTimeSetup?       → <FirstTimeSetup />
   isOperator()?           → <OperatorLayout /> (NetworkTree + InstanceList + OperatorManagement)
   else                    → <AppBrowser />    (user mode — no login required)
@@ -148,24 +155,27 @@ interface StoreConnection {
 
 `changeDoc` is used by `auth.ts` to write operator accounts to `userDB`.
 
-### `src/store/signals.ts` — reactive accessors
+### `src/store/signals.ts` — pure store helpers
 
-Module-level Solid.js signals derived from the `Store`. Components import these directly — no
-prop-drilling for network state.
+Pure functions that derive data from a `Store` snapshot. No global reactive state — components
+receive the store as a prop (`Accessor<Store|null>`) and call these inside their own reactive
+closures. This enables fine-grained reactivity: Solid.js tracks reads at the field level and
+only re-renders the DOM nodes that actually changed.
 
 Key exports:
 
 | Export | Returns |
 |---|---|
-| `engines` | `Engine[]` — all engines in the store |
-| `engineDB` | `Record<EngineID, Engine>` |
-| `disksForEngine(engineId)` | `Disk[]` filtered by `dockedTo` |
-| `instancesForDisk(diskId)` | `Instance[]` filtered by `storedOn` |
-| `appForInstance(instanceOf)` | `App \| undefined` |
-| `allInstances` | `Instance[]` — full network |
 | `isEngineOnline(engine)` | `boolean` — `lastRun` within last 2 minutes |
-| `getEngineTree(store)` | Pure: `EngineTreeNode[]` for rendering the network tree |
-| `getInstancesForSelection(store, sel)` | Pure: filtered by network / engine / disk |
+| `getEngineTree(store)` | `EngineTreeNode[]` for rendering the network tree |
+| `getInstancesForEngine(store, engineId)` | `Instance[]` for one engine |
+| `getInstancesForSelection(store, sel)` | `Instance[]` filtered by network / engine / disk |
+| `getInstanceIdsForSelection(store, sel)` | `string[]` — ID-keyed variant for `<For>` loops |
+
+**Fine-grained reactivity pattern** (design 005): Components iterate over ID lists rather than
+object snapshots. `<For each={instanceIds()}>` reuses Solid.js scopes for unchanged IDs — only
+rows whose data actually changed re-render. Props passed to row components are accessor functions
+(`() => store()?.instanceDB[id]`) so Solid tracks reads surgically.
 
 ### `src/store/commands.ts` — command dispatcher
 
@@ -174,9 +184,20 @@ Automerge document. The commands module:
 
 - Holds a module-level `sendCommand` function set by `App.tsx` after connection.
 - Exports typed command builders (`buildStartInstanceCommand`, etc.) as pure functions.
-- Exports dispatching functions (`startInstance`, `stopInstance`, `ejectDisk`).
+- Exports dispatching functions (`startInstance`, `stopInstance`, `ejectDisk`, `backupApp`,
+  `createBackupDisk`).
 
 Command string format: `"<commandName> <arg1> <arg2>"` — mirrors Engine's `commandUtils.ts`.
+
+### `src/store/discovery.ts` — engine hostname discovery
+
+Probes a list of candidate hostnames (`appdocker01`, `idea01`, `engine01`, `appdocker02`, …)
+concurrently by attempting `GET /api/store-url` on each. Returns all that respond within the
+timeout. Used by `App.tsx` on first load when no hostname is stored:
+
+- 0 results → show Onboarding form
+- 1 result → auto-connect silently
+- 2+ results → show `EnginePickerPanel` for the operator to choose
 
 ### `src/store/auth.ts` — client-side authentication
 
@@ -261,6 +282,21 @@ Store {
   userDB:     Record<UserID,     User>
 }
 
+Disk {
+  id:           DiskID
+  name:         string
+  device:       string | null       // null = not physically inserted
+  dockedTo:     EngineID | null
+  diskTypes:    DiskType[]           // 'app' | 'backup' | 'empty' | 'upgrade' | 'files'
+  backupConfig: BackupConfig | null  // set on backup disks; null otherwise
+}
+
+Instance {
+  ...                               // standard fields
+  status:     Status                // includes 'Missing' in addition to standard statuses
+  lastBackup: Timestamp | null      // null = never backed up
+}
+
 User {
   id:           UserID
   username:     string
@@ -280,16 +316,16 @@ Engine online status: `engine.lastRun` within the last 2 minutes (matches Engine
 in-memory store: 2 engines, 3 disks (Kolibri, Nextcloud, Wikipedia), 5 instances in varied
 states (Running, Stopped, Error, Docked). `userDB` starts empty.
 
-Demo mode activates when:
-- `demoMode` is `true` in `chrome.storage.local` / `localStorage`, **or**
-- No engine hostname is configured (default-on so the UI works without a running Engine)
+Demo mode activates when `demoMode` is `true` in `chrome.storage.local` / `localStorage`.
 
 When active:
 - A yellow **DEMO** badge appears in the status bar.
 - `createEngineConnection` is never imported (no WebSocket attempt, no Automerge loaded).
-- `changeDoc` mutations (operator creation) apply to the in-memory store and are persisted
-  to `localStorage` under `ideaConsole_demoUserDB` — operators survive page reloads.
-- First-time setup screen shows on first launch until an operator is created.
+- The mock store includes a pre-provisioned operator (`admin` / `admin911!`) so the Console
+  opens directly to the app browser — no first-time setup required in demo mode.
+- `changeDoc` mutations (operator creation/removal) apply to the in-memory store and are
+  persisted to `localStorage` under `ideaConsole_demoUserDB` — operators survive page reloads.
+  If persisted operators exist, they replace the pre-provisioned admin.
 
 ---
 
@@ -299,7 +335,7 @@ When active:
 |---|---|
 | Vite | Dev server + production bundler |
 | pnpm | Package manager |
-| Vitest + Testing Library | Unit tests (111 tests) |
+| Vitest + Testing Library | Unit tests (131 tests) |
 | TypeScript strict | Type checking |
 | bcryptjs | Client-side bcrypt (pure JS — no native bindings) |
 
