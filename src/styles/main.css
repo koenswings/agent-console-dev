@@ -1379,3 +1379,120 @@ body {
 .btn--backup:not(:disabled):hover {
   background: rgba(124, 58, 237, 0.1);
 }
+
+/* Status dot as clickable expand toggle */
+.instance-row__status-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.instance-row__status-btn:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 2px;
+}
+
+/* Expandable details panel */
+.instance-row__details {
+  grid-column: 1 / -1;
+  background: var(--colour-bg-alt, #f8f9fa);
+  border-top: 1px solid var(--colour-border);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.instance-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.instance-details__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.instance-details__item--full {
+  grid-column: 1 / -1;
+}
+
+.instance-details dt {
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.instance-details dd {
+  font-size: var(--font-size-sm, 0.82rem);
+  color: var(--colour-text);
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Docker metrics */
+.docker-metrics {
+  border-top: 1px solid var(--colour-border);
+  padding-top: 10px;
+}
+
+.docker-metrics__title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--colour-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.docker-metrics__unavailable {
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-dim, #9ca3af);
+  margin: 0;
+}
+
+.docker-metrics__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.docker-metrics__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.docker-metrics__item--sampled {
+  grid-column: 1 / -1;
+}
+
+.docker-metrics__item dt {
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.docker-metrics__item dd {
+  font-size: var(--font-size-sm, 0.82rem);
+  color: var(--colour-text);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.docker-metrics__subval {
+  color: var(--colour-text-muted);
+}

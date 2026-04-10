@@ -1,7 +1,7 @@
-import { Show, type Component } from 'solid-js';
+import { Show, createSignal, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
-import type { Instance, App, Engine, Disk } from '../types/store';
+import type { Instance, App, Engine, Disk, DockerMetrics } from '../types/store';
 import type { Status } from '../types/store';
 
 interface InstanceRowProps {
@@ -12,17 +12,30 @@ interface InstanceRowProps {
   backupDisk?: () => Disk | undefined;
 }
 
-/** Format a lastBackedUp timestamp for display. */
-export const formatLastBackup = (ts: number | null | undefined): string => {
+// ---------------------------------------------------------------------------
+// Pure formatting helpers
+// ---------------------------------------------------------------------------
+
+const formatTs = (ts: number | null | undefined): string => {
   if (ts == null || ts === 0) return 'Never';
-  const date = new Date(ts);
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  return new Date(ts).toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 };
+
+/** Format a lastBackup timestamp for display. */
+export const formatLastBackup = (ts: number | null | undefined): string => formatTs(ts);
+
+const formatBytes = (bytes: number | null): string => {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
+
+const formatPercent = (p: number | null): string =>
+  p == null ? '—' : `${p.toFixed(2)}%`;
 
 /** Returns true when the Start button should be disabled. */
 export const isStartDisabled = (status: Status): boolean =>
@@ -36,7 +49,66 @@ export const isBackupDisabled = (status: Status): boolean =>
 export const isStopDisabled = (status: Status): boolean =>
   status === 'Stopped' || status === 'Docked' || status === 'Undocked';
 
+// ---------------------------------------------------------------------------
+// DockerMetricsPanel — pure display component
+// ---------------------------------------------------------------------------
+
+interface MetricsPanelProps {
+  metrics: () => DockerMetrics | null | undefined;
+}
+
+export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
+  const m = () => props.metrics();
+  return (
+    <div class="docker-metrics">
+      <div class="docker-metrics__title">Container metrics</div>
+      <Show
+        when={m() != null}
+        fallback={
+          <p class="docker-metrics__unavailable">
+            No metrics — instance is not running.
+          </p>
+        }
+      >
+        <dl class="docker-metrics__grid">
+          <div class="docker-metrics__item">
+            <dt>CPU</dt>
+            <dd>{formatPercent(m()!.cpuPercent)}</dd>
+          </div>
+          <div class="docker-metrics__item">
+            <dt>Memory</dt>
+            <dd>
+              {formatBytes(m()!.memUsageBytes)} / {formatBytes(m()!.memLimitBytes)}
+              <span class="docker-metrics__subval"> ({formatPercent(m()!.memPercent)})</span>
+            </dd>
+          </div>
+          <div class="docker-metrics__item">
+            <dt>Net I/O</dt>
+            <dd>{formatBytes(m()!.netRxBytes)} in / {formatBytes(m()!.netTxBytes)} out</dd>
+          </div>
+          <div class="docker-metrics__item">
+            <dt>Disk I/O</dt>
+            <dd>{formatBytes(m()!.blockReadBytes)} read / {formatBytes(m()!.blockWriteBytes)} write</dd>
+          </div>
+          <Show when={m()!.sampledAt != null}>
+            <div class="docker-metrics__item docker-metrics__item--sampled">
+              <dt>Sampled</dt>
+              <dd>{formatTs(m()!.sampledAt)}</dd>
+            </div>
+          </Show>
+        </dl>
+      </Show>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// InstanceRow
+// ---------------------------------------------------------------------------
+
 const InstanceRow: Component<InstanceRowProps> = (props) => {
+  const [expanded, setExpanded] = createSignal(false);
+
   const handleStart = () => {
     const engine = props.engine();
     const inst = props.instance();
@@ -75,7 +147,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   return (
     <div class="instance-row" role="listitem">
-      <StatusDot status={props.instance()?.status ?? 'Stopped'} />
+      {/* ── Main row ─────────────────────────────────────────── */}
+      <button
+        class="instance-row__status-btn"
+        title={expanded() ? 'Hide details' : 'Show details'}
+        aria-expanded={expanded()}
+        aria-label={`${expanded() ? 'Hide' : 'Show'} details for ${props.instance()?.name}`}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <StatusDot status={props.instance()?.status ?? 'Stopped'} />
+      </button>
 
       <div class="instance-row__info">
         <div class="instance-row__name">{props.instance()?.name}</div>
@@ -130,9 +211,51 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </Show>
       </div>
 
-      <Show when={hasBackupDisk()}>
-        <div class="instance-row__backup-info">
-          Last backup: {formatLastBackup(props.instance()?.lastBackup)}
+      {/* ── Expandable details + metrics panel ───────────────── */}
+      <Show when={expanded()}>
+        <div
+          class="instance-row__details"
+          role="region"
+          aria-label={`Details for ${props.instance()?.name}`}
+        >
+          <dl class="instance-details">
+            <div class="instance-details__item">
+              <dt>Status</dt>
+              <dd>{props.instance()?.status ?? '—'}</dd>
+            </div>
+            <div class="instance-details__item">
+              <dt>Version</dt>
+              <dd>{props.app()?.version ?? '—'}</dd>
+            </div>
+            <div class="instance-details__item">
+              <dt>Engine</dt>
+              <dd>{props.engine()?.hostname ?? '—'}</dd>
+            </div>
+            <div class="instance-details__item">
+              <dt>Port</dt>
+              <dd>{props.instance()?.port ?? '—'}</dd>
+            </div>
+            <div class="instance-details__item">
+              <dt>Created</dt>
+              <dd>{formatTs(props.instance()?.created)}</dd>
+            </div>
+            <div class="instance-details__item">
+              <dt>Last started</dt>
+              <dd>{formatTs(props.instance()?.lastStarted)}</dd>
+            </div>
+            <div class="instance-details__item">
+              <dt>Last backup</dt>
+              <dd>{formatTs(props.instance()?.lastBackup)}</dd>
+            </div>
+            <Show when={props.app()?.description}>
+              <div class="instance-details__item instance-details__item--full">
+                <dt>Description</dt>
+                <dd>{props.app()!.description}</dd>
+              </div>
+            </Show>
+          </dl>
+
+          <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
         </div>
       </Show>
     </div>
