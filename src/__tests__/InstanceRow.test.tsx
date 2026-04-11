@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render } from '@solidjs/testing-library';
+import { render, fireEvent } from '@solidjs/testing-library';
 import InstanceRow, {
   isStartDisabled,
   isStopDisabled,
@@ -12,7 +12,7 @@ import type { Instance, App, Engine, Disk, Status } from '../types/store';
 // ---------------------------------------------------------------------------
 // Helper factories
 // ---------------------------------------------------------------------------
-const makeInstance = (status: Status, lastBackup: number | null = null): Instance => ({
+const makeInstance = (status: Status, lastBackup: number | null = null, metrics = null as import('../types/store').DockerMetrics | null): Instance => ({
   id: 'inst-001',
   instanceOf: 'kolibri-1.0',
   name: 'kolibri',
@@ -23,6 +23,7 @@ const makeInstance = (status: Status, lastBackup: number | null = null): Instanc
   lastBackup,
   lastStarted: Date.now(),
   storedOn: 'DISK001',
+  metrics,
 });
 
 const mockApp: App = {
@@ -265,8 +266,32 @@ describe('InstanceRow component', () => {
     expect(getByRole('button', { name: /back up/i })).toBeDisabled();
   });
 
-  it('shows last backup info when backupDisk is provided', () => {
-    const ts = Date.now() - 60 * 60 * 1000; // 1 hour ago
+  it('details panel is hidden by default', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(container.querySelector('.instance-row__details')).toBeFalsy();
+  });
+
+  it('details panel shows after clicking status button', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.querySelector('.instance-row__details')).toBeTruthy();
+    expect(container.textContent).toContain('Last backup');
+  });
+
+  it('shows last backup info in details panel when backupDisk is provided', () => {
+    const ts = Date.now() - 60 * 60 * 1000;
     const { container } = render(() => (
       <InstanceRow
         instance={() => makeInstance('Running', ts)}
@@ -275,10 +300,11 @@ describe('InstanceRow component', () => {
         backupDisk={() => mockBackupDisk}
       />
     ));
-    expect(container.textContent).toContain('Last backup:');
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('Last backup');
   });
 
-  it('shows "Never" for last backup when timestamp is null', () => {
+  it('shows "Never" for last backup in details panel when timestamp is null', () => {
     const { container } = render(() => (
       <InstanceRow
         instance={() => makeInstance('Running', null)}
@@ -287,6 +313,64 @@ describe('InstanceRow component', () => {
         backupDisk={() => mockBackupDisk}
       />
     ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
     expect(container.textContent).toContain('Never');
+  });
+});
+
+describe('DockerMetricsPanel', () => {
+  const mockMetrics: import('../types/store').DockerMetrics = {
+    cpuPercent:      2.5,
+    memUsageBytes:   256_000_000,
+    memLimitBytes:   4_000_000_000,
+    memPercent:      6.4,
+    netRxBytes:      1_048_576,
+    netTxBytes:      524_288,
+    blockReadBytes:  20_971_520,
+    blockWriteBytes: 10_485_760,
+    sampledAt:       Date.now() - 10_000,
+  };
+
+  it('shows metrics when instance is Running with metrics', () => {
+    const inst = makeInstance('Running', null, mockMetrics);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => inst}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('CPU');
+    expect(container.textContent).toContain('2.50%');
+    expect(container.textContent).toContain('Memory');
+    expect(container.textContent).toContain('244.1 MB');
+    expect(container.textContent).toContain('Net I/O');
+    expect(container.textContent).toContain('Disk I/O');
+  });
+
+  it('shows unavailable notice when metrics is null', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped', null, null)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('not running');
+  });
+
+  it('shows Container metrics heading', () => {
+    const inst = makeInstance('Running', null, mockMetrics);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => inst}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('Container metrics');
   });
 });

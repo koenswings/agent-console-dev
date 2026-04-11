@@ -201,6 +201,17 @@ const kolibriInstance: Instance = {
   lastBackup: TWO_MINS_AGO,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_1_ID,
+  metrics: {
+    cpuPercent:      1.82,
+    memUsageBytes:   312_000_000,
+    memLimitBytes:   4_000_000_000,
+    memPercent:      7.8,
+    netRxBytes:      1_240_000,
+    netTxBytes:      380_000,
+    blockReadBytes:  52_000_000,
+    blockWriteBytes: 18_000_000,
+    sampledAt:       NOW - 15_000,
+  },
 };
 
 const nextcloudInstance: Instance = {
@@ -214,6 +225,17 @@ const nextcloudInstance: Instance = {
   lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
+  metrics: {
+    cpuPercent:      0.41,
+    memUsageBytes:   198_000_000,
+    memLimitBytes:   4_000_000_000,
+    memPercent:      4.95,
+    netRxBytes:      880_000,
+    netTxBytes:      210_000,
+    blockReadBytes:  8_000_000,
+    blockWriteBytes: 3_200_000,
+    sampledAt:       NOW - 15_000,
+  },
 };
 
 const wikipediaInstance: Instance = {
@@ -227,6 +249,7 @@ const wikipediaInstance: Instance = {
   lastBackup: null,
   lastStarted: TWO_MINS_AGO,
   storedOn: DISK_3_ID,
+  metrics: null,
 };
 
 const emptyDiskInstance: Instance = {
@@ -240,6 +263,7 @@ const emptyDiskInstance: Instance = {
   lastBackup: null,
   lastStarted: 0,
   storedOn: DISK_3_ID,
+  metrics: null,
 };
 
 const brokenAppInstance: Instance = {
@@ -253,6 +277,7 @@ const brokenAppInstance: Instance = {
   lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
+  metrics: null,
 };
 
 // ---------------------------------------------------------------------------
