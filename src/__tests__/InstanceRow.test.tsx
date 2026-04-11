@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, fireEvent } from '@solidjs/testing-library';
 import InstanceRow, {
   isStartDisabled,
@@ -6,7 +6,6 @@ import InstanceRow, {
   isBackupDisabled,
   formatLastBackup,
 } from '../components/InstanceRow';
-import { setSendCommandFn } from '../store/commands';
 import type { Instance, App, Engine, Disk, Status } from '../types/store';
 
 // ---------------------------------------------------------------------------
@@ -25,6 +24,17 @@ const makeInstance = (status: Status, lastBackup: number | null = null, metrics 
   storedOn: 'DISK001',
   metrics,
 });
+
+const mockBackupDisk: Disk = {
+  id: 'BACKUP001',
+  name: 'backup-disk',
+  device: 'sdd',
+  created: Date.now(),
+  lastDocked: Date.now(),
+  dockedTo: 'ENGINE_DISK001',
+  diskTypes: ['backup'],
+  backupConfig: { mode: 'on-demand', links: ['inst-001'] },
+};
 
 const mockApp: App = {
   id: 'kolibri-1.0',
@@ -50,19 +60,8 @@ const mockEngine: Engine = {
   commands: [],
 };
 
-const mockBackupDisk: Disk = {
-  id: 'BACKUP001',
-  name: 'backup-disk',
-  device: 'sdd',
-  created: Date.now(),
-  lastDocked: Date.now(),
-  dockedTo: 'ENGINE_DISK001',
-  diskTypes: ['backup'],
-  backupConfig: { mode: 'on-demand', links: ['inst-001'] },
-};
-
 // ---------------------------------------------------------------------------
-// Pure helpers: isStartDisabled / isStopDisabled
+// Pure helpers: isStartDisabled / isStopDisabled / isBackupDisabled / formatLastBackup
 // ---------------------------------------------------------------------------
 describe('isStartDisabled', () => {
   it('disables Start for Running', () => expect(isStartDisabled('Running')).toBe(true));
