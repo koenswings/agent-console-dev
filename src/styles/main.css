@@ -1552,3 +1552,194 @@ body {
 .docker-metrics__subval {
   color: var(--colour-text-muted);
 }
+
+/* --------------------------------------------------------
+   Settings Panel
+   -------------------------------------------------------- */
+.settings-panel {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings-panel__sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--colour-border);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  background: var(--colour-surface);
+  overflow-y: auto;
+}
+
+.settings-panel__tab {
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 9px 16px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-family: var(--font-family);
+  color: var(--colour-text);
+  transition: background 0.1s;
+}
+
+.settings-panel__tab:hover {
+  background: var(--colour-surface-hover);
+}
+
+.settings-panel__tab--active {
+  border-left-color: var(--colour-accent);
+  padding-left: 13px;
+  font-weight: 600;
+  color: var(--colour-accent);
+  background: var(--colour-surface-hover);
+}
+
+.settings-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.settings-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 480px;
+}
+
+.settings-panel__heading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--colour-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-panel__current-engine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--colour-text);
+}
+
+.settings-panel__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.settings-panel__status-dot--connected {
+  background: var(--colour-running);
+}
+
+.settings-panel__engine-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-panel__engine-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  background: var(--colour-surface);
+}
+
+.settings-panel__engine-hostname {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-size: 0.85rem;
+  font-family: monospace;
+  color: var(--colour-text);
+  cursor: pointer;
+}
+
+.settings-panel__engine-hostname:hover:not(:disabled) {
+  color: var(--colour-accent);
+}
+
+.settings-panel__engine-hostname:disabled {
+  cursor: default;
+}
+
+.settings-panel__engine-badge {
+  font-size: 0.72rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.settings-panel__engine-badge--online {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.settings-panel__engine-badge--offline {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.settings-panel__engine-badge--checking {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+/* Flatten Onboarding card when embedded inside SettingsPanel */
+.settings-panel .onboarding {
+  display: block;
+  padding: 0;
+  background: transparent;
+  min-height: unset;
+}
+
+.settings-panel .onboarding__card {
+  max-width: none;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.settings-panel .onboarding__title,
+.settings-panel .onboarding__subtitle {
+  display: none;
+}
+
+/* About section */
+.settings-panel__about-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--colour-text);
+}
+
+.settings-panel__about-desc {
+  font-size: 0.88rem;
+  color: var(--colour-text-muted);
+  margin: 0;
+}
+
+.settings-panel__about-version {
+  font-size: 0.82rem;
+  color: var(--colour-text-dim);
+  margin: 0;
+}
