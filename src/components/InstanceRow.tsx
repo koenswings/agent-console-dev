@@ -1,15 +1,15 @@
-import { Show, createSignal, type Component } from 'solid-js';
+import { Show, For, createSignal, createEffect, onCleanup, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import type { Instance, App, Engine, Disk, DockerMetrics } from '../types/store';
 import type { Status } from '../types/store';
 
 interface InstanceRowProps {
-  instance:    () => Instance | undefined;
-  app:         () => App | undefined;
-  engine:      () => Engine | undefined;
-  /** Backup disk docked on the same engine and linked to this instance, if any. */
-  backupDisk?: () => Disk | undefined;
+  instance:     () => Instance | undefined;
+  app:          () => App | undefined;
+  engine:       () => Engine | undefined;
+  /** Backup disks docked on the same engine and linked to this instance. */
+  backupDisks?: () => Disk[];
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +108,19 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
 
 const InstanceRow: Component<InstanceRowProps> = (props) => {
   const [expanded, setExpanded] = createSignal(false);
+  const [pickerOpen, setPickerOpen] = createSignal(false);
+  let pickerRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    if (!pickerOpen()) return;
+    const handleDocClick = (e: MouseEvent) => {
+      if (pickerRef && !pickerRef.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocClick);
+    onCleanup(() => document.removeEventListener('mousedown', handleDocClick));
+  });
 
   const handleStart = () => {
     const engine = props.engine();
@@ -126,12 +139,24 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   };
 
   const handleBackup = () => {
+    const disks = props.backupDisks?.() ?? [];
+    if (disks.length === 0) return;
+    if (disks.length === 1) {
+      const engine = props.engine();
+      const inst = props.instance();
+      if (!engine || !inst) return;
+      backupApp(engine.id, inst.name, disks[0].name);
+    } else {
+      setPickerOpen((v) => !v);
+    }
+  };
+
+  const handleBackupTo = (disk: Disk) => {
     const engine = props.engine();
-    const bd = props.backupDisk?.();
-    if (!engine || !bd) return;
     const inst = props.instance();
-    if (!inst) return;
-    backupApp(engine.id, inst.name, bd.name);
+    if (!engine || !inst) return;
+    backupApp(engine.id, inst.name, disk.name);
+    setPickerOpen(false);
   };
 
   const openUrl = () => {
@@ -143,7 +168,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return `http://${eng.hostname}.local:${port}`;
   };
 
-  const hasBackupDisk = () => props.backupDisk?.() !== undefined;
+  const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
 
   return (
     <div class="instance-row" role="listitem">
@@ -186,16 +211,36 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           Stop
         </button>
 
-        <Show when={hasBackupDisk()}>
-          <button
-            class="btn btn--backup"
-            disabled={isBackupDisabled(props.instance()?.status ?? 'Stopped')}
-            onClick={handleBackup}
-            title={`Back up to ${props.backupDisk?.()?.name}`}
-            aria-label={`Back up ${props.instance()?.name}`}
-          >
-            Back up
-          </button>
+        <Show when={hasBackupDisks()}>
+          <div class="backup-picker" ref={pickerRef}>
+            <button
+              class="btn btn--backup"
+              disabled={isBackupDisabled(props.instance()?.status ?? 'Stopped')}
+              onClick={handleBackup}
+              title={
+                (props.backupDisks?.() ?? []).length === 1
+                  ? `Back up to ${props.backupDisks!()[0].name}`
+                  : 'Select backup disk'
+              }
+              aria-label={`Back up ${props.instance()?.name}`}
+            >
+              Back up
+            </button>
+            <Show when={pickerOpen()}>
+              <div class="backup-picker__dropdown" role="listbox" aria-label="Select backup disk">
+                <For each={props.backupDisks?.() ?? []}>
+                  {(disk) => (
+                    <button
+                      class="backup-picker__option"
+                      onClick={() => handleBackupTo(disk)}
+                    >
+                      {disk.name}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
         </Show>
 
         <Show when={openUrl() !== null}>
