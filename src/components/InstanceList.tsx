@@ -103,6 +103,8 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                     app={app}
                     engine={engine}
                     backupDisks={backupDisks}
+                    instanceId={id}
+                    store={props.store}
                   />
                 </Show>
               );

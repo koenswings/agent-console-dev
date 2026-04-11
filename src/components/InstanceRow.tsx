@@ -1,7 +1,8 @@
 import { Show, For, createSignal, createEffect, onCleanup, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
-import type { Instance, App, Engine, Disk, DockerMetrics } from '../types/store';
+import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
+import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
 
 interface InstanceRowProps {
@@ -10,6 +11,10 @@ interface InstanceRowProps {
   engine:       () => Engine | undefined;
   /** Backup disks docked on the same engine and linked to this instance. */
   backupDisks?: () => Disk[];
+  /** The instance ID — used for operation locking lookups. */
+  instanceId?:  string;
+  /** Reactive store accessor — used for operation locking lookups. */
+  store?:       () => Store | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +53,19 @@ export const isBackupDisabled = (status: Status): boolean =>
 /** Returns true when the Stop button should be disabled. */
 export const isStopDisabled = (status: Status): boolean =>
   status === 'Stopped' || status === 'Docked' || status === 'Undocked';
+
+// ---------------------------------------------------------------------------
+// Operation progress helpers
+// ---------------------------------------------------------------------------
+
+const OP_LABEL: Record<OperationKind, string> = {
+  copyApp:       'Copying',
+  moveApp:       'Moving',
+  backupApp:     'Backing up',
+  restoreApp:    'Restoring',
+  upgradeApp:    'Upgrading',
+  upgradeEngine: 'Upgrading engine',
+};
 
 // ---------------------------------------------------------------------------
 // DockerMetricsPanel — pure display component
@@ -122,6 +140,33 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     onCleanup(() => document.removeEventListener('mousedown', handleDocClick));
   });
 
+  // ── Operation locking ────────────────────────────────────────────────────
+  const activeOps = (): Operation[] => {
+    if (!props.instanceId || !props.store) return [];
+    return getActiveOpsForInstance(props.store(), props.instanceId);
+  };
+
+  const locked = (): boolean => {
+    if (!props.instanceId || !props.store) return false;
+    return isInstanceLocked(props.store(), props.instanceId);
+  };
+
+  const firstActiveOp = (): Operation | null => activeOps()[0] ?? null;
+
+  const failedOp = (): Operation | null => {
+    if (!props.instanceId || !props.store) return null;
+    const store = props.store();
+    if (!store) return null;
+    if (activeOps().length > 0) return null; // active ops take precedence
+    const failed = Object.values(store.operationDB).filter(
+      (op) => op.status === 'Failed' && op.args['instanceId'] === props.instanceId
+    );
+    if (failed.length === 0) return null;
+    return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
+  };
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
   const handleStart = () => {
     const engine = props.engine();
     const inst = props.instance();
@@ -188,14 +233,43 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         <div class="instance-row__app">
           {props.app() ? props.app()!.title : props.instance()?.instanceOf}
         </div>
+
+        {/* ── Inline operation progress ─────────────────────── */}
+        <Show when={firstActiveOp()}>
+          {(op) => {
+            const label = OP_LABEL[op().kind] ?? op().kind;
+            const pct = op().progressPercent;
+            const labelText = pct != null ? `${label}… ${pct}%` : `${label}…`;
+            return (
+              <div class={`instance-row__progress${pct == null ? ' instance-row__progress--indeterminate' : ''}`}>
+                <div class="instance-row__progress-label">{labelText}</div>
+                <div class="instance-row__progress-bar">
+                  <div
+                    class="instance-row__progress-fill"
+                    style={pct != null ? { width: `${pct}%` } : {}}
+                  />
+                </div>
+              </div>
+            );
+          }}
+        </Show>
+        <Show when={failedOp()}>
+          {(op) => (
+            <div class="instance-row__progress instance-row__progress--failed">
+              <div class="instance-row__progress-label">
+                Failed: {op().error ?? 'Unknown error'} — Try again
+              </div>
+            </div>
+          )}
+        </Show>
       </div>
 
       <div class="instance-row__actions">
         <button
           class="btn btn--start"
-          disabled={isStartDisabled(props.instance()?.status ?? 'Stopped')}
+          disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked()}
           onClick={handleStart}
-          title="Start instance"
+          title={locked() ? 'Operation in progress' : 'Start instance'}
           aria-label={`Start ${props.instance()?.name}`}
         >
           Start
@@ -203,9 +277,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         <button
           class="btn btn--stop"
-          disabled={isStopDisabled(props.instance()?.status ?? 'Stopped')}
+          disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked()}
           onClick={handleStop}
-          title="Stop instance"
+          title={locked() ? 'Operation in progress' : 'Stop instance'}
           aria-label={`Stop ${props.instance()?.name}`}
         >
           Stop
@@ -215,10 +289,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           <div class="backup-picker" ref={pickerRef}>
             <button
               class="btn btn--backup"
-              disabled={isBackupDisabled(props.instance()?.status ?? 'Stopped')}
+              disabled={isBackupDisabled(props.instance()?.status ?? 'Stopped') || locked()}
               onClick={handleBackup}
               title={
-                (props.backupDisks?.() ?? []).length === 1
+                locked()
+                  ? 'Operation in progress'
+                  : (props.backupDisks?.() ?? []).length === 1
                   ? `Back up to ${props.backupDisks!()[0].name}`
                   : 'Select backup disk'
               }

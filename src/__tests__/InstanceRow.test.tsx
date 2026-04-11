@@ -6,7 +6,7 @@ import InstanceRow, {
   isBackupDisabled,
   formatLastBackup,
 } from '../components/InstanceRow';
-import type { Instance, App, Engine, Disk, Status } from '../types/store';
+import type { Instance, App, Engine, Disk, Status, Store, Operation } from '../types/store';
 import * as commands from '../store/commands';
 
 vi.mock('../store/commands', async (importOriginal) => {
@@ -428,6 +428,204 @@ describe('InstanceRow component', () => {
     ));
     fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
     expect(container.textContent).toContain('Never');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Operation locking + inline progress tests
+// ---------------------------------------------------------------------------
+
+const makeStoreWithOps = (ops: Operation[]): Store => ({
+  engineDB: {},
+  diskDB: {},
+  appDB: {},
+  instanceDB: {},
+  userDB: {},
+  operationDB: Object.fromEntries(ops.map((op) => [op.id, op])),
+});
+
+const makeRunningOp = (
+  instanceId: string,
+  kind: Operation['kind'] = 'copyApp',
+  pct: number | null = 45,
+): Operation => ({
+  id: 'op-001',
+  kind,
+  args: { instanceId, sourceDiskId: 'disk-src', targetDiskId: 'disk-tgt' },
+  engineId: 'engine-001',
+  status: 'Running',
+  progressPercent: pct,
+  startedAt: Date.now(),
+  completedAt: null,
+  error: null,
+});
+
+const makeFailedOp = (instanceId: string, errorMsg = 'Disk write failed'): Operation => ({
+  id: 'op-failed-001',
+  kind: 'copyApp',
+  args: { instanceId, sourceDiskId: 'disk-src', targetDiskId: 'disk-tgt' },
+  engineId: 'engine-001',
+  status: 'Failed',
+  progressPercent: null,
+  startedAt: Date.now() - 1000,
+  completedAt: Date.now(),
+  error: errorMsg,
+});
+
+describe('InstanceRow — operation locking', () => {
+  it('Start button is enabled when no ops (no store provided)', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(getByRole('button', { name: /start/i })).not.toBeDisabled();
+  });
+
+  it('Start button is disabled when instance is locked by a Running op', () => {
+    const op = makeRunningOp('inst-001');
+    const store = makeStoreWithOps([op]);
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    expect(getByRole('button', { name: /start/i })).toBeDisabled();
+  });
+
+  it('Stop button is disabled when instance is locked by a Running op', () => {
+    const op = makeRunningOp('inst-001');
+    const store = makeStoreWithOps([op]);
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    expect(getByRole('button', { name: /stop/i })).toBeDisabled();
+  });
+
+  it('Backup button is disabled when instance is locked by a Running op', () => {
+    const op = makeRunningOp('inst-001');
+    const store = makeStoreWithOps([op]);
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisks={() => [mockBackupDisk]}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    expect(getByRole('button', { name: /back up/i })).toBeDisabled();
+  });
+
+  it('buttons are not additionally disabled when op belongs to a different instance', () => {
+    const op = makeRunningOp('inst-other');
+    const store = makeStoreWithOps([op]);
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    // Start should only be disabled by status logic (Stopped → enabled)
+    expect(getByRole('button', { name: /start/i })).not.toBeDisabled();
+  });
+});
+
+describe('InstanceRow — inline progress indicator', () => {
+  it('shows progress label with percent when active op has progressPercent', () => {
+    const op = makeRunningOp('inst-001', 'copyApp', 45);
+    const store = makeStoreWithOps([op]);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    const label = container.querySelector('.instance-row__progress-label');
+    expect(label).toBeTruthy();
+    expect(label!.textContent).toContain('Copying');
+    expect(label!.textContent).toContain('45%');
+  });
+
+  it('shows progress label without percent when progressPercent is null', () => {
+    const op = makeRunningOp('inst-001', 'backupApp', null);
+    const store = makeStoreWithOps([op]);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    const label = container.querySelector('.instance-row__progress-label');
+    expect(label).toBeTruthy();
+    expect(label!.textContent).toContain('Backing up');
+    expect(label!.textContent).not.toContain('%');
+  });
+
+  it('applies indeterminate class when progressPercent is null', () => {
+    const op = makeRunningOp('inst-001', 'restoreApp', null);
+    const store = makeStoreWithOps([op]);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    expect(container.querySelector('.instance-row__progress--indeterminate')).toBeTruthy();
+  });
+
+  it('does not show progress area when no ops and no store', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(container.querySelector('.instance-row__progress')).toBeFalsy();
+  });
+
+  it('shows failed error text when op status is Failed', () => {
+    const op = makeFailedOp('inst-001', 'Disk write failed');
+    const store = makeStoreWithOps([op]);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    const label = container.querySelector('.instance-row__progress--failed .instance-row__progress-label');
+    expect(label).toBeTruthy();
+    expect(label!.textContent).toContain('Failed');
+    expect(label!.textContent).toContain('Disk write failed');
   });
 });
 
