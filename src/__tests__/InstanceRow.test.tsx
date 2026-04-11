@@ -284,9 +284,26 @@ describe('InstanceRow component', () => {
         engine={() => mockEngine}
       />
     ));
-    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    const statusBtn = container.querySelector('.instance-row__status-btn') as HTMLElement;
+    fireEvent.click(statusBtn);
     expect(container.querySelector('.instance-row__details')).toBeTruthy();
     expect(container.textContent).toContain('Last backup');
+    expect(container.textContent).toContain('Created');
+    expect(container.textContent).toContain('Last started');
+  });
+
+  it('details panel hides again after second click', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    const statusBtn = container.querySelector('.instance-row__status-btn') as HTMLElement;
+    fireEvent.click(statusBtn);
+    fireEvent.click(statusBtn);
+    expect(container.querySelector('.instance-row__details')).toBeFalsy();
   });
 
   it('shows last backup info in details panel when backupDisk is provided', () => {
