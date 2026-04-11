@@ -29,15 +29,15 @@ const resolveEngine = (store: Store | null, instance: Instance | undefined): Eng
 };
 
 /**
- * Find a docked Backup Disk linked to this instance on the same engine.
- * Returns undefined if no linked backup disk is currently docked.
+ * Find all docked Backup Disks linked to this instance on the same engine.
+ * Returns an empty array if no linked backup disks are currently docked.
  */
-const resolveBackupDisk = (store: Store | null, instance: Instance | undefined): Disk | undefined => {
-  if (!store || !instance) return undefined;
+const resolveBackupDisks = (store: Store | null, instance: Instance | undefined): Disk[] => {
+  if (!store || !instance) return [];
   const engineDisk = instance.storedOn ? store.diskDB[instance.storedOn] : undefined;
   const engineId = engineDisk?.dockedTo;
-  if (!engineId) return undefined;
-  return Object.values(store.diskDB).find(
+  if (!engineId) return [];
+  return Object.values(store.diskDB).filter(
     (d) =>
       d.dockedTo === engineId &&
       d.device !== null &&
@@ -93,8 +93,8 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                 const inst = instance();
                 return inst ? props.store()?.appDB[inst.instanceOf] : undefined;
               };
-              const engine     = () => resolveEngine(props.store(), instance());
-              const backupDisk = () => resolveBackupDisk(props.store(), instance());
+              const engine      = () => resolveEngine(props.store(), instance());
+              const backupDisks = () => resolveBackupDisks(props.store(), instance());
 
               return (
                 <Show when={instance()}>
@@ -102,7 +102,7 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                     instance={instance}
                     app={app}
                     engine={engine}
-                    backupDisk={backupDisk}
+                    backupDisks={backupDisks}
                   />
                 </Show>
               );

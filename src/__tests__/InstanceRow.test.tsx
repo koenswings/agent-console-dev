@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@solidjs/testing-library';
 import InstanceRow, {
   isStartDisabled,
@@ -7,6 +7,12 @@ import InstanceRow, {
   formatLastBackup,
 } from '../components/InstanceRow';
 import type { Instance, App, Engine, Disk, Status } from '../types/store';
+import * as commands from '../store/commands';
+
+vi.mock('../store/commands', async (importOriginal) => {
+  const mod = await importOriginal<typeof commands>();
+  return { ...mod, backupApp: vi.fn() };
+});
 
 // ---------------------------------------------------------------------------
 // Helper factories
@@ -29,6 +35,17 @@ const mockBackupDisk: Disk = {
   id: 'BACKUP001',
   name: 'backup-disk',
   device: 'sdd',
+  created: Date.now(),
+  lastDocked: Date.now(),
+  dockedTo: 'ENGINE_DISK001',
+  diskTypes: ['backup'],
+  backupConfig: { mode: 'on-demand', links: ['inst-001'] },
+};
+
+const mockBackupDisk2: Disk = {
+  id: 'BACKUP002',
+  name: 'backup-disk-weekly',
+  device: 'sde',
   created: Date.now(),
   lastDocked: Date.now(),
   dockedTo: 'ENGINE_DISK001',
@@ -106,6 +123,9 @@ describe('formatLastBackup', () => {
 // Component rendering — props are accessor functions
 // ---------------------------------------------------------------------------
 describe('InstanceRow component', () => {
+  beforeEach(() => {
+    vi.mocked(commands.backupApp).mockClear();
+  });
   it('renders instance name', () => {
     const { container } = render(() => (
       <InstanceRow
@@ -235,7 +255,7 @@ describe('InstanceRow component', () => {
         instance={() => makeInstance('Running')}
         app={() => mockApp}
         engine={() => mockEngine}
-        backupDisk={() => mockBackupDisk}
+        backupDisks={() => [mockBackupDisk]}
       />
     ));
     expect(container.querySelector('.btn--backup')).toBeTruthy();
@@ -247,7 +267,7 @@ describe('InstanceRow component', () => {
         instance={() => makeInstance('Running')}
         app={() => mockApp}
         engine={() => mockEngine}
-        backupDisk={() => mockBackupDisk}
+        backupDisks={() => [mockBackupDisk]}
       />
     ));
     expect(getByRole('button', { name: /back up/i })).not.toBeDisabled();
@@ -259,10 +279,87 @@ describe('InstanceRow component', () => {
         instance={() => makeInstance('Stopped')}
         app={() => mockApp}
         engine={() => mockEngine}
-        backupDisk={() => mockBackupDisk}
+        backupDisks={() => [mockBackupDisk]}
       />
     ));
     expect(getByRole('button', { name: /back up/i })).toBeDisabled();
+  });
+
+  it('single disk: clicking Backup fires backupApp immediately without showing picker', () => {
+    const { getByRole, container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisks={() => [mockBackupDisk]}
+      />
+    ));
+    fireEvent.click(getByRole('button', { name: /back up/i }));
+    expect(container.querySelector('.backup-picker__dropdown')).toBeFalsy();
+    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledOnce();
+    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledWith('ENGINE_DISK001', 'kolibri', 'backup-disk');
+  });
+
+  it('multiple disks: clicking Backup opens disk picker', () => {
+    const { getByRole, container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisks={() => [mockBackupDisk, mockBackupDisk2]}
+      />
+    ));
+    expect(container.querySelector('.backup-picker__dropdown')).toBeFalsy();
+    fireEvent.click(getByRole('button', { name: /back up/i }));
+    expect(container.querySelector('.backup-picker__dropdown')).toBeTruthy();
+    expect(vi.mocked(commands.backupApp)).not.toHaveBeenCalled();
+  });
+
+  it('multiple disks: picker lists disk names', () => {
+    const { getByRole, container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisks={() => [mockBackupDisk, mockBackupDisk2]}
+      />
+    ));
+    fireEvent.click(getByRole('button', { name: /back up/i }));
+    const dropdown = container.querySelector('.backup-picker__dropdown')!;
+    expect(dropdown.textContent).toContain('backup-disk');
+    expect(dropdown.textContent).toContain('backup-disk-weekly');
+  });
+
+  it('multiple disks: selecting a disk from picker fires backupApp and closes picker', () => {
+    const { getByRole, container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisks={() => [mockBackupDisk, mockBackupDisk2]}
+      />
+    ));
+    fireEvent.click(getByRole('button', { name: /back up/i }));
+    const options = container.querySelectorAll('.backup-picker__option');
+    fireEvent.click(options[1]); // select weekly disk
+    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledOnce();
+    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledWith('ENGINE_DISK001', 'kolibri', 'backup-disk-weekly');
+    expect(container.querySelector('.backup-picker__dropdown')).toBeFalsy();
+  });
+
+  it('multiple disks: clicking outside the picker closes it', () => {
+    const { getByRole, container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisks={() => [mockBackupDisk, mockBackupDisk2]}
+      />
+    ));
+    fireEvent.click(getByRole('button', { name: /back up/i }));
+    expect(container.querySelector('.backup-picker__dropdown')).toBeTruthy();
+    fireEvent.mouseDown(document.body);
+    expect(container.querySelector('.backup-picker__dropdown')).toBeFalsy();
   });
 
   it('details panel is hidden by default', () => {
@@ -313,7 +410,7 @@ describe('InstanceRow component', () => {
         instance={() => makeInstance('Running', ts)}
         app={() => mockApp}
         engine={() => mockEngine}
-        backupDisk={() => mockBackupDisk}
+        backupDisks={() => [mockBackupDisk]}
       />
     ));
     fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
@@ -326,7 +423,7 @@ describe('InstanceRow component', () => {
         instance={() => makeInstance('Running', null)}
         app={() => mockApp}
         engine={() => mockEngine}
-        backupDisk={() => mockBackupDisk}
+        backupDisks={() => [mockBackupDisk]}
       />
     ));
     fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
