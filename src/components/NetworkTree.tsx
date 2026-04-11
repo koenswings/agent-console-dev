@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { isEngineOnline } from '../store/signals';
 import { ejectDisk, copyApp, moveApp } from '../store/commands';
+import { isDiskLocked } from '../store/operations';
 import type { Disk, DiskType, Store } from '../types/store';
 
 // ---------------------------------------------------------------------------
@@ -242,7 +243,12 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                         <Show when={canEject(disk()!)}>
                           <button
                             class="tree-item__eject-btn"
-                            title={`Eject ${disk()?.name}`}
+                            disabled={isDiskLocked(props.store(), diskId)}
+                            title={
+                              isDiskLocked(props.store(), diskId)
+                                ? 'Operation in progress — cannot eject'
+                                : `Eject ${disk()?.name}`
+                            }
                             aria-label={`Eject disk ${disk()?.name}`}
                             onClick={(e) => {
                               e.stopPropagation();

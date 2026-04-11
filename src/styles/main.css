@@ -549,6 +549,51 @@ body {
 }
 
 /* --------------------------------------------------------
+   Instance Row — Inline Operation Progress
+   -------------------------------------------------------- */
+.instance-row__progress {
+  margin-top: 4px;
+}
+
+.instance-row__progress-label {
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-muted);
+  margin-bottom: 3px;
+}
+
+.instance-row__progress-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--colour-border);
+  overflow: hidden;
+}
+
+.instance-row__progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--colour-btn-start);
+  transition: width 0.3s ease;
+}
+
+.instance-row__progress--indeterminate .instance-row__progress-fill {
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  animation: instance-progress-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes instance-progress-pulse {
+  0%   { left: -40%; }
+  100% { left: 120%; }
+}
+
+.instance-row__progress--failed .instance-row__progress-label {
+  color: var(--colour-error);
+}
+
+/* --------------------------------------------------------
    Status Dot
    -------------------------------------------------------- */
 .status-dot {
