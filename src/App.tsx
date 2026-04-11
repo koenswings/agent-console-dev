@@ -1,5 +1,6 @@
 import { createSignal, createEffect, Show, onMount, type Component } from 'solid-js';
 import Onboarding from './components/Onboarding';
+import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
@@ -150,10 +151,10 @@ const App: Component = () => {
     setShowOperatorMgmt(false);
   };
 
-  // Show onboarding if: settings open or (no hostname AND not demo)
+  // Show onboarding for first-run only: no hostname AND not demo
   const shouldShowOnboarding = () => {
     if (!ready()) return false;
-    return showSettings() || (!hostname() && !demo());
+    return !hostname() && !demo();
   };
 
   // Show first-time setup if: store loaded and no operators exist yet
@@ -221,14 +222,26 @@ const App: Component = () => {
 
       {/* Main content */}
       <Show
-        when={!shouldShowOnboarding()}
+        when={!shouldShowOnboarding() && !showSettings()}
         fallback={
-          <Onboarding
-            onComplete={handleOnboardingComplete}
-            discovering={discovering()}
-            discoveryResults={discoveryResults()}
-            onDiscoverySelect={handleDiscoverySelect}
-          />
+          showSettings()
+            ? <SettingsPanel
+                store={store()}
+                connection={connection()}
+                hostname={hostname()}
+                discovering={discovering()}
+                discoveryResults={discoveryResults()}
+                onDiscoverySelect={handleDiscoverySelect}
+                onRescan={runDiscovery}
+                onClose={() => setShowSettings(false)}
+                onComplete={handleOnboardingComplete}
+              />
+            : <Onboarding
+                onComplete={handleOnboardingComplete}
+                discovering={discovering()}
+                discoveryResults={discoveryResults()}
+                onDiscoverySelect={handleDiscoverySelect}
+              />
         }
       >
         <Show
