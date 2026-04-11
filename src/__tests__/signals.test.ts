@@ -79,11 +79,12 @@ describe('getEngineTree', () => {
     expect(node1).toBeDefined();
     expect(node2).toBeDefined();
 
-    // Engine 1 has 2 disks (kolibri-disk + backup-disk)
-    expect(node1!.disks).toHaveLength(2);
+    // Engine 1 has 3 disks (kolibri-disk + backup-disk + empty-disk)
+    expect(node1!.disks).toHaveLength(3);
     const engine1DiskIds = node1!.disks.map((d) => d.id);
     expect(engine1DiskIds).toContain(MOCK_IDS.DISK_1_ID);
     expect(engine1DiskIds).toContain(MOCK_IDS.DISK_4_ID);
+    expect(engine1DiskIds).toContain(MOCK_IDS.DISK_5_ID);
 
     // Engine 2 has 2 disks (nextcloud-disk, wikipedia-disk)
     expect(node2!.disks).toHaveLength(2);

@@ -57,7 +57,7 @@ describe('StatusDot component', () => {
     expect(dot).toHaveAttribute('aria-label', 'Status: Error');
   });
 
-  it.each<Status>(['Running', 'Starting', 'Stopped', 'Docked', 'Error', 'Undocked', 'Pauzed'])(
+  it.each<Status>(['Running', 'Starting', 'Stopped', 'Docked', 'Error', 'Undocked', 'Pauzed', 'Missing'])(
     'renders without throwing for status %s',
     (status) => {
       expect(() => render(() => <StatusDot status={status} />)).not.toThrow();

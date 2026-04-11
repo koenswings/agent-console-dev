@@ -2,6 +2,7 @@ import { createSignal, createEffect, Show, onMount, type Component } from 'solid
 import Onboarding from './components/Onboarding';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
+import EmptyDiskPanel from './components/EmptyDiskPanel';
 import AppBrowser from './components/AppBrowser';
 import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
@@ -194,11 +195,6 @@ const App: Component = () => {
         {/* Auth controls */}
         <Show
           when={isOperator()}
-          fallback={
-            <Show when={!shouldShowOnboarding() && !shouldShowFirstTimeSetup()}>
-              {/* Login link shown in user mode — not shown during onboarding/setup */}
-            </Show>
-          }
         >
           <span class="status-bar__username">{currentUser()?.username}</span>
           <button
@@ -270,7 +266,19 @@ const App: Component = () => {
               fallback={
                 <div class="main-layout">
                   <NetworkTree selection={selection()} onSelect={setSelection} store={store} />
-                  <InstanceList selection={selection()} store={store} />
+                  <Show
+                    when={
+                      selection().type === 'disk' &&
+                      store()?.diskDB[selection().id]?.diskTypes?.includes('empty') === true
+                    }
+                    fallback={<InstanceList selection={selection()} store={store} />}
+                  >
+                    <EmptyDiskPanel
+                      disk={() => store()?.diskDB[selection().id]}
+                      store={store}
+                      engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                    />
+                  </Show>
                 </div>
               }
             >

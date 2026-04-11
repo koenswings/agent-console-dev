@@ -27,6 +27,8 @@ export const statusStyle = (status: Status): StatusStyle => {
       return { className: 'status-dot--undocked', colour: '#9ca3af' };
     case 'Pauzed':
       return { className: 'status-dot--pauzed', colour: '#f97316' };
+    case 'Missing':
+      return { className: 'status-dot--missing', colour: '#9ca3af' };
     default: {
       // Exhaustive check — TypeScript will error if a new Status is added
       // without updating this function.

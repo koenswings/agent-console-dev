@@ -11,7 +11,7 @@ const baseInstance: Instance = {
   port: 8080,
   serviceImages: [],
   created: 0,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: 0,
   storedOn: 'disk-001',
 };

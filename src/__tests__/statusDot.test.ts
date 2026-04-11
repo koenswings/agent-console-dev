@@ -11,6 +11,7 @@ describe('statusColour', () => {
     ['Error', '#ef4444'],
     ['Undocked', '#9ca3af'],
     ['Pauzed', '#f97316'],
+    ['Missing', '#9ca3af'],
   ];
 
   it.each(cases)('returns %s → %s', (status, expected) => {
@@ -49,7 +50,7 @@ describe('statusStyle', () => {
 
   it('covers all Status values', () => {
     const allStatuses: Status[] = [
-      'Running', 'Starting', 'Stopped', 'Docked', 'Error', 'Undocked', 'Pauzed',
+      'Running', 'Starting', 'Stopped', 'Docked', 'Error', 'Undocked', 'Pauzed', 'Missing',
     ];
     allStatuses.forEach((s) => {
       expect(() => statusStyle(s)).not.toThrow();
