@@ -203,3 +203,23 @@ export const installApp = (
 ): void => {
   _sendCommand(engineId, buildInstallAppCommand(appId, targetDiskName, opts));
 };
+
+// ---------------------------------------------------------------------------
+// Restore App command
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the "restoreApp" command string (pure, no side effects).
+ * Format: "restoreApp <instanceName> <targetDiskName>"
+ */
+export const buildRestoreAppCommand = (instanceName: string, targetDiskName: string): string =>
+  `restoreApp ${instanceName} ${targetDiskName}`;
+
+/** Restore a backed-up instance onto a target disk. */
+export const restoreApp = (
+  engineId: string,
+  instanceName: string,
+  targetDiskName: string
+): void => {
+  _sendCommand(engineId, buildRestoreAppCommand(instanceName, targetDiskName));
+};

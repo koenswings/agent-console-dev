@@ -8,6 +8,7 @@ import {
   buildCopyAppCommand,
   buildMoveAppCommand,
   buildInstallAppCommand,
+  buildRestoreAppCommand,
   setSendCommandFn,
   startInstance,
   stopInstance,
@@ -17,6 +18,7 @@ import {
   copyApp,
   moveApp,
   installApp,
+  restoreApp,
 } from '../store/commands';
 
 // ---------------------------------------------------------------------------
@@ -266,5 +268,38 @@ describe('installApp', () => {
       'ENGINE_001',
       'installApp kolibri-1.0 empty-disk --source catalog-disk'
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildRestoreAppCommand
+// ---------------------------------------------------------------------------
+describe('buildRestoreAppCommand', () => {
+  it('formats correctly', () => {
+    expect(buildRestoreAppCommand('kolibri', 'kolibri-disk')).toBe(
+      'restoreApp kolibri kolibri-disk'
+    );
+  });
+
+  it('starts with restoreApp and includes both args', () => {
+    const cmd = buildRestoreAppCommand('my-app', 'target-disk');
+    expect(cmd.startsWith('restoreApp ')).toBe(true);
+    expect(cmd).toContain('my-app');
+    expect(cmd).toContain('target-disk');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// restoreApp dispatcher
+// ---------------------------------------------------------------------------
+describe('restoreApp', () => {
+  it('dispatches the correct command string', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    restoreApp('ENGINE_001', 'kolibri', 'kolibri-disk');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'restoreApp kolibri kolibri-disk');
   });
 });

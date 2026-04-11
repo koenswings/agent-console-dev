@@ -4,6 +4,7 @@ import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
+import RestorePanel from './components/RestorePanel';
 import OperationProgress from './components/OperationProgress';
 import AppBrowser from './components/AppBrowser';
 import LoginForm from './components/LoginForm';
@@ -287,13 +288,35 @@ const App: Component = () => {
                         selection().type === 'disk' &&
                         store()?.diskDB[selection().id]?.diskTypes?.includes('empty') === true
                       }
-                      fallback={<InstanceList selection={selection()} store={store} />}
                     >
                       <EmptyDiskPanel
                         disk={() => store()?.diskDB[selection().id]}
                         store={store}
                         engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
                       />
+                    </Show>
+                    <Show
+                      when={
+                        selection().type === 'disk' &&
+                        store()?.diskDB[selection().id]?.diskTypes?.includes('backup') === true
+                      }
+                    >
+                      <RestorePanel
+                        disk={() => store()?.diskDB[selection().id]}
+                        store={store}
+                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                      />
+                    </Show>
+                    <Show
+                      when={
+                        !(
+                          selection().type === 'disk' &&
+                          (store()?.diskDB[selection().id]?.diskTypes?.includes('empty') ||
+                            store()?.diskDB[selection().id]?.diskTypes?.includes('backup'))
+                        )
+                      }
+                    >
+                      <InstanceList selection={selection()} store={store} />
                     </Show>
                   </div>
                 </div>
