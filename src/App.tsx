@@ -3,6 +3,7 @@ import Onboarding from './components/Onboarding';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
+import OperationProgress from './components/OperationProgress';
 import AppBrowser from './components/AppBrowser';
 import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
@@ -266,19 +267,22 @@ const App: Component = () => {
               fallback={
                 <div class="main-layout">
                   <NetworkTree selection={selection()} onSelect={setSelection} store={store} />
-                  <Show
-                    when={
-                      selection().type === 'disk' &&
-                      store()?.diskDB[selection().id]?.diskTypes?.includes('empty') === true
-                    }
-                    fallback={<InstanceList selection={selection()} store={store} />}
-                  >
-                    <EmptyDiskPanel
-                      disk={() => store()?.diskDB[selection().id]}
-                      store={store}
-                      engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
-                    />
-                  </Show>
+                  <div class="main-layout__right">
+                    <OperationProgress store={store} />
+                    <Show
+                      when={
+                        selection().type === 'disk' &&
+                        store()?.diskDB[selection().id]?.diskTypes?.includes('empty') === true
+                      }
+                      fallback={<InstanceList selection={selection()} store={store} />}
+                    >
+                      <EmptyDiskPanel
+                        disk={() => store()?.diskDB[selection().id]}
+                        store={store}
+                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                      />
+                    </Show>
+                  </div>
                 </div>
               }
             >

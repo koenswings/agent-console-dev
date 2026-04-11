@@ -1,6 +1,6 @@
-import { For, Show, createMemo, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { isEngineOnline } from '../store/signals';
-import { ejectDisk } from '../store/commands';
+import { ejectDisk, copyApp, moveApp } from '../store/commands';
 import type { Disk, DiskType, Store } from '../types/store';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +24,48 @@ const diskTypeLabel = (disk: Disk): string | null => {
 const canEject = (disk: Disk): boolean =>
   disk.device !== null && !(disk.diskTypes ?? []).includes('backup');
 
+// ---------------------------------------------------------------------------
+// Drag data shape
+// ---------------------------------------------------------------------------
+interface DragInstanceData {
+  instanceId: string;
+  instanceName: string;
+  sourceDiskId: string;
+  sourceDiskName: string;
+}
+
+const DRAG_TYPE = 'application/x-idea-instance';
+
+// ---------------------------------------------------------------------------
+// Copy/Move modal
+// ---------------------------------------------------------------------------
+interface CopyMoveModalProps {
+  instanceName: string;
+  sourceDiskName: string;
+  targetDiskName: string;
+  onChoice: (op: 'copy' | 'move') => void;
+  onCancel: () => void;
+}
+
+const CopyMoveModal: Component<CopyMoveModalProps> = (props) => (
+  <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move">
+    <div class="copy-move-modal">
+      <div class="copy-move-modal__title">Copy or Move?</div>
+      <p class="copy-move-modal__desc">
+        <strong>{props.instanceName}</strong> from <em>{props.sourceDiskName}</em> → <em>{props.targetDiskName}</em>
+      </p>
+      <div class="copy-move-modal__actions">
+        <button class="btn" onClick={props.onCancel}>Cancel</button>
+        <button class="btn" onClick={() => props.onChoice('move')}>Move</button>
+        <button class="btn btn--primary" onClick={() => props.onChoice('copy')}>Copy</button>
+      </div>
+    </div>
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Selection type
+// ---------------------------------------------------------------------------
 export interface Selection {
   type: 'network' | 'engine' | 'disk';
   id: string;
@@ -36,6 +78,9 @@ interface NetworkTreeProps {
   store: () => Store | null;
 }
 
+// ---------------------------------------------------------------------------
+// NetworkTree component
+// ---------------------------------------------------------------------------
 const NetworkTree: Component<NetworkTreeProps> = (props) => {
   const isSelected = (type: Selection['type'], id: string): boolean =>
     props.selection.type === type && props.selection.id === id;
@@ -44,6 +89,46 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
   const engineIds = createMemo(() =>
     Object.keys(props.store()?.engineDB ?? {})
   );
+
+  // ── Drag state ────────────────────────────────────────────────────────────
+  const [dragData, setDragData] = createSignal<DragInstanceData | null>(null);
+  const [dropTargetDiskId, setDropTargetDiskId] = createSignal<string | null>(null);
+
+  // Pending copy/move modal state
+  interface PendingOp {
+    data: DragInstanceData;
+    targetDisk: Disk;
+    targetEngineId: string;
+  }
+  const [pendingOp, setPendingOp] = createSignal<PendingOp | null>(null);
+
+  const handleDrop = (targetDiskId: string) => {
+    const data = dragData();
+    const s = props.store();
+    if (!data || !s) return;
+
+    const targetDisk = s.diskDB[targetDiskId];
+    if (!targetDisk || !targetDisk.dockedTo) return;
+
+    // Don't drop onto the same disk
+    if (targetDiskId === data.sourceDiskId) return;
+
+    setPendingOp({ data, targetDisk, targetEngineId: targetDisk.dockedTo });
+    setDropTargetDiskId(null);
+    setDragData(null);
+  };
+
+  const handleCopyMoveChoice = (op: 'copy' | 'move') => {
+    const pending = pendingOp();
+    if (!pending) return;
+    const { data, targetDisk, targetEngineId } = pending;
+    if (op === 'copy') {
+      copyApp(targetEngineId, data.instanceName, data.sourceDiskName, targetDisk.name);
+    } else {
+      moveApp(targetEngineId, data.instanceName, data.sourceDiskName, targetDisk.name);
+    }
+    setPendingOp(null);
+  };
 
   return (
     <nav class="network-tree" aria-label="Network tree">
@@ -108,10 +193,22 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
               <For each={diskIds()}>
                 {(diskId) => {
                   const disk = () => props.store()?.diskDB[diskId] as Disk | undefined;
+                  const isDragOver = () => dropTargetDiskId() === diskId;
+
+                  // ── Instance rows for this disk (draggable) ──────
+                  const instancesOnDisk = createMemo(() => {
+                    const s = props.store();
+                    if (!s) return [];
+                    return Object.values(s.instanceDB).filter(
+                      (inst) => inst.storedOn === diskId
+                    );
+                  });
+
                   return (
                     <Show when={disk()}>
+                      {/* Disk row — droppable */}
                       <div
-                        class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''}`}
+                        class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''} ${isDragOver() ? 'tree-item--drag-over' : ''}`}
                         role="treeitem"
                         tabIndex={0}
                         aria-selected={isSelected('disk', diskId)}
@@ -120,6 +217,19 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             props.onSelect({ type: 'disk', id: diskId });
                           }
+                        }}
+                        onDragOver={(e) => {
+                          if (dragData()) {
+                            e.preventDefault();
+                            setDropTargetDiskId(diskId);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetDiskId() === diskId) setDropTargetDiskId(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleDrop(diskId);
                         }}
                       >
                         <span class="tree-item__icon">💾</span>
@@ -145,6 +255,38 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           </button>
                         </Show>
                       </div>
+
+                      {/* Instance rows — draggable */}
+                      <For each={instancesOnDisk()}>
+                        {(inst) => {
+                          const d = disk();
+                          return (
+                            <div
+                              class="tree-item tree-item--instance"
+                              draggable={true}
+                              title={`Drag to copy/move ${inst.name}`}
+                              onDragStart={(e) => {
+                                if (!d) return;
+                                const data: DragInstanceData = {
+                                  instanceId: inst.id,
+                                  instanceName: inst.name,
+                                  sourceDiskId: diskId,
+                                  sourceDiskName: d.name,
+                                };
+                                e.dataTransfer?.setData(DRAG_TYPE, JSON.stringify(data));
+                                setDragData(data);
+                              }}
+                              onDragEnd={() => {
+                                setDragData(null);
+                                setDropTargetDiskId(null);
+                              }}
+                            >
+                              <span class="tree-item__icon tree-item__icon--instance">📦</span>
+                              <span class="tree-item__label">{inst.name}</span>
+                            </div>
+                          );
+                        }}
+                      </For>
                     </Show>
                   );
                 }}
@@ -153,6 +295,19 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           );
         }}
       </For>
+
+      {/* ── Copy/Move modal ─────────────────────────────────────── */}
+      <Show when={pendingOp()}>
+        {(op) => (
+          <CopyMoveModal
+            instanceName={op().data.instanceName}
+            sourceDiskName={op().data.sourceDiskName}
+            targetDiskName={op().targetDisk.name}
+            onChoice={handleCopyMoveChoice}
+            onCancel={() => setPendingOp(null)}
+          />
+        )}
+      </Show>
     </nav>
   );
 };
