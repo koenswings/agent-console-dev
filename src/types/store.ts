@@ -22,6 +22,15 @@ export type Command = string;
 export type AppURL = string;
 export type AppCategory = string;
 
+// Disk types — mirrors CommonTypes.ts
+export type DiskType = 'app' | 'backup' | 'empty' | 'upgrade' | 'files';
+export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
+
+export interface BackupConfig {
+  mode: BackupMode;
+  links: InstanceID[]; // instance IDs this backup disk is configured for
+}
+
 // ---------------------------------------------------------------------------
 // Engine — mirrors agent-engine-dev/src/data/Engine.ts
 // ---------------------------------------------------------------------------
@@ -47,6 +56,8 @@ export interface Disk {
   created: Timestamp;
   lastDocked: Timestamp;
   dockedTo: EngineID | null;
+  diskTypes: DiskType[];              // types detected for this disk; empty array = unknown
+  backupConfig: BackupConfig | null;  // set when disk is a Backup Disk; null otherwise
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +76,32 @@ export interface App {
 }
 
 // ---------------------------------------------------------------------------
+// DockerMetrics — live container stats written by the Engine on each heartbeat.
+// Mirrors agent-engine-dev/src/data/Instance.ts (DockerMetrics sub-type).
+// All fields are null when the instance is not Running.
+// ---------------------------------------------------------------------------
+export interface DockerMetrics {
+  /** CPU usage as a percentage of all available cores (e.g. 2.34 = 2.34%) */
+  cpuPercent:    number | null;
+  /** Memory currently used by the container, in bytes */
+  memUsageBytes: number | null;
+  /** Hard memory limit for the container, in bytes (from cgroup) */
+  memLimitBytes: number | null;
+  /** Memory usage as a percentage of the limit */
+  memPercent:    number | null;
+  /** Total bytes received over the network since container start */
+  netRxBytes:    number | null;
+  /** Total bytes transmitted over the network since container start */
+  netTxBytes:    number | null;
+  /** Total bytes read from block devices since container start */
+  blockReadBytes:  number | null;
+  /** Total bytes written to block devices since container start */
+  blockWriteBytes: number | null;
+  /** Unix ms when these metrics were last sampled by the Engine */
+  sampledAt:     Timestamp | null;
+}
+
+// ---------------------------------------------------------------------------
 // Instance — mirrors agent-engine-dev/src/data/Instance.ts
 // ---------------------------------------------------------------------------
 export type Status =
@@ -74,6 +111,7 @@ export type Status =
   | 'Running'
   | 'Pauzed'
   | 'Stopped'
+  | 'Missing'
   | 'Error';
 
 export interface Instance {
@@ -84,9 +122,11 @@ export interface Instance {
   port: PortNumber;
   serviceImages: ServiceImage[];
   created: Timestamp;
-  lastBackedUp: Timestamp;
+  lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
   lastStarted: Timestamp;
   storedOn: DiskID | null;
+  /** Live Docker container metrics. Null when instance is not Running. */
+  metrics: DockerMetrics | null;
 }
 
 // ---------------------------------------------------------------------------

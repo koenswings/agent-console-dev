@@ -2,7 +2,7 @@
 
 **Status:** Approved  
 **Author:** Pixel (Console UI Developer)  
-**Date:** 2026-03-29 (updated 2026-03-30)  
+**Date:** 2026-03-29 (updated 2026-04-07)  
 **Depends on:** `design/001-console-tech-stack.md`
 
 ---
@@ -78,18 +78,52 @@ The same `dist/` build artefact is used in all three modes. No separate builds.
 
 ### Mode 1 — Development (Vite dev server)
 
-Used during UI development. Served by `pnpm dev` on the Pi, accessible over Tailscale.
+Used during UI development. Served by the `idea-console-dev` systemd user service on the Pi, accessible over Tailscale.
 
 - **Demo mode** is on by default — uses mock Engine data, no real Engine required
 - Hot-reload active; port 5173
 - Chrome Extension APIs not available (display mode selector is hidden)
 - To use a real Engine: toggle off Demo mode in settings and enter the hostname
+- **URL:** `http://100.115.60.6:5173/` (Tailscale IP)
+
+#### systemd service (persistent dev server)
+
+The dev server runs as a systemd user service — it starts automatically on boot and
+restarts on failure. It does not need to be started manually.
 
 ```bash
-cd /home/pi/idea/agents/agent-console-dev
-pnpm dev
-# Open: http://<pi-tailscale-ip>:5173
+# Check status
+systemctl --user status idea-console-dev
+
+# Restart (e.g. after a code change that breaks hot-reload)
+systemctl --user restart idea-console-dev
+
+# View logs
+journalctl --user -u idea-console-dev -f
 ```
+
+Service file: `~/.config/systemd/user/idea-console-dev.service`
+
+```ini
+[Unit]
+Description=IDEA Console Vite Dev Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/idea/agents/agent-console-dev
+ExecStart=/usr/bin/env bash -c 'source /home/pi/.nvm/nvm.sh 2>/dev/null; export PATH="/home/pi/.local/bin:/usr/local/bin:$PATH"; pnpm dev'
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/home/pi
+Environment=NODE_ENV=development
+
+[Install]
+WantedBy=default.target
+```
+
+The service was enabled with `systemctl --user enable idea-console-dev` so it
+persists across reboots.
 
 ### Mode 2 — Chrome Extension
 

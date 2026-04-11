@@ -6,6 +6,7 @@ import type {
   Disk,
   App,
   Instance,
+  BackupMode,
 } from '../types/store';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ const engine2: Engine = {
 const DISK_1_ID = 'DISK001';
 const DISK_2_ID = 'DISK002';
 const DISK_3_ID = 'DISK003';
+const DISK_4_ID = 'DISK004';
 
 const kolibriDisk: Disk = {
   id: DISK_1_ID,
@@ -69,6 +71,8 @@ const kolibriDisk: Disk = {
   created: ONE_HOUR_AGO,
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_1_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
 };
 
 const nextcloudDisk: Disk = {
@@ -78,6 +82,8 @@ const nextcloudDisk: Disk = {
   created: ONE_HOUR_AGO,
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_2_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
 };
 
 const wikipediaDisk: Disk = {
@@ -87,6 +93,23 @@ const wikipediaDisk: Disk = {
   created: ONE_HOUR_AGO,
   lastDocked: ONE_HOUR_AGO,
   dockedTo: ENGINE_2_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
+};
+
+// Backup disk — linked to kolibri instance
+const backupDisk: Disk = {
+  id: DISK_4_ID,
+  name: 'backup-disk',
+  device: 'sdd',
+  created: ONE_HOUR_AGO,
+  lastDocked: ONE_HOUR_AGO,
+  dockedTo: ENGINE_1_ID,
+  diskTypes: ['backup'],
+  backupConfig: {
+    mode: 'on-demand' as BackupMode,
+    links: ['kolibri-inst-001'], // = INST_KOLIBRI_ID (forward ref workaround)
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -175,9 +198,20 @@ const kolibriInstance: Instance = {
   port: 8080,
   serviceImages: ['learningequality/kolibri:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: TWO_MINS_AGO,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_1_ID,
+  metrics: {
+    cpuPercent:      1.82,
+    memUsageBytes:   312_000_000,
+    memLimitBytes:   4_000_000_000,
+    memPercent:      7.8,
+    netRxBytes:      1_240_000,
+    netTxBytes:      380_000,
+    blockReadBytes:  52_000_000,
+    blockWriteBytes: 18_000_000,
+    sampledAt:       NOW - 15_000,
+  },
 };
 
 const nextcloudInstance: Instance = {
@@ -188,9 +222,20 @@ const nextcloudInstance: Instance = {
   port: 8081,
   serviceImages: ['nextcloud:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
+  metrics: {
+    cpuPercent:      0.41,
+    memUsageBytes:   198_000_000,
+    memLimitBytes:   4_000_000_000,
+    memPercent:      4.95,
+    netRxBytes:      880_000,
+    netTxBytes:      210_000,
+    blockReadBytes:  8_000_000,
+    blockWriteBytes: 3_200_000,
+    sampledAt:       NOW - 15_000,
+  },
 };
 
 const wikipediaInstance: Instance = {
@@ -201,9 +246,10 @@ const wikipediaInstance: Instance = {
   port: 8082,
   serviceImages: ['kiwix/kiwix-serve:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: TWO_MINS_AGO,
   storedOn: DISK_3_ID,
+  metrics: null,
 };
 
 const emptyDiskInstance: Instance = {
@@ -214,9 +260,10 @@ const emptyDiskInstance: Instance = {
   port: 0,
   serviceImages: [],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: 0,
   storedOn: DISK_3_ID,
+  metrics: null,
 };
 
 const brokenAppInstance: Instance = {
@@ -227,9 +274,10 @@ const brokenAppInstance: Instance = {
   port: 8083,
   serviceImages: ['broken/image:latest'],
   created: ONE_HOUR_AGO,
-  lastBackedUp: 0,
+  lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
+  metrics: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -244,6 +292,7 @@ export const MOCK_STORE: Store = {
     [DISK_1_ID]: kolibriDisk,
     [DISK_2_ID]: nextcloudDisk,
     [DISK_3_ID]: wikipediaDisk,
+    [DISK_4_ID]: backupDisk,
   },
   appDB: {
     [APP_KOLIBRI_ID]: kolibriApp,
@@ -259,7 +308,17 @@ export const MOCK_STORE: Store = {
     [INST_EMPTY_ID]: emptyDiskInstance,
     [INST_BROKEN_ID]: brokenAppInstance,
   },
-  userDB: {},
+  userDB: {
+    // Pre-provisioned demo admin — no first-time setup required in demo mode
+    'user-demo-admin': {
+      id: 'user-demo-admin',
+      username: 'admin',
+      // bcrypt hash of 'admin911!' (cost 12)
+      passwordHash: '$2b$12$0OrL1qEVSWi22JYNgbP/u.hP8ig1RjSueV8bbRpg6pPH3E/kFmssq',
+      role: 'operator' as const,
+      created: 0,
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -286,9 +345,13 @@ function persistUserDB(userDB: Store['userDB']): void {
 }
 
 export function createMockConnection(): StoreConnection {
+  const persistedUserDB = loadPersistedUserDB();
   const initialStore: Store = {
     ...MOCK_STORE,
-    userDB: loadPersistedUserDB(),  // restore operators across reloads
+    // Merge: pre-provisioned admin is always present; persisted users layer on top
+    userDB: Object.keys(persistedUserDB).length > 0
+      ? persistedUserDB
+      : MOCK_STORE.userDB,
   };
   const [store, setStore] = createSignal<Store | null>(initialStore);
   const [connected] = createSignal(true);
@@ -339,6 +402,7 @@ export const MOCK_IDS = {
   DISK_1_ID,
   DISK_2_ID,
   DISK_3_ID,
+  DISK_4_ID,
   APP_KOLIBRI_ID,
   APP_NEXTCLOUD_ID,
   INST_KOLIBRI_ID,

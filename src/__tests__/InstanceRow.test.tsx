@@ -1,13 +1,18 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@solidjs/testing-library';
-import InstanceRow, { isStartDisabled, isStopDisabled } from '../components/InstanceRow';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, fireEvent } from '@solidjs/testing-library';
+import InstanceRow, {
+  isStartDisabled,
+  isStopDisabled,
+  isBackupDisabled,
+  formatLastBackup,
+} from '../components/InstanceRow';
 import { setSendCommandFn } from '../store/commands';
-import type { Instance, App, Engine, Status } from '../types/store';
+import type { Instance, App, Engine, Disk, Status } from '../types/store';
 
 // ---------------------------------------------------------------------------
 // Helper factories
 // ---------------------------------------------------------------------------
-const makeInstance = (status: Status): Instance => ({
+const makeInstance = (status: Status, lastBackup: number | null = null, metrics = null as import('../types/store').DockerMetrics | null): Instance => ({
   id: 'inst-001',
   instanceOf: 'kolibri-1.0',
   name: 'kolibri',
@@ -15,9 +20,10 @@ const makeInstance = (status: Status): Instance => ({
   port: 8080,
   serviceImages: [],
   created: Date.now(),
-  lastBackedUp: 0,
+  lastBackup,
   lastStarted: Date.now(),
   storedOn: 'DISK001',
+  metrics,
 });
 
 const mockApp: App = {
@@ -44,6 +50,17 @@ const mockEngine: Engine = {
   commands: [],
 };
 
+const mockBackupDisk: Disk = {
+  id: 'BACKUP001',
+  name: 'backup-disk',
+  device: 'sdd',
+  created: Date.now(),
+  lastDocked: Date.now(),
+  dockedTo: 'ENGINE_DISK001',
+  diskTypes: ['backup'],
+  backupConfig: { mode: 'on-demand', links: ['inst-001'] },
+};
+
 // ---------------------------------------------------------------------------
 // Pure helpers: isStartDisabled / isStopDisabled
 // ---------------------------------------------------------------------------
@@ -67,63 +84,113 @@ describe('isStopDisabled', () => {
   it('enables Stop for Pauzed', () => expect(isStopDisabled('Pauzed')).toBe(false));
 });
 
+describe('isBackupDisabled', () => {
+  it('enables Backup for Running', () => expect(isBackupDisabled('Running')).toBe(false));
+  it('disables Backup for Stopped', () => expect(isBackupDisabled('Stopped')).toBe(true));
+  it('disables Backup for Docked', () => expect(isBackupDisabled('Docked')).toBe(true));
+  it('disables Backup for Starting', () => expect(isBackupDisabled('Starting')).toBe(true));
+  it('disables Backup for Error', () => expect(isBackupDisabled('Error')).toBe(true));
+});
+
+describe('formatLastBackup', () => {
+  it('returns "Never" for null', () => expect(formatLastBackup(null)).toBe('Never'));
+  it('returns "Never" for 0', () => expect(formatLastBackup(0)).toBe('Never'));
+  it('returns a non-empty string for a valid timestamp', () => {
+    const result = formatLastBackup(Date.now());
+    expect(typeof result).toBe('string');
+    expect(result).not.toBe('Never');
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
-// Component rendering
+// Component rendering — props are accessor functions
 // ---------------------------------------------------------------------------
 describe('InstanceRow component', () => {
   it('renders instance name', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(container.textContent).toContain('kolibri');
   });
 
   it('renders app title', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(container.textContent).toContain('Kolibri Learning Platform');
   });
 
   it('Start button is disabled when status is Running', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
-    const startBtn = getByRole('button', { name: /start/i });
-    expect(startBtn).toBeDisabled();
+    expect(getByRole('button', { name: /start/i })).toBeDisabled();
   });
 
   it('Start button is disabled when status is Starting', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Starting')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Starting')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /start/i })).toBeDisabled();
   });
 
   it('Start button is enabled when status is Stopped', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Stopped')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /start/i })).not.toBeDisabled();
   });
 
   it('Stop button is disabled when status is Stopped', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Stopped')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /stop/i })).toBeDisabled();
   });
 
   it('Stop button is enabled when status is Running', () => {
     const { getByRole } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(getByRole('button', { name: /stop/i })).not.toBeDisabled();
   });
 
   it('shows Open link when status is Running', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Running')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     const link = container.querySelector('a.btn--open');
     expect(link).toBeTruthy();
@@ -132,16 +199,178 @@ describe('InstanceRow component', () => {
 
   it('does not show Open link when status is Stopped', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Stopped')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
-    const link = container.querySelector('a.btn--open');
-    expect(link).toBeFalsy();
+    expect(container.querySelector('a.btn--open')).toBeFalsy();
   });
 
   it('does not show Open link when status is Docked', () => {
     const { container } = render(() => (
-      <InstanceRow instance={makeInstance('Docked')} app={mockApp} engine={mockEngine} />
+      <InstanceRow
+        instance={() => makeInstance('Docked')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
     ));
     expect(container.querySelector('a.btn--open')).toBeFalsy();
+  });
+
+  it('does not show Backup button when no backupDisk provided', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(container.querySelector('.btn--backup')).toBeFalsy();
+  });
+
+  it('shows Backup button when backupDisk is provided', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(container.querySelector('.btn--backup')).toBeTruthy();
+  });
+
+  it('Backup button is enabled when status is Running', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(getByRole('button', { name: /back up/i })).not.toBeDisabled();
+  });
+
+  it('Backup button is disabled when status is Stopped', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    expect(getByRole('button', { name: /back up/i })).toBeDisabled();
+  });
+
+  it('details panel is hidden by default', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(container.querySelector('.instance-row__details')).toBeFalsy();
+  });
+
+  it('details panel shows after clicking status button', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.querySelector('.instance-row__details')).toBeTruthy();
+    expect(container.textContent).toContain('Last backup');
+  });
+
+  it('shows last backup info in details panel when backupDisk is provided', () => {
+    const ts = Date.now() - 60 * 60 * 1000;
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running', ts)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('Last backup');
+  });
+
+  it('shows "Never" for last backup in details panel when timestamp is null', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running', null)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        backupDisk={() => mockBackupDisk}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('Never');
+  });
+});
+
+describe('DockerMetricsPanel', () => {
+  const mockMetrics: import('../types/store').DockerMetrics = {
+    cpuPercent:      2.5,
+    memUsageBytes:   256_000_000,
+    memLimitBytes:   4_000_000_000,
+    memPercent:      6.4,
+    netRxBytes:      1_048_576,
+    netTxBytes:      524_288,
+    blockReadBytes:  20_971_520,
+    blockWriteBytes: 10_485_760,
+    sampledAt:       Date.now() - 10_000,
+  };
+
+  it('shows metrics when instance is Running with metrics', () => {
+    const inst = makeInstance('Running', null, mockMetrics);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => inst}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('CPU');
+    expect(container.textContent).toContain('2.50%');
+    expect(container.textContent).toContain('Memory');
+    expect(container.textContent).toContain('244.1 MB');
+    expect(container.textContent).toContain('Net I/O');
+    expect(container.textContent).toContain('Disk I/O');
+  });
+
+  it('shows unavailable notice when metrics is null', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped', null, null)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('not running');
+  });
+
+  it('shows Container metrics heading', () => {
+    const inst = makeInstance('Running', null, mockMetrics);
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => inst}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('Container metrics');
   });
 });

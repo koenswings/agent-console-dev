@@ -2,16 +2,16 @@ import type { Component } from 'solid-js';
 import type { Instance, App } from '../types/store';
 
 interface AppCardProps {
-  instance: Instance;
-  app: App | undefined;
-  engineHostname: string;
+  instance: () => Instance | undefined;
+  app: () => App | undefined;
+  engineHostname: () => string;
 }
 
 const AppCard: Component<AppCardProps> = (props) => {
-  const isRunning = () => props.instance.status === 'Running';
+  const isRunning = () => props.instance()?.status === 'Running';
 
   const appUrl = () =>
-    `http://${props.engineHostname}:${props.instance.port}`;
+    `http://${props.engineHostname()}:${props.instance()?.port}`;
 
   const handleOpen = () => {
     if (!isRunning()) return;
@@ -22,14 +22,14 @@ const AppCard: Component<AppCardProps> = (props) => {
     <div class={`app-card${isRunning() ? '' : ' app-card--unavailable'}`}>
       <div class="app-card__header">
         <span class="app-card__title">
-          {props.app?.title ?? props.instance.name}
+          {props.app()?.title ?? props.instance()?.name}
         </span>
-        {props.app?.category && (
-          <span class="app-card__category">{props.app.category}</span>
+        {props.app()?.category && (
+          <span class="app-card__category">{props.app()!.category}</span>
         )}
       </div>
-      {props.app?.description && (
-        <p class="app-card__description">{props.app.description}</p>
+      {props.app()?.description && (
+        <p class="app-card__description">{props.app()!.description}</p>
       )}
       <div class="app-card__footer">
         {isRunning() ? (

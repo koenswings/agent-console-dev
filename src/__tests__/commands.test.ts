@@ -3,10 +3,14 @@ import {
   buildStartInstanceCommand,
   buildStopInstanceCommand,
   buildEjectDiskCommand,
+  buildBackupAppCommand,
+  buildCreateBackupDiskCommand,
   setSendCommandFn,
   startInstance,
   stopInstance,
   ejectDisk,
+  backupApp,
+  createBackupDisk,
 } from '../store/commands';
 
 // ---------------------------------------------------------------------------
@@ -86,5 +90,54 @@ describe('ejectDisk', () => {
 
     expect(mock).toHaveBeenCalledOnce();
     expect(mock).toHaveBeenCalledWith('ENGINE_001', 'ejectDisk kolibri-disk');
+  });
+});
+
+describe('buildBackupAppCommand', () => {
+  it('formats correctly', () => {
+    expect(buildBackupAppCommand('kolibri', 'backup-disk')).toBe(
+      'backupApp kolibri backup-disk'
+    );
+  });
+});
+
+describe('buildCreateBackupDiskCommand', () => {
+  it('formats correctly with one instance', () => {
+    expect(buildCreateBackupDiskCommand('backup-disk', 'on-demand', ['kolibri'])).toBe(
+      'createBackupDisk backup-disk on-demand kolibri'
+    );
+  });
+
+  it('formats correctly with multiple instances', () => {
+    expect(
+      buildCreateBackupDiskCommand('backup-disk', 'immediate', ['kolibri', 'nextcloud'])
+    ).toBe('createBackupDisk backup-disk immediate kolibri nextcloud');
+  });
+});
+
+describe('backupApp', () => {
+  it('dispatches the correct command string', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    backupApp('ENGINE_001', 'kolibri', 'backup-disk');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'backupApp kolibri backup-disk');
+  });
+});
+
+describe('createBackupDisk', () => {
+  it('dispatches the correct command string', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    createBackupDisk('ENGINE_001', 'backup-disk', 'on-demand', ['kolibri']);
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith(
+      'ENGINE_001',
+      'createBackupDisk backup-disk on-demand kolibri'
+    );
   });
 });

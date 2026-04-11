@@ -1,17 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render } from '@solidjs/testing-library';
-import { createRoot } from 'solid-js';
 import NetworkTree from '../components/NetworkTree';
-import { setStoreSignal } from '../store/signals';
 import { MOCK_STORE, MOCK_IDS } from '../mock/mockStore';
 import type { Selection } from '../components/NetworkTree';
-
-// ---------------------------------------------------------------------------
-// Seed the module-level store signal before each test
-// ---------------------------------------------------------------------------
-beforeEach(() => {
-  setStoreSignal(MOCK_STORE);
-});
 
 const defaultSelection: Selection = { type: 'network', id: '' };
 
@@ -20,6 +11,7 @@ describe('NetworkTree component', () => {
     expect(() =>
       render(() => (
         <NetworkTree
+          store={() => MOCK_STORE}
           selection={defaultSelection}
           onSelect={() => {}}
         />
@@ -29,14 +21,22 @@ describe('NetworkTree component', () => {
 
   it('shows an "All instances" item at the top', () => {
     const { container } = render(() => (
-      <NetworkTree selection={defaultSelection} onSelect={() => {}} />
+      <NetworkTree
+        store={() => MOCK_STORE}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
     ));
     expect(container.textContent).toContain('All instances');
   });
 
   it('renders both engines from the mock store', () => {
     const { container } = render(() => (
-      <NetworkTree selection={defaultSelection} onSelect={() => {}} />
+      <NetworkTree
+        store={() => MOCK_STORE}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
     ));
     expect(container.textContent).toContain('appdocker01');
     expect(container.textContent).toContain('appdocker02');
@@ -44,32 +44,49 @@ describe('NetworkTree component', () => {
 
   it('renders the correct number of engine nodes (2)', () => {
     const { container } = render(() => (
-      <NetworkTree selection={defaultSelection} onSelect={() => {}} />
+      <NetworkTree
+        store={() => MOCK_STORE}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
     ));
     const engineItems = container.querySelectorAll('.tree-item--engine');
     expect(engineItems).toHaveLength(2);
   });
 
-  it('renders all 3 disks as sub-nodes', () => {
+  it('renders all 4 disks as sub-nodes', () => {
     const { container } = render(() => (
-      <NetworkTree selection={defaultSelection} onSelect={() => {}} />
+      <NetworkTree
+        store={() => MOCK_STORE}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
     ));
     const diskItems = container.querySelectorAll('.tree-item--disk');
-    expect(diskItems).toHaveLength(3);
+    expect(diskItems).toHaveLength(4);
   });
 
   it('shows disk names', () => {
     const { container } = render(() => (
-      <NetworkTree selection={defaultSelection} onSelect={() => {}} />
+      <NetworkTree
+        store={() => MOCK_STORE}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
     ));
     expect(container.textContent).toContain('kolibri-disk');
     expect(container.textContent).toContain('nextcloud-disk');
     expect(container.textContent).toContain('wikipedia-disk');
+    expect(container.textContent).toContain('backup-disk');
   });
 
   it('shows online badges for online engines', () => {
     const { container } = render(() => (
-      <NetworkTree selection={defaultSelection} onSelect={() => {}} />
+      <NetworkTree
+        store={() => MOCK_STORE}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
     ));
     const onlineBadges = container.querySelectorAll('.tree-item__badge--online');
     // Both mock engines are online (lastRun within 2 minutes)
@@ -79,6 +96,7 @@ describe('NetworkTree component', () => {
   it('applies selected class to the network item when type is network', () => {
     const { container } = render(() => (
       <NetworkTree
+        store={() => MOCK_STORE}
         selection={{ type: 'network', id: '' }}
         onSelect={() => {}}
       />
@@ -90,12 +108,12 @@ describe('NetworkTree component', () => {
   it('applies selected class to an engine item when that engine is selected', () => {
     const { container } = render(() => (
       <NetworkTree
+        store={() => MOCK_STORE}
         selection={{ type: 'engine', id: MOCK_IDS.ENGINE_1_ID }}
         onSelect={() => {}}
       />
     ));
     const engineItems = container.querySelectorAll('.tree-item--engine');
-    // Find the selected one
     const selected = Array.from(engineItems).find((el) =>
       el.classList.contains('tree-item--selected')
     );
@@ -106,6 +124,7 @@ describe('NetworkTree component', () => {
     const calls: Selection[] = [];
     const { container } = render(() => (
       <NetworkTree
+        store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={(s) => calls.push(s)}
       />
@@ -120,6 +139,7 @@ describe('NetworkTree component', () => {
     const calls: Selection[] = [];
     const { container } = render(() => (
       <NetworkTree
+        store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={(s) => calls.push(s)}
       />
@@ -128,5 +148,17 @@ describe('NetworkTree component', () => {
     firstDisk?.click();
     expect(calls).toHaveLength(1);
     expect(calls[0].type).toBe('disk');
+  });
+
+  it('renders without store (null)', () => {
+    const { container } = render(() => (
+      <NetworkTree
+        store={() => null}
+        selection={defaultSelection}
+        onSelect={() => {}}
+      />
+    ));
+    expect(container.textContent).toContain('All instances');
+    expect(container.querySelectorAll('.tree-item--engine')).toHaveLength(0);
   });
 });

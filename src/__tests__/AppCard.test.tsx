@@ -32,9 +32,9 @@ describe('AppCard', () => {
   it('renders app title and description', () => {
     render(() => (
       <AppCard
-        instance={baseInstance}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => baseInstance}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     expect(screen.getByText('Kolibri Learning Platform')).toBeInTheDocument();
@@ -44,9 +44,9 @@ describe('AppCard', () => {
   it('renders category badge', () => {
     render(() => (
       <AppCard
-        instance={baseInstance}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => baseInstance}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     expect(screen.getByText('education')).toBeInTheDocument();
@@ -55,9 +55,9 @@ describe('AppCard', () => {
   it('shows enabled Open button for running instance', () => {
     render(() => (
       <AppCard
-        instance={baseInstance}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => baseInstance}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     const btn = screen.getByRole('button', { name: 'Open' });
@@ -68,9 +68,9 @@ describe('AppCard', () => {
     const stopped = { ...baseInstance, status: 'Stopped' as const };
     render(() => (
       <AppCard
-        instance={stopped}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => stopped}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     expect(screen.getByText('Not available')).toBeInTheDocument();
@@ -81,9 +81,9 @@ describe('AppCard', () => {
     const stopped = { ...baseInstance, status: 'Stopped' as const };
     const { container } = render(() => (
       <AppCard
-        instance={stopped}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => stopped}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     expect(container.querySelector('.app-card--unavailable')).toBeInTheDocument();
@@ -92,9 +92,9 @@ describe('AppCard', () => {
   it('does not apply unavailable class for running instance', () => {
     const { container } = render(() => (
       <AppCard
-        instance={baseInstance}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => baseInstance}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     expect(container.querySelector('.app-card--unavailable')).not.toBeInTheDocument();
@@ -104,9 +104,9 @@ describe('AppCard', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(() => (
       <AppCard
-        instance={baseInstance}
-        app={baseApp}
-        engineHostname="appdocker01"
+        instance={() => baseInstance}
+        app={() => baseApp}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     fireEvent.click(screen.getByRole('button', { name: 'Open' }));
@@ -121,9 +121,9 @@ describe('AppCard', () => {
   it('falls back to instance name when app is undefined', () => {
     render(() => (
       <AppCard
-        instance={baseInstance}
-        app={undefined}
-        engineHostname="appdocker01"
+        instance={() => baseInstance}
+        app={() => undefined}
+        engineHostname={() => 'appdocker01'}
       />
     ));
     expect(screen.getByText('kolibri')).toBeInTheDocument();
