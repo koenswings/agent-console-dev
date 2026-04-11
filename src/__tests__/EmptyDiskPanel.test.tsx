@@ -111,10 +111,39 @@ describe('EmptyDiskPanel', () => {
     expect(cmd).toBe('createFilesDisk empty-disk');
   });
 
-  it('shows coming-soon notice for Create App Instance', () => {
+  it('navigates to install dialog for Create new App Instance', () => {
     renderPanel();
     fireEvent.click(screen.getByText('Create new App Instance'));
-    expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
+    expect(screen.getByText('Install App')).toBeInTheDocument();
+  });
+
+  it('shows apps from the store in the install dialog', () => {
+    renderPanel();
+    fireEvent.click(screen.getByText('Create new App Instance'));
+    // Mock store has kolibri, nextcloud, wikipedia, etc.
+    expect(screen.getByText('Kolibri Learning Platform')).toBeInTheDocument();
+  });
+
+  it('dispatches installApp command when an app is selected and Install clicked', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+    renderPanel();
+    fireEvent.click(screen.getByText('Create new App Instance'));
+    // Select the first radio
+    const radios = screen.getAllByRole('radio');
+    fireEvent.click(radios[0]);
+    fireEvent.click(screen.getByRole('button', { name: /^install$/i }));
+    expect(mock).toHaveBeenCalledOnce();
+    const [engineId, cmd] = mock.mock.calls[0];
+    expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
+    expect(cmd).toMatch(/^installApp /);
+  });
+
+  it('Install button is disabled when no app is selected', () => {
+    renderPanel();
+    fireEvent.click(screen.getByText('Create new App Instance'));
+    const installBtn = screen.getByRole('button', { name: /^install$/i });
+    expect(installBtn).toBeDisabled();
   });
 
   it('Cancel button in backup form returns to menu', () => {

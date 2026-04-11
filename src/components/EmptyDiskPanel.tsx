@@ -7,9 +7,9 @@
  *   3. Create new App Instance  — requires Engine to surface available app sources;
  *      currently shows a placeholder until the Engine API supports it.
  */
-import { For, Show, createSignal, type Component } from 'solid-js';
-import { createBackupDisk, createFilesDisk } from '../store/commands';
-import type { Disk, Instance, Store, BackupMode } from '../types/store';
+import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
+import { createBackupDisk, createFilesDisk, installApp } from '../store/commands';
+import type { App, Disk, Instance, Store, BackupMode } from '../types/store';
 
 interface EmptyDiskPanelProps {
   disk: () => Disk | undefined;
@@ -18,7 +18,7 @@ interface EmptyDiskPanelProps {
   engineId: () => string | undefined;
 }
 
-type Panel = 'menu' | 'backup' | 'files' | 'app';
+type Panel = 'menu' | 'backup' | 'files' | 'app' | 'install';
 
 const BACKUP_MODES: { value: BackupMode; label: string; description: string }[] = [
   {
@@ -51,6 +51,49 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const s = props.store();
     if (!s) return [];
     return Object.values(s.instanceDB);
+  };
+
+  // ── Install App configuration ──────────────────────────────────────────────
+  const [appFilter, setAppFilter] = createSignal('');
+  const [selectedAppId, setSelectedAppId] = createSignal<string | null>(null);
+
+  const allApps = createMemo((): App[] => {
+    const s = props.store();
+    if (!s) return [];
+    return Object.values(s.appDB);
+  });
+
+  const filteredApps = createMemo((): App[] => {
+    const q = appFilter().toLowerCase();
+    if (!q) return allApps();
+    return allApps().filter(
+      (a) =>
+        a.title.toLowerCase().includes(q) ||
+        a.name.toLowerCase().includes(q) ||
+        (a.category ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  const appSourceLabel = (app: App): string => {
+    if (app.source === 'disk' && app.sourceDiskName) return app.sourceDiskName;
+    if (app.source === 'github') return 'GitHub';
+    return 'catalog';
+  };
+
+  const handleInstallApp = () => {
+    setError('');
+    const engineId = props.engineId();
+    const disk = props.disk();
+    const appId = selectedAppId();
+    if (!engineId || !disk || !appId) return;
+
+    const app = props.store()?.appDB[appId];
+    const opts = app?.source === 'disk' && app?.sourceDiskName
+      ? { source: app.sourceDiskName }
+      : undefined;
+
+    installApp(engineId, appId, disk.name, opts);
+    setSubmitted(true);
   };
 
   const toggleInstance = (id: string) => {
@@ -98,6 +141,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     setError('');
     setSelectedInstanceIds([]);
     setBackupMode('on-demand');
+    setAppFilter('');
+    setSelectedAppId(null);
   };
 
   return (
@@ -152,8 +197,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
           </button>
 
           <button
-            class="empty-disk-option empty-disk-option--unavailable"
-            onClick={() => setPanel('app')}
+            class="empty-disk-option"
+            onClick={() => setPanel('install')}
           >
             <span class="empty-disk-option__icon">📦</span>
             <div>
@@ -261,6 +306,70 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
           </div>
           <div class="empty-disk-panel__actions">
             <button class="btn" onClick={() => setPanel('menu')}>Back</button>
+          </div>
+        </div>
+      </Show>
+
+      {/* ── Install App ───────────────────────────────────────────── */}
+      <Show when={!submitted() && panel() === 'install'}>
+        <div class="empty-disk-panel__form">
+          <h3 class="empty-disk-panel__form-title">Install App</h3>
+          <p class="empty-disk-panel__hint">
+            Choose an app to install onto <strong>{props.disk()?.name}</strong>.
+          </p>
+
+          <label class="empty-disk-panel__label" for="app-filter">Search</label>
+          <input
+            id="app-filter"
+            class="empty-disk-panel__input"
+            type="text"
+            placeholder="Filter by name or category…"
+            value={appFilter()}
+            onInput={(e) => setAppFilter((e.target as HTMLInputElement).value)}
+          />
+
+          <Show
+            when={filteredApps().length > 0}
+            fallback={<p class="empty-disk-panel__hint">No apps found.</p>}
+          >
+            <div class="empty-disk-panel__app-list">
+              <For each={filteredApps()}>
+                {(app) => (
+                  <label class={`app-option ${selectedAppId() === app.id ? 'app-option--selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="installApp"
+                      value={app.id}
+                      checked={selectedAppId() === app.id}
+                      onChange={() => setSelectedAppId(app.id)}
+                    />
+                    <div class="app-option__info">
+                      <div class="app-option__title">{app.title}</div>
+                      <div class="app-option__meta">
+                        v{app.version}
+                        {' · '}
+                        {appSourceLabel(app)}
+                      </div>
+                    </div>
+                  </label>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <Show when={error()}>
+            <p class="empty-disk-panel__error">{error()}</p>
+          </Show>
+
+          <div class="empty-disk-panel__actions">
+            <button class="btn" onClick={() => { setError(''); setPanel('menu'); }}>Cancel</button>
+            <button
+              class="btn btn--primary"
+              disabled={!selectedAppId()}
+              onClick={handleInstallApp}
+            >
+              Install
+            </button>
           </div>
         </div>
       </Show>

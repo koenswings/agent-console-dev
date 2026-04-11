@@ -73,6 +73,10 @@ export interface App {
   category: AppCategory;
   icon: AppURL | null;
   author: string | null;
+  // Extended fields present on entries from Backup/Catalog Disks
+  source?: 'disk' | 'github';
+  sourceDiskId?: DiskID;
+  sourceDiskName?: DiskName;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +150,26 @@ export interface User {
 }
 
 // ---------------------------------------------------------------------------
+// Operation — mirrors agent-engine-dev/src/data/Operation.ts
+// Progress tracking for long-running engine operations written to operationDB.
+// ---------------------------------------------------------------------------
+export type OperationStatus = 'Pending' | 'Running' | 'Done' | 'Failed';
+export type OperationKind = 'copyApp' | 'moveApp' | 'backupApp' | 'restoreApp' | 'upgradeApp' | 'upgradeEngine';
+export type OperationID = string;
+
+export interface Operation {
+  id: OperationID;
+  kind: OperationKind;
+  args: Record<string, string>;
+  engineId: EngineID;
+  status: OperationStatus;
+  progressPercent: number | null;
+  startedAt: Timestamp;
+  completedAt: Timestamp | null;
+  error: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Store — mirrors agent-engine-dev/src/data/Store.ts
 // ---------------------------------------------------------------------------
 export interface Store {
@@ -154,4 +178,5 @@ export interface Store {
   appDB: Record<AppID, App>;
   instanceDB: Record<InstanceID, Instance>;
   userDB: Record<UserID, User>;
+  operationDB: Record<OperationID, Operation>;
 }

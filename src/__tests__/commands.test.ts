@@ -5,12 +5,18 @@ import {
   buildEjectDiskCommand,
   buildBackupAppCommand,
   buildCreateBackupDiskCommand,
+  buildCopyAppCommand,
+  buildMoveAppCommand,
+  buildInstallAppCommand,
   setSendCommandFn,
   startInstance,
   stopInstance,
   ejectDisk,
   backupApp,
   createBackupDisk,
+  copyApp,
+  moveApp,
+  installApp,
 } from '../store/commands';
 
 // ---------------------------------------------------------------------------
@@ -138,6 +144,127 @@ describe('createBackupDisk', () => {
     expect(mock).toHaveBeenCalledWith(
       'ENGINE_001',
       'createBackupDisk backup-disk on-demand kolibri'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildCopyAppCommand
+// ---------------------------------------------------------------------------
+describe('buildCopyAppCommand', () => {
+  it('formats correctly', () => {
+    expect(buildCopyAppCommand('kolibri', 'kolibri-disk', 'target-disk')).toBe(
+      'copyApp kolibri kolibri-disk target-disk'
+    );
+  });
+
+  it('starts with copyApp', () => {
+    const cmd = buildCopyAppCommand('myapp', 'src', 'dst');
+    expect(cmd.startsWith('copyApp ')).toBe(true);
+    expect(cmd).toContain('myapp');
+    expect(cmd).toContain('src');
+    expect(cmd).toContain('dst');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildMoveAppCommand
+// ---------------------------------------------------------------------------
+describe('buildMoveAppCommand', () => {
+  it('formats correctly', () => {
+    expect(buildMoveAppCommand('nextcloud', 'nextcloud-disk', 'new-disk')).toBe(
+      'moveApp nextcloud nextcloud-disk new-disk'
+    );
+  });
+
+  it('starts with moveApp', () => {
+    const cmd = buildMoveAppCommand('myapp', 'src', 'dst');
+    expect(cmd.startsWith('moveApp ')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildInstallAppCommand
+// ---------------------------------------------------------------------------
+describe('buildInstallAppCommand', () => {
+  it('formats with no options', () => {
+    expect(buildInstallAppCommand('kolibri-1.0', 'empty-disk')).toBe(
+      'installApp kolibri-1.0 empty-disk'
+    );
+  });
+
+  it('includes --source when provided', () => {
+    const cmd = buildInstallAppCommand('kolibri-1.0', 'empty-disk', { source: 'catalog-disk' });
+    expect(cmd).toBe('installApp kolibri-1.0 empty-disk --source catalog-disk');
+  });
+
+  it('includes --name when provided', () => {
+    const cmd = buildInstallAppCommand('kolibri-1.0', 'empty-disk', { name: 'my-kolibri' });
+    expect(cmd).toBe('installApp kolibri-1.0 empty-disk --name my-kolibri');
+  });
+
+  it('includes both --source and --name when both provided', () => {
+    const cmd = buildInstallAppCommand('kolibri-1.0', 'empty-disk', {
+      source: 'catalog-disk',
+      name: 'my-kolibri',
+    });
+    expect(cmd).toBe('installApp kolibri-1.0 empty-disk --source catalog-disk --name my-kolibri');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// copyApp dispatcher
+// ---------------------------------------------------------------------------
+describe('copyApp', () => {
+  it('dispatches the correct command string', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    copyApp('ENGINE_001', 'kolibri', 'kolibri-disk', 'target-disk');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'copyApp kolibri kolibri-disk target-disk');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// moveApp dispatcher
+// ---------------------------------------------------------------------------
+describe('moveApp', () => {
+  it('dispatches the correct command string', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    moveApp('ENGINE_002', 'nextcloud', 'nextcloud-disk', 'new-disk');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_002', 'moveApp nextcloud nextcloud-disk new-disk');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// installApp dispatcher
+// ---------------------------------------------------------------------------
+describe('installApp', () => {
+  it('dispatches with no options', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    installApp('ENGINE_001', 'kolibri-1.0', 'empty-disk');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'installApp kolibri-1.0 empty-disk');
+  });
+
+  it('dispatches with --source option', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    installApp('ENGINE_001', 'kolibri-1.0', 'empty-disk', { source: 'catalog-disk' });
+
+    expect(mock).toHaveBeenCalledWith(
+      'ENGINE_001',
+      'installApp kolibri-1.0 empty-disk --source catalog-disk'
     );
   });
 });

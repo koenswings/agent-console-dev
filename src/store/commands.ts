@@ -130,3 +130,76 @@ export const createFilesDisk = (
 ): void => {
   _sendCommand(engineId, buildCreateFilesDiskCommand(diskName));
 };
+
+// ---------------------------------------------------------------------------
+// Copy / Move App commands
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the "copyApp" command string (pure, no side effects).
+ * Format: "copyApp <instanceName> <sourceDiskName> <targetDiskName>"
+ */
+export const buildCopyAppCommand = (
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
+): string => `copyApp ${instanceName} ${sourceDiskName} ${targetDiskName}`;
+
+/**
+ * Build the "moveApp" command string (pure, no side effects).
+ * Format: "moveApp <instanceName> <sourceDiskName> <targetDiskName>"
+ */
+export const buildMoveAppCommand = (
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
+): string => `moveApp ${instanceName} ${sourceDiskName} ${targetDiskName}`;
+
+/** Duplicate an instance onto a target disk (new InstanceID). */
+export const copyApp = (
+  engineId: string,
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
+): void => {
+  _sendCommand(engineId, buildCopyAppCommand(instanceName, sourceDiskName, targetDiskName));
+};
+
+/** Move an instance to a target disk (same InstanceID). */
+export const moveApp = (
+  engineId: string,
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
+): void => {
+  _sendCommand(engineId, buildMoveAppCommand(instanceName, sourceDiskName, targetDiskName));
+};
+
+// ---------------------------------------------------------------------------
+// Install App command
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the "installApp" command string (pure, no side effects).
+ * Format: "installApp <appId> <targetDiskName> [--source <sourceDiskName>] [--name <instanceName>]"
+ */
+export const buildInstallAppCommand = (
+  appId: string,
+  targetDiskName: string,
+  opts?: { source?: string; name?: string }
+): string => {
+  let cmd = `installApp ${appId} ${targetDiskName}`;
+  if (opts?.source) cmd += ` --source ${opts.source}`;
+  if (opts?.name)   cmd += ` --name ${opts.name}`;
+  return cmd;
+};
+
+/** Install an app from the appDB onto a target disk. */
+export const installApp = (
+  engineId: string,
+  appId: string,
+  targetDiskName: string,
+  opts?: { source?: string; name?: string }
+): void => {
+  _sendCommand(engineId, buildInstallAppCommand(appId, targetDiskName, opts));
+};
