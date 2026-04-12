@@ -22,16 +22,18 @@ const LoginForm: Component<LoginFormProps> = (props) => {
     setError('');
     setLoading(true);
 
-    // Yield to the browser so the loading state renders before bcrypt runs
-    await new Promise((r) => setTimeout(r, 30));
-
-    const ok = await login(username(), password(), props.store);
-    setLoading(false);
-
-    if (ok) {
-      props.onSuccess();
-    } else {
-      setError('Invalid username or password.');
+    try {
+      const ok = await login(username(), password(), props.store);
+      if (ok) {
+        props.onSuccess();
+      } else {
+        setError('Invalid username or password.');
+      }
+    } catch (err) {
+      console.error('[login]', err);
+      setError('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 

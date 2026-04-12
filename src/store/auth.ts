@@ -88,7 +88,9 @@ export async function login(
   );
   if (!user) return false;
 
-  const match = await bcrypt.compare(password, user.passwordHash);
+  // Coerce to plain string — Automerge proxies wrap primitives and bcryptjs
+  // will throw (silently hanging the caller) if it receives a non-string.
+  const match = await bcrypt.compare(password, String(user.passwordHash));
   if (!match) return false;
 
   setCurrentUser(user);
@@ -184,7 +186,7 @@ export async function changePassword(
   const user = (store.userDB ?? {})[userId];
   if (!user) return false;
 
-  const match = await bcrypt.compare(currentPassword, user.passwordHash);
+  const match = await bcrypt.compare(currentPassword, String(user.passwordHash));
   if (!match) return false;
 
   const newHash = await bcrypt.hash(newPassword, 10);
