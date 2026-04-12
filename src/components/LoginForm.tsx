@@ -24,7 +24,6 @@ const LoginForm: Component<LoginFormProps> = (props) => {
     setLoading(true);
 
     try {
-      // Find user
       const users = Object.values(props.store.userDB ?? {}) as User[];
       const user = users.find((u) => String(u.username) === username());
       if (!user) {
@@ -33,14 +32,7 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      // Compare — bcrypt with timeout so it can't hang forever
-      const hash = String(user.passwordHash);
-      const match = await Promise.race([
-        bcrypt.compare(password(), hash),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Login timed out — please try again.')), 10_000)
-        ),
-      ]);
+      const match = await bcrypt.compare(password(), String(user.passwordHash));
 
       if (!match) {
         setError('Invalid username or password.');
@@ -48,11 +40,11 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      // Verified — set user and persist session (no second bcrypt call)
-      await setAuthenticatedUser(user);
+      // setAuthenticatedUser is fire-and-forget for session persistence
+      setAuthenticatedUser(user);
       props.onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      setError(err instanceof Error ? err.message : 'Login failed.');
       setLoading(false);
     }
   };
@@ -103,11 +95,7 @@ const LoginForm: Component<LoginFormProps> = (props) => {
 
           {error() && <p class="form-error">{error()}</p>}
 
-          <button
-            class="btn btn--primary"
-            type="submit"
-            disabled={loading()}
-          >
+          <button class="btn btn--primary" type="submit" disabled={loading()}>
             {loading() ? 'Verifying…' : 'Log in'}
           </button>
         </form>

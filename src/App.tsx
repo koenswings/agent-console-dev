@@ -41,7 +41,52 @@ const App: Component = () => {
   const [discovering, setDiscovering] = createSignal(false);
   const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
 
+  // Derive store and connected from the connection signal reactively.
+  // These effects run at the top level — they are created once and track the
+  // connection() signal, so when initConnection() sets a new connection they
+  // automatically pick up the new one. No more effects created inside async fns.
+  createEffect(() => {
+    const conn = connection();
+    if (!conn) return;
+    setStore(conn.store());
+    setConnected(conn.connected());
+    setSendCommandFn(conn.sendCommand);
+  });
+
+  // Separately track live store changes from the current connection
+  createEffect(() => {
+    const conn = connection();
+    if (!conn) return;
+    // Subscribe to the store signal on the current connection
+    const s = conn.store();
+    setStore(s);
+  });
+
+  createEffect(() => {
+    const conn = connection();
+    if (!conn) return;
+    setConnected(conn.connected());
+  });
+
+  // Restore session when store first becomes available
+  let sessionRestoreRan = false;
+  createEffect(() => {
+    const conn = connection();
+    if (!conn) return;
+    const s = conn.store();
+    if (s && !sessionRestoreRan) {
+      sessionRestoreRan = true;
+      restoreSession(s).then(() => setSessionRestored(true)).catch(() => setSessionRestored(true));
+    }
+  });
+
   const initConnection = async () => {
+    // Reset session state for new connection
+    sessionRestoreRan = false;
+    setSessionRestored(false);
+    setStore(null);
+    setConnected(false);
+
     const isDemo = await readStoredDemoMode();
     setDemo(isDemo);
 
@@ -53,20 +98,8 @@ const App: Component = () => {
       conn = await createEngineConnection();
     }
 
+    // Setting the connection signal triggers the top-level createEffects above
     setConnection(conn);
-    setSendCommandFn(conn.sendCommand);
-
-    createEffect(() => {
-      const s = conn.store();
-      setStore(s);
-    });
-    createEffect(() => { setConnected(conn.connected()); });
-
-    // Restore session once store is populated
-    createEffect(() => {
-      const s = conn.store();
-      if (s) restoreSession(s).then(() => setSessionRestored(true));
-    });
   };
 
   onMount(async () => {
@@ -85,10 +118,8 @@ const App: Component = () => {
 
     const isDemo = await readStoredDemoMode();
     if (isDemo || host) {
-      // Has memory of a previous connection (or demo mode) — connect directly
       await initConnection();
     } else {
-      // No previous connection — show onboarding and scan in background
       runDiscovery();
     }
   });
@@ -99,10 +130,8 @@ const App: Component = () => {
     discoverAllEngines().then(async (results) => {
       setDiscovering(false);
       if (results.length === 1) {
-        // Single engine found — auto-connect silently
         await handleDiscoverySelect(results[0]);
       } else {
-        // 0 = form, 2+ = picker (passed to Onboarding via signal)
         setDiscoveryResults(results);
       }
     });
@@ -115,31 +144,23 @@ const App: Component = () => {
     await initConnection();
   };
 
-  // Reconnect after failure: clear hostname and re-scan
   const handleConnectionFailure = async () => {
     setHostname('');
     localStorage.removeItem('engineHostname');
-    try { await (window as any).chrome?.storage?.local?.remove('engineHostname'); } catch {}
     runDiscovery();
   };
 
-  // Watch for disconnection after initial connect and trigger re-scan
+  // Watch for disconnection and trigger re-scan after debounce
   createEffect(() => {
     const isConn = connected();
     const host = hostname();
-    // Only re-scan if we had a hostname, lost connection, and are not in demo/production mode
     if (!isConn && host && !demo() && !isProductionWebMode()) {
-      // Debounce: wait 15s before re-scanning to avoid flapping on brief blips
       const timer = setTimeout(() => {
-        if (!connected() && hostname()) {
-          handleConnectionFailure();
-        }
+        if (!connected() && hostname()) handleConnectionFailure();
       }, 15_000);
       return () => clearTimeout(timer);
     }
   });
-
-
 
   const handleOnboardingComplete = async () => {
     const host = await readStoredHostname();
@@ -148,7 +169,6 @@ const App: Component = () => {
     await initConnection();
   };
 
-  // Reconnect in-place without closing the settings panel (e.g. demo toggle)
   const handleReconnect = async () => {
     const host = await readStoredHostname();
     setHostname(host);
@@ -160,14 +180,11 @@ const App: Component = () => {
     setShowOperatorMgmt(false);
   };
 
-  // Show onboarding for first-run only: no hostname AND not demo
   const shouldShowOnboarding = () => {
     if (!ready()) return false;
     return !hostname() && !demo();
   };
 
-  // Show first-time setup if: store loaded and no operators exist yet
-  // Applies in demo mode too — demo starts with empty userDB to show the real first-run flow
   const shouldShowFirstTimeSetup = () => {
     if (!ready()) return false;
     return isFirstTimeSetup(store());
@@ -188,14 +205,14 @@ const App: Component = () => {
           }`} />
           <span>
             {connected()
-              ? hostname()          // connected: show hostname
+              ? hostname()
               : demo()
-              ? ''                  // demo: badge already shows it, no duplicate text
+              ? ''
               : discovering()
-              ? 'Scanning…'        // scanning the network
+              ? 'Scanning…'
               : hostname()
-              ? 'Connecting…'      // hostname known, waiting for sync
-              : 'No engine found'   // scan done, nothing responded
+              ? 'Connecting…'
+              : 'No engine found'
             }
           </span>
         </div>
@@ -203,10 +220,7 @@ const App: Component = () => {
           <span class="status-bar__demo-badge">DEMO</span>
         </Show>
 
-        {/* Auth controls */}
-        <Show
-          when={isOperator()}
-        >
+        <Show when={isOperator()}>
           <span class="status-bar__username">{currentUser()?.username}</span>
           <button
             class="status-bar__operator-mgmt-btn"
@@ -291,7 +305,6 @@ const App: Component = () => {
               </>
             }
           >
-            {/* Operator mode */}
             <Show
               when={showOperatorMgmt() && store() && connection()}
               fallback={
