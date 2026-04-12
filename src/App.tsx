@@ -68,7 +68,8 @@ const App: Component = () => {
     setConnected(conn.connected());
   });
 
-  // Restore session when store first becomes available
+  // Restore session when store first becomes available, then mark done.
+  // If store never loads (engine offline), still mark restored after 3s so login button works.
   let sessionRestoreRan = false;
   createEffect(() => {
     const conn = connection();
@@ -78,6 +79,15 @@ const App: Component = () => {
       sessionRestoreRan = true;
       restoreSession(s).then(() => setSessionRestored(true)).catch(() => setSessionRestored(true));
     }
+  });
+
+  // Fallback: if store never arrives (engine slow/offline), unblock login after 3s
+  createEffect(() => {
+    const conn = connection();
+    if (!conn) return;
+    if (sessionRestored()) return;
+    const timer = setTimeout(() => setSessionRestored(true), 3000);
+    return () => clearTimeout(timer);
   });
 
   const initConnection = async () => {
@@ -293,9 +303,9 @@ const App: Component = () => {
               <>
                 <AppBrowser
                   store={store}
-                  onLogin={() => sessionRestored() && setShowLogin(true)}
+                  onLogin={() => setShowLogin(true)}
                 />
-                <Show when={showLogin() && sessionRestored()}>
+                <Show when={showLogin()}>
                   <LoginForm
                     store={store()}
                     onSuccess={() => setShowLogin(false)}

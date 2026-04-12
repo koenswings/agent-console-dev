@@ -154,10 +154,12 @@ export async function createEngineConnection(): Promise<StoreConnection> {
     );
     await Promise.race([handle.whenReady(), timeoutPromise]);
 
+    // Mark connected as soon as the handle is ready (WebSocket is up)
+    setConnected(true);
+
     const doc = handle.doc();
     if (doc) {
       setStore(doc as Store);
-      setConnected(true);
     }
 
     // Subscribe to subsequent changes
