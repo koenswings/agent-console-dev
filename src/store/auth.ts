@@ -11,6 +11,10 @@ import { createSignal } from 'solid-js';
 import bcrypt from 'bcryptjs';
 import type { User, UserID, Store } from '../types/store';
 
+function isExtensionContext(): boolean {
+  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
+}
+
 // ---------------------------------------------------------------------------
 // Auth state signals
 // ---------------------------------------------------------------------------
@@ -38,36 +42,30 @@ interface OperatorSession {
 
 async function persistSession(user: User): Promise<void> {
   const session: OperatorSession = { userId: user.id, username: user.username };
-  try {
-    await chrome.storage.local.set({ [SESSION_KEY]: session });
-  } catch {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  if (isExtensionContext()) {
+    try { await chrome.storage.local.set({ [SESSION_KEY]: session }); return; } catch {}
   }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 async function clearPersistedSession(): Promise<void> {
-  try {
-    await chrome.storage.local.remove(SESSION_KEY);
-  } catch {
-    localStorage.removeItem(SESSION_KEY);
+  if (isExtensionContext()) {
+    try { await chrome.storage.local.remove(SESSION_KEY); return; } catch {}
   }
+  localStorage.removeItem(SESSION_KEY);
 }
 
 async function readPersistedSession(): Promise<OperatorSession | null> {
-  try {
-    const result = await chrome.storage.local.get(SESSION_KEY);
-    if (result[SESSION_KEY]) return result[SESSION_KEY] as OperatorSession;
-  } catch {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (raw) {
-      try {
-        return JSON.parse(raw) as OperatorSession;
-      } catch {
-        return null;
-      }
-    }
+  if (isExtensionContext()) {
+    try {
+      const result = await chrome.storage.local.get(SESSION_KEY);
+      if (result[SESSION_KEY]) return result[SESSION_KEY] as OperatorSession;
+      return null;
+    } catch {}
   }
-  return null;
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as OperatorSession; } catch { return null; }
 }
 
 // ---------------------------------------------------------------------------
@@ -86,34 +84,15 @@ export async function login(
   const user = Object.values(store.userDB ?? {}).find(
     (u) => u.username === username
   );
-  if (!user) {
-    console.log('[auth] login: user not found');
-    return false;
-  }
+  if (!user) return false;
 
-  // Coerce to plain string — Automerge proxies wrap primitives and bcryptjs
-  // will throw (silently hanging the caller) if it receives a non-string.
-  const hash = String(user.passwordHash);
-  console.log('[auth] login: comparing password, hash prefix:', hash.slice(0, 7));
-
-  const match = await Promise.race([
-    bcrypt.compare(password, hash),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('bcrypt.compare timed out after 10s')), 10_000)
-    ),
-  ]);
-  console.log('[auth] login: bcrypt result:', match);
+  // Coerce to plain string — Automerge wraps values in ImmutableString objects;
+  // bcryptjs throws "Illegal arguments" if it receives a non-string.
+  const match = await bcrypt.compare(password, String(user.passwordHash));
   if (!match) return false;
 
   setCurrentUser(user);
-  console.log('[auth] login: persisting session...');
-  await Promise.race([
-    persistSession(user),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('persistSession timed out after 5s')), 5_000)
-    ),
-  ]);
-  console.log('[auth] login: done');
+  await persistSession(user);
   return true;
 }
 
