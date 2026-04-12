@@ -20,7 +20,7 @@ import {
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
-import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl } from './components/Onboarding';
+import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl, saveDemoMode } from './components/Onboarding';
 import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
@@ -238,13 +238,17 @@ const App: Component = () => {
                 connection={connection()}
                 hostname={hostname()}
                 demo={demo()}
-                discovering={discovering()}
-                discoveryResults={discoveryResults()}
-                onDiscoverySelect={handleDiscoverySelect}
-                onRescan={runDiscovery}
                 onClose={() => setShowSettings(false)}
                 onComplete={handleOnboardingComplete}
-                onReconnect={handleReconnect}
+                onConnect={async (h, s) => {
+                  await saveHostnameAndStoreUrl(h, s);
+                  setHostname(h);
+                  await initConnection();
+                }}
+                onDemoMode={async () => {
+                  await saveDemoMode(true);
+                  await handleReconnect();
+                }}
               />
             : <Onboarding
                 onComplete={handleOnboardingComplete}

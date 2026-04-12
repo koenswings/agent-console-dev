@@ -14,9 +14,17 @@ vi.mock('../store/auth', () => ({
   changePassword: vi.fn(() => Promise.resolve(true)),
 }));
 
-// Stub Onboarding to avoid chrome.storage calls
-vi.mock('../components/Onboarding', () => ({
-  default: () => <div data-testid="onboarding-stub" />,
+// Stub storage to avoid chrome.storage calls
+vi.mock('../store/storage', () => ({
+  csGet: vi.fn(() => Promise.resolve({})),
+  csSet: vi.fn(() => Promise.resolve()),
+  STORAGE_KEY_MODE: 'displayMode',
+  STORAGE_KEY_DEMO: 'demoMode',
+}));
+
+// Stub ChangeEngineDialog — we test it separately
+vi.mock('../components/ChangeEngineDialog', () => ({
+  default: () => <div data-testid="change-engine-dialog-stub" />,
 }));
 
 // Prevent real network probes in tests
@@ -58,13 +66,10 @@ const defaultProps = () => ({
   connection: makeConnection(),
   hostname: 'appdocker01.local',
   demo: false,
-  discovering: false,
-  discoveryResults: [],
-  onDiscoverySelect: vi.fn(),
-  onRescan: vi.fn(),
   onClose: vi.fn(),
   onComplete: vi.fn(),
-  onReconnect: vi.fn(),
+  onConnect: vi.fn(),
+  onDemoMode: vi.fn(),
 });
 
 beforeEach(() => {
@@ -110,9 +115,10 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('Version 0.1.0')).toBeInTheDocument();
   });
 
-  it('shows connected hostname label in engine connection section', () => {
+  it('shows connected hostname label', () => {
     render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" demo={false} />);
     expect(screen.getByText(/Connected to/)).toBeInTheDocument();
+    expect(screen.getByText('appdocker01.local')).toBeInTheDocument();
   });
 
   it('shows demo mode label when demo is true', () => {
@@ -125,35 +131,31 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('Not connected')).toBeInTheDocument();
   });
 
-  it('does not show other engines list when discoveryResults only contains current hostname', () => {
-    render(() => (
-      <SettingsPanel
-        {...defaultProps()}
-        hostname="appdocker01.local"
-        discoveryResults={[{ hostname: 'appdocker01.local', storeUrl: 'automerge:abc' }]}
-      />
-    ));
-    expect(screen.queryByText('Other engines on the network:')).not.toBeInTheDocument();
+  it('shows Change engine button when operator is logged in', () => {
+    vi.mocked(isOperator).mockReturnValue(true);
+    render(() => <SettingsPanel {...defaultProps()} />);
+    expect(screen.getByRole('button', { name: /change engine/i })).toBeInTheDocument();
   });
 
-  it('shows other engines list when there are different engines in discoveryResults', () => {
-    render(() => (
-      <SettingsPanel
-        {...defaultProps()}
-        hostname="appdocker01.local"
-        discoveryResults={[
-          { hostname: 'appdocker01.local', storeUrl: 'automerge:abc' },
-          { hostname: 'appdocker02.local', storeUrl: 'automerge:def' },
-        ]}
-      />
-    ));
-    expect(screen.getByText('Other engines on the network:')).toBeInTheDocument();
-    expect(screen.getByText('appdocker02.local')).toBeInTheDocument();
+  it('does not show Change engine button when not operator', () => {
+    vi.mocked(isOperator).mockReturnValue(false);
+    render(() => <SettingsPanel {...defaultProps()} />);
+    expect(screen.queryByRole('button', { name: /change engine/i })).not.toBeInTheDocument();
   });
 
-  it('shows current hostname in the connected label', () => {
-    render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" demo={false} />);
-    expect(screen.getByText('appdocker01.local')).toBeInTheDocument();
+  it('opens ChangeEngineDialog when Change engine button clicked', () => {
+    vi.mocked(isOperator).mockReturnValue(true);
+    render(() => <SettingsPanel {...defaultProps()} />);
+    fireEvent.click(screen.getByRole('button', { name: /change engine/i }));
+    expect(screen.getByTestId('change-engine-dialog-stub')).toBeInTheDocument();
+  });
+
+  it('shows display mode options in About tab', () => {
+    render(() => <SettingsPanel {...defaultProps()} />);
+    fireEvent.click(screen.getByText('About'));
+    expect(screen.getByText('Side panel')).toBeInTheDocument();
+    expect(screen.getByText('Popup')).toBeInTheDocument();
+    expect(screen.getByText('Standalone window')).toBeInTheDocument();
   });
 
   it('calls changePassword with correct args on submit', async () => {
@@ -173,10 +175,8 @@ describe('SettingsPanel', () => {
       />
     ));
 
-    // Navigate to Account tab
     fireEvent.click(screen.getByText('Account'));
 
-    // Use querySelectorAll to get password inputs by type
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     fireEvent.input(passwordInputs[0], { target: { value: 'oldpass123' } });
     fireEvent.input(passwordInputs[1], { target: { value: 'newpass456' } });
