@@ -96,6 +96,15 @@ async function readPersistedSession(): Promise<OperatorSession | null> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Set the current user directly (after external verification) and persist session.
+ * Use this when you've already verified the password to avoid running bcrypt twice.
+ */
+export async function setAuthenticatedUser(user: User): Promise<void> {
+  setCurrentUser(user);
+  await persistSession(user);
+}
+
+/**
  * Attempt login. Returns true on success, false on bad credentials.
  * On success, sets the currentUser signal and persists the session.
  */

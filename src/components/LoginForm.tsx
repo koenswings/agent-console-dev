@@ -1,6 +1,7 @@
 import { createSignal, type Component } from 'solid-js';
-import { login } from '../store/auth';
-import type { Store } from '../types/store';
+import bcrypt from 'bcryptjs';
+import { setAuthenticatedUser } from '../store/auth';
+import type { Store, User } from '../types/store';
 
 interface LoginFormProps {
   store: Store | null;
@@ -23,22 +24,41 @@ const LoginForm: Component<LoginFormProps> = (props) => {
     setLoading(true);
 
     try {
-      const ok = await login(username(), password(), props.store);
-      if (ok) {
-        props.onSuccess();
-      } else {
+      // Find user
+      const users = Object.values(props.store.userDB ?? {}) as User[];
+      const user = users.find((u) => String(u.username) === username());
+      if (!user) {
         setError('Invalid username or password.');
+        setLoading(false);
+        return;
       }
+
+      // Compare — bcrypt with timeout so it can't hang forever
+      const hash = String(user.passwordHash);
+      const match = await Promise.race([
+        bcrypt.compare(password(), hash),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Login timed out — please try again.')), 10_000)
+        ),
+      ]);
+
+      if (!match) {
+        setError('Invalid username or password.');
+        setLoading(false);
+        return;
+      }
+
+      // Verified — set user and persist session (no second bcrypt call)
+      await setAuthenticatedUser(user);
+      props.onSuccess();
     } catch (err) {
-      console.error('[login]', err);
-      setError('Login failed. Please try again.');
-    } finally {
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
       setLoading(false);
     }
   };
 
   return (
-    <div class="modal-overlay" onClick={props.onCancel}>
+    <div class="modal-overlay">
       <div class="modal" onClick={(e) => e.stopPropagation()}>
         <div class="modal__header">
           <span class="modal__title">Operator Login</span>
