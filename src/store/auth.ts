@@ -70,21 +70,23 @@ interface OperatorSession {
 }
 
 async function persistSession(user: User): Promise<void> {
-  // Coerce Automerge ImmutableString proxies to plain strings before serialising
+  // Always write to localStorage first (synchronous, reliable).
+  // Then attempt chrome.storage as a best-effort bonus for extension contexts.
   const session: OperatorSession = { userId: String(user.id), username: String(user.username) };
-  if (hasChromeStorage()) {
-    const ok = await chromeStorageSet({ [SESSION_KEY]: session });
-    if (ok) return;
-  }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  if (hasChromeStorage()) {
+    // Fire-and-forget with timeout — never block on this
+    chromeStorageSet({ [SESSION_KEY]: session }).catch(() => {});
+  }
 }
 
 async function clearPersistedSession(): Promise<void> {
-  if (hasChromeStorage()) await chromeStorageRemove(SESSION_KEY);
   localStorage.removeItem(SESSION_KEY);
+  if (hasChromeStorage()) chromeStorageRemove(SESSION_KEY).catch(() => {});
 }
 
 async function readPersistedSession(): Promise<OperatorSession | null> {
+  // Try chrome.storage first (extension context), fall back to localStorage
   if (hasChromeStorage()) {
     const result = await chromeStorageGet(SESSION_KEY);
     if (result?.[SESSION_KEY]) return result[SESSION_KEY] as OperatorSession;
