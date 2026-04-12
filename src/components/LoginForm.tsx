@@ -1,4 +1,4 @@
-import { createSignal, type Component } from 'solid-js';
+import { createSignal, Show, type Component } from 'solid-js';
 import bcrypt from 'bcryptjs';
 import { setAuthenticatedUser } from '../store/auth';
 import type { Store, User } from '../types/store';
@@ -95,8 +95,11 @@ const LoginForm: Component<LoginFormProps> = (props) => {
 
           {error() && <p class="form-error">{error()}</p>}
 
-          <button class="btn btn--primary" type="submit" disabled={loading()}>
-            {loading() ? 'Verifying…' : 'Log in'}
+          <Show when={!props.store}>
+            <p class="form-field__hint" style="color:var(--colour-text-muted)">Waiting for engine to sync…</p>
+          </Show>
+          <button class="btn btn--primary" type="submit" disabled={loading() || !props.store}>
+            {loading() ? 'Verifying…' : !props.store ? 'Connecting…' : 'Log in'}
           </button>
         </form>
       </div>
