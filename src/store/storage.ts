@@ -13,27 +13,31 @@ export const STORAGE_KEY_HISTORY = 'engineHistory';
 
 export type DisplayMode = 'sidePanel' | 'popup' | 'window';
 
+function isExtensionContext(): boolean {
+  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
+}
+
 export async function csGet(keys: string[]): Promise<Record<string, string>> {
-  try {
-    const r = await chrome.storage.local.get(keys);
-    return r as Record<string, string>;
-  } catch {
-    const out: Record<string, string> = {};
-    for (const k of keys) {
-      const v = localStorage.getItem(k);
-      if (v !== null) out[k] = v;
-    }
-    return out;
+  if (isExtensionContext()) {
+    try {
+      const r = await chrome.storage.local.get(keys);
+      return r as Record<string, string>;
+    } catch {}
   }
+  const out: Record<string, string> = {};
+  for (const k of keys) {
+    const v = localStorage.getItem(k);
+    if (v !== null) out[k] = v;
+  }
+  return out;
 }
 
 export async function csSet(data: Record<string, string | boolean>): Promise<void> {
-  try {
-    await chrome.storage.local.set(data);
-  } catch {
-    for (const [k, v] of Object.entries(data)) {
-      localStorage.setItem(k, String(v));
-    }
+  if (isExtensionContext()) {
+    try { await chrome.storage.local.set(data); return; } catch {}
+  }
+  for (const [k, v] of Object.entries(data)) {
+    localStorage.setItem(k, String(v));
   }
 }
 

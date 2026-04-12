@@ -101,7 +101,6 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         ...(storeUrl().trim() ? { [STORAGE_KEY_STORE_URL]: storeUrl().trim() } : {}),
       });
       if (!storeUrl().trim()) {
-        try { await chrome.storage.local.remove(STORAGE_KEY_STORE_URL); } catch {}
         localStorage.removeItem(STORAGE_KEY_STORE_URL);
       }
       props.onComplete();

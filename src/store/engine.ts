@@ -46,11 +46,12 @@ export function isProductionWebMode(): boolean {
 // ---------------------------------------------------------------------------
 
 async function readFromStorage(key: string): Promise<string | null> {
-  try {
-    const result = await chrome.storage.local.get(key);
-    if (result[key] != null) return result[key] as string;
-  } catch {
-    // not in extension context
+  if (isExtensionContext()) {
+    try {
+      const result = await chrome.storage.local.get(key);
+      if (result[key] != null) return result[key] as string;
+      return null;
+    } catch {}
   }
   return localStorage.getItem(key);
 }
