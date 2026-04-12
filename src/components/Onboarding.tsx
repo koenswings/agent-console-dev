@@ -127,10 +127,11 @@ const Onboarding: Component<OnboardingProps> = (props) => {
     await csSet({ [STORAGE_KEY_MODE]: mode });
   };
 
-  // Save demo mode immediately on change
+  // Save demo mode immediately on change and trigger App reinit so status bar updates
   const handleDemoChange = async (val: boolean) => {
     setDemoMode(val);
     await csSet({ [STORAGE_KEY_DEMO]: String(val) });
+    props.onComplete();
   };
 
   const handleSubmit = async (e: Event) => {
