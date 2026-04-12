@@ -141,6 +141,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <Show when={showChangeEngine()}>
               <ChangeEngineDialog
                 currentHostname={props.hostname}
+                demo={props.demo}
                 onConnect={(h, s) => {
                   setShowChangeEngine(false);
                   props.onConnect(h, s);

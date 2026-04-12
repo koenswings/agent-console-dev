@@ -241,6 +241,7 @@ const App: Component = () => {
                 onClose={() => setShowSettings(false)}
                 onComplete={handleOnboardingComplete}
                 onConnect={async (h, s) => {
+                  await saveDemoMode(false);
                   await saveHostnameAndStoreUrl(h, s);
                   setHostname(h);
                   await initConnection();
