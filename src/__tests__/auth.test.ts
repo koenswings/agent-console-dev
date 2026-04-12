@@ -6,11 +6,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock bcryptjs before importing auth
-// Use callback-style mocks to match the callback API used in auth.ts
 vi.mock('bcryptjs', () => ({
   default: {
-    compare: vi.fn((_data, _hash, cb) => cb(null, true)),
-    hash: vi.fn((_data, _rounds, cb) => cb(null, '$hashed')),
+    compare: vi.fn(),
+    hash: vi.fn(),
   },
 }));
 
@@ -88,7 +87,7 @@ describe('isFirstTimeSetup', () => {
 
 describe('login', () => {
   it('succeeds with correct credentials', async () => {
-    vi.mocked(bcrypt.compare).mockImplementation((_d, _h, cb) => { cb(null, true); return undefined as never; });
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
     const store = makeStore([makeUser()]);
 
     const result = await login('admin', 'correct', store);
@@ -98,7 +97,7 @@ describe('login', () => {
   });
 
   it('fails with wrong password', async () => {
-    vi.mocked(bcrypt.compare).mockImplementation((_d, _h, cb) => { cb(null, false); return undefined as never; });
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
     const store = makeStore([makeUser()]);
 
     const result = await login('admin', 'wrong', store);
@@ -123,7 +122,7 @@ describe('login', () => {
 
 describe('logout', () => {
   it('clears currentUser', async () => {
-    vi.mocked(bcrypt.compare).mockImplementation((_d, _h, cb) => { cb(null, true); return undefined as never; });
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
     const store = makeStore([makeUser()]);
     await login('admin', 'correct', store);
     expect(currentUser()).not.toBeNull();
@@ -157,7 +156,7 @@ describe('restoreSession', () => {
 
 describe('createOperator', () => {
   it('creates a new operator and writes to store', async () => {
-    vi.mocked(bcrypt.hash).mockImplementation((_d, _r, cb) => { cb(null, '$hashed'); return undefined as never; });
+    vi.mocked(bcrypt.hash).mockResolvedValue('$hashed' as never);
     const store = makeStore();
     const { changeDoc, getDoc } = makeChangeDoc();
     getDoc().userDB = {}; // ensure the doc has a userDB
@@ -208,8 +207,8 @@ describe('removeOperator', () => {
 
 describe('changePassword', () => {
   it('changes password when current password is correct', async () => {
-    vi.mocked(bcrypt.compare).mockImplementation((_d, _h, cb) => { cb(null, true); return undefined as never; });
-    vi.mocked(bcrypt.hash).mockImplementation((_d, _r, cb) => { cb(null, '$newhash'); return undefined as never; });
+    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.hash).mockResolvedValue('$newhash' as never);
     const store = makeStore([makeUser()]);
     const { changeDoc } = makeChangeDoc();
 
@@ -220,7 +219,7 @@ describe('changePassword', () => {
   });
 
   it('returns false when current password is wrong', async () => {
-    vi.mocked(bcrypt.compare).mockImplementation((_d, _h, cb) => { cb(null, false); return undefined as never; });
+    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
     const store = makeStore([makeUser()]);
     const { changeDoc } = makeChangeDoc();
 

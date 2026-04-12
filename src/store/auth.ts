@@ -88,11 +88,7 @@ export async function login(
   );
   if (!user) return false;
 
-  // Use callback form — bcryptjs yields between rounds with setImmediate,
-  // keeping the UI thread responsive during the ~1s hash comparison.
-  const match = await new Promise<boolean>((resolve) => {
-    bcrypt.compare(password, user.passwordHash, (_err, result) => resolve(!!result));
-  });
+  const match = await bcrypt.compare(password, user.passwordHash);
   if (!match) return false;
 
   setCurrentUser(user);
@@ -141,9 +137,9 @@ export async function createOperator(
   );
   if (existing) throw new Error(`Username "${username}" is already taken`);
 
-  const passwordHash = await new Promise<string>((resolve, reject) => {
-    bcrypt.hash(password, 12, (err, hash) => err ? reject(err) : resolve(hash));
-  });
+  // Cost 10: ~100ms — secure and non-blocking in the browser.
+  // Cost 12 (~1s) caused UI thread blocking on login/setup.
+  const passwordHash = await bcrypt.hash(password, 10);
   const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const user: User = {
     id,
@@ -188,14 +184,10 @@ export async function changePassword(
   const user = (store.userDB ?? {})[userId];
   if (!user) return false;
 
-  const match = await new Promise<boolean>((resolve) => {
-    bcrypt.compare(currentPassword, user.passwordHash, (_err, result) => resolve(!!result));
-  });
+  const match = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!match) return false;
 
-  const newHash = await new Promise<string>((resolve, reject) => {
-    bcrypt.hash(newPassword, 12, (err, hash) => err ? reject(err) : resolve(hash));
-  });
+  const newHash = await bcrypt.hash(newPassword, 10);
   changeDoc((doc) => {
     if (doc.userDB[userId]) {
       doc.userDB[userId].passwordHash = newHash;
