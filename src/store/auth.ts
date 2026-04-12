@@ -74,7 +74,8 @@ async function readPersistedSession(): Promise<OperatorSession | null> {
  */
 export async function setAuthenticatedUser(user: User): Promise<void> {
   setCurrentUser(user);
-  await persistSession(user);
+  // Fire-and-forget — never block login on session persistence
+  persistSession(user).catch(() => {});
 }
 
 /**
