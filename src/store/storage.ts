@@ -13,16 +13,36 @@ export const STORAGE_KEY_HISTORY = 'engineHistory';
 
 export type DisplayMode = 'sidePanel' | 'popup' | 'window';
 
-function isExtensionContext(): boolean {
-  try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; } catch { return false; }
+// chrome.storage.local exists in regular Chrome tabs but its promises never
+// resolve. Race with a 200ms timeout and fall back to localStorage.
+async function chromeGet(keys: string[]): Promise<Record<string, string> | null> {
+  try {
+    const result = await Promise.race([
+      chrome.storage.local.get(keys),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
+    ]);
+    return result as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
+async function chromeSet(data: Record<string, string | boolean>): Promise<boolean> {
+  try {
+    await Promise.race([
+      chrome.storage.local.set(data),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function csGet(keys: string[]): Promise<Record<string, string>> {
-  if (isExtensionContext()) {
-    try {
-      const r = await chrome.storage.local.get(keys);
-      return r as Record<string, string>;
-    } catch {}
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    const r = await chromeGet(keys);
+    if (r !== null) return r;
   }
   const out: Record<string, string> = {};
   for (const k of keys) {
@@ -33,8 +53,9 @@ export async function csGet(keys: string[]): Promise<Record<string, string>> {
 }
 
 export async function csSet(data: Record<string, string | boolean>): Promise<void> {
-  if (isExtensionContext()) {
-    try { await chrome.storage.local.set(data); return; } catch {}
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    const ok = await chromeSet(data);
+    if (ok) return;
   }
   for (const [k, v] of Object.entries(data)) {
     localStorage.setItem(k, String(v));
