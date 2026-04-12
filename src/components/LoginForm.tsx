@@ -11,6 +11,7 @@ interface LoginFormProps {
 const LoginForm: Component<LoginFormProps> = (props) => {
   const [username, setUsername] = createSignal('');
   const [password, setPassword] = createSignal('');
+  const [showPassword, setShowPassword] = createSignal(false);
   const [error, setError] = createSignal('');
   const [loading, setLoading] = createSignal(false);
 
@@ -20,6 +21,9 @@ const LoginForm: Component<LoginFormProps> = (props) => {
 
     setError('');
     setLoading(true);
+
+    // Yield to the browser so the loading state renders before bcrypt runs
+    await new Promise((r) => setTimeout(r, 30));
 
     const ok = await login(username(), password(), props.store);
     setLoading(false);
@@ -52,17 +56,28 @@ const LoginForm: Component<LoginFormProps> = (props) => {
             />
           </label>
 
-          <label class="form-field">
+          <div class="form-field">
             <span class="form-field__label">Password</span>
-            <input
-              class="form-field__input"
-              type="password"
-              autocomplete="current-password"
-              value={password()}
-              onInput={(e) => setPassword(e.currentTarget.value)}
-              required
-            />
-          </label>
+            <div class="form-field__password-row">
+              <input
+                class="form-field__input"
+                type={showPassword() ? 'text' : 'password'}
+                autocomplete="current-password"
+                value={password()}
+                onInput={(e) => setPassword(e.currentTarget.value)}
+                required
+              />
+              <button
+                type="button"
+                class="form-field__show-pw"
+                onClick={() => setShowPassword((v) => !v)}
+                title={showPassword() ? 'Hide password' : 'Show password'}
+                aria-label={showPassword() ? 'Hide password' : 'Show password'}
+              >
+                {showPassword() ? '🙈' : '👁'}
+              </button>
+            </div>
+          </div>
 
           {error() && <p class="form-error">{error()}</p>}
 
@@ -71,7 +86,7 @@ const LoginForm: Component<LoginFormProps> = (props) => {
             type="submit"
             disabled={loading()}
           >
-            {loading() ? 'Logging in…' : 'Log in'}
+            {loading() ? 'Verifying…' : 'Log in'}
           </button>
         </form>
       </div>
