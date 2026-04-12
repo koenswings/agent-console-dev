@@ -36,6 +36,7 @@ const App: Component = () => {
   const [showLogin, setShowLogin] = createSignal(false);
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
   const [ready, setReady] = createSignal(false);
+  const [sessionRestored, setSessionRestored] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
   const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
@@ -64,7 +65,7 @@ const App: Component = () => {
     // Restore session once store is populated
     createEffect(() => {
       const s = conn.store();
-      if (s) restoreSession(s);
+      if (s) restoreSession(s).then(() => setSessionRestored(true));
     });
   };
 
@@ -277,9 +278,9 @@ const App: Component = () => {
               <>
                 <AppBrowser
                   store={store}
-                  onLogin={() => setShowLogin(true)}
+                  onLogin={() => sessionRestored() && setShowLogin(true)}
                 />
-                <Show when={showLogin()}>
+                <Show when={showLogin() && sessionRestored()}>
                   <LoginForm
                     store={store()}
                     onSuccess={() => setShowLogin(false)}
