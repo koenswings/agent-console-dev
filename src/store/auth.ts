@@ -111,7 +111,13 @@ export async function login(
 
   // Coerce to plain string — Automerge wraps values in ImmutableString objects;
   // bcryptjs throws "Illegal arguments" if it receives a non-string.
-  const match = await bcrypt.compare(password, String(user.passwordHash));
+  const hash = String(user.passwordHash);
+  const match = await Promise.race([
+    bcrypt.compare(password, hash),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('bcrypt timed out')), 8000)
+    ),
+  ]);
   if (!match) return false;
 
   setCurrentUser(user);
