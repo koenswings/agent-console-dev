@@ -12,7 +12,7 @@ import bcrypt from 'bcryptjs';
 import type { User, UserID, Store } from '../types/store';
 
 function isExtensionContext(): boolean {
-  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
+  try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; } catch { return false; }
 }
 
 // ---------------------------------------------------------------------------

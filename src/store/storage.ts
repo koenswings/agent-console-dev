@@ -14,7 +14,7 @@ export const STORAGE_KEY_HISTORY = 'engineHistory';
 export type DisplayMode = 'sidePanel' | 'popup' | 'window';
 
 function isExtensionContext(): boolean {
-  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
+  try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; } catch { return false; }
 }
 
 export async function csGet(keys: string[]): Promise<Record<string, string>> {

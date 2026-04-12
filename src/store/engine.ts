@@ -23,7 +23,7 @@ const STORAGE_KEY_STORE_URL = 'storeUrl';
 
 export function isExtensionContext(): boolean {
   try {
-    return typeof chrome !== 'undefined' && !!chrome.storage?.local;
+    return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
   } catch {
     return false;
   }
