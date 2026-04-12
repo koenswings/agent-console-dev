@@ -39,8 +39,10 @@ async function chromeStorageRemove(key: string): Promise<void> {
   } catch {}
 }
 
+// chrome.runtime.id is only set in real extension contexts.
+// chrome.storage.local exists in regular Chrome tabs too but its calls hang.
 const hasChromeStorage = () =>
-  typeof chrome !== 'undefined' && !!chrome.storage?.local;
+  typeof chrome !== 'undefined' && !!chrome.runtime?.id;
 
 // ---------------------------------------------------------------------------
 // Auth state signals
@@ -68,7 +70,8 @@ interface OperatorSession {
 }
 
 async function persistSession(user: User): Promise<void> {
-  const session: OperatorSession = { userId: user.id, username: user.username };
+  // Coerce Automerge ImmutableString proxies to plain strings before serialising
+  const session: OperatorSession = { userId: String(user.id), username: String(user.username) };
   if (hasChromeStorage()) {
     const ok = await chromeStorageSet({ [SESSION_KEY]: session });
     if (ok) return;

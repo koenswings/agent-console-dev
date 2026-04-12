@@ -245,6 +245,7 @@ const App: Component = () => {
                   await saveDemoMode(false);
                   await saveHostnameAndStoreUrl(h, s);
                   setHostname(h);
+                  setShowSettings(false);
                   await initConnection();
                 }}
                 onDemoMode={async () => {

@@ -1828,6 +1828,24 @@ body {
   margin: 0;
 }
 
+.settings-panel__close-btn {
+  align-self: flex-end;
+  background: none;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 4px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  cursor: pointer;
+  font-family: var(--font-family);
+  margin-bottom: 8px;
+}
+
+.settings-panel__close-btn:hover {
+  color: var(--colour-text);
+  border-color: var(--colour-text-muted);
+}
+
 .settings-panel__change-engine-btn {
   align-self: flex-start;
 }
