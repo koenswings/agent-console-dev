@@ -86,15 +86,34 @@ export async function login(
   const user = Object.values(store.userDB ?? {}).find(
     (u) => u.username === username
   );
-  if (!user) return false;
+  if (!user) {
+    console.log('[auth] login: user not found');
+    return false;
+  }
 
   // Coerce to plain string — Automerge proxies wrap primitives and bcryptjs
   // will throw (silently hanging the caller) if it receives a non-string.
-  const match = await bcrypt.compare(password, String(user.passwordHash));
+  const hash = String(user.passwordHash);
+  console.log('[auth] login: comparing password, hash prefix:', hash.slice(0, 7));
+
+  const match = await Promise.race([
+    bcrypt.compare(password, hash),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('bcrypt.compare timed out after 10s')), 10_000)
+    ),
+  ]);
+  console.log('[auth] login: bcrypt result:', match);
   if (!match) return false;
 
   setCurrentUser(user);
-  await persistSession(user);
+  console.log('[auth] login: persisting session...');
+  await Promise.race([
+    persistSession(user),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('persistSession timed out after 5s')), 5_000)
+    ),
+  ]);
+  console.log('[auth] login: done');
   return true;
 }
 
