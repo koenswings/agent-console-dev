@@ -1670,8 +1670,20 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
-  font-weight: 500;
+  padding: 10px 12px;
+  background: var(--colour-surface-alt);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.settings-panel__current-label {
   color: var(--colour-text);
+}
+
+.settings-panel__other-label {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  margin: 0 0 6px;
 }
 
 .settings-panel__status-dot {

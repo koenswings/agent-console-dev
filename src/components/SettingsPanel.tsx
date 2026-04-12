@@ -11,12 +11,15 @@ export interface SettingsPanelProps {
   store: Store | null;
   connection: StoreConnection | null;
   hostname: string;
+  demo: boolean;
   discovering: boolean;
   discoveryResults: DiscoveryResult[];
   onDiscoverySelect: (result: DiscoveryResult) => void;
   onRescan: () => void;
   onClose: () => void;
   onComplete: () => void;
+  /** Reconnect in-place without closing the panel (e.g. live toggle changes) */
+  onReconnect: () => void;
 }
 
 async function probeHostname(hostname: string): Promise<boolean> {
@@ -48,21 +51,9 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
     Record<string, 'online' | 'offline' | 'checking'>
   >({});
 
-  // All known engines: current hostname + discovery results (deduplicated)
-  const knownEngines = (): DiscoveryResult[] => {
-    const seen = new Set<string>();
-    const engines: DiscoveryResult[] = [];
-    if (props.hostname) {
-      seen.add(props.hostname);
-      engines.push({ hostname: props.hostname, storeUrl: '' });
-    }
-    for (const r of props.discoveryResults) {
-      if (!seen.has(r.hostname)) {
-        seen.add(r.hostname);
-        engines.push(r);
-      }
-    }
-    return engines;
+  // Other engines: discovery results that are NOT the current hostname
+  const otherEngines = (): DiscoveryResult[] => {
+    return props.discoveryResults.filter((r) => r.hostname !== props.hostname);
   };
 
   const probeEngine = async (hostname: string) => {
@@ -135,54 +126,49 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
           <div class="settings-panel__section">
             <h2 class="settings-panel__heading">Engine Connection</h2>
 
-            {/* Current connection */}
-            <Show when={props.hostname}>
-              <div class="settings-panel__current-engine">
+            {/* Current connection status */}
+            <div class="settings-panel__current-engine">
+              <Show when={props.demo}>
+                <span class="settings-panel__status-dot" style="background:var(--colour-text-dim)" />
+                <span class="settings-panel__current-label">Demo mode — simulated data, no engine connected</span>
+              </Show>
+              <Show when={!props.demo && props.hostname}>
                 <span class="settings-panel__status-dot settings-panel__status-dot--connected" />
-                <span>{props.hostname}</span>
-              </div>
-            </Show>
+                <span class="settings-panel__current-label">Connected to <strong>{props.hostname}</strong></span>
+              </Show>
+              <Show when={!props.demo && !props.hostname}>
+                <span class="settings-panel__status-dot" style="background:var(--colour-error)" />
+                <span class="settings-panel__current-label">Not connected</span>
+              </Show>
+            </div>
 
-            {/* Known engines list */}
-            <Show when={knownEngines().length > 0}>
+            {/* Other engines found on the network — only shown when there are alternatives */}
+            <Show when={otherEngines().length > 0}>
+              <p class="settings-panel__other-label">Other engines on the network:</p>
               <div class="settings-panel__engine-list">
-                <For each={knownEngines()}>
+                <For each={otherEngines()}>
                   {(engine) => {
                     const status = () => engineStatuses()[engine.hostname];
                     return (
                       <div class="settings-panel__engine-item">
                         <button
                           class="settings-panel__engine-hostname"
-                          onClick={() => {
-                            if (engine.storeUrl) props.onDiscoverySelect(engine);
-                          }}
-                          disabled={!engine.storeUrl}
-                          title={engine.storeUrl ? 'Click to connect' : engine.hostname}
+                          onClick={() => props.onDiscoverySelect(engine)}
+                          title="Switch to this engine"
                         >
                           {engine.hostname}
                         </button>
                         <Show when={status() === 'checking'}>
-                          <span class="settings-panel__engine-badge settings-panel__engine-badge--checking">
-                            checking…
-                          </span>
+                          <span class="settings-panel__engine-badge settings-panel__engine-badge--checking">checking…</span>
                         </Show>
                         <Show when={status() === 'online'}>
-                          <span class="settings-panel__engine-badge settings-panel__engine-badge--online">
-                            online
-                          </span>
+                          <span class="settings-panel__engine-badge settings-panel__engine-badge--online">online</span>
                         </Show>
                         <Show when={status() === 'offline'}>
-                          <span class="settings-panel__engine-badge settings-panel__engine-badge--offline">
-                            offline
-                          </span>
+                          <span class="settings-panel__engine-badge settings-panel__engine-badge--offline">offline</span>
                         </Show>
                         <Show when={!status()}>
-                          <button
-                            class="btn btn--small"
-                            onClick={() => probeEngine(engine.hostname)}
-                          >
-                            Check
-                          </button>
+                          <button class="btn btn--small" onClick={() => probeEngine(engine.hostname)}>Check</button>
                         </Show>
                       </div>
                     );
@@ -191,18 +177,10 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               </div>
             </Show>
 
-            {/* Re-scan button */}
-            <button
-              class="btn btn--primary"
-              onClick={props.onRescan}
-              disabled={props.discovering}
-            >
-              {props.discovering ? 'Scanning…' : 'Re-scan network'}
-            </button>
-
-            {/* Onboarding embedded — handles hostname input, display mode, demo toggle */}
+            {/* Onboarding embedded — hostname input, display mode, demo toggle */}
             <Onboarding
               onComplete={props.onComplete}
+              onReconnect={props.onReconnect}
               discovering={props.discovering}
               discoveryResults={props.discoveryResults}
               onDiscoverySelect={props.onDiscoverySelect}

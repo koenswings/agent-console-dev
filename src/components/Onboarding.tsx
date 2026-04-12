@@ -78,6 +78,11 @@ export async function readStoredDemoMode(): Promise<boolean> {
 
 interface OnboardingProps {
   onComplete: () => void;
+  /**
+   * Called when a live setting (e.g. demo toggle) should trigger a reconnect
+   * without closing the Settings panel. Falls back to onComplete if not provided.
+   */
+  onReconnect?: () => void;
   /** True while App.tsx background discovery is running */
   discovering?: boolean;
   /** Passed from App.tsx when background discovery already ran */
@@ -127,11 +132,13 @@ const Onboarding: Component<OnboardingProps> = (props) => {
     await csSet({ [STORAGE_KEY_MODE]: mode });
   };
 
-  // Save demo mode immediately on change and trigger App reinit so status bar updates
+  // Save demo mode immediately on change and trigger App reconnect so status bar updates
   const handleDemoChange = async (val: boolean) => {
     setDemoMode(val);
     await csSet({ [STORAGE_KEY_DEMO]: String(val) });
-    props.onComplete();
+    // Use onReconnect (stays in settings) when available; fall back to onComplete
+    if (props.onReconnect) props.onReconnect();
+    else props.onComplete();
   };
 
   const handleSubmit = async (e: Event) => {

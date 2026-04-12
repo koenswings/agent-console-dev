@@ -147,6 +147,13 @@ const App: Component = () => {
     await initConnection();
   };
 
+  // Reconnect in-place without closing the settings panel (e.g. demo toggle)
+  const handleReconnect = async () => {
+    const host = await readStoredHostname();
+    setHostname(host);
+    await initConnection();
+  };
+
   const handleLogout = async () => {
     await logout();
     setShowOperatorMgmt(false);
@@ -230,12 +237,14 @@ const App: Component = () => {
                 store={store()}
                 connection={connection()}
                 hostname={hostname()}
+                demo={demo()}
                 discovering={discovering()}
                 discoveryResults={discoveryResults()}
                 onDiscoverySelect={handleDiscoverySelect}
                 onRescan={runDiscovery}
                 onClose={() => setShowSettings(false)}
                 onComplete={handleOnboardingComplete}
+                onReconnect={handleReconnect}
               />
             : <Onboarding
                 onComplete={handleOnboardingComplete}

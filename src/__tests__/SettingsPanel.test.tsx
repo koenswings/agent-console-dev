@@ -57,12 +57,14 @@ const defaultProps = () => ({
   store: makeStore(),
   connection: makeConnection(),
   hostname: 'appdocker01.local',
+  demo: false,
   discovering: false,
   discoveryResults: [],
   onDiscoverySelect: vi.fn(),
   onRescan: vi.fn(),
   onClose: vi.fn(),
   onComplete: vi.fn(),
+  onReconnect: vi.fn(),
 });
 
 beforeEach(() => {
@@ -108,21 +110,50 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('Version 0.1.0')).toBeInTheDocument();
   });
 
-  it('shows Re-scan network button in Engine Connection tab', () => {
-    render(() => <SettingsPanel {...defaultProps()} />);
-    expect(screen.getByRole('button', { name: 'Re-scan network' })).toBeInTheDocument();
+  it('shows connected hostname label in engine connection section', () => {
+    render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" demo={false} />);
+    expect(screen.getByText(/Connected to/)).toBeInTheDocument();
   });
 
-  it('Re-scan button calls onRescan', () => {
-    const onRescan = vi.fn();
-    render(() => <SettingsPanel {...defaultProps()} onRescan={onRescan} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Re-scan network' }));
-    expect(onRescan).toHaveBeenCalledOnce();
+  it('shows demo mode label when demo is true', () => {
+    render(() => <SettingsPanel {...defaultProps()} demo={true} hostname="" />);
+    expect(screen.getByText(/Demo mode/)).toBeInTheDocument();
   });
 
-  it('shows current hostname in engine connection section', () => {
-    render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" />);
-    expect(screen.getAllByText('appdocker01.local').length).toBeGreaterThan(0);
+  it('shows not connected label when no hostname and not demo', () => {
+    render(() => <SettingsPanel {...defaultProps()} demo={false} hostname="" />);
+    expect(screen.getByText('Not connected')).toBeInTheDocument();
+  });
+
+  it('does not show other engines list when discoveryResults only contains current hostname', () => {
+    render(() => (
+      <SettingsPanel
+        {...defaultProps()}
+        hostname="appdocker01.local"
+        discoveryResults={[{ hostname: 'appdocker01.local', storeUrl: 'automerge:abc' }]}
+      />
+    ));
+    expect(screen.queryByText('Other engines on the network:')).not.toBeInTheDocument();
+  });
+
+  it('shows other engines list when there are different engines in discoveryResults', () => {
+    render(() => (
+      <SettingsPanel
+        {...defaultProps()}
+        hostname="appdocker01.local"
+        discoveryResults={[
+          { hostname: 'appdocker01.local', storeUrl: 'automerge:abc' },
+          { hostname: 'appdocker02.local', storeUrl: 'automerge:def' },
+        ]}
+      />
+    ));
+    expect(screen.getByText('Other engines on the network:')).toBeInTheDocument();
+    expect(screen.getByText('appdocker02.local')).toBeInTheDocument();
+  });
+
+  it('shows current hostname in the connected label', () => {
+    render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" demo={false} />);
+    expect(screen.getByText('appdocker01.local')).toBeInTheDocument();
   });
 
   it('calls changePassword with correct args on submit', async () => {
