@@ -10,39 +10,7 @@
 import { createSignal } from 'solid-js';
 import bcrypt from 'bcryptjs';
 import type { User, UserID, Store } from '../types/store';
-
-async function chromeStorageSet(data: object): Promise<boolean> {
-  try {
-    await Promise.race([
-      chrome.storage.local.set(data),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
-    ]);
-    return true;
-  } catch { return false; }
-}
-
-async function chromeStorageGet(key: string): Promise<Record<string, unknown> | null> {
-  try {
-    return await Promise.race([
-      chrome.storage.local.get(key),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
-    ]) as Record<string, unknown>;
-  } catch { return null; }
-}
-
-async function chromeStorageRemove(key: string): Promise<void> {
-  try {
-    await Promise.race([
-      chrome.storage.local.remove(key),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
-    ]);
-  } catch {}
-}
-
-// chrome.runtime.id is only set in real extension contexts.
-// chrome.storage.local exists in regular Chrome tabs too but its calls hang.
-const hasChromeStorage = () =>
-  typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+import { IS_EXTENSION } from './context';
 
 // ---------------------------------------------------------------------------
 // Auth state signals
@@ -70,26 +38,26 @@ interface OperatorSession {
 }
 
 async function persistSession(user: User): Promise<void> {
-  // Always write to localStorage first (synchronous, reliable).
-  // Then attempt chrome.storage as a best-effort bonus for extension contexts.
   const session: OperatorSession = { userId: String(user.id), username: String(user.username) };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  if (hasChromeStorage()) {
-    // Fire-and-forget with timeout — never block on this
-    chromeStorageSet({ [SESSION_KEY]: session }).catch(() => {});
+  if (IS_EXTENSION) {
+    try { await chrome.storage.local.set({ [SESSION_KEY]: session }); return; } catch {}
   }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 async function clearPersistedSession(): Promise<void> {
+  if (IS_EXTENSION) {
+    try { await chrome.storage.local.remove(SESSION_KEY); } catch {}
+  }
   localStorage.removeItem(SESSION_KEY);
-  if (hasChromeStorage()) chromeStorageRemove(SESSION_KEY).catch(() => {});
 }
 
 async function readPersistedSession(): Promise<OperatorSession | null> {
-  // Try chrome.storage first (extension context), fall back to localStorage
-  if (hasChromeStorage()) {
-    const result = await chromeStorageGet(SESSION_KEY);
-    if (result?.[SESSION_KEY]) return result[SESSION_KEY] as OperatorSession;
+  if (IS_EXTENSION) {
+    try {
+      const r = await chrome.storage.local.get(SESSION_KEY);
+      if (r[SESSION_KEY]) return r[SESSION_KEY] as OperatorSession;
+    } catch {}
   }
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;

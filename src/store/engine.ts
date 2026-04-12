@@ -48,10 +48,7 @@ export function isProductionWebMode(): boolean {
 async function readFromStorage(key: string): Promise<string | null> {
   if (isExtensionContext()) {
     try {
-      const result = await Promise.race([
-        chrome.storage.local.get(key),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
-      ]) as Record<string, unknown>;
+      const result = await chrome.storage.local.get(key) as Record<string, unknown>;
       if (result[key] != null) return result[key] as string;
       return null;
     } catch {}

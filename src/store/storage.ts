@@ -1,9 +1,11 @@
 /**
  * storage.ts — Chrome extension storage helpers
  *
- * Centralises all chrome.storage.local / localStorage access.
- * Import from here instead of duplicating in components.
+ * Uses chrome.storage.local when running as a real extension (IS_EXTENSION),
+ * falls back to localStorage for web/dev mode. Detection is synchronous and
+ * done once at module load — no async races, no timeouts.
  */
+import { IS_EXTENSION } from './context';
 
 export const STORAGE_KEY_HOSTNAME = 'engineHostname';
 export const STORAGE_KEY_STORE_URL = 'storeUrl';
@@ -13,36 +15,14 @@ export const STORAGE_KEY_HISTORY = 'engineHistory';
 
 export type DisplayMode = 'sidePanel' | 'popup' | 'window';
 
-// chrome.storage.local exists in regular Chrome tabs but its promises never
-// resolve. Race with a 200ms timeout and fall back to localStorage.
-async function chromeGet(keys: string[]): Promise<Record<string, string> | null> {
-  try {
-    const result = await Promise.race([
-      chrome.storage.local.get(keys),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
-    ]);
-    return result as Record<string, string>;
-  } catch {
-    return null;
-  }
-}
-
-async function chromeSet(data: Record<string, string | boolean>): Promise<boolean> {
-  try {
-    await Promise.race([
-      chrome.storage.local.set(data),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 200)),
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function csGet(keys: string[]): Promise<Record<string, string>> {
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    const r = await chromeGet(keys);
-    if (r !== null) return r;
+  if (IS_EXTENSION) {
+    try {
+      const r = await chrome.storage.local.get(keys);
+      return r as Record<string, string>;
+    } catch {
+      // fall through to localStorage
+    }
   }
   const out: Record<string, string> = {};
   for (const k of keys) {
@@ -53,9 +33,13 @@ export async function csGet(keys: string[]): Promise<Record<string, string>> {
 }
 
 export async function csSet(data: Record<string, string | boolean>): Promise<void> {
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    const ok = await chromeSet(data);
-    if (ok) return;
+  if (IS_EXTENSION) {
+    try {
+      await chrome.storage.local.set(data);
+      return;
+    } catch {
+      // fall through to localStorage
+    }
   }
   for (const [k, v] of Object.entries(data)) {
     localStorage.setItem(k, String(v));
