@@ -17,6 +17,8 @@ import {
   isFirstTimeSetup,
   logout,
   restoreSession,
+  createOperator,
+  setAuthenticatedUser,
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
@@ -81,6 +83,30 @@ const App: Component = () => {
     }
   });
 
+  // Auto-provision default operator when real engine store has no users.
+  // This runs once per connection when the store first syncs with an empty userDB.
+  // Creates admin/admin911! so the operator can log in without first-time setup.
+  let provisioningRan = false;
+  createEffect(() => {
+    const s = store();
+    const conn = connection();
+    if (!s || !conn || demo() || isOperator() || provisioningRan) return;
+    if (!isFirstTimeSetup(s)) return; // userDB already has users
+    provisioningRan = true;
+    const DEFAULT_USERNAME = 'admin';
+    const DEFAULT_PASSWORD = 'admin911!';
+    createOperator(DEFAULT_USERNAME, DEFAULT_PASSWORD, s, conn.changeDoc)
+      .then((user) => {
+        console.log('[app] Auto-provisioned default operator:', DEFAULT_USERNAME);
+        return setAuthenticatedUser(user);
+      })
+      .catch((err) => {
+        // Might fail if another tab provisioned at the same time — not fatal
+        console.warn('[app] Auto-provision skipped:', err.message);
+        provisioningRan = false;
+      });
+  });
+
   // Fallback: if store never arrives (engine slow/offline), unblock login after 3s
   createEffect(() => {
     const conn = connection();
@@ -94,6 +120,7 @@ const App: Component = () => {
     // Reset session state for new connection
     sessionRestoreRan = false;
     setSessionRestored(false);
+    provisioningRan = false;
     setStore(null);
     setConnected(false);
 
