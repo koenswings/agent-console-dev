@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('bcryptjs', () => ({
   default: {
     compare: vi.fn(),
+    compareSync: vi.fn(),
     hash: vi.fn(),
   },
 }));
@@ -87,7 +88,7 @@ describe('isFirstTimeSetup', () => {
 
 describe('login', () => {
   it('succeeds with correct credentials', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.compareSync).mockReturnValue(true as never);
     const store = makeStore([makeUser()]);
 
     const result = await login('admin', 'correct', store);
@@ -97,7 +98,7 @@ describe('login', () => {
   });
 
   it('fails with wrong password', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+    vi.mocked(bcrypt.compareSync).mockReturnValue(false as never);
     const store = makeStore([makeUser()]);
 
     const result = await login('admin', 'wrong', store);
@@ -112,7 +113,7 @@ describe('login', () => {
     const result = await login('nobody', 'anything', store);
 
     expect(result).toBe(false);
-    expect(bcrypt.compare).not.toHaveBeenCalled();
+    expect(bcrypt.compareSync).not.toHaveBeenCalled();
   });
 });
 
@@ -122,7 +123,7 @@ describe('login', () => {
 
 describe('logout', () => {
   it('clears currentUser', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.compareSync).mockReturnValue(true as never);
     const store = makeStore([makeUser()]);
     await login('admin', 'correct', store);
     expect(currentUser()).not.toBeNull();
@@ -207,7 +208,7 @@ describe('removeOperator', () => {
 
 describe('changePassword', () => {
   it('changes password when current password is correct', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    vi.mocked(bcrypt.compareSync).mockReturnValue(true as never);
     vi.mocked(bcrypt.hash).mockResolvedValue('$newhash' as never);
     const store = makeStore([makeUser()]);
     const { changeDoc } = makeChangeDoc();
@@ -219,7 +220,7 @@ describe('changePassword', () => {
   });
 
   it('returns false when current password is wrong', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+    vi.mocked(bcrypt.compareSync).mockReturnValue(false as never);
     const store = makeStore([makeUser()]);
     const { changeDoc } = makeChangeDoc();
 

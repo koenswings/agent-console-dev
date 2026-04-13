@@ -83,11 +83,11 @@ const makeStore = (): Store => ({
 });
 
 describe('AppBrowser', () => {
-  it('renders app cards for running instances only (Kolibri running, Nextcloud stopped)', () => {
+  it('renders app cards for all instances regardless of status', () => {
     render(() => <AppBrowser store={() => makeStore()} onLogin={vi.fn()} />);
     expect(screen.getByText('Kolibri')).toBeInTheDocument();
-    // Nextcloud is Stopped — filtered out in user mode
-    expect(screen.queryByText('Nextcloud')).not.toBeInTheDocument();
+    // Nextcloud is Stopped — still shown (greyed out via app-card--unavailable)
+    expect(screen.getByText('Nextcloud')).toBeInTheDocument();
   });
 
   it('shows Open button for running instance', () => {
@@ -107,11 +107,12 @@ describe('AppBrowser', () => {
     expect(screen.getByText(/No apps available/)).toBeInTheDocument();
   });
 
-  it('shows empty message when no instances are Running', () => {
+  it('shows instance even when not Running (greyed out)', () => {
     const store = makeStore();
     store.instanceDB['inst-1'].status = 'Stopped';
     render(() => <AppBrowser store={() => store} onLogin={vi.fn()} />);
-    expect(screen.getByText(/No apps available/)).toBeInTheDocument();
+    // Non-running instances still show, they are just greyed out
+    expect(screen.queryByText(/No apps available/)).not.toBeInTheDocument();
   });
 
   it('calls onLogin when Log in button is clicked', () => {
