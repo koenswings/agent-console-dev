@@ -20,7 +20,7 @@ import {
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
-import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl } from './components/Onboarding';
+import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl, saveDemoMode } from './components/Onboarding';
 import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
@@ -147,6 +147,13 @@ const App: Component = () => {
     await initConnection();
   };
 
+  // Reconnect in-place without closing the settings panel (e.g. demo toggle)
+  const handleReconnect = async () => {
+    const host = await readStoredHostname();
+    setHostname(host);
+    await initConnection();
+  };
+
   const handleLogout = async () => {
     await logout();
     setShowOperatorMgmt(false);
@@ -230,12 +237,18 @@ const App: Component = () => {
                 store={store()}
                 connection={connection()}
                 hostname={hostname()}
-                discovering={discovering()}
-                discoveryResults={discoveryResults()}
-                onDiscoverySelect={handleDiscoverySelect}
-                onRescan={runDiscovery}
+                demo={demo()}
                 onClose={() => setShowSettings(false)}
                 onComplete={handleOnboardingComplete}
+                onConnect={async (h, s) => {
+                  await saveHostnameAndStoreUrl(h, s);
+                  setHostname(h);
+                  await initConnection();
+                }}
+                onDemoMode={async () => {
+                  await saveDemoMode(true);
+                  await handleReconnect();
+                }}
               />
             : <Onboarding
                 onComplete={handleOnboardingComplete}

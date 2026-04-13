@@ -1670,8 +1670,20 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
-  font-weight: 500;
+  padding: 10px 12px;
+  background: var(--colour-surface-alt);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.settings-panel__current-label {
   color: var(--colour-text);
+}
+
+.settings-panel__other-label {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  margin: 0 0 6px;
 }
 
 .settings-panel__status-dot {
@@ -1787,4 +1799,173 @@ body {
   font-size: 0.82rem;
   color: var(--colour-text-dim);
   margin: 0;
+}
+
+.settings-panel__change-engine-btn {
+  align-self: flex-start;
+}
+
+.settings-panel__display-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--colour-border);
+}
+
+.settings-panel__display-mode-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--colour-text);
+}
+
+.settings-panel__display-mode-hint {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  margin: 0 0 4px;
+}
+
+/* --------------------------------------------------------
+   Change Engine Dialog
+   -------------------------------------------------------- */
+.change-engine-dialog {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.change-engine-dialog__card {
+  background: var(--colour-surface);
+  border-radius: 8px;
+  padding: 24px;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.change-engine-dialog__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--colour-text);
+}
+
+.change-engine-dialog__section-label {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  margin: 0 0 6px;
+  font-weight: 500;
+}
+
+.change-engine-dialog__history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.change-engine-dialog__history-item {
+  background: var(--colour-surface-alt);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  text-align: left;
+  font-size: 0.88rem;
+  font-family: monospace;
+  cursor: pointer;
+  color: var(--colour-text);
+}
+
+.change-engine-dialog__history-item:hover {
+  background: var(--colour-surface-hover);
+  color: var(--colour-accent);
+}
+
+.change-engine-dialog__input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.change-engine-dialog__input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-family: var(--font-family);
+  background: var(--colour-surface);
+  color: var(--colour-text);
+}
+
+.change-engine-dialog__input:focus {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: -1px;
+}
+
+.change-engine-dialog__probing {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  margin: 0;
+}
+
+.change-engine-dialog__suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.change-engine-dialog__suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  background: var(--colour-surface-alt);
+}
+
+.change-engine-dialog__suggestion-name {
+  font-size: 0.88rem;
+  font-family: monospace;
+  color: var(--colour-text);
+}
+
+.change-engine-dialog__error {
+  font-size: var(--font-size-sm);
+  color: var(--colour-error);
+  margin: 0;
+}
+
+.change-engine-dialog__scan-btn {
+  align-self: flex-start;
+}
+
+.change-engine-dialog__demo-section {
+  border-top: 1px solid var(--colour-border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.change-engine-dialog__cancel {
+  background: none;
+  border: none;
+  color: var(--colour-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: left;
+  font-family: var(--font-family);
+}
+
+.change-engine-dialog__cancel:hover {
+  color: var(--colour-text);
 }

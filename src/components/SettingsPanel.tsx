@@ -1,7 +1,7 @@
-import { createSignal, Show, For, type Component } from 'solid-js';
-import Onboarding from './Onboarding';
+import { createSignal, onMount, Show, For, type Component } from 'solid-js';
+import ChangeEngineDialog from './ChangeEngineDialog';
 import { currentUser, isOperator, changePassword } from '../store/auth';
-import type { DiscoveryResult } from '../store/discovery';
+import { csGet, csSet, STORAGE_KEY_MODE, type DisplayMode } from '../store/storage';
 import type { Store } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
 
@@ -11,29 +11,17 @@ export interface SettingsPanelProps {
   store: Store | null;
   connection: StoreConnection | null;
   hostname: string;
-  discovering: boolean;
-  discoveryResults: DiscoveryResult[];
-  onDiscoverySelect: (result: DiscoveryResult) => void;
-  onRescan: () => void;
+  demo: boolean;
   onClose: () => void;
   onComplete: () => void;
-}
-
-async function probeHostname(hostname: string): Promise<boolean> {
-  try {
-    const res = await fetch(`http://${hostname}/api/store-url`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    if (!res.ok) return false;
-    const json = await res.json();
-    return typeof json?.url === 'string' && (json.url as string).startsWith('automerge:');
-  } catch {
-    return false;
-  }
+  onConnect: (hostname: string, storeUrl: string) => void;
+  onDemoMode: () => void;
 }
 
 const SettingsPanel: Component<SettingsPanelProps> = (props) => {
   const [activeTab, setActiveTab] = createSignal<Tab>('engine');
+  const [showChangeEngine, setShowChangeEngine] = createSignal(false);
+  const [displayMode, setDisplayMode] = createSignal<DisplayMode>('sidePanel');
 
   // Change password state
   const [currentPw, setCurrentPw] = createSignal('');
@@ -43,32 +31,14 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
   const [pwSuccess, setPwSuccess] = createSignal('');
   const [pwLoading, setPwLoading] = createSignal(false);
 
-  // Per-engine online/offline status
-  const [engineStatuses, setEngineStatuses] = createSignal<
-    Record<string, 'online' | 'offline' | 'checking'>
-  >({});
+  onMount(async () => {
+    const r = await csGet([STORAGE_KEY_MODE]);
+    setDisplayMode((r[STORAGE_KEY_MODE] as DisplayMode) ?? 'sidePanel');
+  });
 
-  // All known engines: current hostname + discovery results (deduplicated)
-  const knownEngines = (): DiscoveryResult[] => {
-    const seen = new Set<string>();
-    const engines: DiscoveryResult[] = [];
-    if (props.hostname) {
-      seen.add(props.hostname);
-      engines.push({ hostname: props.hostname, storeUrl: '' });
-    }
-    for (const r of props.discoveryResults) {
-      if (!seen.has(r.hostname)) {
-        seen.add(r.hostname);
-        engines.push(r);
-      }
-    }
-    return engines;
-  };
-
-  const probeEngine = async (hostname: string) => {
-    setEngineStatuses((prev) => ({ ...prev, [hostname]: 'checking' }));
-    const online = await probeHostname(hostname);
-    setEngineStatuses((prev) => ({ ...prev, [hostname]: online ? 'online' : 'offline' }));
+  const handleModeChange = async (mode: DisplayMode) => {
+    setDisplayMode(mode);
+    await csSet({ [STORAGE_KEY_MODE]: mode });
   };
 
   const handleChangePassword = async (e: Event) => {
@@ -111,6 +81,12 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
     return t;
   };
 
+  const modeOptions: { id: DisplayMode; label: string; desc: string }[] = [
+    { id: 'sidePanel', label: 'Side panel', desc: 'Docked to the right of the browser. Stays open across tabs.' },
+    { id: 'popup', label: 'Popup', desc: 'Opens on icon click, closes when you click away.' },
+    { id: 'window', label: 'Standalone window', desc: 'Opens as a separate Chrome window.' },
+  ];
+
   return (
     <div class="settings-panel">
       {/* Left sidebar */}
@@ -135,78 +111,47 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
           <div class="settings-panel__section">
             <h2 class="settings-panel__heading">Engine Connection</h2>
 
-            {/* Current connection */}
-            <Show when={props.hostname}>
-              <div class="settings-panel__current-engine">
+            {/* Status row */}
+            <div class="settings-panel__current-engine">
+              <Show when={props.demo}>
+                <span class="settings-panel__status-dot" style="background:var(--colour-text-dim)" />
+                <span class="settings-panel__current-label">Demo mode — simulated data, no engine connected</span>
+              </Show>
+              <Show when={!props.demo && props.hostname}>
                 <span class="settings-panel__status-dot settings-panel__status-dot--connected" />
-                <span>{props.hostname}</span>
-              </div>
+                <span class="settings-panel__current-label">Connected to <strong>{props.hostname}</strong></span>
+              </Show>
+              <Show when={!props.demo && !props.hostname}>
+                <span class="settings-panel__status-dot" style="background:var(--colour-error)" />
+                <span class="settings-panel__current-label">Not connected</span>
+              </Show>
+            </div>
+
+            {/* Change engine — operator only */}
+            <Show when={isOperator()}>
+              <button
+                class="btn btn--primary settings-panel__change-engine-btn"
+                onClick={() => setShowChangeEngine(true)}
+              >
+                Change engine
+              </button>
             </Show>
 
-            {/* Known engines list */}
-            <Show when={knownEngines().length > 0}>
-              <div class="settings-panel__engine-list">
-                <For each={knownEngines()}>
-                  {(engine) => {
-                    const status = () => engineStatuses()[engine.hostname];
-                    return (
-                      <div class="settings-panel__engine-item">
-                        <button
-                          class="settings-panel__engine-hostname"
-                          onClick={() => {
-                            if (engine.storeUrl) props.onDiscoverySelect(engine);
-                          }}
-                          disabled={!engine.storeUrl}
-                          title={engine.storeUrl ? 'Click to connect' : engine.hostname}
-                        >
-                          {engine.hostname}
-                        </button>
-                        <Show when={status() === 'checking'}>
-                          <span class="settings-panel__engine-badge settings-panel__engine-badge--checking">
-                            checking…
-                          </span>
-                        </Show>
-                        <Show when={status() === 'online'}>
-                          <span class="settings-panel__engine-badge settings-panel__engine-badge--online">
-                            online
-                          </span>
-                        </Show>
-                        <Show when={status() === 'offline'}>
-                          <span class="settings-panel__engine-badge settings-panel__engine-badge--offline">
-                            offline
-                          </span>
-                        </Show>
-                        <Show when={!status()}>
-                          <button
-                            class="btn btn--small"
-                            onClick={() => probeEngine(engine.hostname)}
-                          >
-                            Check
-                          </button>
-                        </Show>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
+            {/* Change engine dialog */}
+            <Show when={showChangeEngine()}>
+              <ChangeEngineDialog
+                currentHostname={props.hostname}
+                onConnect={(h, s) => {
+                  setShowChangeEngine(false);
+                  props.onConnect(h, s);
+                }}
+                onDemoMode={() => {
+                  setShowChangeEngine(false);
+                  props.onDemoMode();
+                }}
+                onCancel={() => setShowChangeEngine(false)}
+              />
             </Show>
-
-            {/* Re-scan button */}
-            <button
-              class="btn btn--primary"
-              onClick={props.onRescan}
-              disabled={props.discovering}
-            >
-              {props.discovering ? 'Scanning…' : 'Re-scan network'}
-            </button>
-
-            {/* Onboarding embedded — handles hostname input, display mode, demo toggle */}
-            <Onboarding
-              onComplete={props.onComplete}
-              discovering={props.discovering}
-              discoveryResults={props.discoveryResults}
-              onDiscoverySelect={props.onDiscoverySelect}
-            />
           </div>
         </Show>
 
@@ -262,6 +207,31 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <p class="settings-panel__about-name">IDEA Console</p>
             <p class="settings-panel__about-desc">Offline web app management for schools</p>
             <p class="settings-panel__about-version">Version 0.1.0</p>
+
+            {/* Display mode */}
+            <div class="settings-panel__display-mode">
+              <p class="settings-panel__display-mode-label">Display mode</p>
+              <p class="settings-panel__display-mode-hint">
+                Saved immediately. Takes effect on next toolbar icon click.
+              </p>
+              <div class="mode-options">
+                <For each={modeOptions}>
+                  {(opt) => (
+                    <label class="mode-option">
+                      <input
+                        type="radio"
+                        name="displayMode"
+                        value={opt.id}
+                        checked={displayMode() === opt.id}
+                        onChange={() => handleModeChange(opt.id)}
+                      />
+                      <span class="mode-option__label">{opt.label}</span>
+                      <span class="mode-option__desc">{opt.desc}</span>
+                    </label>
+                  )}
+                </For>
+              </div>
+            </div>
           </div>
         </Show>
       </div>
