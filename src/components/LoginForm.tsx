@@ -1,5 +1,5 @@
 import { createSignal, Show, type Component } from 'solid-js';
-import bcrypt from 'bcryptjs';
+import { bcryptCompare } from '../store/bcryptCompare';
 import { setAuthenticatedUser } from '../store/auth';
 import type { Store, User } from '../types/store';
 
@@ -36,15 +36,7 @@ const LoginForm: Component<LoginFormProps> = (props) => {
       // scheduler.postTask in modern browsers which can silently hang;
       // compareSync is always reliable.
       const hash = String(user.passwordHash);
-      const match = await new Promise<boolean>((resolve, reject) => {
-        setTimeout(() => {
-          try {
-            resolve(bcrypt.compareSync(password(), hash));
-          } catch (e) {
-            reject(e);
-          }
-        }, 0);
-      });
+      const match = await bcryptCompare(password(), hash);
 
       if (!match) {
         setError('Invalid username or password.');
