@@ -9,6 +9,7 @@
  */
 import { createSignal } from 'solid-js';
 import bcrypt from 'bcryptjs';
+import { bcryptCompare } from './bcryptCompare';
 import type { User, UserID, Store } from '../types/store';
 import { IS_EXTENSION } from './context';
 
@@ -97,9 +98,7 @@ export async function login(
   // Use compareSync in a setTimeout(0) — avoids scheduler.postTask quirks in
   // modern browsers that can cause bcrypt.compare() to never resolve.
   const hash = String(user.passwordHash);
-  const match = await new Promise<boolean>((resolve) =>
-    setTimeout(() => resolve(bcrypt.compareSync(password, hash)), 0)
-  );
+  const match = await bcryptCompare(password, hash);
   if (!match) return false;
 
   setCurrentUser(user);
@@ -195,9 +194,7 @@ export async function changePassword(
   const user = (store.userDB ?? {})[userId];
   if (!user) return false;
 
-  const match = await new Promise<boolean>((resolve) =>
-    setTimeout(() => resolve(bcrypt.compareSync(currentPassword, String(user.passwordHash))), 0)
-  );
+  const match = await bcryptCompare(currentPassword, String(user.passwordHash));
   if (!match) return false;
 
   const newHash = await bcrypt.hash(newPassword, 10);

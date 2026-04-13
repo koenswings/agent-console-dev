@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock bcryptjs before importing auth
+// Mock bcryptjs and bcryptCompare to avoid slow hashing in tests
 vi.mock('bcryptjs', () => ({
   default: {
     compare: vi.fn(),
@@ -14,7 +14,12 @@ vi.mock('bcryptjs', () => ({
   },
 }));
 
+vi.mock('../store/bcryptCompare', () => ({
+  bcryptCompare: vi.fn(),
+}));
+
 import bcrypt from 'bcryptjs';
+import { bcryptCompare } from '../store/bcryptCompare';
 import {
   login,
   logout,
@@ -88,7 +93,7 @@ describe('isFirstTimeSetup', () => {
 
 describe('login', () => {
   it('succeeds with correct credentials', async () => {
-    vi.mocked(bcrypt.compareSync).mockReturnValue(true as never);
+    vi.mocked(bcryptCompare).mockResolvedValue(true as never);
     const store = makeStore([makeUser()]);
 
     const result = await login('admin', 'correct', store);
@@ -98,7 +103,7 @@ describe('login', () => {
   });
 
   it('fails with wrong password', async () => {
-    vi.mocked(bcrypt.compareSync).mockReturnValue(false as never);
+    vi.mocked(bcryptCompare).mockResolvedValue(false as never);
     const store = makeStore([makeUser()]);
 
     const result = await login('admin', 'wrong', store);
@@ -113,7 +118,7 @@ describe('login', () => {
     const result = await login('nobody', 'anything', store);
 
     expect(result).toBe(false);
-    expect(bcrypt.compareSync).not.toHaveBeenCalled();
+    expect(bcryptCompare).not.toHaveBeenCalled();
   });
 });
 
@@ -123,7 +128,7 @@ describe('login', () => {
 
 describe('logout', () => {
   it('clears currentUser', async () => {
-    vi.mocked(bcrypt.compareSync).mockReturnValue(true as never);
+    vi.mocked(bcryptCompare).mockResolvedValue(true as never);
     const store = makeStore([makeUser()]);
     await login('admin', 'correct', store);
     expect(currentUser()).not.toBeNull();
@@ -208,7 +213,7 @@ describe('removeOperator', () => {
 
 describe('changePassword', () => {
   it('changes password when current password is correct', async () => {
-    vi.mocked(bcrypt.compareSync).mockReturnValue(true as never);
+    vi.mocked(bcryptCompare).mockResolvedValue(true as never);
     vi.mocked(bcrypt.hash).mockResolvedValue('$newhash' as never);
     const store = makeStore([makeUser()]);
     const { changeDoc } = makeChangeDoc();
@@ -220,7 +225,7 @@ describe('changePassword', () => {
   });
 
   it('returns false when current password is wrong', async () => {
-    vi.mocked(bcrypt.compareSync).mockReturnValue(false as never);
+    vi.mocked(bcryptCompare).mockResolvedValue(false as never);
     const store = makeStore([makeUser()]);
     const { changeDoc } = makeChangeDoc();
 
