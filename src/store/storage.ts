@@ -57,9 +57,9 @@ export async function saveHostnameAndStoreUrl(hostname: string, storeUrl: string
 
 export async function readStoredDemoMode(): Promise<boolean> {
   const r = await csGet([STORAGE_KEY_DEMO]);
-  if (STORAGE_KEY_DEMO in r) return r[STORAGE_KEY_DEMO] === 'true';
-  const hostname = await readStoredHostname();
-  return !hostname;
+  // Only return true if explicitly stored as 'true'.
+  // Never default to demo mode — users should see engine discovery, not a mock.
+  return r[STORAGE_KEY_DEMO] === 'true';
 }
 
 export async function saveDemoMode(val: boolean): Promise<void> {

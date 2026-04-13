@@ -28,29 +28,34 @@ const LoginForm: Component<LoginFormProps> = (props) => {
       const user = users.find((u) => String(u.username) === username());
       if (!user) {
         setError('Invalid username or password.');
-        setLoading(false);
         return;
       }
 
-      // Use compareSync in a microtask to avoid blocking the UI thread.
-      // bcryptjs's async API uses scheduler.postTask in modern browsers which
-      // can behave unexpectedly; the sync path is more reliable here since
-      // bcrypt cost is ≤12 (~100–300ms on modern hardware).
-      const match = await new Promise<boolean>((resolve) =>
-        setTimeout(() => resolve(bcrypt.compareSync(password(), String(user.passwordHash))), 0)
-      );
+      // Use compareSync wrapped in a Promise so the UI can re-paint before
+      // the blocking bcrypt work starts. bcryptjs's async compare() uses
+      // scheduler.postTask in modern browsers which can silently hang;
+      // compareSync is always reliable.
+      const hash = String(user.passwordHash);
+      const match = await new Promise<boolean>((resolve, reject) => {
+        setTimeout(() => {
+          try {
+            resolve(bcrypt.compareSync(password(), hash));
+          } catch (e) {
+            reject(e);
+          }
+        }, 0);
+      });
 
       if (!match) {
         setError('Invalid username or password.');
-        setLoading(false);
         return;
       }
 
-      // setAuthenticatedUser is fire-and-forget for session persistence
       setAuthenticatedUser(user);
       props.onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.');
+    } finally {
       setLoading(false);
     }
   };

@@ -297,10 +297,14 @@ const App: Component = () => {
                   await saveHostnameAndStoreUrl(h, s);
                   setHostname(h);
                   setShowSettings(false);
+                  // Clear any stale session from a previous connection (e.g. demo)
+                  await logout();
                   await initConnection();
                 }}
                 onDemoMode={async () => {
                   await saveDemoMode(true);
+                  // Clear any stale session from real engine
+                  await logout();
                   await handleReconnect();
                 }}
               />
