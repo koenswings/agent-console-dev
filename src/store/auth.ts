@@ -94,13 +94,12 @@ export async function login(
 
   // Coerce to plain string — Automerge wraps values in ImmutableString objects;
   // bcryptjs throws "Illegal arguments" if it receives a non-string.
+  // Use compareSync in a setTimeout(0) — avoids scheduler.postTask quirks in
+  // modern browsers that can cause bcrypt.compare() to never resolve.
   const hash = String(user.passwordHash);
-  const match = await Promise.race([
-    bcrypt.compare(password, hash),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('bcrypt timed out')), 8000)
-    ),
-  ]);
+  const match = await new Promise<boolean>((resolve) =>
+    setTimeout(() => resolve(bcrypt.compareSync(password, hash)), 0)
+  );
   if (!match) return false;
 
   setCurrentUser(user);
@@ -196,7 +195,9 @@ export async function changePassword(
   const user = (store.userDB ?? {})[userId];
   if (!user) return false;
 
-  const match = await bcrypt.compare(currentPassword, String(user.passwordHash));
+  const match = await new Promise<boolean>((resolve) =>
+    setTimeout(() => resolve(bcrypt.compareSync(currentPassword, String(user.passwordHash))), 0)
+  );
   if (!match) return false;
 
   const newHash = await bcrypt.hash(newPassword, 10);

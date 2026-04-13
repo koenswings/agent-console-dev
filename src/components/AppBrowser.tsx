@@ -21,11 +21,10 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
     return engine?.hostname ?? 'localhost';
   };
 
-  // ID list of Running instances — stable strings so <For> reuses scopes
+  // ID list of all instances (Running and non-Running alike).
+  // AppCard shows non-running apps as greyed-out/unavailable.
   const instanceIds = createMemo(() =>
-    Object.entries(props.store()?.instanceDB ?? {})
-      .filter(([, inst]) => inst.status === 'Running')
-      .map(([id]) => id)
+    Object.keys(props.store()?.instanceDB ?? {})
   );
 
   return (

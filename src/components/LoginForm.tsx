@@ -32,7 +32,13 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      const match = await bcrypt.compare(password(), String(user.passwordHash));
+      // Use compareSync in a microtask to avoid blocking the UI thread.
+      // bcryptjs's async API uses scheduler.postTask in modern browsers which
+      // can behave unexpectedly; the sync path is more reliable here since
+      // bcrypt cost is ≤12 (~100–300ms on modern hardware).
+      const match = await new Promise<boolean>((resolve) =>
+        setTimeout(() => resolve(bcrypt.compareSync(password(), String(user.passwordHash))), 0)
+      );
 
       if (!match) {
         setError('Invalid username or password.');
