@@ -95,6 +95,7 @@ test.describe('Real engine', () => {
   // 3. Login on real engine (skips if store not synced or no users exist yet)
   // -------------------------------------------------------------------------
   test('logs in as operator on real engine when store is synced', async ({ page }) => {
+    test.setTimeout(90_000); // store sync can take 40s + bcrypt at cost 12 is ~1s
     // Operator credentials created via first-time setup on this machine.
     // demo mock store uses 'admin' / 'admin911!' — the real engine uses the
     // same default if it was set up via first-time setup with those values.
@@ -107,12 +108,15 @@ test.describe('Real engine', () => {
     const loginBtn = page.locator('.app-browser__login-link');
     const firstTimeSetup = page.locator('.first-time-setup');
 
-    // Wait up to 15s for the store to deliver its content
+    // The store sync can take 20-40s on first connect (Automerge CRDT transfer).
+    // Wait up to 45s for either the login button (users exist) or first-time setup
+    // (empty userDB — auto-provisioning will run automatically).
+    // If neither appears, the store hasn't synced — skip gracefully.
     let hasUsers = false;
     try {
       await Promise.race([
-        loginBtn.waitFor({ state: 'visible', timeout: 15_000 }),
-        firstTimeSetup.waitFor({ state: 'visible', timeout: 15_000 }),
+        loginBtn.waitFor({ state: 'visible', timeout: 45_000 }),
+        firstTimeSetup.waitFor({ state: 'visible', timeout: 45_000 }),
       ]);
       hasUsers = await loginBtn.isVisible();
     } catch {
@@ -121,11 +125,17 @@ test.describe('Real engine', () => {
     }
 
     if (!hasUsers) {
-      test.skip(); // empty userDB — first-time setup showing
-      return;
+      // userDB was empty — auto-provisioning may be running.
+      // Wait for it to complete and the login button to appear.
+      try {
+        await loginBtn.waitFor({ state: 'visible', timeout: 15_000 });
+      } catch {
+        test.skip();
+        return;
+      }
     }
 
-    // Attempt login with the default first-time-setup credentials
+    // Login with auto-provisioned default credentials (admin / admin911!)
     await loginBtn.click();
     await page.locator('.modal').waitFor({ state: 'visible' });
     await page.locator('input[autocomplete="username"]').fill('admin');
@@ -137,16 +147,16 @@ test.describe('Real engine', () => {
     const formError = page.locator('.form-error');
     try {
       await Promise.race([
-        usernameLabel.waitFor({ state: 'visible', timeout: 15_000 }),
-        formError.waitFor({ state: 'visible', timeout: 15_000 }),
+        usernameLabel.waitFor({ state: 'visible', timeout: 20_000 }),
+        formError.waitFor({ state: 'visible', timeout: 20_000 }),
       ]);
     } catch {
-      test.skip(); // neither appeared — skip rather than fail
+      test.skip();
       return;
     }
 
     if (await formError.isVisible()) {
-      // Credentials don't match this engine's store — test not applicable
+      // Credentials don't match — skip rather than fail (engine may have different user)
       test.skip();
       return;
     }

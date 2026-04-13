@@ -149,23 +149,33 @@ export async function createEngineConnection(): Promise<StoreConnection> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handle: any = await (repo.find(storeUrl as any) as unknown as Promise<any>);
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Connection timeout')), 10_000)
-    );
-    await Promise.race([handle.whenReady(), timeoutPromise]);
-
-    // Mark connected as soon as the handle is ready (WebSocket is up)
+    // Wait for the network adapter to be ready (WS handshake complete).
+    // We do NOT await the full document sync here — the Automerge doc may take
+    // 30–60 s to sync on slow networks. Instead we mark connected once the WS
+    // is up and update the store reactively as changes arrive.
+    await adapter.whenReady();
     setConnected(true);
+    console.log('[engine] WS ready — waiting for document sync');
 
-    const doc = handle.doc();
-    if (doc) {
-      setStore(doc as Store);
+    // If the doc is already ready (cached / fast server), apply it immediately.
+    const initialDoc = handle.doc();
+    if (initialDoc) {
+      setStore(initialDoc as Store);
+      console.log('[engine] Document already ready on connect');
     }
 
-    // Subscribe to subsequent changes
+    // Subscribe to document changes — fires whenever Automerge syncs new data.
     handle.addListener?.('change', ({ doc: d }: { doc: unknown }) => {
       setStore(d as Store);
       setConnected(true);
+    });
+
+    // Also listen for heads-changed which fires even when patches are empty
+    // (e.g. first-time sync of a document that was created with no changes).
+    handle.addListener?.('heads-changed', ({ doc: d }: { doc: unknown }) => {
+      if (d && !handle.doc() !== null) {
+        setStore(d as Store);
+      }
     });
 
     const sendCommand = (engineId: string, command: string): void => {
