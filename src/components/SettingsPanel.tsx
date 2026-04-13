@@ -2,6 +2,7 @@ import { createSignal, onMount, Show, For, type Component } from 'solid-js';
 import ChangeEngineDialog from './ChangeEngineDialog';
 import { currentUser, isOperator, changePassword } from '../store/auth';
 import { csGet, csSet, STORAGE_KEY_MODE, type DisplayMode } from '../store/storage';
+import { IS_EXTENSION } from '../store/context';
 import type { Store } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
 
@@ -105,6 +106,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
 
       {/* Right content */}
       <div class="settings-panel__content">
+        <button class="settings-panel__close-btn" onClick={props.onClose}>✕ Close</button>
 
         {/* Engine Connection */}
         <Show when={activeTab() === 'engine'}>
@@ -141,6 +143,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <Show when={showChangeEngine()}>
               <ChangeEngineDialog
                 currentHostname={props.hostname}
+                demo={props.demo}
                 onConnect={(h, s) => {
                   setShowChangeEngine(false);
                   props.onConnect(h, s);
@@ -208,7 +211,8 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <p class="settings-panel__about-desc">Offline web app management for schools</p>
             <p class="settings-panel__about-version">Version 0.1.0</p>
 
-            {/* Display mode */}
+            {/* Display mode — extension only */}
+            <Show when={IS_EXTENSION}>
             <div class="settings-panel__display-mode">
               <p class="settings-panel__display-mode-label">Display mode</p>
               <p class="settings-panel__display-mode-hint">
@@ -232,6 +236,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
                 </For>
               </div>
             </div>
+            </Show>
           </div>
         </Show>
       </div>

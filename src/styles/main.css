@@ -925,6 +925,33 @@ body {
   color: var(--colour-text-dim);
 }
 
+.form-field__password-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-field__password-row .form-field__input {
+  flex: 1;
+}
+
+.form-field__show-pw {
+  background: none;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--colour-text-muted);
+  flex-shrink: 0;
+}
+
+.form-field__show-pw:hover {
+  border-color: var(--colour-accent);
+  color: var(--colour-accent);
+}
+
 /* --------------------------------------------------------
    Display mode selector
    -------------------------------------------------------- */
@@ -1799,6 +1826,24 @@ body {
   font-size: 0.82rem;
   color: var(--colour-text-dim);
   margin: 0;
+}
+
+.settings-panel__close-btn {
+  align-self: flex-end;
+  background: none;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+  padding: 4px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  cursor: pointer;
+  font-family: var(--font-family);
+  margin-bottom: 8px;
+}
+
+.settings-panel__close-btn:hover {
+  color: var(--colour-text);
+  border-color: var(--colour-text-muted);
 }
 
 .settings-panel__change-engine-btn {

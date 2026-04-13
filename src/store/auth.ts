@@ -10,6 +10,7 @@
 import { createSignal } from 'solid-js';
 import bcrypt from 'bcryptjs';
 import type { User, UserID, Store } from '../types/store';
+import { IS_EXTENSION } from './context';
 
 // ---------------------------------------------------------------------------
 // Auth state signals
@@ -37,42 +38,45 @@ interface OperatorSession {
 }
 
 async function persistSession(user: User): Promise<void> {
-  const session: OperatorSession = { userId: user.id, username: user.username };
-  try {
-    await chrome.storage.local.set({ [SESSION_KEY]: session });
-  } catch {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  const session: OperatorSession = { userId: String(user.id), username: String(user.username) };
+  if (IS_EXTENSION) {
+    try { await chrome.storage.local.set({ [SESSION_KEY]: session }); return; } catch {}
   }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 async function clearPersistedSession(): Promise<void> {
-  try {
-    await chrome.storage.local.remove(SESSION_KEY);
-  } catch {
-    localStorage.removeItem(SESSION_KEY);
+  if (IS_EXTENSION) {
+    try { await chrome.storage.local.remove(SESSION_KEY); } catch {}
   }
+  localStorage.removeItem(SESSION_KEY);
 }
 
 async function readPersistedSession(): Promise<OperatorSession | null> {
-  try {
-    const result = await chrome.storage.local.get(SESSION_KEY);
-    if (result[SESSION_KEY]) return result[SESSION_KEY] as OperatorSession;
-  } catch {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (raw) {
-      try {
-        return JSON.parse(raw) as OperatorSession;
-      } catch {
-        return null;
-      }
-    }
+  if (IS_EXTENSION) {
+    try {
+      const r = await chrome.storage.local.get(SESSION_KEY);
+      if (r[SESSION_KEY]) return r[SESSION_KEY] as OperatorSession;
+    } catch {}
   }
-  return null;
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as OperatorSession; } catch { return null; }
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * Set the current user directly (after external verification) and persist session.
+ * Use this when you've already verified the password to avoid running bcrypt twice.
+ */
+export async function setAuthenticatedUser(user: User): Promise<void> {
+  setCurrentUser(user);
+  // Fire-and-forget — never block login on session persistence
+  persistSession(user).catch(() => {});
+}
 
 /**
  * Attempt login. Returns true on success, false on bad credentials.
@@ -88,7 +92,15 @@ export async function login(
   );
   if (!user) return false;
 
-  const match = await bcrypt.compare(password, user.passwordHash);
+  // Coerce to plain string — Automerge wraps values in ImmutableString objects;
+  // bcryptjs throws "Illegal arguments" if it receives a non-string.
+  const hash = String(user.passwordHash);
+  const match = await Promise.race([
+    bcrypt.compare(password, hash),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('bcrypt timed out')), 8000)
+    ),
+  ]);
   if (!match) return false;
 
   setCurrentUser(user);
@@ -137,7 +149,9 @@ export async function createOperator(
   );
   if (existing) throw new Error(`Username "${username}" is already taken`);
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  // Cost 10: ~100ms — secure and non-blocking in the browser.
+  // Cost 12 (~1s) caused UI thread blocking on login/setup.
+  const passwordHash = await bcrypt.hash(password, 10);
   const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const user: User = {
     id,
@@ -182,10 +196,10 @@ export async function changePassword(
   const user = (store.userDB ?? {})[userId];
   if (!user) return false;
 
-  const match = await bcrypt.compare(currentPassword, user.passwordHash);
+  const match = await bcrypt.compare(currentPassword, String(user.passwordHash));
   if (!match) return false;
 
-  const newHash = await bcrypt.hash(newPassword, 12);
+  const newHash = await bcrypt.hash(newPassword, 10);
   changeDoc((doc) => {
     if (doc.userDB[userId]) {
       doc.userDB[userId].passwordHash = newHash;

@@ -58,6 +58,7 @@ function displayName(hostname: string): string {
 
 export interface ChangeEngineDialogProps {
   currentHostname: string;
+  demo: boolean;
   onConnect: (hostname: string, storeUrl: string) => void;
   onDemoMode: () => void;
   onCancel: () => void;
@@ -218,12 +219,19 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
           {scanning() ? 'Scanning…' : 'Scan network for engines'}
         </button>
 
-        {/* Demo mode — developer/testing only */}
+        {/* Demo mode toggle */}
         <div class="change-engine-dialog__demo-section">
           <p class="change-engine-dialog__section-label">Developer / testing</p>
-          <button class="btn btn--secondary" onClick={handleDemoMode}>
-            Switch to demo mode
-          </button>
+          <Show
+            when={props.demo}
+            fallback={
+              <button class="btn btn--secondary" onClick={handleDemoMode}>
+                Switch to demo mode
+              </button>
+            }
+          >
+            <p class="change-engine-dialog__probing">Currently in demo mode. Enter an engine name above to switch to a real engine.</p>
+          </Show>
         </div>
 
         {/* Cancel */}

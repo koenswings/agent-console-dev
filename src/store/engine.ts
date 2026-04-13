@@ -23,7 +23,7 @@ const STORAGE_KEY_STORE_URL = 'storeUrl';
 
 export function isExtensionContext(): boolean {
   try {
-    return typeof chrome !== 'undefined' && !!chrome.storage?.local;
+    return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
   } catch {
     return false;
   }
@@ -46,11 +46,12 @@ export function isProductionWebMode(): boolean {
 // ---------------------------------------------------------------------------
 
 async function readFromStorage(key: string): Promise<string | null> {
-  try {
-    const result = await chrome.storage.local.get(key);
-    if (result[key] != null) return result[key] as string;
-  } catch {
-    // not in extension context
+  if (isExtensionContext()) {
+    try {
+      const result = await chrome.storage.local.get(key) as Record<string, unknown>;
+      if (result[key] != null) return result[key] as string;
+      return null;
+    } catch {}
   }
   return localStorage.getItem(key);
 }
@@ -153,10 +154,12 @@ export async function createEngineConnection(): Promise<StoreConnection> {
     );
     await Promise.race([handle.whenReady(), timeoutPromise]);
 
+    // Mark connected as soon as the handle is ready (WebSocket is up)
+    setConnected(true);
+
     const doc = handle.doc();
     if (doc) {
       setStore(doc as Store);
-      setConnected(true);
     }
 
     // Subscribe to subsequent changes

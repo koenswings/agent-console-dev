@@ -150,12 +150,11 @@ describe('SettingsPanel', () => {
     expect(screen.getByTestId('change-engine-dialog-stub')).toBeInTheDocument();
   });
 
-  it('shows display mode options in About tab', () => {
+  it('does not show display mode options in About tab when not extension', () => {
+    // IS_EXTENSION is false in test/web context
     render(() => <SettingsPanel {...defaultProps()} />);
     fireEvent.click(screen.getByText('About'));
-    expect(screen.getByText('Side panel')).toBeInTheDocument();
-    expect(screen.getByText('Popup')).toBeInTheDocument();
-    expect(screen.getByText('Standalone window')).toBeInTheDocument();
+    expect(screen.queryByText('Side panel')).not.toBeInTheDocument();
   });
 
   it('calls changePassword with correct args on submit', async () => {

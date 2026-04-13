@@ -1,9 +1,11 @@
 /**
  * storage.ts — Chrome extension storage helpers
  *
- * Centralises all chrome.storage.local / localStorage access.
- * Import from here instead of duplicating in components.
+ * Uses chrome.storage.local when running as a real extension (IS_EXTENSION),
+ * falls back to localStorage for web/dev mode. Detection is synchronous and
+ * done once at module load — no async races, no timeouts.
  */
+import { IS_EXTENSION } from './context';
 
 export const STORAGE_KEY_HOSTNAME = 'engineHostname';
 export const STORAGE_KEY_STORE_URL = 'storeUrl';
@@ -14,26 +16,33 @@ export const STORAGE_KEY_HISTORY = 'engineHistory';
 export type DisplayMode = 'sidePanel' | 'popup' | 'window';
 
 export async function csGet(keys: string[]): Promise<Record<string, string>> {
-  try {
-    const r = await chrome.storage.local.get(keys);
-    return r as Record<string, string>;
-  } catch {
-    const out: Record<string, string> = {};
-    for (const k of keys) {
-      const v = localStorage.getItem(k);
-      if (v !== null) out[k] = v;
+  if (IS_EXTENSION) {
+    try {
+      const r = await chrome.storage.local.get(keys);
+      return r as Record<string, string>;
+    } catch {
+      // fall through to localStorage
     }
-    return out;
   }
+  const out: Record<string, string> = {};
+  for (const k of keys) {
+    const v = localStorage.getItem(k);
+    if (v !== null) out[k] = v;
+  }
+  return out;
 }
 
 export async function csSet(data: Record<string, string | boolean>): Promise<void> {
-  try {
-    await chrome.storage.local.set(data);
-  } catch {
-    for (const [k, v] of Object.entries(data)) {
-      localStorage.setItem(k, String(v));
+  if (IS_EXTENSION) {
+    try {
+      await chrome.storage.local.set(data);
+      return;
+    } catch {
+      // fall through to localStorage
     }
+  }
+  for (const [k, v] of Object.entries(data)) {
+    localStorage.setItem(k, String(v));
   }
 }
 

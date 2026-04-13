@@ -327,8 +327,8 @@ export const MOCK_STORE: Store = {
     'user-demo-admin': {
       id: 'user-demo-admin',
       username: 'admin',
-      // bcrypt hash of 'admin911!' (cost 12)
-      passwordHash: '$2b$12$0OrL1qEVSWi22JYNgbP/u.hP8ig1RjSueV8bbRpg6pPH3E/kFmssq',
+      // bcrypt hash of 'admin911!' (cost 10 — keeps UI responsive)
+      passwordHash: '$2b$10$f5NukxN9RJQpCK6TykX2b.qKjQdMKIAsPP5IqSTuvv5bFvVpCXGDS',
       role: 'operator' as const,
       created: 0,
     },
