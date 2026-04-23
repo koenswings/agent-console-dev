@@ -1,4 +1,5 @@
-import { createSignal, createEffect, Show, batch, onMount, type Component } from 'solid-js';
+import { createSignal, createEffect, Show, Switch, Match, onMount, type Component } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
@@ -28,25 +29,42 @@ import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 
+// ---------------------------------------------------------------------------
+// Which panel to show in the right-hand main content pane.
+// ---------------------------------------------------------------------------
+type RightPanel = 'empty-disk' | 'backup-disk' | 'instances';
+
+function rightPanelFor(selection: Selection, store: Store | null): RightPanel {
+  if (selection.type !== 'disk' || !store) return 'instances';
+  const disk = store.diskDB[selection.id];
+  if (disk?.diskTypes?.includes('empty')) return 'empty-disk';
+  if (disk?.diskTypes?.includes('backup')) return 'backup-disk';
+  return 'instances';
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
 const App: Component = () => {
+  // ── Connection state ──────────────────────────────────────────────────────
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
   const [demo, setDemo] = createSignal(false);
-  const [selection, setSelection] = createSignal<Selection>({ type: 'network', id: '' });
-  const [showSettings, setShowSettings] = createSignal(false);
-  const [showLogin, setShowLogin] = createSignal(false);
-  const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
-  const [ready, setReady] = createSignal(false);
-  const [sessionRestored, setSessionRestored] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
   const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
 
-  // Derive store and connected from the connection signal reactively.
-  // These effects run at the top level — they are created once and track the
-  // connection() signal, so when initConnection() sets a new connection they
-  // automatically pick up the new one. No more effects created inside async fns.
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [ready, setReady] = createSignal(false);
+  const [selection, setSelection] = createSignal<Selection>({ type: 'network', id: '' });
+  const [showSettings, setShowSettings] = createSignal(false);
+  const [showLogin, setShowLogin] = createSignal(false);
+  const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
+  const [sessionRestored, setSessionRestored] = createSignal(false);
+
+  // ── Reactive sync from connection → store / connected signals ─────────────
   createEffect(() => {
     const conn = connection();
     if (!conn) return;
@@ -55,13 +73,10 @@ const App: Component = () => {
     setSendCommandFn(conn.sendCommand);
   });
 
-  // Separately track live store changes from the current connection
   createEffect(() => {
     const conn = connection();
     if (!conn) return;
-    // Subscribe to the store signal on the current connection
-    const s = conn.store();
-    setStore(s);
+    setStore(conn.store());
   });
 
   createEffect(() => {
@@ -70,8 +85,7 @@ const App: Component = () => {
     setConnected(conn.connected());
   });
 
-  // Restore session when store first becomes available, then mark done.
-  // If store never loads (engine offline), still mark restored after 3s so login button works.
+  // ── Session restore (once per connection, when store first arrives) ───────
   let sessionRestoreRan = false;
   createEffect(() => {
     const conn = connection();
@@ -79,87 +93,56 @@ const App: Component = () => {
     const s = conn.store();
     if (s && !sessionRestoreRan) {
       sessionRestoreRan = true;
-      restoreSession(s).then(() => setSessionRestored(true)).catch(() => setSessionRestored(true));
+      restoreSession(s)
+        .then(() => setSessionRestored(true))
+        .catch(() => setSessionRestored(true));
     }
   });
 
-  // Auto-provision default operator when real engine store has no users.
-  // This runs once per connection when the store first syncs with an empty userDB.
-  // Creates admin/admin911! so the operator can log in without first-time setup.
+  // Fallback: unblock login button if store never arrives (engine offline)
+  createEffect(() => {
+    const conn = connection();
+    if (!conn || sessionRestored()) return;
+    const timer = setTimeout(() => setSessionRestored(true), 3000);
+    return () => clearTimeout(timer);
+  });
+
+  // ── Auto-provision admin on fresh engine with empty userDB ───────────────
   let provisioningRan = false;
   createEffect(() => {
     const s = store();
     const conn = connection();
     if (!s || !conn || demo() || isOperator() || provisioningRan) return;
-    if (!isFirstTimeSetup(s)) return; // userDB already has users
+    if (!isFirstTimeSetup(s)) return;
     provisioningRan = true;
-    const DEFAULT_USERNAME = 'admin';
-    const DEFAULT_PASSWORD = 'admin911!';
-    createOperator(DEFAULT_USERNAME, DEFAULT_PASSWORD, s, conn.changeDoc)
+    createOperator('admin', 'admin911!', s, conn.changeDoc)
       .then((user) => {
-        console.log('[app] Auto-provisioned default operator:', DEFAULT_USERNAME);
-        return setAuthenticatedUser(user);
+        console.log('[app] auto-provisioned default operator');
+        setAuthenticatedUser(user);
       })
       .catch((err) => {
-        // Might fail if another tab provisioned at the same time — not fatal
-        console.warn('[app] Auto-provision skipped:', err.message);
+        console.warn('[app] auto-provision skipped:', err.message);
         provisioningRan = false;
       });
   });
 
-  // Fallback: if store never arrives (engine slow/offline), unblock login after 3s
-  createEffect(() => {
-    const conn = connection();
-    if (!conn) return;
-    if (sessionRestored()) return;
-    const timer = setTimeout(() => setSessionRestored(true), 3000);
-    return () => clearTimeout(timer);
-  });
-
+  // ── Connection management ─────────────────────────────────────────────────
   const initConnection = async () => {
-    // Reset session state for new connection
     sessionRestoreRan = false;
-    setSessionRestored(false);
     provisioningRan = false;
+    setSessionRestored(false);
     setStore(null);
     setConnected(false);
 
     const isDemo = await readStoredDemoMode();
     setDemo(isDemo);
 
-    let conn: StoreConnection;
-    if (isDemo) {
-      conn = createMockConnection();
-    } else {
-      const { createEngineConnection } = await import('./store/engine');
-      conn = await createEngineConnection();
-    }
+    const conn = isDemo
+      ? createMockConnection()
+      : await (await import('./store/engine')).createEngineConnection();
 
-    // Setting the connection signal triggers the top-level createEffects above
     setConnection(conn);
   };
-
-  onMount(async () => {
-    if (isProductionWebMode()) {
-      const host = window.location.hostname;
-      setHostname(host);
-      setDemo(false);
-      setReady(true);
-      await initConnection();
-      return;
-    }
-
-    const host = await readStoredHostname();
-    setHostname(host);
-    setReady(true);
-
-    const isDemo = await readStoredDemoMode();
-    if (isDemo || host) {
-      await initConnection();
-    } else {
-      runDiscovery();
-    }
-  });
 
   const runDiscovery = () => {
     setDiscovering(true);
@@ -187,7 +170,7 @@ const App: Component = () => {
     runDiscovery();
   };
 
-  // Watch for disconnection and trigger re-scan after debounce
+  // Reconnect after 15s of disconnection (not in demo / production mode)
   createEffect(() => {
     const isConn = connected();
     const host = hostname();
@@ -199,16 +182,31 @@ const App: Component = () => {
     }
   });
 
-  const handleOnboardingComplete = async () => {
-    const host = await readStoredHostname();
-    setHostname(host);
-    setShowSettings(false);
-    await initConnection();
-  };
+  onMount(async () => {
+    if (isProductionWebMode()) {
+      setHostname(window.location.hostname);
+      setDemo(false);
+      setReady(true);
+      await initConnection();
+      return;
+    }
 
-  const handleReconnect = async () => {
     const host = await readStoredHostname();
     setHostname(host);
+    setReady(true);
+
+    const isDemo = await readStoredDemoMode();
+    if (isDemo || host) {
+      await initConnection();
+    } else {
+      runDiscovery();
+    }
+  });
+
+  // ── Settings / reconnect helpers ─────────────────────────────────────────
+  const handleOnboardingComplete = async () => {
+    setHostname(await readStoredHostname());
+    setShowSettings(false);
     await initConnection();
   };
 
@@ -217,42 +215,39 @@ const App: Component = () => {
     setShowOperatorMgmt(false);
   };
 
-  const shouldShowOnboarding = () => {
-    if (!ready()) return false;
-    return !hostname() && !demo();
+  // ── Computed screen conditions ────────────────────────────────────────────
+  const showOnboarding   = () => ready() && !hostname() && !demo();
+  const showFirstSetup   = () => ready() && isFirstTimeSetup(store());
+  const showMainLayout   = () => isOperator() && !showOperatorMgmt();
+  const rightPanel       = () => rightPanelFor(selection(), store());
+
+  // ── Status-bar dot ────────────────────────────────────────────────────────
+  const dotClass = () => {
+    if (connected()) return 'status-bar__dot--connected';
+    if (discovering() || (hostname() && !demo())) return 'status-bar__dot--searching';
+    return 'status-bar__dot--disconnected';
   };
 
-  const shouldShowFirstTimeSetup = () => {
-    if (!ready()) return false;
-    return isFirstTimeSetup(store());
+  const statusLabel = () => {
+    if (connected()) return hostname();
+    if (demo()) return '';
+    if (discovering()) return 'Scanning…';
+    if (hostname()) return 'Connecting…';
+    return 'No engine found';
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div class="app">
-      {/* Status bar */}
+
+      {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div class="status-bar">
         <span class="status-bar__title">IDEA Console</span>
         <div class="status-bar__indicator">
-          <span class={`status-bar__dot ${
-            connected()
-              ? 'status-bar__dot--connected'
-              : (discovering() || (hostname() && !demo()))
-              ? 'status-bar__dot--searching'
-              : 'status-bar__dot--disconnected'
-          }`} />
-          <span>
-            {connected()
-              ? hostname()
-              : demo()
-              ? ''
-              : discovering()
-              ? 'Scanning…'
-              : hostname()
-              ? 'Connecting…'
-              : 'No engine found'
-            }
-          </span>
+          <span class={`status-bar__dot ${dotClass()}`} />
+          <span>{statusLabel()}</span>
         </div>
+
         <Show when={demo()}>
           <span class="status-bar__demo-badge">DEMO</span>
         </Show>
@@ -280,133 +275,119 @@ const App: Component = () => {
         </button>
       </div>
 
-      {/* Main content */}
-      <Show
-        when={!shouldShowOnboarding() && !showSettings()}
-        fallback={
-          showSettings()
-            ? <SettingsPanel
-                store={store()}
-                connection={connection()}
-                hostname={hostname()}
-                demo={demo()}
-                onClose={() => setShowSettings(false)}
-                onComplete={handleOnboardingComplete}
-                onConnect={async (h, s) => {
-                  await saveDemoMode(false);
-                  await saveHostnameAndStoreUrl(h, s);
-                  setHostname(h);
-                  setShowSettings(false);
-                  // Clear any stale session from a previous connection (e.g. demo)
-                  await logout();
-                  await initConnection();
-                }}
-                onDemoMode={async () => {
-                  await saveDemoMode(true);
-                  // Clear any stale session from real engine
-                  await logout();
-                  await handleReconnect();
-                }}
-              />
-            : <Onboarding
-                onComplete={handleOnboardingComplete}
-                discovering={discovering()}
-                discoveryResults={discoveryResults()}
-                onDiscoverySelect={handleDiscoverySelect}
-              />
-        }
-      >
-        <Show
-          when={!shouldShowFirstTimeSetup()}
-          fallback={
-            <Show when={store() && connection()}>
-              <FirstTimeSetup
-                store={store()!}
-                connection={connection()!}
-                onComplete={(user) => {
-                  setShowLogin(false);
-                  setAuthenticatedUser(user);
-                }}
-              />
-            </Show>
-          }
-        >
-          <Show
-            when={isOperator()}
-            fallback={
-              <>
-                <AppBrowser
-                  store={store}
-                  onLogin={() => setShowLogin(true)}
-                />
-                <Show when={showLogin()}>
-                  <LoginForm
-                    store={store()}
-                    onSuccess={(user) => {
-                      // Two separate flushes, explicit order:
-                      // 1. Hide the inner Show → LoginForm is destroyed cleanly
-                      // 2. Flip isOperator() → outer Show switches to main content
-                      // This avoids any batch-ordering ambiguity.
-                      setShowLogin(false);
-                      setAuthenticatedUser(user);
-                    }}
-                    onCancel={() => setShowLogin(false)}
+      {/* ── Page content — exactly one Match renders at a time ────────────── */}
+      <Switch>
+
+        {/* Settings panel */}
+        <Match when={showSettings()}>
+          <SettingsPanel
+            store={store()}
+            connection={connection()}
+            hostname={hostname()}
+            demo={demo()}
+            onClose={() => setShowSettings(false)}
+            onComplete={handleOnboardingComplete}
+            onConnect={async (h, s) => {
+              await saveDemoMode(false);
+              await saveHostnameAndStoreUrl(h, s);
+              setHostname(h);
+              setShowSettings(false);
+              await logout();
+              await initConnection();
+            }}
+            onDemoMode={async () => {
+              await saveDemoMode(true);
+              await logout();
+              setHostname(await readStoredHostname());
+              await initConnection();
+            }}
+          />
+        </Match>
+
+        {/* Engine discovery / onboarding */}
+        <Match when={showOnboarding()}>
+          <Onboarding
+            onComplete={handleOnboardingComplete}
+            discovering={discovering()}
+            discoveryResults={discoveryResults()}
+            onDiscoverySelect={handleDiscoverySelect}
+          />
+        </Match>
+
+        {/* First-time operator setup */}
+        <Match when={showFirstSetup() && store() && connection()}>
+          <FirstTimeSetup
+            store={store()!}
+            connection={connection()!}
+            onComplete={(user) => {
+              // setAuthenticatedUser is synchronous; calling it here (post-finally
+              // in FirstTimeSetup) flips isOperator() which moves Switch to the
+              // mainLayout Match — clean transition with no disposal issues.
+              setAuthenticatedUser(user);
+            }}
+          />
+        </Match>
+
+        {/* Operator management */}
+        <Match when={showOperatorMgmt() && isOperator() && store() && connection()}>
+          <OperatorManagement store={store()!} connection={connection()!} />
+        </Match>
+
+        {/* Main layout (authenticated) */}
+        <Match when={showMainLayout()}>
+          <div class="main-layout">
+            <NetworkTree selection={selection()} onSelect={setSelection} store={store} />
+            <div class="main-layout__right">
+              <OperationProgress store={store} />
+              <Switch>
+                <Match when={rightPanel() === 'empty-disk'}>
+                  <EmptyDiskPanel
+                    disk={() => store()?.diskDB[selection().id]}
+                    store={store}
+                    engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
                   />
-                </Show>
-              </>
-            }
-          >
-            <Show
-              when={showOperatorMgmt() && store() && connection()}
-              fallback={
-                <div class="main-layout">
-                  <NetworkTree selection={selection()} onSelect={setSelection} store={store} />
-                  <div class="main-layout__right">
-                    <OperationProgress store={store} />
-                    <Show
-                      when={
-                        selection().type === 'disk' &&
-                        store()?.diskDB[selection().id]?.diskTypes?.includes('empty') === true
-                      }
-                    >
-                      <EmptyDiskPanel
-                        disk={() => store()?.diskDB[selection().id]}
-                        store={store}
-                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
-                      />
-                    </Show>
-                    <Show
-                      when={
-                        selection().type === 'disk' &&
-                        store()?.diskDB[selection().id]?.diskTypes?.includes('backup') === true
-                      }
-                    >
-                      <RestorePanel
-                        disk={() => store()?.diskDB[selection().id]}
-                        store={store}
-                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
-                      />
-                    </Show>
-                    <Show
-                      when={
-                        !(
-                          selection().type === 'disk' &&
-                          (store()?.diskDB[selection().id]?.diskTypes?.includes('empty') ||
-                            store()?.diskDB[selection().id]?.diskTypes?.includes('backup'))
-                        )
-                      }
-                    >
-                      <InstanceList selection={selection()} store={store} />
-                    </Show>
-                  </div>
-                </div>
-              }
-            >
-              <OperatorManagement store={store()!} connection={connection()!} />
-            </Show>
-          </Show>
-        </Show>
+                </Match>
+                <Match when={rightPanel() === 'backup-disk'}>
+                  <RestorePanel
+                    disk={() => store()?.diskDB[selection().id]}
+                    store={store}
+                    engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                  />
+                </Match>
+                <Match when={true}>
+                  <InstanceList selection={selection()} store={store} />
+                </Match>
+              </Switch>
+            </div>
+          </div>
+        </Match>
+
+        {/* Unauthenticated main view (default / fallback) */}
+        <Match when={true}>
+          <AppBrowser store={store} onLogin={() => setShowLogin(true)} />
+        </Match>
+
+      </Switch>
+
+      {/* ── Login modal ────────────────────────────────────────────────────── */}
+      {/*                                                                       */}
+      {/* Portal renders into document.body — completely outside the Switch     */}
+      {/* tree above. This means isOperator() flipping (which re-evaluates the  */}
+      {/* Switch) never touches the modal's DOM or reactive root. The modal      */}
+      {/* opens and closes purely via showLogin(), independently of auth state.  */}
+      <Show when={showLogin()}>
+        <Portal>
+          <LoginForm
+            store={store()}
+            onSuccess={(user) => {
+              setShowLogin(false);
+              setAuthenticatedUser(user);
+            }}
+            onCancel={() => setShowLogin(false)}
+          />
+        </Portal>
       </Show>
+
     </div>
   );
 };
