@@ -1,5 +1,4 @@
 import { createSignal, createEffect, Show, Switch, Match, onMount, type Component } from 'solid-js';
-import { Portal } from 'solid-js/web';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
@@ -369,23 +368,17 @@ const App: Component = () => {
 
       </Switch>
 
-      {/* ── Login modal ────────────────────────────────────────────────────── */}
-      {/*                                                                       */}
-      {/* Portal renders into document.body — completely outside the Switch     */}
-      {/* tree above. This means isOperator() flipping (which re-evaluates the  */}
-      {/* Switch) never touches the modal's DOM or reactive root. The modal      */}
-      {/* opens and closes purely via showLogin(), independently of auth state.  */}
+      {/* ── Login modal ───────────────────────────────────────────────────── */}
+      {/* Lives outside the Switch so auth signal changes never affect it.      */}
       <Show when={showLogin()}>
-        <Portal>
-          <LoginForm
-            store={store()}
-            onSuccess={(user) => {
-              setShowLogin(false);
-              setAuthenticatedUser(user);
-            }}
-            onCancel={() => setShowLogin(false)}
-          />
-        </Portal>
+        <LoginForm
+          store={store()}
+          onSuccess={(user) => {
+            setShowLogin(false);
+            setAuthenticatedUser(user);
+          }}
+          onCancel={() => setShowLogin(false)}
+        />
       </Show>
 
     </div>
