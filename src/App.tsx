@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, onMount, type Component } from 'solid-js';
+import { createSignal, createEffect, Show, batch, onMount, type Component } from 'solid-js';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
@@ -339,7 +339,10 @@ const App: Component = () => {
                 <Show when={showLogin()}>
                   <LoginForm
                     store={store()}
-                    onSuccess={() => setShowLogin(false)}
+                    onSuccess={(user) => batch(() => {
+                      setAuthenticatedUser(user);
+                      setShowLogin(false);
+                    })}
                     onCancel={() => setShowLogin(false)}
                   />
                 </Show>

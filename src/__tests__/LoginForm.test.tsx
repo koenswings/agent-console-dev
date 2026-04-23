@@ -22,10 +22,8 @@ vi.mock('../store/bcryptCompare', () => ({
   bcryptCompare: (...args: [string, string]) => mockBcryptCompare(...args),
 }));
 
-const mockSetAuthenticatedUser = vi.fn<[User], Promise<void>>();
-vi.mock('../store/auth', () => ({
-  setAuthenticatedUser: (...args: [User]) => mockSetAuthenticatedUser(...args),
-}));
+// LoginForm no longer calls setAuthenticatedUser directly — it hands the
+// verified user to the parent via onSuccess(user). No auth mock needed.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,7 +53,6 @@ const makeStore = (users: User[] = [makeUser()]): Store => ({
 describe('LoginForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSetAuthenticatedUser.mockResolvedValue(undefined);
   });
 
   it('renders the login form', () => {
@@ -120,9 +117,9 @@ describe('LoginForm', () => {
     expect(screen.queryByRole('button', { name: /verifying/i })).toBeNull();
   });
 
-  it('calls onSuccess and setAuthenticatedUser on correct password', async () => {
+  it('calls onSuccess with the verified User on correct password', async () => {
     mockBcryptCompare.mockResolvedValue(true);
-    const onSuccess = vi.fn();
+    const onSuccess = vi.fn<[User], void>();
 
     render(() => (
       <LoginForm
@@ -137,38 +134,24 @@ describe('LoginForm', () => {
     fireEvent.submit(screen.getByRole('button', { name: /log in/i }).closest('form')!);
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
-    expect(mockSetAuthenticatedUser).toHaveBeenCalledOnce();
-    expect(mockSetAuthenticatedUser.mock.calls[0][0].username).toBe('admin');
+    // Parent receives the user and handles setAuthenticatedUser + setShowLogin
+    expect(onSuccess.mock.calls[0][0].username).toBe('admin');
   });
 
   /**
    * REGRESSION TEST — Solid disposal order bug.
    *
-   * If setAuthenticatedUser is called before setLoading(false) runs, and the
-   * parent's isOperator() check destroys this component's reactive root as a
-   * side effect, then setLoading(false) in the finally block becomes a no-op
-   * and the button stays on "Verifying…".
+   * LoginForm must NOT call setAuthenticatedUser (a global signal write)
+   * internally. If it did, isOperator() would flip synchronously, destroying
+   * this component's reactive root before the finally block can run
+   * setLoading(false) — leaving the button stuck on "Verifying…".
    *
-   * We simulate this by having setAuthenticatedUser call a callback that
-   * "destroys" the component (simulates what the parent's Show does) and then
-   * verify the button state was reset before that happened.
+   * The contract: LoginForm hands the verified user to onSuccess(user).
+   * The parent (App) calls setAuthenticatedUser + setShowLogin inside batch().
    */
-  it('REGRESSION: setLoading(false) runs before setAuthenticatedUser destroys the component', async () => {
-    const callOrder: string[] = [];
-
+  it('REGRESSION: LoginForm does not call setAuthenticatedUser — passes user to onSuccess instead', async () => {
     mockBcryptCompare.mockResolvedValue(true);
-
-    // Simulate: when setAuthenticatedUser is called, the parent Show destroys
-    // the component. We verify that onSuccess (parent's setShowLogin(false))
-    // was called BEFORE setAuthenticatedUser, meaning the component is still
-    // intact when its own loading state is cleared.
-    mockSetAuthenticatedUser.mockImplementation(async () => {
-      callOrder.push('setAuthenticatedUser');
-    });
-
-    const onSuccess = vi.fn(() => {
-      callOrder.push('onSuccess');
-    });
+    const onSuccess = vi.fn<[User], void>();
 
     render(() => (
       <LoginForm
@@ -182,11 +165,12 @@ describe('LoginForm', () => {
     fireEvent.input(screen.getByLabelText(/password/i), { target: { value: 'admin911!' } });
     fireEvent.submit(screen.getByRole('button', { name: /log in/i }).closest('form')!);
 
-    await waitFor(() => expect(mockSetAuthenticatedUser).toHaveBeenCalled());
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
 
-    // onSuccess must be called BEFORE setAuthenticatedUser to avoid
-    // the disposal-order bug.
-    expect(callOrder).toEqual(['onSuccess', 'setAuthenticatedUser']);
+    // onSuccess receives the user object — parent owns the signal writes
+    const receivedUser = onSuccess.mock.calls[0][0];
+    expect(receivedUser).toBeDefined();
+    expect(receivedUser.username).toBe('admin');
   });
 
   it('shows error on unknown username', async () => {

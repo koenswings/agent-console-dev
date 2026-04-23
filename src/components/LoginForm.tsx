@@ -1,11 +1,12 @@
 import { createSignal, Show, type Component } from 'solid-js';
 import { bcryptCompare } from '../store/bcryptCompare';
-import { setAuthenticatedUser } from '../store/auth';
 import type { Store, User } from '../types/store';
 
 interface LoginFormProps {
   store: Store | null;
-  onSuccess: () => void;
+  /** Called with the verified User on success. The parent is responsible for
+   *  calling setAuthenticatedUser() and clearing showLogin in one batch(). */
+  onSuccess: (user: User) => void;
   onCancel: () => void;
 }
 
@@ -23,8 +24,6 @@ const LoginForm: Component<LoginFormProps> = (props) => {
     setError('');
     setLoading(true);
 
-    let loggedInUser: User | null = null;
-
     try {
       const users = Object.values(props.store.userDB ?? {}) as User[];
       const user = users.find((u) => String(u.username) === username());
@@ -33,10 +32,6 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      // Use compareSync wrapped in a Promise so the UI can re-paint before
-      // the blocking bcrypt work starts. bcryptjs's async compare() uses
-      // scheduler.postTask in modern browsers which can silently hang;
-      // compareSync is always reliable.
       const hash = String(user.passwordHash);
       const match = await bcryptCompare(password(), hash);
 
@@ -45,36 +40,17 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      // Stash the user — do NOT call setAuthenticatedUser here.
-      // Reason: setAuthenticatedUser calls setCurrentUser() which is a global
-      // Solid signal. That synchronously flips isOperator() → true, which
-      // causes the outer <Show when={isOperator()}> in App.tsx to destroy
-      // this component's reactive root. The finally block then tries to call
-      // setLoading(false) on a disposed signal — it's a silent no-op, so the
-      // button stays stuck on "Verifying…" forever.
-      // Fix: clear our own loading state first (via finally), THEN hand off
-      // control to the parent by calling onSuccess + setAuthenticatedUser
-      // after the finally block has run.
-      loggedInUser = user;
+      // Hand the verified user to the parent. The parent will call
+      // setAuthenticatedUser() + setShowLogin(false) inside a batch().
+      // We do NOT touch any global signals here — that would synchronously
+      // flip isOperator(), destroying this component's reactive root before
+      // the finally block can run setLoading(false).
+      props.onSuccess(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.');
     } finally {
-      // Always clear loading state while this component is still alive.
-      // If we do this after setAuthenticatedUser, the component may already
-      // be disposed and this becomes a no-op.
+      // Always executes while this component is still the reactive owner.
       setLoading(false);
-    }
-
-    // Post-finally: safe to hand off now. The component's own signals are
-    // settled, so disposing it (via the parent's Show flip) is clean.
-    if (loggedInUser) {
-      // onSuccess() tells the parent to set showLogin(false).
-      // setAuthenticatedUser() sets the global currentUser signal which flips
-      // isOperator() and destroys this component. Order matters: if we call
-      // setAuthenticatedUser first, Solid schedules component disposal before
-      // onSuccess runs and showLogin never gets cleared.
-      props.onSuccess();
-      await setAuthenticatedUser(loggedInUser);
     }
   };
 
