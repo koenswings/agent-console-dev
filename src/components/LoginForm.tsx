@@ -23,6 +23,8 @@ const LoginForm: Component<LoginFormProps> = (props) => {
     setError('');
     setLoading(true);
 
+    let loggedInUser: User | null = null;
+
     try {
       const users = Object.values(props.store.userDB ?? {}) as User[];
       const user = users.find((u) => String(u.username) === username());
@@ -43,12 +45,36 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      setAuthenticatedUser(user);
-      props.onSuccess();
+      // Stash the user — do NOT call setAuthenticatedUser here.
+      // Reason: setAuthenticatedUser calls setCurrentUser() which is a global
+      // Solid signal. That synchronously flips isOperator() → true, which
+      // causes the outer <Show when={isOperator()}> in App.tsx to destroy
+      // this component's reactive root. The finally block then tries to call
+      // setLoading(false) on a disposed signal — it's a silent no-op, so the
+      // button stays stuck on "Verifying…" forever.
+      // Fix: clear our own loading state first (via finally), THEN hand off
+      // control to the parent by calling onSuccess + setAuthenticatedUser
+      // after the finally block has run.
+      loggedInUser = user;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.');
     } finally {
+      // Always clear loading state while this component is still alive.
+      // If we do this after setAuthenticatedUser, the component may already
+      // be disposed and this becomes a no-op.
       setLoading(false);
+    }
+
+    // Post-finally: safe to hand off now. The component's own signals are
+    // settled, so disposing it (via the parent's Show flip) is clean.
+    if (loggedInUser) {
+      // onSuccess() tells the parent to set showLogin(false).
+      // setAuthenticatedUser() sets the global currentUser signal which flips
+      // isOperator() and destroys this component. Order matters: if we call
+      // setAuthenticatedUser first, Solid schedules component disposal before
+      // onSuccess runs and showLogin never gets cleared.
+      props.onSuccess();
+      await setAuthenticatedUser(loggedInUser);
     }
   };
 
