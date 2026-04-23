@@ -1,4 +1,5 @@
 import { createSignal, createEffect, Show, Switch, Match, onMount, type Component } from 'solid-js';
+import pkg from '../package.json';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
@@ -241,7 +242,7 @@ const App: Component = () => {
 
       {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div class="status-bar">
-        <span class="status-bar__title">IDEA Console</span>
+        <span class="status-bar__title">IDEA Console <span class="status-bar__version">v{pkg.version}</span></span>
         <div class="status-bar__indicator">
           <span class={`status-bar__dot ${dotClass()}`} />
           <span>{statusLabel()}</span>

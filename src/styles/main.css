@@ -170,6 +170,14 @@ body {
   margin-right: 8px;
 }
 
+.status-bar__version {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--colour-text-dim);
+  margin-left: 4px;
+  letter-spacing: 0.02em;
+}
+
 .status-bar__indicator {
   display: flex;
   align-items: center;
