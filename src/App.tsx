@@ -323,10 +323,10 @@ const App: Component = () => {
               <FirstTimeSetup
                 store={store()!}
                 connection={connection()!}
-                onComplete={(user) => batch(() => {
-                  setAuthenticatedUser(user);
+                onComplete={(user) => {
                   setShowLogin(false);
-                })}
+                  setAuthenticatedUser(user);
+                }}
               />
             </Show>
           }
@@ -342,10 +342,14 @@ const App: Component = () => {
                 <Show when={showLogin()}>
                   <LoginForm
                     store={store()}
-                    onSuccess={(user) => batch(() => {
-                      setAuthenticatedUser(user);
+                    onSuccess={(user) => {
+                      // Two separate flushes, explicit order:
+                      // 1. Hide the inner Show → LoginForm is destroyed cleanly
+                      // 2. Flip isOperator() → outer Show switches to main content
+                      // This avoids any batch-ordering ambiguity.
                       setShowLogin(false);
-                    })}
+                      setAuthenticatedUser(user);
+                    }}
                     onCancel={() => setShowLogin(false)}
                   />
                 </Show>
