@@ -323,7 +323,10 @@ const App: Component = () => {
               <FirstTimeSetup
                 store={store()!}
                 connection={connection()!}
-                onComplete={() => setShowLogin(false)}
+                onComplete={(user) => batch(() => {
+                  setAuthenticatedUser(user);
+                  setShowLogin(false);
+                })}
               />
             </Show>
           }

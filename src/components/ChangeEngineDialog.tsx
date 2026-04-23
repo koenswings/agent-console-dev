@@ -99,10 +99,13 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
     setScanning(true);
     setSuggestions([]);
     setError('');
-    const results = await discoverAllEngines();
-    setSuggestions(results);
-    setScanning(false);
-    if (results.length === 0) setError('No engines found on the network.');
+    try {
+      const results = await discoverAllEngines();
+      setSuggestions(results);
+      if (results.length === 0) setError('No engines found on the network.');
+    } finally {
+      setScanning(false);
+    }
   };
 
   const connect = async (hostname: string, storeUrl: string) => {
@@ -115,8 +118,12 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
     if (!bare) return;
     setConnecting(true);
     setError('');
-    const result = await probeHost(`${bare}.local`) ?? await probeHost(bare);
-    setConnecting(false);
+    let result: ProbeResult | null = null;
+    try {
+      result = await probeHost(`${bare}.local`) ?? await probeHost(bare);
+    } finally {
+      setConnecting(false);
+    }
     if (!result) {
       setError(`Could not reach "${bare}". Check the name and try again.`);
       return;
