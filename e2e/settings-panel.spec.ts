@@ -15,6 +15,9 @@ test.describe('Settings panel', () => {
     page.on('pageerror', (err) => pageErrors.push(err));
 
     await loginAsDemo(page);
+
+    // Main layout must be visible before any settings interactions
+    await expect(page.locator('.main-layout')).toBeVisible();
   });
 
   test('settings panel opens via the gear button', async ({ page }) => {
@@ -99,6 +102,26 @@ test.describe('Settings panel', () => {
     // Switch to About tab
     await page.locator('.settings-panel__tab', { hasText: 'About' }).click();
     await expect(page.locator('.settings-panel__heading')).toContainText('About');
+    await expect(page.locator('.settings-panel')).toBeVisible();
+
+    expect(pageErrors).toHaveLength(0);
+  });
+
+  test('closes settings and returns to main layout, then opens again', async ({ page }) => {
+    // Step 1: main layout is visible (confirmed by beforeEach)
+    await expect(page.locator('.main-layout')).toBeVisible();
+
+    // Step 2: open settings
+    await page.locator('.status-bar__settings-btn').click();
+    await expect(page.locator('.settings-panel')).toBeVisible();
+
+    // Step 3: toggle settings closed
+    await page.locator('.status-bar__settings-btn').click();
+    await expect(page.locator('.settings-panel')).not.toBeVisible();
+    await expect(page.locator('.main-layout')).toBeVisible();
+
+    // Step 4: open settings again — proves button still works
+    await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
     expect(pageErrors).toHaveLength(0);

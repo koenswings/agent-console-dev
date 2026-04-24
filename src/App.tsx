@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, Switch, Match, onMount, type Component } from 'solid-js';
+import { createSignal, createEffect, Show, Switch, Match, onMount, batch, type Component } from 'solid-js';
 import pkg from '../package.json';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
@@ -375,8 +375,10 @@ const App: Component = () => {
         <LoginForm
           store={store()}
           onSuccess={(user) => {
-            setShowLogin(false);
-            setAuthenticatedUser(user);
+            batch(() => {
+              setShowLogin(false);
+              setAuthenticatedUser(user);
+            });
           }}
           onCancel={() => setShowLogin(false)}
         />
