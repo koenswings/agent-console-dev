@@ -110,7 +110,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
 
       {/* Right content */}
       <div class="settings-panel__content">
-        <button class="settings-panel__close-btn" onClick={props.onClose}>✕ Close</button>
+
 
         {/* Engine Connection */}
         <Show when={activeTab() === 'engine'}>
