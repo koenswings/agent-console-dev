@@ -4,6 +4,8 @@
 **Date:** 2026-04-25  
 **Author:** Pixel (Console UI Developer)
 
+> Screenshots captured automatically with Playwright headless Chromium via `scripts/screenshot-screens.ts`.
+
 ---
 
 ## Overview
@@ -17,12 +19,6 @@ The UI is a single-page app built with SolidJS. All screens render inside one `<
 ## Persistent Chrome: Status Bar
 
 Present on **every screen**, always at the top.
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ IDEA Console v0.2.1    ● 100.115.60.6      [DEMO]  admin  👥  Log out  ⚙ │
-└─────────────────────────────────────────────────────────────────────┘
-```
 
 | Element | Description | Visibility |
 |---|---|---|
@@ -59,50 +55,12 @@ Additionally, one **modal overlay** can appear on top of any screen:
 
 ---
 
-## Screenshots
-
-All screenshots captured with Playwright headless Chromium against the live dev server (demo mode).
-Script: `scripts/screenshot-screens.ts`
-
-| Screen | File |
-|---|---|
-| S1 Onboarding | `screenshots/S1-onboarding.png` |
-| S4 App Browser (logged out) | `screenshots/S4-app-browser-logged-out.png` |
-| M1 Login Modal | `screenshots/M1-login-modal.png` |
-| S5 Main Layout | `screenshots/S5-main-layout.png` |
-| S5b Engine selected | `screenshots/S5b-engine-selected.png` |
-| S5c Disk selected | `screenshots/S5c-disk-selected.png` |
-| S6 Operator Management | `screenshots/S6-operator-management.png` |
-| S7 Empty Disk Panel | `screenshots/S7-empty-disk-panel.png` |
-| S8 Restore Panel | `screenshots/S8-restore-panel.png` |
-| S2 Settings — Engine | `screenshots/S2-settings-engine.png` |
-| S2b Settings — Account | `screenshots/S2b-settings-account.png` |
-| S2c Settings — About | `screenshots/S2c-settings-about.png` |
-
----
-
 ## Screen 1: Onboarding
 
 **File:** `src/components/Onboarding.tsx`  
 **When shown:** App has no configured hostname and is not in demo mode. Also shown embedded within the Settings panel's "Change engine" flow.
 
-```
-┌───────────────────────────────────────────┐
-│           IDEA Console                    │
-│  Configure the Engine connection…         │
-│                                           │
-│  ● Scanning for engine on the network…   │  ← only while discovering
-│                                           │
-│  [Demo mode toggle]  ☑ Demo mode          │
-│   Show mock data — explore without Engine │
-│                                           │
-│  (when not demo mode):                    │
-│  [Scan for engine]                        │
-│  Engine hostname: [________________]      │
-│                                           │
-│       [Save & Connect]                    │
-└───────────────────────────────────────────┘
-```
+![S1 Onboarding](screenshots/S1-onboarding.png)
 
 **Sub-state: Engine Picker** — if 2+ engines are found on the network, a list of discovered engines appears instead of the manual form. The user picks one or chooses "Enter manually".
 
@@ -117,22 +75,17 @@ Script: `scripts/screenshot-screens.ts`
 **File:** `src/components/SettingsPanel.tsx`  
 **When shown:** ⚙ button in status bar. Overlays the entire content area.
 
-```
-┌──────────────────────────────────────────────────────┐
-│  [Engine Connection] [Account] [About]    [✕ Close]  │
-│                                                      │
-│  Engine Connection tab:                              │
-│  ● Connected to 100.115.60.6                         │
-│  [Change engine]  (operator only)                    │
-│                                                      │
-│  Account tab (operator only):                        │
-│  Change Password form                                │
-│                                                      │
-│  About tab:                                          │
-│  IDEA Console · v0.1.0                               │
-│  Display mode picker (extension only)                │
-└──────────────────────────────────────────────────────┘
-```
+**Engine Connection tab:**
+
+![S2 Settings — Engine](screenshots/S2-settings-engine.png)
+
+**Account tab** (operator only — change password):
+
+![S2b Settings — Account](screenshots/S2b-settings-account.png)
+
+**About tab:**
+
+![S2c Settings — About](screenshots/S2c-settings-about.png)
 
 **Tabs:**
 - **Engine Connection** — shows current connection status; "Change engine" opens `ChangeEngineDialog` sub-panel inline (hostname input + demo toggle + scan)
@@ -151,18 +104,7 @@ Script: `scripts/screenshot-screens.ts`
 **File:** `src/components/FirstTimeSetup.tsx`  
 **When shown:** Engine is connected but `userDB` is empty (no operators exist yet). Auto-provision of `admin/admin911!` also runs in the background when this condition is met.
 
-```
-┌───────────────────────────────────────────┐
-│       Welcome to IDEA Console             │
-│  Create the first operator account        │
-│                                           │
-│  Username: [admin____________]            │
-│  Password: [________________]             │
-│  Confirm:  [________________]             │
-│                                           │
-│       [Create account]                    │
-└───────────────────────────────────────────┘
-```
+_(No screenshot — requires a fresh engine with empty userDB. Hard to reproduce in demo mode.)_
 
 **Flows from here:**
 - Create account → **Screen 5** (Main Layout, automatically logged in)
@@ -174,19 +116,7 @@ Script: `scripts/screenshot-screens.ts`
 **File:** `src/components/AppBrowser.tsx`  
 **When shown:** Default fallback — shown when connected (real or demo) but no operator is logged in.
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Apps                                    [Log in]   │
-│                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
-│  │ Kolibri  │  │Nextcloud │  │  App 3   │          │
-│  │ Running  │  │ Undocked │  │ Stopped  │          │
-│  │ [Open ↗] │  │(greyed)  │  │(greyed)  │          │
-│  └──────────┘  └──────────┘  └──────────┘          │
-│                                                     │
-│  (or: "No apps available on this network yet.")     │
-└─────────────────────────────────────────────────────┘
-```
+![S4 App Browser — logged out](screenshots/S4-app-browser-logged-out.png)
 
 - App cards show all instances (Running and non-Running)
 - Running apps show an "Open ↗" link to the app's URL on the engine
@@ -203,19 +133,7 @@ Script: `scripts/screenshot-screens.ts`
 **File:** `src/components/LoginForm.tsx`  
 **When shown:** Floats above App Browser (or any screen) when "Log in" is clicked. Rendered outside the Switch so it survives screen transitions.
 
-```
-┌─────────────────────────────────┐
-│  Operator Login              [✕]│
-│                                 │
-│  Username: [____________]       │
-│  Password: [____________] [👁]  │
-│                                 │
-│  [error message if any]         │
-│  Waiting for engine to sync…    │  ← only if store not ready
-│                                 │
-│       [Log in] / [Verifying…]   │
-└─────────────────────────────────┘
-```
+![M1 Login Modal](screenshots/M1-login-modal.png)
 
 **Flows from here:**
 - ✕ / Cancel → modal closes, returns to App Browser
@@ -228,25 +146,17 @@ Script: `scripts/screenshot-screens.ts`
 **File:** `src/App.tsx` + `NetworkTree.tsx` + `InstanceList.tsx`  
 **When shown:** Operator is logged in and Operator Management is not open.
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│ STATUS BAR                                                           │
-├───────────────────┬──────────────────────────────────────────────────┤
-│ NETWORK TREE      │  RIGHT PANEL (one of: Instance List /            │
-│                   │              Empty Disk / Restore Panel)         │
-│ 🌐 All instances  │                                                  │
-│                   │  All instances                        3          │
-│ 🖥 appdocker01    │  ┌─────────────────────────────────────────────┐ │
-│   online          │  │ kolibri-main   Running  ● [Stop] [Backup]   │ │
-│   💾 main-disk    │  │ CPU 12% · RAM 345MB · Disk 2.1GB            │ │
-│     📦 kolibri    │  │ Last backup: Apr 10, 14:32                  │ │
-│     📦 nextcloud  │  ├─────────────────────────────────────────────┤ │
-│   💾 backup-disk  │  │ nextcloud-main  Undocked  ● [Start]         │ │
-│     backup        │  │ (no metrics)                                │ │
-│   💾 empty-disk   │  └─────────────────────────────────────────────┘ │
-│     empty         │                                                  │
-└───────────────────┴──────────────────────────────────────────────────┘
-```
+**All instances selected (default):**
+
+![S5 Main Layout](screenshots/S5-main-layout.png)
+
+**Engine selected:**
+
+![S5b Engine selected](screenshots/S5b-engine-selected.png)
+
+**Disk selected:**
+
+![S5c Disk selected](screenshots/S5c-disk-selected.png)
 
 ### Left Panel: Network Tree
 
@@ -257,13 +167,8 @@ Hierarchical tree:
 4. **📦 Instance rows** (under each disk) — draggable; drag to another disk triggers Copy/Move modal
 
 **Copy/Move modal** — appears inline in NetworkTree when an instance is dropped on a different disk:
-```
-┌─────────────────────────────────┐
-│  Copy or Move?                  │
-│  kolibri from main → backup-2   │
-│  [Cancel]  [Move]  [Copy]       │
-└─────────────────────────────────┘
-```
+- Instance name, source disk → target disk
+- [Cancel] [Move] [Copy]
 
 ### Right Panel
 
@@ -291,24 +196,7 @@ Each `InstanceRow` shows:
 **File:** `src/components/OperatorManagement.tsx`  
 **When shown:** 👥 button in status bar (replaces main layout content area entirely).
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Operators                                          │
-│  ● admin (you)                          [Remove]   │
-│  ● teacher1                             [Remove]   │
-│                                                     │
-│  Add Operator                                       │
-│  Username: [__________]                             │
-│  Password: [__________]                             │
-│  [Add operator]                                     │
-│                                                     │
-│  Change My Password                                 │
-│  Current: [__________]                              │
-│  New:      [__________]                             │
-│  Confirm:  [__________]                             │
-│  [Change password]                                  │
-└─────────────────────────────────────────────────────┘
-```
+![S6 Operator Management](screenshots/S6-operator-management.png)
 
 **Flows from here:**
 - 👥 button again (✕) → returns to **Screen 5** (Main Layout)
@@ -320,39 +208,13 @@ Each `InstanceRow` shows:
 **File:** `src/components/EmptyDiskPanel.tsx`  
 **When shown:** Operator selects an empty-type disk in the Network Tree (right panel of Main Layout).
 
-Has 4 sub-states:
+![S7 Empty Disk Panel](screenshots/S7-empty-disk-panel.png)
 
-### 7a. Menu
-```
-┌──────────────────────────────────────────┐
-│ 💾 usb-drive-01  Empty disk              │
-│  What would you like to do?              │
-│                                          │
-│  [🗄 Configure as Backup Disk]           │
-│     Link instances + backup schedule     │
-│                                          │
-│  [📁 Configure as Files Disk]            │
-│     Shared network filesystem            │
-│                                          │
-│  [📦 Create new App Instance]            │
-│     Install from network or catalog disk │
-└──────────────────────────────────────────┘
-```
-
-### 7b. Configure as Backup Disk
-- Backup mode selector: On demand / Immediate / Scheduled (radio)
-- Instance checklist (all instances on the network)
-- [Cancel] [Configure Backup Disk]
-- On submit: shows success state with [Back]
-
-### 7c. Configure as Files Disk
-- Confirmation text
-- [Cancel] [Configure Files Disk]
-
-### 7d. Install App
-- Search/filter input
-- App list (radio selection): name, version, source
-- [Cancel] [Install]
+Sub-states:
+- **Menu** — choose: Configure as Backup Disk / Files Disk / Install App
+- **Configure as Backup Disk** — backup mode selector (On demand / Immediate / Scheduled) + instance checklist
+- **Configure as Files Disk** — confirmation + submit
+- **Install App** — search filter + app list (radio) + Install button
 
 ---
 
@@ -361,22 +223,7 @@ Has 4 sub-states:
 **File:** `src/components/RestorePanel.tsx`  
 **When shown:** Operator selects a backup-type disk in the Network Tree.
 
-```
-┌──────────────────────────────────────────┐
-│ 💾 backup-disk  Backup disk              │
-│  Mode: On demand · Linked: 2 instances   │
-│                                          │
-│  kolibri-main                            │
-│    Backed up: Apr 10, 14:32              │
-│    Restore to:  [main-disk ▾]            │
-│    [Restore]                             │
-│                                          │
-│  nextcloud-main                          │
-│    Backed up: Apr 9, 09:11               │
-│    Restore to:  [main-disk ▾]            │
-│    [Restore]                             │
-└──────────────────────────────────────────┘
-```
+![S8 Restore Panel](screenshots/S8-restore-panel.png)
 
 - Lists all instances linked to this backup disk
 - Per-instance: last backup time, target disk selector, Restore button
@@ -425,28 +272,6 @@ Has 4 sub-states:
                                     │    (Screen 6)        │
                                     └─────────────────────┘
 ```
-
----
-
-## Screenshots Needed
-
-The browser isn't reachable from this agent, so I need you to take these screenshots of `http://100.115.60.6:5173`:
-
-| # | What to capture | How to reach it |
-|---|---|---|
-| S1 | Onboarding screen | Open in incognito / clear localStorage |
-| S2 | Settings panel | Click ⚙ |
-| S3 | First-time setup | Fresh engine with empty userDB (or hard to reproduce) |
-| S4 | App Browser (logged out) | Normal load, not logged in |
-| M1 | Login modal | Click "Log in" in App Browser |
-| S5 | Main Layout | Log in, click "All instances" |
-| S5b | Main Layout — engine selected | Click engine row in tree |
-| S5c | Main Layout — disk selected | Click a disk row |
-| S6 | Operator Management | Click 👥 button |
-| S7 | Empty Disk Panel | Click an empty disk in tree |
-| S8 | Restore Panel | Click a backup disk in tree |
-
-Once you send them, I'll embed them in this doc.
 
 ---
 
