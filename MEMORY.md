@@ -16,11 +16,12 @@
 - **Avoid presenting the same thing twice.** A one-Pi system should not show the same address in two separate lists.
 - **Settings panels stay open until explicitly closed.** Changing a toggle or scanning should update state in the background, not dismiss the panel.
 
-## UI Design Doc (MANDATORY)
+## UI Design Doc (MANDATORY — do not skip)
 - `design/UI-DESIGN.md` must be kept in sync with the app
 - Every PR that results in a visual change must include an update to UI-DESIGN.md
 - Re-run `scripts/screenshot-screens.ts` after the change to capture fresh screenshots
-- The doc update and new screenshots must be committed as part of the same PR
+- **Both** the text in UI-DESIGN.md AND the screenshots must be updated and committed in the PR
+- ⚠️ I forgot this in PR #47 — I ran the screenshots but did not update the doc text. Don't repeat this.
 
 ## Dev Server & Version Process (MANDATORY)
 - Dev server runs at `http://100.115.60.6:5173` (Tailscale) and `http://192.168.0.231:5173` (LAN)

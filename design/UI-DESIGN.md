@@ -93,9 +93,11 @@ Additionally, one **modal overlay** can appear on top of any screen:
 - **About** — app name, version, display mode selector (extension only)
 
 **Flows from here:**
-- ✕ Close → returns to previous screen
+- ⚙ button again (toggles closed) → returns to previous screen
 - Change engine → triggers reconnect, stays in Settings
 - Switch to demo mode → reconnects in demo
+
+> Note: there is no separate Close button inside the panel — the ⚙ status bar button toggles it open/closed.
 
 ---
 
@@ -210,11 +212,17 @@ Each `InstanceRow` shows:
 
 ![S7 Empty Disk Panel](screenshots/S7-empty-disk-panel.png)
 
-Sub-states:
-- **Menu** — choose: Configure as Backup Disk / Files Disk / Install App
-- **Configure as Backup Disk** — backup mode selector (On demand / Immediate / Scheduled) + instance checklist
-- **Configure as Files Disk** — confirmation + submit
-- **Install App** — search filter + app list (radio) + Install button
+**Header:** disk icon + disk name + "Empty — ready to configure" subtitle. Back button appears when drilling into a sub-panel.
+
+**Sub-states:**
+- **Menu** — three action cards with coloured icons and chevrons:
+  - 🟣 **Backup Disk** — link instances and choose a backup schedule
+  - 🔵 **Files Disk** — shared network filesystem for the Engine
+  - 🟢 **Install App** — install an app from the network or catalog
+- **Backup Disk form** — radio group (On demand / Immediate / Scheduled) + instance checkbox list
+- **Files Disk form** — confirmation text + submit
+- **Install App form** — search input + app radio list + Install button
+- **Success state** — confirmation message + Back button
 
 ---
 
@@ -275,6 +283,4 @@ Sub-states:
 
 ---
 
-## Known Issues
 
-- **Login modal does not dismiss after successful login** — the persistent bug. `showLogin` signal is set to `false` inside `batch()` together with `setAuthenticatedUser`, but the `<Show when={showLogin()}>` does not respond. Root cause is unclear — either Solid reactive disposal order or a stale closure issue.
