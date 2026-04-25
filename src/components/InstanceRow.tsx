@@ -158,7 +158,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const store = props.store();
     if (!store) return null;
     if (activeOps().length > 0) return null; // active ops take precedence
-    const failed = Object.values(store.operationDB).filter(
+    const failed = Object.values(store.operationDB ?? {}).filter(
       (op) => op.status === 'Failed' && op.args['instanceId'] === props.instanceId
     );
     if (failed.length === 0) return null;

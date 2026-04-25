@@ -1,54 +1,22 @@
 /**
- * bcryptCompare — runs bcrypt.compareSync off the main thread via a Web Worker.
+ * bcryptCompare — runs bcrypt.compareSync on the main thread via setTimeout(0).
  *
- * Falls back to compareSync on the main thread if workers aren't available
- * (e.g. strict CSP, extension sandboxes).
+ * This yields to the event loop before the blocking work, keeping the UI
+ * responsive. We deliberately avoid Web Workers: in Chromium-based browsers
+ * the worker message callback can be silently delayed or dropped when the
+ * main thread is handling reactive updates, causing the login form to hang
+ * on "Verifying…" indefinitely.
+ *
+ * setTimeout(0) + compareSync is reliable across all environments
+ * (extension, web, dev server, production) and adds no extra round-trip.
  */
 import bcrypt from 'bcryptjs';
 
 export function bcryptCompare(password: string, hash: string): Promise<boolean> {
-  // Web Workers require a non-null origin — not available in file:// context.
-  if (typeof Worker === 'undefined') {
-    return new Promise((resolve, reject) =>
-      setTimeout(() => {
-        try { resolve(bcrypt.compareSync(password, hash)); }
-        catch (e) { reject(e); }
-      }, 0)
-    );
-  }
-
-  return new Promise((resolve, reject) => {
-    let worker: Worker;
-    try {
-      worker = new Worker(new URL('../workers/bcrypt.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-    } catch {
-      // Worker construction failed (e.g. CSP) — fall back to main thread
-      return setTimeout(() => {
-        try { resolve(bcrypt.compareSync(password, hash)); }
-        catch (e) { reject(e); }
-      }, 0);
-    }
-
-    const timeout = setTimeout(() => {
-      worker.terminate();
-      reject(new Error('bcrypt timed out'));
-    }, 30_000);
-
-    worker.onmessage = (e: MessageEvent<{ result?: boolean; error?: string }>) => {
-      clearTimeout(timeout);
-      worker.terminate();
-      if (e.data.error) reject(new Error(e.data.error));
-      else resolve(e.data.result ?? false);
-    };
-
-    worker.onerror = (e) => {
-      clearTimeout(timeout);
-      worker.terminate();
-      reject(new Error(e.message));
-    };
-
-    worker.postMessage({ password, hash });
-  });
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      try { resolve(bcrypt.compareSync(password, hash)); }
+      catch (e) { reject(e); }
+    }, 0)
+  );
 }

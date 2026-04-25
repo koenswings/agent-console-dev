@@ -1,11 +1,12 @@
 import { createSignal, Show, type Component } from 'solid-js';
 import { bcryptCompare } from '../store/bcryptCompare';
-import { setAuthenticatedUser } from '../store/auth';
 import type { Store, User } from '../types/store';
 
 interface LoginFormProps {
   store: Store | null;
-  onSuccess: () => void;
+  /** Called with the verified User on success. The parent is responsible for
+   *  calling setAuthenticatedUser() and clearing showLogin in one batch(). */
+  onSuccess: (user: User) => void;
   onCancel: () => void;
 }
 
@@ -31,10 +32,6 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      // Use compareSync wrapped in a Promise so the UI can re-paint before
-      // the blocking bcrypt work starts. bcryptjs's async compare() uses
-      // scheduler.postTask in modern browsers which can silently hang;
-      // compareSync is always reliable.
       const hash = String(user.passwordHash);
       const match = await bcryptCompare(password(), hash);
 
@@ -43,11 +40,16 @@ const LoginForm: Component<LoginFormProps> = (props) => {
         return;
       }
 
-      setAuthenticatedUser(user);
-      props.onSuccess();
+      // Hand the verified user to the parent. The parent will call
+      // setAuthenticatedUser() + setShowLogin(false) inside a batch().
+      // We do NOT touch any global signals here — that would synchronously
+      // flip isOperator(), destroying this component's reactive root before
+      // the finally block can run setLoading(false).
+      props.onSuccess(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.');
     } finally {
+      // Always executes while this component is still the reactive owner.
       setLoading(false);
     }
   };

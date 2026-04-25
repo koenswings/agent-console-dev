@@ -72,8 +72,11 @@ async function readPersistedSession(): Promise<OperatorSession | null> {
 /**
  * Set the current user directly (after external verification) and persist session.
  * Use this when you've already verified the password to avoid running bcrypt twice.
+ *
+ * Synchronous so callers can use Solid's batch() to co-update other signals
+ * (e.g. setShowLogin) atomically in the same reactive flush.
  */
-export async function setAuthenticatedUser(user: User): Promise<void> {
+export function setAuthenticatedUser(user: User): void {
   setCurrentUser(user);
   // Fire-and-forget — never block login on session persistence
   persistSession(user).catch(() => {});

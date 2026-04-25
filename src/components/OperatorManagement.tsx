@@ -81,14 +81,18 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
     const userId = currentUser()?.id;
     if (!userId) return;
     setPwLoading(true);
-    const ok = await changePassword(
-      userId,
-      currentPw(),
-      newPw(),
-      props.store,
-      props.connection.changeDoc
-    );
-    setPwLoading(false);
+    let ok = false;
+    try {
+      ok = await changePassword(
+        userId,
+        currentPw(),
+        newPw(),
+        props.store,
+        props.connection.changeDoc
+      );
+    } finally {
+      setPwLoading(false);
+    }
     if (ok) {
       setPwSuccess('Password changed.');
       setCurrentPw('');

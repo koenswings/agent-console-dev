@@ -1,12 +1,13 @@
 import { createSignal, type Component } from 'solid-js';
-import { createOperator, login } from '../store/auth';
-import type { Store } from '../types/store';
+import { createOperator } from '../store/auth';
+import type { Store, User } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
 
 interface FirstTimeSetupProps {
   store: Store;
   connection: StoreConnection;
-  onComplete: () => void;
+  /** Called with the newly created User so the parent can auth in one batch(). */
+  onComplete: (user: User) => void;
 }
 
 const FirstTimeSetup: Component<FirstTimeSetupProps> = (props) => {
@@ -30,21 +31,23 @@ const FirstTimeSetup: Component<FirstTimeSetupProps> = (props) => {
     }
 
     setLoading(true);
+    let createdUser: User | null = null;
     try {
-      await createOperator(username(), password(), props.store, props.connection.changeDoc);
-      // Auto-login after creating the first account
-      // Note: store signal will update via Automerge sync; use a fresh snapshot
-      // for login by re-reading after changeDoc. For simplicity, construct the
-      // updated store inline.
-      const updatedStore = props.connection.store();
-      if (updatedStore) {
-        await login(username(), password(), updatedStore);
-      }
-      props.onComplete();
+      // Do NOT call setAuthenticatedUser (or login) here — those write to a
+      // global Solid signal which can cause the parent's Show to destroy this
+      // component's reactive root before the finally block runs setLoading(false).
+      createdUser = await createOperator(username(), password(), props.store, props.connection.changeDoc);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed.');
     } finally {
+      // Always clears the button state while this component still owns its signals.
       setLoading(false);
+    }
+
+    // Post-finally: safe to hand off now. The parent will call setAuthenticatedUser
+    // + any other signal writes in a batch() so Solid flushes them atomically.
+    if (createdUser) {
+      props.onComplete(createdUser);
     }
   };
 

@@ -57,14 +57,18 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
     const userId = currentUser()?.id;
     if (!userId || !props.store || !props.connection) return;
     setPwLoading(true);
-    const ok = await changePassword(
-      userId,
-      currentPw(),
-      newPw(),
-      props.store,
-      props.connection.changeDoc,
-    );
-    setPwLoading(false);
+    let ok = false;
+    try {
+      ok = await changePassword(
+        userId,
+        currentPw(),
+        newPw(),
+        props.store,
+        props.connection.changeDoc,
+      );
+    } finally {
+      setPwLoading(false);
+    }
     if (ok) {
       setPwSuccess('Password changed.');
       setCurrentPw('');

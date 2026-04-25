@@ -55,8 +55,12 @@ test.describe('Demo login flow', () => {
     // Main layout should be rendered
     await expect(page.locator('.main-layout')).toBeVisible();
 
+    // App browser (unauthenticated view) should be gone
+    await expect(page.locator('.app-browser')).not.toBeVisible();
+
     // Login modal should be gone
     await expect(page.locator('.modal')).not.toBeVisible();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
 
     expect(consoleErrors).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);
