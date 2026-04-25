@@ -33,7 +33,7 @@ test.describe('Settings panel', () => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    await page.locator('.settings-panel__close-btn').click();
+    await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).not.toBeVisible();
 
     expect(pageErrors).toHaveLength(0);

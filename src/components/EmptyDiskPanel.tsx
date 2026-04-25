@@ -4,8 +4,7 @@
  * Lets the operator choose what to do with the disk:
  *   1. Configure as Backup Disk — pick instances + backup mode → createBackupDisk command
  *   2. Configure as Files Disk  — single confirm → createFilesDisk command
- *   3. Create new App Instance  — requires Engine to surface available app sources;
- *      currently shows a placeholder until the Engine API supports it.
+ *   3. Install App              — pick from appDB → installApp command
  */
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { createBackupDisk, createFilesDisk, installApp } from '../store/commands';
@@ -18,7 +17,7 @@ interface EmptyDiskPanelProps {
   engineId: () => string | undefined;
 }
 
-type Panel = 'menu' | 'backup' | 'files' | 'app' | 'install';
+type Panel = 'menu' | 'backup' | 'files' | 'install';
 
 const BACKUP_MODES: { value: BackupMode; label: string; description: string }[] = [
   {
@@ -29,12 +28,12 @@ const BACKUP_MODES: { value: BackupMode; label: string; description: string }[] 
   {
     value: 'immediate',
     label: 'Immediate',
-    description: 'Backup runs as soon as the disk is docked. Apps are stopped one by one during backup.',
+    description: 'Backup runs as soon as the disk is docked.',
   },
   {
     value: 'scheduled',
     label: 'Scheduled',
-    description: 'Backup runs on a schedule (configured on the disk). Apps are stopped during backup.',
+    description: 'Backup runs on a schedule configured on the disk.',
   },
 ];
 
@@ -80,32 +79,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     return 'catalog';
   };
 
-  const handleInstallApp = () => {
-    setError('');
-    const engineId = props.engineId();
-    const disk = props.disk();
-    const appId = selectedAppId();
-    if (!engineId || !disk || !appId) return;
-
-    const app = props.store()?.appDB[appId];
-    const opts = app?.source === 'disk' && app?.sourceDiskName
-      ? { source: app.sourceDiskName }
-      : undefined;
-
-    installApp(engineId, appId, disk.name, opts);
-    setSubmitted(true);
-  };
-
   const toggleInstance = (id: string) => {
     setSelectedInstanceIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
-  };
-
-  const instanceName = (id: string): string => {
-    const s = props.store();
-    if (!s) return id;
-    return s.instanceDB[id]?.name ?? id;
   };
 
   const handleConfigureBackup = () => {
@@ -135,6 +112,22 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     setSubmitted(true);
   };
 
+  const handleInstallApp = () => {
+    setError('');
+    const engineId = props.engineId();
+    const disk = props.disk();
+    const appId = selectedAppId();
+    if (!engineId || !disk || !appId) return;
+
+    const app = props.store()?.appDB[appId];
+    const opts = app?.source === 'disk' && app?.sourceDiskName
+      ? { source: app.sourceDiskName }
+      : undefined;
+
+    installApp(engineId, appId, disk.name, opts);
+    setSubmitted(true);
+  };
+
   const reset = () => {
     setPanel('menu');
     setSubmitted(false);
@@ -145,234 +138,203 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     setSelectedAppId(null);
   };
 
+  const goMenu = () => { setError(''); setPanel('menu'); };
+
   return (
-    <section class="empty-disk-panel" aria-label="Empty disk configuration">
-      <header class="empty-disk-panel__header">
-        <span class="empty-disk-panel__disk-icon">💾</span>
-        <div>
-          <div class="empty-disk-panel__title">{props.disk()?.name ?? 'Empty disk'}</div>
-          <div class="empty-disk-panel__subtitle">Empty disk — ready to configure</div>
+    <section class="edp" aria-label="Empty disk configuration">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header class="edp__header">
+        <div class="edp__header-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22" aria-hidden="true">
+            <ellipse cx="12" cy="6" rx="9" ry="3"/>
+            <path d="M3 6v6c0 1.657 4.03 3 9 3s9-1.343 9-3V6"/>
+            <path d="M3 12v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6"/>
+          </svg>
         </div>
+        <div class="edp__header-text">
+          <div class="edp__title">{props.disk()?.name ?? 'Empty disk'}</div>
+          <div class="edp__subtitle">Empty — ready to configure</div>
+        </div>
+        <Show when={panel() !== 'menu' && !submitted()}>
+          <button class="edp__back" onClick={goMenu}>← Back</button>
+        </Show>
       </header>
 
-      {/* ── Success state ─────────────────────────────────────────── */}
-      <Show when={submitted()}>
-        <div class="empty-disk-panel__success">
-          <span class="empty-disk-panel__success-icon">✓</span>
-          <p>Command sent. The Engine is configuring the disk.</p>
-          <button class="btn" onClick={reset}>Back</button>
-        </div>
-      </Show>
+      <div class="edp__body">
 
-      {/* ── Menu ─────────────────────────────────────────────────── */}
-      <Show when={!submitted() && panel() === 'menu'}>
-        <p class="empty-disk-panel__intro">
-          What would you like to do with this disk?
-        </p>
-        <div class="empty-disk-panel__options">
-          <button
-            class="empty-disk-option"
-            onClick={() => setPanel('backup')}
-          >
-            <span class="empty-disk-option__icon">🗄</span>
-            <div>
-              <div class="empty-disk-option__title">Configure as Backup Disk</div>
-              <div class="empty-disk-option__desc">
-                Link instances to this disk and choose a backup schedule.
-              </div>
-            </div>
-          </button>
-
-          <button
-            class="empty-disk-option"
-            onClick={() => setPanel('files')}
-          >
-            <span class="empty-disk-option__icon">📁</span>
-            <div>
-              <div class="empty-disk-option__title">Configure as Files Disk</div>
-              <div class="empty-disk-option__desc">
-                Create a shared network file system mounted by the Engine.
-              </div>
-            </div>
-          </button>
-
-          <button
-            class="empty-disk-option"
-            onClick={() => setPanel('install')}
-          >
-            <span class="empty-disk-option__icon">📦</span>
-            <div>
-              <div class="empty-disk-option__title">Create new App Instance</div>
-              <div class="empty-disk-option__desc">
-                Install an app from the network or a catalog disk.
-              </div>
-            </div>
-          </button>
-        </div>
-      </Show>
-
-      {/* ── Configure as Backup Disk ──────────────────────────────── */}
-      <Show when={!submitted() && panel() === 'backup'}>
-        <div class="empty-disk-panel__form">
-          <h3 class="empty-disk-panel__form-title">Configure as Backup Disk</h3>
-
-          <label class="empty-disk-panel__label">Backup mode</label>
-          <div class="empty-disk-panel__radio-group">
-            <For each={BACKUP_MODES}>
-              {(m) => (
-                <label class={`radio-option ${backupMode() === m.value ? 'radio-option--selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="backupMode"
-                    value={m.value}
-                    checked={backupMode() === m.value}
-                    onChange={() => setBackupMode(m.value)}
-                  />
-                  <div>
-                    <div class="radio-option__label">{m.label}</div>
-                    <div class="radio-option__desc">{m.description}</div>
-                  </div>
-                </label>
-              )}
-            </For>
+        {/* ── Success ──────────────────────────────────────────────────────── */}
+        <Show when={submitted()}>
+          <div class="edp__success">
+            <div class="edp__success-icon">✓</div>
+            <p class="edp__success-msg">Command sent. The Engine is configuring the disk.</p>
+            <button class="btn" onClick={reset}>← Back</button>
           </div>
+        </Show>
 
-          <label class="empty-disk-panel__label">Link to instances</label>
-          <Show
-            when={allInstances().length > 0}
-            fallback={<p class="empty-disk-panel__hint">No instances found on the network.</p>}
-          >
-            <div class="empty-disk-panel__instance-list">
-              <For each={allInstances()}>
-                {(inst) => (
-                  <label class={`checkbox-option ${selectedInstanceIds().includes(inst.id) ? 'checkbox-option--selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedInstanceIds().includes(inst.id)}
-                      onChange={() => toggleInstance(inst.id)}
-                    />
-                    <span class="checkbox-option__label">{inst.name}</span>
-                    <span class="checkbox-option__status">{inst.status}</span>
-                  </label>
-                )}
-              </For>
-            </div>
-          </Show>
+        {/* ── Menu ─────────────────────────────────────────────────────────── */}
+        <Show when={!submitted() && panel() === 'menu'}>
+          <p class="edp__prompt">What would you like to do with this disk?</p>
+          <div class="edp__menu">
 
-          <Show when={error()}>
-            <p class="empty-disk-panel__error">{error()}</p>
-          </Show>
-
-          <div class="empty-disk-panel__actions">
-            <button class="btn" onClick={() => { setError(''); setPanel('menu'); }}>Cancel</button>
-            <button class="btn btn--primary" onClick={handleConfigureBackup}>
-              Configure Backup Disk
+            <button class="edp-card" onClick={() => setPanel('backup')}>
+              <div class="edp-card__icon edp-card__icon--backup">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                  <path d="M4 3a1 1 0 011-1h10a1 1 0 011 1v2H4V3zM2 7a1 1 0 011-1h14a1 1 0 011 1v2H2V7zM2 11h16v6a1 1 0 01-1 1H3a1 1 0 01-1-1v-6z"/>
+                </svg>
+              </div>
+              <div class="edp-card__text">
+                <span class="edp-card__title">Backup Disk</span>
+                <span class="edp-card__desc">Link instances and choose a backup schedule</span>
+              </div>
+              <span class="edp-card__chevron">›</span>
             </button>
-          </div>
-        </div>
-      </Show>
 
-      {/* ── Configure as Files Disk ───────────────────────────────── */}
-      <Show when={!submitted() && panel() === 'files'}>
-        <div class="empty-disk-panel__form">
-          <h3 class="empty-disk-panel__form-title">Configure as Files Disk</h3>
-          <p class="empty-disk-panel__hint">
-            The Engine will format this disk as a shared network file system.
-            Apps configured to use a Files Disk will have it mounted automatically.
-          </p>
-          <Show when={error()}>
-            <p class="empty-disk-panel__error">{error()}</p>
-          </Show>
-          <div class="empty-disk-panel__actions">
-            <button class="btn" onClick={() => setPanel('menu')}>Cancel</button>
-            <button class="btn btn--primary" onClick={handleConfigureFiles}>
-              Configure Files Disk
+            <button class="edp-card" onClick={() => setPanel('files')}>
+              <div class="edp-card__icon edp-card__icon--files">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                  <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                </svg>
+              </div>
+              <div class="edp-card__text">
+                <span class="edp-card__title">Files Disk</span>
+                <span class="edp-card__desc">Shared network filesystem for the Engine</span>
+              </div>
+              <span class="edp-card__chevron">›</span>
             </button>
+
+            <button class="edp-card" onClick={() => setPanel('install')}>
+              <div class="edp-card__icon edp-card__icon--install">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                  <path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 5a1 1 0 10-2 0v3H6a1 1 0 100 2h3v3a1 1 0 102 0v-3h3a1 1 0 100-2h-3V7z"/>
+                </svg>
+              </div>
+              <div class="edp-card__text">
+                <span class="edp-card__title">Install App</span>
+                <span class="edp-card__desc">Install an app from the network or catalog</span>
+              </div>
+              <span class="edp-card__chevron">›</span>
+            </button>
+
           </div>
-        </div>
-      </Show>
+        </Show>
 
-      {/* ── Create App Instance (placeholder) ────────────────────── */}
-      <Show when={!submitted() && panel() === 'app'}>
-        <div class="empty-disk-panel__form">
-          <h3 class="empty-disk-panel__form-title">Create new App Instance</h3>
-          <div class="empty-disk-panel__unavailable-notice">
-            <p>
-              <strong>Coming soon.</strong> The Engine needs to surface the list of available
-              app sources (docked app disks, backup/catalog disks, network) before this can
-              be built. Once that API is available this flow will let you pick an app and
-              install it onto this disk.
-            </p>
-          </div>
-          <div class="empty-disk-panel__actions">
-            <button class="btn" onClick={() => setPanel('menu')}>Back</button>
-          </div>
-        </div>
-      </Show>
+        {/* ── Backup Disk form ─────────────────────────────────────────────── */}
+        <Show when={!submitted() && panel() === 'backup'}>
+          <div class="edp-form">
 
-      {/* ── Install App ───────────────────────────────────────────── */}
-      <Show when={!submitted() && panel() === 'install'}>
-        <div class="empty-disk-panel__form">
-          <h3 class="empty-disk-panel__form-title">Install App</h3>
-          <p class="empty-disk-panel__hint">
-            Choose an app to install onto <strong>{props.disk()?.name}</strong>.
-          </p>
-
-          <label class="empty-disk-panel__label" for="app-filter">Search</label>
-          <input
-            id="app-filter"
-            class="empty-disk-panel__input"
-            type="text"
-            placeholder="Filter by name or category…"
-            value={appFilter()}
-            onInput={(e) => setAppFilter((e.target as HTMLInputElement).value)}
-          />
-
-          <Show
-            when={filteredApps().length > 0}
-            fallback={<p class="empty-disk-panel__hint">No apps found.</p>}
-          >
-            <div class="empty-disk-panel__app-list">
-              <For each={filteredApps()}>
-                {(app) => (
-                  <label class={`app-option ${selectedAppId() === app.id ? 'app-option--selected' : ''}`}>
+            <p class="edp-form__label">Backup mode</p>
+            <div class="edp-radios">
+              <For each={BACKUP_MODES}>
+                {(m) => (
+                  <label class={`edp-radio ${backupMode() === m.value ? 'edp-radio--on' : ''}`}>
                     <input
                       type="radio"
-                      name="installApp"
-                      value={app.id}
-                      checked={selectedAppId() === app.id}
-                      onChange={() => setSelectedAppId(app.id)}
+                      name="backupMode"
+                      value={m.value}
+                      checked={backupMode() === m.value}
+                      onChange={() => setBackupMode(m.value)}
                     />
-                    <div class="app-option__info">
-                      <div class="app-option__title">{app.title}</div>
-                      <div class="app-option__meta">
-                        v{app.version}
-                        {' · '}
-                        {appSourceLabel(app)}
-                      </div>
+                    <div>
+                      <div class="edp-radio__title">{m.label}</div>
+                      <div class="edp-radio__desc">{m.description}</div>
                     </div>
                   </label>
                 )}
               </For>
             </div>
-          </Show>
 
-          <Show when={error()}>
-            <p class="empty-disk-panel__error">{error()}</p>
-          </Show>
-
-          <div class="empty-disk-panel__actions">
-            <button class="btn" onClick={() => { setError(''); setPanel('menu'); }}>Cancel</button>
-            <button
-              class="btn btn--primary"
-              disabled={!selectedAppId()}
-              onClick={handleInstallApp}
+            <p class="edp-form__label">Link to instances</p>
+            <Show
+              when={allInstances().length > 0}
+              fallback={<p class="edp-form__hint">No instances found on the network.</p>}
             >
-              Install
-            </button>
+              <div class="edp-checks">
+                <For each={allInstances()}>
+                  {(inst) => (
+                    <label class={`edp-check ${selectedInstanceIds().includes(inst.id) ? 'edp-check--on' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={selectedInstanceIds().includes(inst.id)}
+                        onChange={() => toggleInstance(inst.id)}
+                      />
+                      <span class="edp-check__name">{inst.name}</span>
+                      <span class="edp-check__status">{inst.status}</span>
+                    </label>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+            <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <div class="edp-form__actions">
+              <button class="btn btn--primary" onClick={handleConfigureBackup}>Configure Backup Disk</button>
+            </div>
+
           </div>
-        </div>
-      </Show>
+        </Show>
+
+        {/* ── Files Disk form ──────────────────────────────────────────────── */}
+        <Show when={!submitted() && panel() === 'files'}>
+          <div class="edp-form">
+            <p class="edp-form__hint">
+              The Engine will format this disk as a shared network filesystem.
+              Apps configured to use a Files Disk will have it mounted automatically.
+            </p>
+            <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <div class="edp-form__actions">
+              <button class="btn btn--primary" onClick={handleConfigureFiles}>Configure Files Disk</button>
+            </div>
+          </div>
+        </Show>
+
+        {/* ── Install App form ─────────────────────────────────────────────── */}
+        <Show when={!submitted() && panel() === 'install'}>
+          <div class="edp-form">
+            <p class="edp-form__hint">
+              Choose an app to install onto <strong>{props.disk()?.name}</strong>.
+            </p>
+            <input
+              class="edp-form__search"
+              type="text"
+              placeholder="Search apps…"
+              value={appFilter()}
+              onInput={(e) => setAppFilter((e.target as HTMLInputElement).value)}
+            />
+            <Show
+              when={filteredApps().length > 0}
+              fallback={<p class="edp-form__hint">No apps found.</p>}
+            >
+              <div class="edp-applist">
+                <For each={filteredApps()}>
+                  {(app) => (
+                    <label class={`edp-appitem ${selectedAppId() === app.id ? 'edp-appitem--on' : ''}`}>
+                      <input
+                        type="radio"
+                        name="installApp"
+                        value={app.id}
+                        checked={selectedAppId() === app.id}
+                        onChange={() => setSelectedAppId(app.id)}
+                      />
+                      <div class="edp-appitem__info">
+                        <span class="edp-appitem__title">{app.title}</span>
+                        <span class="edp-appitem__meta">v{app.version} · {appSourceLabel(app)}</span>
+                      </div>
+                    </label>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <div class="edp-form__actions">
+              <button class="btn btn--primary" disabled={!selectedAppId()} onClick={handleInstallApp}>
+                Install App
+              </button>
+            </div>
+          </div>
+        </Show>
+
+      </div>
     </section>
   );
 };

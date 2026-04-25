@@ -16,6 +16,20 @@
 - **Avoid presenting the same thing twice.** A one-Pi system should not show the same address in two separate lists.
 - **Settings panels stay open until explicitly closed.** Changing a toggle or scanning should update state in the background, not dismiss the panel.
 
+## UI Design Doc (MANDATORY)
+- `design/UI-DESIGN.md` must be kept in sync with the app
+- Every PR that results in a visual change must include an update to UI-DESIGN.md
+- Re-run `scripts/screenshot-screens.ts` after the change to capture fresh screenshots
+- The doc update and new screenshots must be committed as part of the same PR
+
+## Dev Server & Version Process (MANDATORY)
+- Dev server runs at `http://100.115.60.6:5173` (Tailscale) and `http://192.168.0.231:5173` (LAN)
+- Vite HMR is live — file edits hot-reload instantly, no restart needed
+- **Every time I make a code change:** bump the patch version in `package.json` (e.g. 0.2.0 → 0.2.1) and tell Koen the new version number so he can verify the status bar
+- Version is displayed in the UI as `v{pkg.version}` in the status bar (imported from `package.json`)
+- Always state the version number when reporting changes to Koen
+- **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
+
 ## What to do at next session start
 - Check if Koen merged PRs #37, #38, #39
 - If merged: set up Playwright e2e tests (config + login flow + demo/real engine switching)
@@ -37,6 +51,14 @@
 - Koen merges PRs himself; open PR with URL
 - Claude Code for heavy implementation; Pixel for orchestration and review
 - Console v1 feature-complete as of PR #36 (April 11, 2026)
+
+### Deployment context (important)
+- **Primary use case: web server** — app is served from an HTTP server (Vite dev server now, production web server on the engine later)
+- **NOT primarily the Chrome extension** — extension exists but web mode is dominant
+- `isProductionWebMode()` returns true when served from a real hostname (not localhost, not extension)
+- In production web mode: hostname auto-detected from `window.location.hostname`, no localStorage dance
+- Playwright tests run against the production build (`pnpm build && python3 -m http.server 5173`) — NOT against the real engine web server
+- Tests use `localStorage.setItem('demoMode', 'true')` which is correct for web mode (not extension)
 
 ### Koen's working style
 - Sends issues one by one as he finds them during UI review

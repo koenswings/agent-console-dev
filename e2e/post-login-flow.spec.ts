@@ -39,8 +39,8 @@ test.describe('Post-login flow', () => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    // Close via panel close button
-    await page.locator('.settings-panel__close-btn').click();
+    // Close via the settings toggle button in the status bar
+    await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).not.toBeVisible();
     await expect(page.locator('.main-layout')).toBeVisible();
 
