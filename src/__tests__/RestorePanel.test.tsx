@@ -35,13 +35,13 @@ describe('RestorePanel', () => {
     expect(screen.getByText('On demand')).toBeInTheDocument();
   });
 
-  it('shows "No instances configured" when links is empty', () => {
+  it('shows "No apps configured" when links is empty', () => {
     const emptyLinksDisk: Disk = {
       ...backupDisk,
       backupConfig: { mode: 'on-demand', links: [] },
     };
     renderPanel({ disk: emptyLinksDisk });
-    expect(screen.getByText(/no instances configured for backup on this disk/i)).toBeInTheDocument();
+    expect(screen.getByText(/no apps configured for backup on this disk/i)).toBeInTheDocument();
   });
 
   it('shows "no backup configuration" when backupConfig is null', () => {

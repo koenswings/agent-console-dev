@@ -19,7 +19,7 @@ describe('NetworkTree component', () => {
     ).not.toThrow();
   });
 
-  it('shows an "All instances" item at the top', () => {
+  it('shows an "All apps" item at the top', () => {
     const { container } = render(() => (
       <NetworkTree
         store={() => MOCK_STORE}
@@ -27,7 +27,7 @@ describe('NetworkTree component', () => {
         onSelect={() => {}}
       />
     ));
-    expect(container.textContent).toContain('All instances');
+    expect(container.textContent).toContain('All apps');
   });
 
   it('renders both engines from the mock store', () => {
@@ -159,7 +159,7 @@ describe('NetworkTree component', () => {
         onSelect={() => {}}
       />
     ));
-    expect(container.textContent).toContain('All instances');
+    expect(container.textContent).toContain('All apps');
     expect(container.querySelectorAll('.tree-item--engine')).toHaveLength(0);
   });
 });
