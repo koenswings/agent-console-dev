@@ -39,7 +39,7 @@ const resolveBackupDisks = (store: Store | null, instance: Instance | undefined)
   if (!engineId) return [];
   return Object.values(store.diskDB).filter(
     (d) =>
-      d.dockedTo === engineId &&
+      String(d.dockedTo) === String(engineId) &&
       d.device !== null &&
       d.diskTypes?.includes('backup') &&
       d.backupConfig?.links.includes(instance.id)

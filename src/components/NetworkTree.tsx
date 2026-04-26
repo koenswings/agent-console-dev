@@ -165,7 +165,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           // Disk IDs for this engine — only changes when disks are added/removed
           const diskIds = createMemo(() =>
             Object.keys(props.store()?.diskDB ?? {}).filter(
-              (id) => props.store()?.diskDB[id]?.dockedTo === engineId
+              (id) => String(props.store()?.diskDB[id]?.dockedTo) === engineId
             )
           );
 
@@ -208,7 +208,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     const s = props.store();
                     if (!s) return [];
                     return Object.values(s.instanceDB).filter(
-                      (inst) => inst.storedOn === diskId
+                      (inst) => String(inst.storedOn) === diskId
                     );
                   });
 
