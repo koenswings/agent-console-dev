@@ -137,42 +137,42 @@ export const createFilesDisk = (
 
 /**
  * Build the "copyApp" command string (pure, no side effects).
- * Format: "copyApp <instanceName> <sourceDiskName> <targetDiskName>"
+ * Format: "copyApp <instanceId> <sourceDiskId> <targetDiskId>"
  */
 export const buildCopyAppCommand = (
-  instanceName: string,
-  sourceDiskName: string,
-  targetDiskName: string
-): string => `copyApp ${instanceName} ${sourceDiskName} ${targetDiskName}`;
+  instanceId: string,
+  sourceDiskId: string,
+  targetDiskId: string
+): string => `copyApp ${instanceId} ${sourceDiskId} ${targetDiskId}`;
 
 /**
  * Build the "moveApp" command string (pure, no side effects).
- * Format: "moveApp <instanceName> <sourceDiskName> <targetDiskName>"
+ * Format: "moveApp <instanceId> <sourceDiskId> <targetDiskId>"
  */
 export const buildMoveAppCommand = (
-  instanceName: string,
-  sourceDiskName: string,
-  targetDiskName: string
-): string => `moveApp ${instanceName} ${sourceDiskName} ${targetDiskName}`;
+  instanceId: string,
+  sourceDiskId: string,
+  targetDiskId: string
+): string => `moveApp ${instanceId} ${sourceDiskId} ${targetDiskId}`;
 
 /** Duplicate an instance onto a target disk (new InstanceID). */
 export const copyApp = (
   engineId: string,
-  instanceName: string,
-  sourceDiskName: string,
-  targetDiskName: string
+  instanceId: string,
+  sourceDiskId: string,
+  targetDiskId: string
 ): void => {
-  _sendCommand(engineId, buildCopyAppCommand(instanceName, sourceDiskName, targetDiskName));
+  _sendCommand(engineId, buildCopyAppCommand(instanceId, sourceDiskId, targetDiskId));
 };
 
 /** Move an instance to a target disk (same InstanceID). */
 export const moveApp = (
   engineId: string,
-  instanceName: string,
-  sourceDiskName: string,
-  targetDiskName: string
+  instanceId: string,
+  sourceDiskId: string,
+  targetDiskId: string
 ): void => {
-  _sendCommand(engineId, buildMoveAppCommand(instanceName, sourceDiskName, targetDiskName));
+  _sendCommand(engineId, buildMoveAppCommand(instanceId, sourceDiskId, targetDiskId));
 };
 
 // ---------------------------------------------------------------------------

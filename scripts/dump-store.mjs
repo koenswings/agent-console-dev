@@ -4,27 +4,25 @@ import { WebSocketClientAdapter } from '@automerge/automerge-repo-network-websoc
 const STORE_URL = 'automerge:4GQmEZehPDfryGDxkFo9XixbvmAC';
 const WS_URL = 'ws://192.168.0.231:4321';
 
-const handle = await new Repo({
+const repo = new Repo({
   network: [new WebSocketClientAdapter(WS_URL)],
   sharePolicy: async () => true,
-}).find(STORE_URL);
+});
 
+const handle = await repo.find(STORE_URL);
 await new Promise(r => setTimeout(r, 2000));
-const doc = handle.doc();
 
-// Full disk dump with diskTypes
-const disks = doc.diskDB ?? {};
-console.log('=== DISKS (docked only) ===');
-for (const [id, d] of Object.entries(disks)) {
-  if (!d?.dockedTo) continue;
-  console.log(`  ${id}: name=${String(d.name)} dockedTo=${String(d.dockedTo)} diskTypes=${JSON.stringify(d.diskTypes)} device=${String(d.device)}`);
-}
+// Remove TEST_COMMAND from wizardly-hugle
+handle.change((d) => {
+  const engine = d.engineDB?.['ENGINE_AA000000000000000724'];
+  if (engine?.commands) {
+    const idx = engine.commands.indexOf('TEST_COMMAND');
+    if (idx !== -1) {
+      engine.commands.splice(idx, 1);
+      console.log('Removed TEST_COMMAND');
+    }
+  }
+});
 
-// Instances
-const instances = doc.instanceDB ?? {};
-console.log('\n=== INSTANCES ===');
-for (const [id, inst] of Object.entries(instances)) {
-  console.log(`  ${id}: name=${String(inst?.name)} storedOn=${String(inst?.storedOn)}`);
-}
-
+await new Promise(r => setTimeout(r, 500));
 process.exit(0);

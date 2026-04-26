@@ -154,18 +154,18 @@ describe('createBackupDisk', () => {
 // buildCopyAppCommand
 // ---------------------------------------------------------------------------
 describe('buildCopyAppCommand', () => {
-  it('formats correctly', () => {
-    expect(buildCopyAppCommand('kolibri', 'kolibri-disk', 'target-disk')).toBe(
-      'copyApp kolibri kolibri-disk target-disk'
+  it('formats correctly with IDs', () => {
+    expect(buildCopyAppCommand('inst-001', 'DISK001', 'DISK002')).toBe(
+      'copyApp inst-001 DISK001 DISK002'
     );
   });
 
   it('starts with copyApp', () => {
-    const cmd = buildCopyAppCommand('myapp', 'src', 'dst');
+    const cmd = buildCopyAppCommand('inst-001', 'src-id', 'dst-id');
     expect(cmd.startsWith('copyApp ')).toBe(true);
-    expect(cmd).toContain('myapp');
-    expect(cmd).toContain('src');
-    expect(cmd).toContain('dst');
+    expect(cmd).toContain('inst-001');
+    expect(cmd).toContain('src-id');
+    expect(cmd).toContain('dst-id');
   });
 });
 
@@ -173,14 +173,14 @@ describe('buildCopyAppCommand', () => {
 // buildMoveAppCommand
 // ---------------------------------------------------------------------------
 describe('buildMoveAppCommand', () => {
-  it('formats correctly', () => {
-    expect(buildMoveAppCommand('nextcloud', 'nextcloud-disk', 'new-disk')).toBe(
-      'moveApp nextcloud nextcloud-disk new-disk'
+  it('formats correctly with IDs', () => {
+    expect(buildMoveAppCommand('inst-002', 'DISK001', 'DISK003')).toBe(
+      'moveApp inst-002 DISK001 DISK003'
     );
   });
 
   it('starts with moveApp', () => {
-    const cmd = buildMoveAppCommand('myapp', 'src', 'dst');
+    const cmd = buildMoveAppCommand('inst-001', 'src-id', 'dst-id');
     expect(cmd.startsWith('moveApp ')).toBe(true);
   });
 });
@@ -222,10 +222,10 @@ describe('copyApp', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
 
-    copyApp('ENGINE_001', 'kolibri', 'kolibri-disk', 'target-disk');
+    copyApp('ENGINE_001', 'inst-001', 'DISK001', 'DISK002');
 
     expect(mock).toHaveBeenCalledOnce();
-    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'copyApp kolibri kolibri-disk target-disk');
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'copyApp inst-001 DISK001 DISK002');
   });
 });
 
@@ -237,10 +237,10 @@ describe('moveApp', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
 
-    moveApp('ENGINE_002', 'nextcloud', 'nextcloud-disk', 'new-disk');
+    moveApp('ENGINE_002', 'inst-002', 'DISK001', 'DISK003');
 
     expect(mock).toHaveBeenCalledOnce();
-    expect(mock).toHaveBeenCalledWith('ENGINE_002', 'moveApp nextcloud nextcloud-disk new-disk');
+    expect(mock).toHaveBeenCalledWith('ENGINE_002', 'moveApp inst-002 DISK001 DISK003');
   });
 });
 
