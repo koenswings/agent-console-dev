@@ -45,9 +45,9 @@ export const getEngineTree = (store: Store): EngineTreeNode[] => {
  * Returns all instances for a given store + engineId (pure, no reactive dep).
  */
 export const getInstancesForEngine = (store: Store, engineId: EngineID): import('../types/store').Instance[] => {
-  const disks = Object.values(store.diskDB ?? {}).filter((d) => d.dockedTo === engineId);
-  const diskIds = new Set(disks.map((d) => d.id));
-  return Object.values(store.instanceDB ?? {}).filter((inst) => inst.storedOn != null && diskIds.has(inst.storedOn));
+  const disks = Object.values(store.diskDB ?? {}).filter((d) => String(d.dockedTo) === engineId);
+  const diskIds = new Set(disks.map((d) => String(d.id)));
+  return Object.values(store.instanceDB ?? {}).filter((inst) => inst.storedOn != null && diskIds.has(String(inst.storedOn)));
 };
 
 /**
@@ -64,7 +64,7 @@ export const getInstancesForSelection = (
     case 'engine':
       return getInstancesForEngine(store, selection.id);
     case 'disk':
-      return Object.values(store.instanceDB ?? {}).filter((inst) => inst.storedOn === selection.id);
+      return Object.values(store.instanceDB ?? {}).filter((inst) => String(inst.storedOn) === selection.id);
   }
 };
 
