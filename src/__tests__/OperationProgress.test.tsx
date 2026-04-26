@@ -30,12 +30,14 @@ describe('OperationProgress', () => {
     expect(container.querySelector('.operation-progress')).toBeNull();
   });
 
-  it('renders nothing when all operations are Done', () => {
-    const op = makeOp({ status: 'Done' });
+  it('shows Done operations briefly with done class before auto-dismiss', () => {
+    const op = makeOp({ status: 'Done', progressPercent: 100 });
     const { container } = render(() => (
       <OperationProgress store={storeWith({ [op.id]: op })} />
     ));
-    expect(container.querySelector('.operation-progress')).toBeNull();
+    // Done ops are visible until auto-dismissed after 3s
+    expect(container.querySelector('.operation-card--done')).toBeTruthy();
+    expect(screen.getByText('✓ Done')).toBeInTheDocument();
   });
 
   it('renders a Running operation', () => {

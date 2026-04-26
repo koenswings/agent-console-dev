@@ -3,13 +3,14 @@ import InstanceRow from './InstanceRow';
 import { getInstanceIdsForSelection } from '../store/signals';
 import type { Selection } from './NetworkTree';
 import type { Instance, Engine, Disk, Store } from '../types/store';
+import type { DragAppData } from '../types/drag';
 
 // ---------------------------------------------------------------------------
 // Pure resolvers (operate on store snapshots)
 // ---------------------------------------------------------------------------
 
 const selectionLabel = (selection: Selection, store: Store | null): string => {
-  if (selection.type === 'network') return 'All instances';
+  if (selection.type === 'network') return 'All apps';
   if (selection.type === 'engine' && store) {
     const engine = store.engineDB[selection.id];
     return engine ? engine.hostname : selection.id;
@@ -39,7 +40,7 @@ const resolveBackupDisks = (store: Store | null, instance: Instance | undefined)
   if (!engineId) return [];
   return Object.values(store.diskDB).filter(
     (d) =>
-      d.dockedTo === engineId &&
+      String(d.dockedTo) === String(engineId) &&
       d.device !== null &&
       d.diskTypes?.includes('backup') &&
       d.backupConfig?.links.includes(instance.id)
@@ -54,6 +55,10 @@ interface InstanceListProps {
   selection: Selection;
   /** Accessor for the raw Store — passed from App to avoid coupling to global signal */
   store: () => Store | null;
+  /** Called when a drag starts on an app row. */
+  onDragStart?: (data: DragAppData) => void;
+  /** Called when a drag ends (dropped or cancelled). */
+  onDragEnd?:   () => void;
 }
 
 const InstanceList: Component<InstanceListProps> = (props) => {
@@ -80,7 +85,7 @@ const InstanceList: Component<InstanceListProps> = (props) => {
           when={instanceIds().length > 0}
           fallback={
             <p class="instance-list__empty">
-              No instances
+              No apps
             </p>
           }
         >
@@ -105,6 +110,8 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                     backupDisks={backupDisks}
                     instanceId={id}
                     store={props.store}
+                    onDragStart={props.onDragStart}
+                    onDragEnd={props.onDragEnd}
                   />
                 </Show>
               );

@@ -11,7 +11,7 @@ import AppBrowser from './components/AppBrowser';
 import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
 import OperatorManagement from './components/OperatorManagement';
-import { setSendCommandFn } from './store/commands';
+import { setSendCommandFn, copyApp, moveApp } from './store/commands';
 import {
   currentUser,
   isOperator,
@@ -28,6 +28,7 @@ import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
+import type { DragAppData } from './types/drag';
 
 // ---------------------------------------------------------------------------
 // Which panel to show in the right-hand main content pane.
@@ -37,8 +38,14 @@ type RightPanel = 'empty-disk' | 'backup-disk' | 'instances';
 function rightPanelFor(selection: Selection, store: Store | null): RightPanel {
   if (selection.type !== 'disk' || !store) return 'instances';
   const disk = store.diskDB[selection.id];
-  if (disk?.diskTypes?.includes('empty')) return 'empty-disk';
+  // backup disks always show the restore panel
   if (disk?.diskTypes?.includes('backup')) return 'backup-disk';
+  // Only treat as empty if there are genuinely no instances stored on it.
+  // The Engine sometimes tags a disk 'empty' even after instances are installed.
+  const hasInstances = Object.values(store.instanceDB ?? {}).some(
+    (inst) => String(inst.storedOn) === selection.id
+  );
+  if (!hasInstances && disk?.diskTypes?.includes('empty')) return 'empty-disk';
   return 'instances';
 }
 
@@ -63,6 +70,41 @@ const App: Component = () => {
   const [showLogin, setShowLogin] = createSignal(false);
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
   const [sessionRestored, setSessionRestored] = createSignal(false);
+
+  // ── Drag-and-drop state (lifted here so NetworkTree and InstanceList share it)
+  const [dragData, setDragData] = createSignal<DragAppData | null>(null);
+
+  interface PendingMove {
+    data: DragAppData;
+    targetDiskId: string;
+    targetDiskName: string;
+  }
+  const [pendingMove, setPendingMove] = createSignal<PendingMove | null>(null);
+
+  const handleDrop = (data: DragAppData, targetDiskId: string) => {
+    const s = store();
+    if (!s) return;
+    const targetDisk = s.diskDB[targetDiskId];
+    if (!targetDisk?.dockedTo) return;
+    setPendingMove({ data, targetDiskId, targetDiskName: String(targetDisk.name) });
+  };
+
+  const handleCopyMoveChoice = (op: 'copy' | 'move') => {
+    const pending = pendingMove();
+    if (!pending) return;
+    const s = store();
+    // Command must go to the SOURCE engine — it is the one running rsync
+    const sourceDisk = s?.diskDB[pending.data.sourceDiskId];
+    if (!sourceDisk?.dockedTo) return;
+    const engineId = String(sourceDisk.dockedTo);
+    if (op === 'copy') {
+      copyApp(engineId, pending.data.instanceName, pending.data.sourceDiskId, pending.targetDiskId);
+    } else {
+      moveApp(engineId, pending.data.instanceName, pending.data.sourceDiskId, pending.targetDiskId);
+    }
+    setPendingMove(null);
+    setDragData(null);
+  };
 
   // ── Reactive sync from connection → store / connected signals ─────────────
   createEffect(() => {
@@ -336,7 +378,13 @@ const App: Component = () => {
         {/* Main layout (authenticated) */}
         <Match when={showMainLayout()}>
           <div class="main-layout">
-            <NetworkTree selection={selection()} onSelect={setSelection} store={store} />
+            <NetworkTree
+              selection={selection()}
+              onSelect={setSelection}
+              store={store}
+              dragData={dragData}
+              onDrop={handleDrop}
+            />
             <div class="main-layout__right">
               <OperationProgress store={store} />
               <Switch>
@@ -355,10 +403,34 @@ const App: Component = () => {
                   />
                 </Match>
                 <Match when={true}>
-                  <InstanceList selection={selection()} store={store} />
+                  <InstanceList
+                    selection={selection()}
+                    store={store}
+                    onDragStart={(data) => setDragData(data)}
+                    onDragEnd={() => setDragData(null)}
+                  />
                 </Match>
               </Switch>
             </div>
+
+            {/* Copy/Move modal — shown when an app is dropped onto a disk */}
+            <Show when={pendingMove()}>
+              {(pm) => (
+                <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move">
+                  <div class="copy-move-modal">
+                    <div class="copy-move-modal__title">Copy or Move?</div>
+                    <p class="copy-move-modal__desc">
+                      <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em>
+                    </p>
+                    <div class="copy-move-modal__actions">
+                      <button class="btn" onClick={() => setPendingMove(null)}>Cancel</button>
+                      <button class="btn" onClick={() => handleCopyMoveChoice('move')}>Move</button>
+                      <button class="btn btn--primary" onClick={() => handleCopyMoveChoice('copy')}>Copy</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Show>
           </div>
         </Match>
 

@@ -4,6 +4,8 @@ import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
+import type { DragAppData } from '../types/drag';
+import { DRAG_TYPE } from '../types/drag';
 
 interface InstanceRowProps {
   instance:     () => Instance | undefined;
@@ -15,6 +17,10 @@ interface InstanceRowProps {
   instanceId?:  string;
   /** Reactive store accessor — used for operation locking lookups. */
   store?:       () => Store | null;
+  /** Called when a drag starts on this row. */
+  onDragStart?: (data: DragAppData) => void;
+  /** Called when a drag ends (dropped or cancelled). */
+  onDragEnd?:   () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +90,7 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
         when={m() != null}
         fallback={
           <p class="docker-metrics__unavailable">
-            No metrics — instance is not running.
+            No metrics — app is not running.
           </p>
         }
       >
@@ -153,13 +159,19 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const firstActiveOp = (): Operation | null => activeOps()[0] ?? null;
 
+  // Only show runtime failures on the app row (start/stop/backup/restore).
+  // Copy/move failures are shown in the OperationProgress panel instead.
+  const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp']);
+
   const failedOp = (): Operation | null => {
     if (!props.instanceId || !props.store) return null;
     const store = props.store();
     if (!store) return null;
     if (activeOps().length > 0) return null; // active ops take precedence
     const failed = Object.values(store.operationDB ?? {}).filter(
-      (op) => op.status === 'Failed' && op.args['instanceId'] === props.instanceId
+      (op) => op.status === 'Failed'
+        && op.args['instanceId'] === props.instanceId
+        && RUNTIME_OP_KINDS.has(op.kind)
     );
     if (failed.length === 0) return null;
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
@@ -215,8 +227,31 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
 
+  const dragData = (): DragAppData | null => {
+    const inst = props.instance();
+    const disk = inst?.storedOn ? props.store?.()?.diskDB[String(inst.storedOn)] : undefined;
+    if (!inst || !disk) return null;
+    return {
+      instanceId:     inst.id,
+      instanceName:   inst.name,
+      sourceDiskId:   String(inst.storedOn),
+      sourceDiskName: disk.name,
+    };
+  };
+
   return (
-    <div class="instance-row" role="listitem">
+    <div
+      class="instance-row"
+      role="listitem"
+      draggable={true}
+      onDragStart={(e) => {
+        const data = dragData();
+        if (!data) return;
+        e.dataTransfer?.setData(DRAG_TYPE, JSON.stringify(data));
+        props.onDragStart?.(data);
+      }}
+      onDragEnd={() => props.onDragEnd?.()}
+    >
       {/* ── Main row ─────────────────────────────────────────── */}
       <button
         class="instance-row__status-btn"
@@ -269,7 +304,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--start"
           disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked()}
           onClick={handleStart}
-          title={locked() ? 'Operation in progress' : 'Start instance'}
+          title={locked() ? 'Operation in progress' : 'Start app'}
           aria-label={`Start ${props.instance()?.name}`}
         >
           Start
@@ -279,7 +314,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--stop"
           disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked()}
           onClick={handleStop}
-          title={locked() ? 'Operation in progress' : 'Stop instance'}
+          title={locked() ? 'Operation in progress' : 'Stop app'}
           aria-label={`Stop ${props.instance()?.name}`}
         >
           Stop

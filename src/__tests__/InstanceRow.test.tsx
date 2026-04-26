@@ -462,8 +462,8 @@ const makeRunningOp = (
 
 const makeFailedOp = (instanceId: string, errorMsg = 'Disk write failed'): Operation => ({
   id: 'op-failed-001',
-  kind: 'copyApp',
-  args: { instanceId, sourceDiskId: 'disk-src', targetDiskId: 'disk-tgt' },
+  kind: 'backupApp',
+  args: { instanceId, backupDiskId: 'disk-backup' },
   engineId: 'engine-001',
   status: 'Failed',
   progressPercent: null,

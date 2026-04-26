@@ -115,7 +115,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
           when={linkedInstances().length > 0}
           fallback={
             <p class="restore-panel__empty">
-              No instances configured for backup on this disk.
+              No apps configured for backup on this disk.
             </p>
           }
         >

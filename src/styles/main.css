@@ -2403,3 +2403,153 @@ body {
   font-size: 0.75rem;
   color: var(--colour-text-dim);
 }
+
+/* ── Copy/Move modal ────────────────────────────────────────────────────── */
+.copy-move-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.copy-move-modal {
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: 8px;
+  padding: 24px;
+  width: 340px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+}
+
+.copy-move-modal__title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 12px;
+  color: var(--colour-text);
+}
+
+.copy-move-modal__desc {
+  font-size: 0.875rem;
+  color: var(--colour-text-dim);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.copy-move-modal__desc strong {
+  color: var(--colour-text);
+}
+
+.copy-move-modal__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ── Operation progress panel ───────────────────────────────────────────── */
+.operation-progress {
+  background: var(--colour-surface-alt);
+  border: 1px solid var(--colour-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.operation-progress__header {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--colour-text-dim);
+}
+
+.operation-card {
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: 5px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.operation-card--failed {
+  border-color: var(--colour-danger, #e05);
+}
+
+.operation-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.operation-card__kind {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--colour-text);
+}
+
+.operation-card__status {
+  font-size: 0.75rem;
+  color: var(--colour-text-dim);
+}
+
+.operation-card__args {
+  font-size: 0.78rem;
+  color: var(--colour-text-dim);
+}
+
+.operation-card__progress-bar {
+  height: 4px;
+  background: var(--colour-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.operation-card__progress-fill {
+  height: 100%;
+  background: var(--colour-accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.operation-card__error {
+  font-size: 0.78rem;
+  color: var(--colour-danger, #e05);
+}
+
+/* ── OperationProgress additions ─────────────────────────────────────────── */
+.operation-card--done .operation-card__progress-fill {
+  background: var(--colour-success, #22c55e);
+}
+
+.operation-card--done .operation-card__status {
+  color: var(--colour-success, #22c55e);
+  font-weight: 500;
+}
+
+.operation-card__top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.operation-card__dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--colour-text-dim);
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.operation-card__dismiss:hover {
+  color: var(--colour-danger, #e05);
+}
