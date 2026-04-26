@@ -32,11 +32,8 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- Check if Koen merged PRs #37, #38, #39
-- If merged: set up Playwright e2e tests (config + login flow + demo/real engine switching)
-- If not merged: ask Koen to merge before proceeding
-- The Playwright test setup should build the app and run against http://localhost:5173/
-- Axle's Markov-model design is at agent-engine-dev design/duration-tests.md — use for inspiration
+- main is up to date as of PR #47 (v0.2.3) — login works, empty disk panel redesigned, settings close button removed
+- LoginDebug.tsx removed in PR #48 — main is clean
 
 ## Autonomous testing plan (to implement)
 - Write Playwright e2e tests that actually run the UI
