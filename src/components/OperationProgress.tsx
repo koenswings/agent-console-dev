@@ -6,6 +6,7 @@
  */
 import { For, Show, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import type { Operation, OperationKind, Store } from '../types/store';
+import { cancelOperation } from '../store/commands';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,12 +60,15 @@ interface OpCardProps {
   op: Operation;
   store: Store | null;
   onDismiss: () => void;
+  onCancel: () => void;
 }
 
 const OpCard: Component<OpCardProps> = (props) => {
   const isDone   = () => props.op.status === 'Done';
   const isFailed = () => props.op.status === 'Failed';
   const pct      = () => props.op.progressPercent ?? 0;
+
+  const isActive = () => props.op.status === 'Pending' || props.op.status === 'Running';
 
   // Auto-dismiss Done cards after 3s
   if (isDone()) {
@@ -80,8 +84,11 @@ const OpCard: Component<OpCardProps> = (props) => {
           <span class="operation-card__status">
             {isDone() ? '✓ Done' : props.op.status}
           </span>
+          <Show when={isActive()}>
+            <button class="operation-card__cancel" onClick={props.onCancel} title="Cancel operation" aria-label="Cancel">✕</button>
+          </Show>
           <Show when={isFailed()}>
-            <button class="operation-card__dismiss" onClick={props.onDismiss} aria-label="Dismiss">✕</button>
+            <button class="operation-card__dismiss" onClick={props.onDismiss} title="Dismiss and release lock" aria-label="Dismiss">✕</button>
           </Show>
         </div>
       </div>
@@ -119,6 +126,28 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
     setDismissed((prev) => new Set([...prev, opId]));
   };
 
+  // Resolve which engine to send cancelOperation to (source engine)
+  const engineIdForOp = (op: Operation): string | null => {
+    const s = props.store();
+    if (!s) return null;
+    // Use engineId stored on the op if available
+    if (op.engineId) return String(op.engineId);
+    // Fall back to source disk's engine
+    const srcDiskId = op.args['sourceDiskId'];
+    if (srcDiskId) {
+      const disk = s.diskDB?.[srcDiskId];
+      if (disk?.dockedTo) return String(disk.dockedTo);
+    }
+    return null;
+  };
+
+  const cancel = (op: Operation) => {
+    const engineId = engineIdForOp(op);
+    if (engineId) cancelOperation(engineId, op.id);
+    // Optimistically dismiss from view
+    dismiss(op.id);
+  };
+
   const visibleOps = createMemo((): Operation[] => {
     const db = props.store()?.operationDB;
     if (!db) return [];
@@ -139,7 +168,8 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
             <OpCard
               op={op}
               store={props.store()}
-              onDismiss={() => dismiss(op.id)}
+              onDismiss={() => { cancel(op); }}
+              onCancel={() => cancel(op)}
             />
           )}
         </For>

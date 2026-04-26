@@ -77,6 +77,19 @@ export const ejectDisk = (engineId: string, diskName: string): void => {
 };
 
 // ---------------------------------------------------------------------------
+// Cancel operation
+// ---------------------------------------------------------------------------
+
+/**
+ * Cancel a Pending or Running operation (also releases the resource lock on
+ * Failed ops). Sent to the engine that owns the operation.
+ * Format: "cancelOperation <operationId>"
+ */
+export const cancelOperation = (engineId: string, operationId: string): void => {
+  _sendCommand(engineId, `cancelOperation ${operationId}`);
+};
+
+// ---------------------------------------------------------------------------
 // Backup commands
 // ---------------------------------------------------------------------------
 
