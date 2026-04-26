@@ -183,7 +183,14 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   }
                 }}
               >
-                <span class="tree-item__icon">🖥</span>
+                <span class="tree-item__icon tree-item__icon--engine">
+                  <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13" aria-hidden="true" style="display:block">
+                    <rect x="1" y="2" width="14" height="4" rx="1"/>
+                    <rect x="1" y="8" width="14" height="4" rx="1"/>
+                    <circle cx="12.5" cy="4" r="0.9"/>
+                    <circle cx="12.5" cy="10" r="0.9"/>
+                  </svg>
+                </span>
                 <span class="tree-item__label">{engine()?.hostname}</span>
                 <span class={`tree-item__badge ${online() ? 'tree-item__badge--online' : 'tree-item__badge--offline'}`}>
                   {online() ? 'online' : 'offline'}

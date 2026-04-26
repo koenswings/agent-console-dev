@@ -164,7 +164,7 @@ _(No screenshot — requires a fresh engine with empty userDB. Hard to reproduce
 
 Hierarchical tree:
 1. **🌐 All instances** — top-level row, selects all
-2. **🖥 Engine rows** — hostname + online/offline badge
+2. **⬛ Engine rows** — SVG server rack icon + hostname + online/offline badge (icon reflects headless server, not a desktop monitor)
 3. **💾 Disk rows** (under each engine) — disk name + type badge (app / backup / empty / files / upgrade) + ⏏ eject button (not on backup disks)
 4. **📦 Instance rows** (under each disk) — draggable; drag to another disk triggers Copy/Move modal
 

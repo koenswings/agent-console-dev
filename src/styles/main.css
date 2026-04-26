@@ -356,6 +356,12 @@ body {
 .tree-item__icon {
   font-size: 13px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.tree-item__icon--engine {
+  color: var(--colour-text-muted);
 }
 
 .tree-item__label {
