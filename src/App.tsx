@@ -37,8 +37,14 @@ type RightPanel = 'empty-disk' | 'backup-disk' | 'instances';
 function rightPanelFor(selection: Selection, store: Store | null): RightPanel {
   if (selection.type !== 'disk' || !store) return 'instances';
   const disk = store.diskDB[selection.id];
-  if (disk?.diskTypes?.includes('empty')) return 'empty-disk';
+  // backup disks always show the restore panel
   if (disk?.diskTypes?.includes('backup')) return 'backup-disk';
+  // Only treat as empty if there are genuinely no instances stored on it.
+  // The Engine sometimes tags a disk 'empty' even after instances are installed.
+  const hasInstances = Object.values(store.instanceDB ?? {}).some(
+    (inst) => String(inst.storedOn) === selection.id
+  );
+  if (!hasInstances && disk?.diskTypes?.includes('empty')) return 'empty-disk';
   return 'instances';
 }
 

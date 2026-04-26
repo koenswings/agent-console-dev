@@ -15,10 +15,20 @@ const DISK_TYPE_LABEL: Record<DiskType, string> = {
   files: 'files',
 };
 
-/** Returns the primary display label for a disk based on its diskTypes array. */
-const diskTypeLabel = (disk: Disk): string | null => {
+/**
+ * Returns the primary display label for a disk.
+ * Disks tagged 'empty' that actually have instances are shown as 'app' instead.
+ */
+const diskTypeLabel = (disk: Disk, store: Store | null): string | null => {
   if (!disk.diskTypes || disk.diskTypes.length === 0) return null;
-  return DISK_TYPE_LABEL[disk.diskTypes[0]] ?? null;
+  const raw = DISK_TYPE_LABEL[disk.diskTypes[0]] ?? null;
+  if (raw === 'empty' && store) {
+    const hasInstances = Object.values(store.instanceDB ?? {}).some(
+      (inst) => String(inst.storedOn) === disk.id
+    );
+    if (hasInstances) return 'app';
+  }
+  return raw;
 };
 
 /** Returns true when the eject button should be shown (never on backup disks). */
@@ -138,9 +148,9 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                       >
                         <span class="tree-item__icon">💾</span>
                         <span class="tree-item__label">{disk()?.name}</span>
-                        <Show when={diskTypeLabel(disk()!)}>
-                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!)}`}>
-                            {diskTypeLabel(disk()!)}
+                        <Show when={diskTypeLabel(disk()!, props.store())}>
+                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!, props.store())}`}>
+                            {diskTypeLabel(disk()!, props.store())}
                           </span>
                         </Show>
                         <Show when={canEject(disk()!)}>
