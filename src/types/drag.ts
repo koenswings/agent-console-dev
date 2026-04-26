@@ -4,6 +4,7 @@ export interface DragAppData {
   instanceName:   string;
   sourceDiskId:   string;
   sourceDiskName: string;
+  targetDiskName?: string; // resolved at drop time
 }
 
 export const DRAG_TYPE = 'application/x-idea-instance';

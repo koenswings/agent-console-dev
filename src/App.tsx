@@ -97,9 +97,9 @@ const App: Component = () => {
     if (!targetDisk?.dockedTo) return;
     const engineId = String(targetDisk.dockedTo);
     if (op === 'copy') {
-      copyApp(engineId, pending.data.instanceId, pending.data.sourceDiskId, pending.targetDiskId);
+      copyApp(engineId, pending.data.instanceName, pending.data.sourceDiskName, pending.targetDiskName);
     } else {
-      moveApp(engineId, pending.data.instanceId, pending.data.sourceDiskId, pending.targetDiskId);
+      moveApp(engineId, pending.data.instanceName, pending.data.sourceDiskName, pending.targetDiskName);
     }
     setPendingMove(null);
     setDragData(null);

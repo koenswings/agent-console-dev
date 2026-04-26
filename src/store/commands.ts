@@ -137,42 +137,42 @@ export const createFilesDisk = (
 
 /**
  * Build the "copyApp" command string (pure, no side effects).
- * Format: "copyApp <instanceId> <sourceDiskId> <targetDiskId>"
+ * Format: "copyApp <instanceName> <sourceDiskName> <targetDiskName>"
  */
 export const buildCopyAppCommand = (
-  instanceId: string,
-  sourceDiskId: string,
-  targetDiskId: string
-): string => `copyApp ${instanceId} ${sourceDiskId} ${targetDiskId}`;
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
+): string => `copyApp ${instanceName} ${sourceDiskName} ${targetDiskName}`;
 
 /**
  * Build the "moveApp" command string (pure, no side effects).
- * Format: "moveApp <instanceId> <sourceDiskId> <targetDiskId>"
+ * Format: "moveApp <instanceName> <sourceDiskName> <targetDiskName>"
  */
 export const buildMoveAppCommand = (
-  instanceId: string,
-  sourceDiskId: string,
-  targetDiskId: string
-): string => `moveApp ${instanceId} ${sourceDiskId} ${targetDiskId}`;
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
+): string => `moveApp ${instanceName} ${sourceDiskName} ${targetDiskName}`;
 
 /** Duplicate an instance onto a target disk (new InstanceID). */
 export const copyApp = (
   engineId: string,
-  instanceId: string,
-  sourceDiskId: string,
-  targetDiskId: string
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
 ): void => {
-  _sendCommand(engineId, buildCopyAppCommand(instanceId, sourceDiskId, targetDiskId));
+  _sendCommand(engineId, buildCopyAppCommand(instanceName, sourceDiskName, targetDiskName));
 };
 
 /** Move an instance to a target disk (same InstanceID). */
 export const moveApp = (
   engineId: string,
-  instanceId: string,
-  sourceDiskId: string,
-  targetDiskId: string
+  instanceName: string,
+  sourceDiskName: string,
+  targetDiskName: string
 ): void => {
-  _sendCommand(engineId, buildMoveAppCommand(instanceId, sourceDiskId, targetDiskId));
+  _sendCommand(engineId, buildMoveAppCommand(instanceName, sourceDiskName, targetDiskName));
 };
 
 // ---------------------------------------------------------------------------
