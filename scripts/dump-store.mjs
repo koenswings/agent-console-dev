@@ -12,21 +12,28 @@ const handle = await new Repo({
 await new Promise(r => setTimeout(r, 2000));
 const doc = handle.doc();
 
-const ops = Object.values(doc.operationDB ?? {});
-console.log(`operationDB (${ops.length}):`);
-for (const op of ops) {
-  console.log(`  kind=${String(op.kind)} status=${String(op.status)} progress=${op.progressPercent ?? 0}%`);
-  if (op.error) console.log(`  error: ${String(op.error)}`);
-  if (op.args) console.log(`  args: ${JSON.stringify(op.args)}`);
+// Command queues
+console.log('=== command queues ===');
+for (const [id, e] of Object.entries(doc.engineDB ?? {})) {
+  const cmds = e.commands ?? [];
+  console.log(`  ${String(e.hostname)}: ${cmds.length ? JSON.stringify(cmds) : '(empty)'}`);
 }
 
-// instances on idea01 now?
-const idea01 = Object.entries(doc.engineDB ?? {}).find(([,e]) => e.hostname === 'idea01');
-if (idea01) {
-  const [engineId] = idea01;
-  const diskIds = new Set(Object.values(doc.diskDB ?? {}).filter(d => String(d.dockedTo) === engineId).map(d => String(d.id)));
-  const instances = Object.values(doc.instanceDB ?? {}).filter(i => diskIds.has(String(i.storedOn)));
-  console.log(`\nidea01 instances: ${instances.map(i => String(i.name)).join(', ') || 'none'}`);
+// Operations
+const ops = Object.values(doc.operationDB ?? {});
+console.log(`\n=== operationDB (${ops.length}) ===`);
+for (const op of ops) {
+  console.log(`  ${String(op.kind)} status=${String(op.status)} progress=${op.progressPercent ?? 0}% error=${op.error ?? '-'}`);
+  console.log(`  args: ${JSON.stringify(op.args)}`);
+}
+
+// Source disk of the kolibri-on-idea01 instance
+const instances = doc.instanceDB ?? {};
+console.log('\n=== instances ===');
+for (const [id, inst] of Object.entries(instances)) {
+  const disk = inst?.storedOn ? doc.diskDB?.[String(inst.storedOn)] : null;
+  const eng = disk?.dockedTo ? doc.engineDB?.[String(disk.dockedTo)] : null;
+  console.log(`  ${String(inst?.name)}: storedOn=${String(inst?.storedOn)} engine=${String(eng?.hostname ?? 'none')}`);
 }
 
 process.exit(0);

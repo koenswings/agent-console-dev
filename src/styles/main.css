@@ -2523,3 +2523,33 @@ body {
   font-size: 0.78rem;
   color: var(--colour-danger, #e05);
 }
+
+/* ── OperationProgress additions ─────────────────────────────────────────── */
+.operation-card--done .operation-card__progress-fill {
+  background: var(--colour-success, #22c55e);
+}
+
+.operation-card--done .operation-card__status {
+  color: var(--colour-success, #22c55e);
+  font-weight: 500;
+}
+
+.operation-card__top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.operation-card__dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--colour-text-dim);
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.operation-card__dismiss:hover {
+  color: var(--colour-danger, #e05);
+}
