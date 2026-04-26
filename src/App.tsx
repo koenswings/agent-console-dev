@@ -93,9 +93,10 @@ const App: Component = () => {
     const pending = pendingMove();
     if (!pending) return;
     const s = store();
-    const targetDisk = s?.diskDB[pending.targetDiskId];
-    if (!targetDisk?.dockedTo) return;
-    const engineId = String(targetDisk.dockedTo);
+    // Command must go to the SOURCE engine — it is the one running rsync
+    const sourceDisk = s?.diskDB[pending.data.sourceDiskId];
+    if (!sourceDisk?.dockedTo) return;
+    const engineId = String(sourceDisk.dockedTo);
     if (op === 'copy') {
       copyApp(engineId, pending.data.instanceName, pending.data.sourceDiskId, pending.targetDiskId);
     } else {
