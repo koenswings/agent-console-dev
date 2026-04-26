@@ -159,13 +159,19 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const firstActiveOp = (): Operation | null => activeOps()[0] ?? null;
 
+  // Only show runtime failures on the app row (start/stop/backup/restore).
+  // Copy/move failures are shown in the OperationProgress panel instead.
+  const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp']);
+
   const failedOp = (): Operation | null => {
     if (!props.instanceId || !props.store) return null;
     const store = props.store();
     if (!store) return null;
     if (activeOps().length > 0) return null; // active ops take precedence
     const failed = Object.values(store.operationDB ?? {}).filter(
-      (op) => op.status === 'Failed' && op.args['instanceId'] === props.instanceId
+      (op) => op.status === 'Failed'
+        && op.args['instanceId'] === props.instanceId
+        && RUNTIME_OP_KINDS.has(op.kind)
     );
     if (failed.length === 0) return null;
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
