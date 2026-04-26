@@ -2553,3 +2553,17 @@ body {
 .operation-card__dismiss:hover {
   color: var(--colour-danger, #e05);
 }
+
+.operation-card__cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--colour-text-dim);
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.operation-card__cancel:hover {
+  color: var(--colour-danger, #e05);
+}
