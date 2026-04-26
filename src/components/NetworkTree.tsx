@@ -1,8 +1,10 @@
-import { For, Show, createMemo, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { isEngineOnline } from '../store/signals';
 import { ejectDisk } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import type { Disk, DiskType, Store } from '../types/store';
+import type { DragAppData } from '../types/drag';
+import { DRAG_TYPE } from '../types/drag';
 
 // ---------------------------------------------------------------------------
 // Disk type badge helpers
@@ -48,6 +50,10 @@ interface NetworkTreeProps {
   onSelect: (selection: Selection) => void;
   /** Reactive store accessor — passed from App.tsx */
   store: () => Store | null;
+  /** Current drag payload — set by App when a row drag starts. */
+  dragData: () => DragAppData | null;
+  /** Called when an app is dropped onto a disk. */
+  onDrop: (data: DragAppData, targetDiskId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +67,9 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
   const engineIds = createMemo(() =>
     Object.keys(props.store()?.engineDB ?? {})
   );
+
+  // Local drop-target highlight state
+  const [dropTargetDiskId, setDropTargetDiskId] = createSignal<string | null>(null);
 
   return (
     <nav class="network-tree" aria-label="Network tree">
@@ -132,10 +141,14 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 {(diskId) => {
                   const disk = () => props.store()?.diskDB[diskId] as Disk | undefined;
 
+                  const isDragOver = () => dropTargetDiskId() === diskId;
+                  const isDragTarget = () => props.dragData() !== null
+                    && props.dragData()!.sourceDiskId !== diskId;
+
                   return (
                     <Show when={disk()}>
                       <div
-                        class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''}`}
+                        class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''} ${isDragOver() && isDragTarget() ? 'tree-item--drag-over' : ''}`}
                         role="treeitem"
                         tabIndex={0}
                         aria-selected={isSelected('disk', diskId)}
@@ -143,6 +156,23 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             props.onSelect({ type: 'disk', id: diskId });
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          if (props.dragData() && isDragTarget()) {
+                            e.preventDefault();
+                            setDropTargetDiskId(diskId);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetDiskId() === diskId) setDropTargetDiskId(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDropTargetDiskId(null);
+                          const data = props.dragData();
+                          if (data && data.sourceDiskId !== diskId) {
+                            props.onDrop(data, diskId);
                           }
                         }}
                       >

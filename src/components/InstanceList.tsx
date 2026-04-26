@@ -3,6 +3,7 @@ import InstanceRow from './InstanceRow';
 import { getInstanceIdsForSelection } from '../store/signals';
 import type { Selection } from './NetworkTree';
 import type { Instance, Engine, Disk, Store } from '../types/store';
+import type { DragAppData } from '../types/drag';
 
 // ---------------------------------------------------------------------------
 // Pure resolvers (operate on store snapshots)
@@ -54,6 +55,10 @@ interface InstanceListProps {
   selection: Selection;
   /** Accessor for the raw Store — passed from App to avoid coupling to global signal */
   store: () => Store | null;
+  /** Called when a drag starts on an app row. */
+  onDragStart?: (data: DragAppData) => void;
+  /** Called when a drag ends (dropped or cancelled). */
+  onDragEnd?:   () => void;
 }
 
 const InstanceList: Component<InstanceListProps> = (props) => {
@@ -105,6 +110,8 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                     backupDisks={backupDisks}
                     instanceId={id}
                     store={props.store}
+                    onDragStart={props.onDragStart}
+                    onDragEnd={props.onDragEnd}
                   />
                 </Show>
               );

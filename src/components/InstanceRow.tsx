@@ -4,6 +4,8 @@ import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
+import type { DragAppData } from '../types/drag';
+import { DRAG_TYPE } from '../types/drag';
 
 interface InstanceRowProps {
   instance:     () => Instance | undefined;
@@ -15,6 +17,10 @@ interface InstanceRowProps {
   instanceId?:  string;
   /** Reactive store accessor — used for operation locking lookups. */
   store?:       () => Store | null;
+  /** Called when a drag starts on this row. */
+  onDragStart?: (data: DragAppData) => void;
+  /** Called when a drag ends (dropped or cancelled). */
+  onDragEnd?:   () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,8 +221,31 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
 
+  const dragData = (): DragAppData | null => {
+    const inst = props.instance();
+    const disk = inst?.storedOn ? props.store?.()?.diskDB[String(inst.storedOn)] : undefined;
+    if (!inst || !disk) return null;
+    return {
+      instanceId:     inst.id,
+      instanceName:   inst.name,
+      sourceDiskId:   String(inst.storedOn),
+      sourceDiskName: disk.name,
+    };
+  };
+
   return (
-    <div class="instance-row" role="listitem">
+    <div
+      class="instance-row"
+      role="listitem"
+      draggable={true}
+      onDragStart={(e) => {
+        const data = dragData();
+        if (!data) return;
+        e.dataTransfer?.setData(DRAG_TYPE, JSON.stringify(data));
+        props.onDragStart?.(data);
+      }}
+      onDragEnd={() => props.onDragEnd?.()}
+    >
       {/* ── Main row ─────────────────────────────────────────── */}
       <button
         class="instance-row__status-btn"
