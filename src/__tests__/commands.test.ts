@@ -19,6 +19,7 @@ import {
   moveApp,
   installApp,
   restoreApp,
+  cancelOperation,
 } from '../store/commands';
 
 // ---------------------------------------------------------------------------
@@ -301,5 +302,20 @@ describe('restoreApp', () => {
 
     expect(mock).toHaveBeenCalledOnce();
     expect(mock).toHaveBeenCalledWith('ENGINE_001', 'restoreApp kolibri kolibri-disk');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cancelOperation dispatcher
+// ---------------------------------------------------------------------------
+describe('cancelOperation', () => {
+  it('dispatches the correct command string', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    cancelOperation('ENGINE_001', 'op-abc-123');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'cancelOperation op-abc-123');
   });
 });
