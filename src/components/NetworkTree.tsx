@@ -149,7 +149,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
         }}
       >
         <span class="tree-item__icon">🌐</span>
-        <span class="tree-item__label">All instances</span>
+        <span class="tree-item__label">All apps</span>
       </div>
 
       {/* ── Per-engine rows ──────────────────────────────────────── */}

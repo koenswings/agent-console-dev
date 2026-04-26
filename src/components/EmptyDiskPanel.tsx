@@ -93,7 +93,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
     const ids = selectedInstanceIds();
     if (ids.length === 0) {
-      setError('Select at least one instance to back up.');
+      setError('Select at least one app to back up.');
       return;
     }
 

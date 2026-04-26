@@ -84,7 +84,7 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
         when={m() != null}
         fallback={
           <p class="docker-metrics__unavailable">
-            No metrics — instance is not running.
+            No metrics — app is not running.
           </p>
         }
       >
@@ -269,7 +269,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--start"
           disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked()}
           onClick={handleStart}
-          title={locked() ? 'Operation in progress' : 'Start instance'}
+          title={locked() ? 'Operation in progress' : 'Start app'}
           aria-label={`Start ${props.instance()?.name}`}
         >
           Start
@@ -279,7 +279,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--stop"
           disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked()}
           onClick={handleStop}
-          title={locked() ? 'Operation in progress' : 'Stop instance'}
+          title={locked() ? 'Operation in progress' : 'Stop app'}
           aria-label={`Stop ${props.instance()?.name}`}
         >
           Stop

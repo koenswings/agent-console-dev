@@ -9,7 +9,7 @@ import type { Instance, Engine, Disk, Store } from '../types/store';
 // ---------------------------------------------------------------------------
 
 const selectionLabel = (selection: Selection, store: Store | null): string => {
-  if (selection.type === 'network') return 'All instances';
+  if (selection.type === 'network') return 'All apps';
   if (selection.type === 'engine' && store) {
     const engine = store.engineDB[selection.id];
     return engine ? engine.hostname : selection.id;
@@ -80,7 +80,7 @@ const InstanceList: Component<InstanceListProps> = (props) => {
           when={instanceIds().length > 0}
           fallback={
             <p class="instance-list__empty">
-              No instances
+              No apps
             </p>
           }
         >
