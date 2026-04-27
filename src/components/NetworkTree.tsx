@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { isEngineOnline } from '../store/signals';
-import { ejectDisk } from '../store/commands';
+import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import type { Disk, DiskType, Store } from '../types/store';
 import type { DragAppData } from '../types/drag';
@@ -134,6 +134,20 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 <span class={`tree-item__badge ${online() ? 'tree-item__badge--online' : 'tree-item__badge--offline'}`}>
                   {online() ? 'online' : 'offline'}
                 </span>
+                <button
+                  class="tree-item__reboot-btn"
+                  title={`Reboot ${engine()?.hostname}`}
+                  aria-label={`Reboot engine ${engine()?.hostname}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const eng = engine();
+                    if (eng && confirm(`Reboot ${eng.hostname}?`)) {
+                      rebootEngine(eng.id);
+                    }
+                  }}
+                >
+                  ↺
+                </button>
               </div>
 
               {/* ── Per-disk sub-rows ────────────────────────────── */}

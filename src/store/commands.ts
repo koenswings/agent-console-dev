@@ -77,6 +77,18 @@ export const ejectDisk = (engineId: string, diskName: string): void => {
 };
 
 // ---------------------------------------------------------------------------
+// Reboot engine
+// ---------------------------------------------------------------------------
+
+/**
+ * Send the "reboot" command to the given engine.
+ * The engine will reboot the host OS.
+ */
+export const rebootEngine = (engineId: string): void => {
+  _sendCommand(engineId, 'reboot');
+};
+
+// ---------------------------------------------------------------------------
 // Cancel operation
 // ---------------------------------------------------------------------------
 

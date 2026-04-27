@@ -20,6 +20,7 @@ import {
   installApp,
   restoreApp,
   cancelOperation,
+  rebootEngine,
 } from '../store/commands';
 
 // ---------------------------------------------------------------------------
@@ -317,5 +318,20 @@ describe('cancelOperation', () => {
 
     expect(mock).toHaveBeenCalledOnce();
     expect(mock).toHaveBeenCalledWith('ENGINE_001', 'cancelOperation op-abc-123');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rebootEngine dispatcher
+// ---------------------------------------------------------------------------
+describe('rebootEngine', () => {
+  it('dispatches the reboot command with no args', () => {
+    const mock = vi.fn();
+    setSendCommandFn(mock);
+
+    rebootEngine('ENGINE_001');
+
+    expect(mock).toHaveBeenCalledOnce();
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'reboot');
   });
 });
