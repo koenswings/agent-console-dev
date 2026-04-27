@@ -411,6 +411,30 @@ body {
   color: var(--colour-error);
 }
 
+/* Reboot button on engine rows */
+.tree-item__reboot-btn {
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  margin-left: 4px;
+}
+
+.tree-item:hover .tree-item__reboot-btn {
+  opacity: 1;
+}
+
+.tree-item__reboot-btn:hover {
+  color: var(--colour-warning, #f59e0b);
+}
+
 /* Disk type badge in tree */
 .tree-item__type-badge {
   font-size: var(--font-size-xs);
