@@ -631,6 +631,18 @@ body {
   color: var(--colour-error);
 }
 
+/* Inline error hint on Error-status rows (collapsed) */
+.instance-row__error-hint {
+  font-size: var(--font-size-xs);
+  color: var(--colour-error);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+  opacity: 0.85;
+}
+
 /* --------------------------------------------------------
    Status Dot
    -------------------------------------------------------- */
@@ -1589,6 +1601,23 @@ body {
 
 .instance-details__item--full {
   grid-column: 1 / -1;
+}
+
+.instance-details__item--error dt {
+  color: var(--colour-error);
+}
+
+.instance-details__error-text {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  color: var(--colour-error);
+  background: color-mix(in srgb, var(--colour-error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--colour-error) 20%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
 }
 
 .instance-details dt {

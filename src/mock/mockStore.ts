@@ -214,6 +214,7 @@ const kolibriInstance: Instance = {
   lastBackup: TWO_MINS_AGO,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_1_ID,
+  statusCondition: null,
   metrics: {
     cpuPercent:      1.82,
     memUsageBytes:   312_000_000,
@@ -238,6 +239,7 @@ const nextcloudInstance: Instance = {
   lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
+  statusCondition: null,
   metrics: {
     cpuPercent:      0.41,
     memUsageBytes:   198_000_000,
@@ -262,6 +264,7 @@ const wikipediaInstance: Instance = {
   lastBackup: null,
   lastStarted: TWO_MINS_AGO,
   storedOn: DISK_3_ID,
+  statusCondition: null,
   metrics: null,
 };
 
@@ -276,6 +279,7 @@ const emptyDiskInstance: Instance = {
   lastBackup: null,
   lastStarted: 0,
   storedOn: DISK_3_ID,
+  statusCondition: null,
   metrics: null,
 };
 
@@ -290,6 +294,7 @@ const brokenAppInstance: Instance = {
   lastBackup: null,
   lastStarted: ONE_HOUR_AGO,
   storedOn: DISK_2_ID,
+  statusCondition: 'Docker container exited with code 1. compose up failed: image broken/image:latest not found.',
   metrics: null,
 };
 
