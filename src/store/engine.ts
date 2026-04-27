@@ -166,6 +166,17 @@ export async function createEngineConnection(): Promise<StoreConnection> {
 
     // Subscribe to document changes — fires whenever Automerge syncs new data.
     handle.addListener?.('change', ({ doc: d }: { doc: unknown }) => {
+      const s = d as Store;
+      if (s?.diskDB) {
+        const diskEntries = Object.entries(s.diskDB);
+        console.log('[engine][diag] diskDB count:', diskEntries.length);
+        diskEntries.forEach(([id, disk]) => {
+          const dockedTo = disk?.dockedTo;
+          console.log(`[engine][diag] disk ${id} name=${disk?.name} dockedTo=${JSON.stringify(dockedTo)} type=${typeof dockedTo} constructor=${dockedTo?.constructor?.name}`);
+        });
+        const engineIds = Object.keys(s.engineDB ?? {});
+        console.log('[engine][diag] engineDB ids:', engineIds);
+      }
       setStore(d as Store);
       setConnected(true);
     });
