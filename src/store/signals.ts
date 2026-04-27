@@ -37,7 +37,7 @@ export interface EngineTreeNode {
 export const getEngineTree = (store: Store): EngineTreeNode[] => {
   return Object.values(store.engineDB ?? {}).map((engine) => ({
     engine,
-    disks: Object.values(store.diskDB ?? {}).filter((d) => d.dockedTo === engine.id),
+    disks: Object.values(store.diskDB ?? {}).filter((d) => String(d.dockedTo) === engine.id),
   }));
 };
 
