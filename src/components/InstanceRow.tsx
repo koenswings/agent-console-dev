@@ -297,6 +297,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </div>
           )}
         </Show>
+        <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded()}>
+          <div class="instance-row__error-hint">
+            {props.instance()!.statusCondition}
+          </div>
+        </Show>
       </div>
 
       <div class="instance-row__actions">
@@ -403,6 +408,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               <dt>Last backup</dt>
               <dd>{formatTs(props.instance()?.lastBackup)}</dd>
             </div>
+            <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition}>
+              <div class="instance-details__item instance-details__item--full instance-details__item--error">
+                <dt>Error</dt>
+                <dd class="instance-details__error-text">{props.instance()!.statusCondition}</dd>
+              </div>
+            </Show>
             <Show when={props.app()?.description}>
               <div class="instance-details__item instance-details__item--full">
                 <dt>Description</dt>

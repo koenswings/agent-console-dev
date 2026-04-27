@@ -129,6 +129,12 @@ export interface Instance {
   lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
   lastStarted: Timestamp;
   storedOn: DiskID | null;
+  /**
+   * Human-readable description of why the instance is in Error state.
+   * Written by the Engine when status transitions to 'Error'.
+   * Null when status is not Error or no diagnosis is available.
+   */
+  statusCondition: string | null;
   /** Live Docker container metrics. Null when instance is not Running. */
   metrics: DockerMetrics | null;
 }
