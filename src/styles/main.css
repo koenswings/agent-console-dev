@@ -400,6 +400,7 @@ body {
   flex-shrink: 0;
   line-height: 1;
   opacity: 0;
+  margin-left: auto;
   transition: opacity 0.1s, color 0.1s;
 }
 
@@ -441,7 +442,6 @@ body {
   padding: 1px 5px;
   border-radius: 3px;
   font-weight: 500;
-  margin-left: auto;
   flex-shrink: 0;
   border: 1px solid transparent;
 }
@@ -1508,7 +1508,6 @@ body {
   padding: 1px 5px;
   border-radius: 3px;
   font-weight: 500;
-  margin-left: auto;
   flex-shrink: 0;
   border: 1px solid transparent;
 }

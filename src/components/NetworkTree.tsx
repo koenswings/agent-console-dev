@@ -196,11 +196,6 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                       >
                         <span class="tree-item__icon">💾</span>
                         <span class="tree-item__label">{disk()?.name}</span>
-                        <Show when={diskTypeLabel(disk()!, props.store())}>
-                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!, props.store())}`}>
-                            {diskTypeLabel(disk()!, props.store())}
-                          </span>
-                        </Show>
                         <Show when={canEject(disk()!)}>
                           <button
                             class="tree-item__eject-btn"
@@ -220,6 +215,11 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           >
                             ⏏
                           </button>
+                        </Show>
+                        <Show when={diskTypeLabel(disk()!, props.store())}>
+                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!, props.store())}`}>
+                            {diskTypeLabel(disk()!, props.store())}
+                          </span>
                         </Show>
                       </div>
                     </Show>
