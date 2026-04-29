@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1">
+<title>Mobile mockup — IDEA Console</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #1e293b; font-size: 14px; }
+
+  /* ── Status bar ── */
+  .status-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 13px;
+  }
+  .status-bar__title { font-weight: 600; font-size: 13px; }
+  .status-bar__dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+  .status-bar__host { color: #64748b; font-size: 12px; }
+  .status-bar__demo { background: #fed7aa; color: #9a3412; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; }
+  .status-bar__right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .status-bar__user { font-size: 12px; color: #64748b; }
+  .status-bar__icon-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: #64748b; padding: 2px 4px; }
+
+  /* ── Tab content ── */
+  .tab-content { display: none; height: calc(100vh - 98px); overflow-y: auto; }
+  .tab-content.active { display: block; }
+
+  /* ── App list tab ── */
+  .app-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .app-filter { display: flex; gap: 6px; margin-bottom: 4px; overflow-x: auto; padding-bottom: 2px; }
+  .app-filter__chip {
+    flex-shrink: 0; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
+    border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer;
+  }
+  .app-filter__chip.active { background: #1e40af; color: #fff; border-color: #1e40af; }
+  .app-card {
+    background: #fff; border-radius: 10px; padding: 12px 14px;
+    border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px;
+  }
+  .app-card__top { display: flex; align-items: center; gap: 10px; }
+  .app-card__dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .app-card__dot--running { background: #22c55e; }
+  .app-card__dot--stopped { background: #94a3b8; }
+  .app-card__dot--error   { background: #ef4444; }
+  .app-card__name { font-weight: 600; font-size: 14px; flex: 1; }
+  .app-card__disk { font-size: 11px; color: #94a3b8; margin-left: auto; }
+  .app-card__status { font-size: 11px; color: #64748b; padding-left: 19px; margin-top: -4px; }
+  .app-card__actions { display: flex; gap: 6px; padding-left: 19px; }
+  .btn { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 1px solid transparent; cursor: pointer; }
+  .btn--stop   { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+  .btn--start  { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+  .btn--open   { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+  .btn--backup { background: #faf5ff; color: #7c3aed; border-color: #e9d5ff; }
+  .btn--ghost  { background: #f8fafc; color: #94a3b8; border-color: #e2e8f0; cursor: default; }
+  .app-card__progress { height: 3px; border-radius: 2px; background: #e2e8f0; margin-top: 2px; }
+  .app-card__progress-fill { height: 100%; border-radius: 2px; background: #2563eb; }
+
+  /* ── Network tab ── */
+  .net-section { padding: 8px 0; }
+  .net-header { padding: 8px 14px 4px; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
+  .net-item { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; cursor: pointer; }
+  .net-item:active { background: #f1f5f9; }
+  .net-item--engine { font-weight: 600; background: #fff; }
+  .net-item--disk   { padding-left: 36px; color: #64748b; font-size: 12px; background: #fff; }
+  .net-item__label  { flex: 1; }
+  .net-item__badge  { font-size: 11px; padding: 1px 5px; border-radius: 3px; font-weight: 500; border: 1px solid transparent; }
+  .net-item__badge--app    { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+  .net-item__badge--backup { color: #7c3aed; border-color: #ddd6fe; background: #f5f3ff; }
+  .net-item__badge--empty  { color: #94a3b8; border-color: #e2e8f0; background: #f8fafc; }
+  .net-item__dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .net-item__dot--online  { background: #22c55e; }
+  .net-item__dot--offline { background: #ef4444; }
+  .net-item__chevron { color: #cbd5e1; font-size: 12px; }
+
+  /* ── Activity tab ── */
+  .activity { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .activity__section-title { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+  .op-card { background: #fff; border-radius: 10px; padding: 12px 14px; border: 1px solid #e2e8f0; }
+  .op-card__top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .op-card__name { font-weight: 600; font-size: 13px; }
+  .op-card__status { margin-left: auto; font-size: 11px; color: #64748b; }
+  .op-card__args { font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+  .op-card__bar { height: 4px; border-radius: 2px; background: #e2e8f0; }
+  .op-card__bar-fill { height: 100%; border-radius: 2px; background: #2563eb; }
+  .hist-item { background: #fff; border-radius: 10px; padding: 10px 14px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .hist-item__status { font-size: 14px; flex-shrink: 0; }
+  .hist-item__name { flex: 1; }
+  .hist-item__time { font-size: 11px; color: #94a3b8; }
+  .hist-item--error { border-left: 3px solid #ef4444; }
+  .hist-item__err { font-size: 11px; color: #ef4444; padding: 4px 0 0 22px; }
+  .hist-wrap { display: flex; flex-direction: column; gap: 0; }
+  .hist-wrap .hist-item { border-radius: 0; border-bottom: none; }
+  .hist-wrap .hist-item:first-child { border-radius: 10px 10px 0 0; }
+  .hist-wrap .hist-item:last-child  { border-radius: 0 0 10px 10px; border-bottom: 1px solid #e2e8f0; }
+
+  /* ── Bottom tab bar ── */
+  .tab-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; background: #fff;
+    border-top: 1px solid #e2e8f0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .tab-bar__item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 8px 4px 6px; cursor: pointer; gap: 3px;
+    font-size: 10px; font-weight: 500; color: #94a3b8;
+    border: none; background: none;
+  }
+  .tab-bar__item.active { color: #2563eb; }
+  .tab-bar__icon { font-size: 20px; line-height: 1; }
+  .tab-bar__badge {
+    position: absolute; top: 4px; right: calc(50% - 16px);
+    background: #ef4444; color: #fff; border-radius: 8px;
+    font-size: 9px; font-weight: 700; padding: 1px 4px;
+    min-width: 14px; text-align: center;
+  }
+  .tab-bar__item { position: relative; }
+</style>
+</head>
+<body>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span class="status-bar__title">IDEA Console</span>
+  <span class="status-bar__dot"></span>
+  <span class="status-bar__host">appdocker01</span>
+  <span class="status-bar__demo">DEMO</span>
+  <div class="status-bar__right">
+    <span class="status-bar__user">admin</span>
+    <button class="status-bar__icon-btn">⚙</button>
+  </div>
+</div>
+
+<!-- Tab 1: Apps -->
+<div class="tab-content active" id="tab-apps">
+  <div class="app-list">
+    <div class="app-filter">
+      <div class="app-filter__chip active">All</div>
+      <div class="app-filter__chip">appdocker01</div>
+      <div class="app-filter__chip">appdocker02</div>
+    </div>
+
+    <!-- Running app with backup in progress -->
+    <div class="app-card">
+      <div class="app-card__top">
+        <span class="app-card__dot app-card__dot--running"></span>
+        <span class="app-card__name">Kolibri</span>
+        <span class="app-card__disk">kolibri-disk</span>
+      </div>
+      <div class="app-card__status">Running · CPU 12% · RAM 340 MB</div>
+      <div class="app-card__progress"><div class="app-card__progress-fill" style="width:62%"></div></div>
+      <div style="font-size:11px;color:#64748b;padding-left:19px">Backup running — 62%</div>
+      <div class="app-card__actions">
+        <button class="btn btn--stop">Stop</button>
+        <button class="btn btn--open">Open ↗</button>
+        <button class="btn btn--ghost">Back up</button>
+      </div>
+    </div>
+
+    <!-- Running app -->
+    <div class="app-card">
+      <div class="app-card__top">
+        <span class="app-card__dot app-card__dot--running"></span>
+        <span class="app-card__name">Nextcloud</span>
+        <span class="app-card__disk">nextcloud-disk</span>
+      </div>
+      <div class="app-card__status">Running · CPU 4% · RAM 210 MB</div>
+      <div class="app-card__actions">
+        <button class="btn btn--stop">Stop</button>
+        <button class="btn btn--open">Open ↗</button>
+        <button class="btn btn--backup">Back up</button>
+      </div>
+    </div>
+
+    <!-- Stopped app -->
+    <div class="app-card">
+      <div class="app-card__top">
+        <span class="app-card__dot app-card__dot--stopped"></span>
+        <span class="app-card__name">Wikipedia</span>
+        <span class="app-card__disk">wikipedia-disk</span>
+      </div>
+      <div class="app-card__status">Stopped</div>
+      <div class="app-card__actions">
+        <button class="btn btn--start">Start</button>
+        <button class="btn btn--backup">Back up</button>
+      </div>
+    </div>
+
+    <!-- Error app -->
+    <div class="app-card" style="border-left: 3px solid #ef4444;">
+      <div class="app-card__top">
+        <span class="app-card__dot app-card__dot--error"></span>
+        <span class="app-card__name">broken-app</span>
+        <span class="app-card__disk">kolibri-disk</span>
+      </div>
+      <div class="app-card__status" style="color:#ef4444">Error · Docker compose failed</div>
+      <div class="app-card__actions">
+        <button class="btn btn--start">Restart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 2: Network -->
+<div class="tab-content" id="tab-network">
+  <div class="net-section">
+    <div class="net-header">Network</div>
+    <div class="net-item net-item--engine">
+      <span>🖥</span>
+      <span class="net-item__label">appdocker01</span>
+      <span class="net-item__dot net-item__dot--online"></span>
+    </div>
+    <div class="net-item net-item--disk">
+      <span>💾</span>
+      <span class="net-item__label">kolibri-disk</span>
+      <span class="net-item__badge net-item__badge--app">app</span>
+    </div>
+    <div class="net-item net-item--disk">
+      <span>💾</span>
+      <span class="net-item__label">nextcloud-disk</span>
+      <span class="net-item__badge net-item__badge--app">app</span>
+    </div>
+    <div class="net-item net-item--disk">
+      <span>💾</span>
+      <span class="net-item__label">backup-disk</span>
+      <span class="net-item__badge net-item__badge--backup">backup</span>
+    </div>
+    <div class="net-item net-item--engine" style="margin-top:4px">
+      <span>🖥</span>
+      <span class="net-item__label">appdocker02</span>
+      <span class="net-item__dot net-item__dot--online"></span>
+    </div>
+    <div class="net-item net-item--disk">
+      <span>💾</span>
+      <span class="net-item__label">wikipedia-disk</span>
+      <span class="net-item__badge net-item__badge--app">app</span>
+    </div>
+    <div class="net-item net-item--disk">
+      <span>💾</span>
+      <span class="net-item__label">empty-disk</span>
+      <span class="net-item__badge net-item__badge--empty">empty</span>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 3: Activity -->
+<div class="tab-content" id="tab-activity">
+  <div class="activity">
+    <div class="activity__section-title">Active operations</div>
+    <div class="op-card">
+      <div class="op-card__top">
+        <span class="op-card__name">Back up</span>
+        <span class="op-card__status">Running</span>
+      </div>
+      <div class="op-card__args">kolibri → backup-disk</div>
+      <div class="op-card__bar"><div class="op-card__bar-fill" style="width:62%"></div></div>
+    </div>
+
+    <div class="activity__section-title" style="margin-top:4px">Command history</div>
+    <div class="hist-wrap">
+      <div class="hist-item hist-item--error">
+        <span class="hist-item__status">✗</span>
+        <span class="hist-item__name">upgradeEngine</span>
+        <span class="hist-item__time">1h ago</span>
+      </div>
+      <div style="font-size:11px;color:#ef4444;padding:4px 14px 8px 40px;background:#fff">Upgrade failed: incompatible version</div>
+      <div class="hist-item">
+        <span class="hist-item__status">✓</span>
+        <span class="hist-item__name">copyApp</span>
+        <span class="hist-item__time">28m ago</span>
+      </div>
+      <div class="hist-item">
+        <span class="hist-item__status">✓</span>
+        <span class="hist-item__name">backupApp</span>
+        <span class="hist-item__time">4m ago</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom tab bar -->
+<div class="tab-bar">
+  <button class="tab-bar__item active" onclick="switchTab('apps', this)">
+    <span class="tab-bar__icon">📦</span>
+    Apps
+  </button>
+  <button class="tab-bar__item" onclick="switchTab('network', this)">
+    <span class="tab-bar__icon">🌐</span>
+    Network
+  </button>
+  <button class="tab-bar__item" onclick="switchTab('activity', this)">
+    <span class="tab-bar__badge">1</span>
+    <span class="tab-bar__icon">⚡</span>
+    Activity
+  </button>
+</div>
+
+<script>
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-bar__item').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>
