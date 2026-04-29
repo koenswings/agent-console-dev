@@ -2675,3 +2675,183 @@ body {
 .operation-card__log-toggle:hover { color: var(--colour-text); }
 .operation-card__logs { margin-top: 4px; }
 .operation-card__no-log { font-size: 0.78rem; color: var(--colour-text-dim); padding: 4px 0; }
+
+/* ── Mobile tab bar ── */
+.mobile-layout {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+.mobile-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 60px;
+}
+
+.mobile-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--colour-surface);
+  border-top: 1px solid var(--colour-border);
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.mobile-tab-bar__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px 6px;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  border: none;
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.mobile-tab-bar__item--active {
+  color: #2563eb;
+}
+
+.mobile-tab-bar__icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.mobile-tab-bar__badge {
+  position: absolute;
+  top: 4px;
+  right: calc(50% - 18px);
+  background: #ef4444;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Mobile app cards ── */
+.mobile-app-list {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-filter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-filter-chip {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--colour-border);
+  background: var(--colour-surface);
+  color: var(--colour-text-muted);
+  cursor: pointer;
+}
+
+.mobile-filter-chip--active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.mobile-app-card {
+  background: var(--colour-surface);
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--colour-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-app-card--error {
+  border-left: 3px solid var(--colour-error, #ef4444);
+}
+
+.mobile-app-card__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-app-card__name {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-app-card__disk {
+  font-size: 11px;
+  color: var(--colour-text-dim);
+  flex-shrink: 0;
+}
+
+.mobile-app-card__status {
+  font-size: 12px;
+  color: var(--colour-text-muted);
+  padding-left: 19px;
+}
+
+.mobile-app-card__progress {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--colour-border);
+}
+
+.mobile-app-card__progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #2563eb;
+}
+
+.mobile-app-card__progress-label {
+  font-size: 11px;
+  color: var(--colour-text-muted);
+  padding-left: 19px;
+  margin-top: -4px;
+}
+
+.mobile-app-card__actions {
+  display: flex;
+  gap: 6px;
+  padding-left: 19px;
+  flex-wrap: wrap;
+}
+
+/* On mobile, remove max-height from network tree when in tab context */
+.mobile-network-tab .network-tree {
+  max-height: none;
+  height: 100%;
+}
+
+/* Activity tab */
+.mobile-activity-tab {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

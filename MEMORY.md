@@ -32,7 +32,7 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #57 (v0.2.24) — command log panel merged
+- main is up to date as of PR #58 (v0.2.26) — disk badge alignment + engine status dot merged
   - CommandHistory + LogLines components
   - OperationProgress shows live log for running ops
   - Mock store has running demo operation for screenshots

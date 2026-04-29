@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, Switch, Match, onMount, batch, type Component } from 'solid-js';
+import { createSignal, createEffect, Show, Switch, Match, onMount, onCleanup, batch, type Component } from 'solid-js';
 import pkg from '../package.json';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
@@ -9,6 +9,7 @@ import RestorePanel from './components/RestorePanel';
 import OperationProgress from './components/OperationProgress';
 import CommandHistory from './components/CommandHistory';
 import AppBrowser from './components/AppBrowser';
+import MobileLayout from './components/MobileLayout';
 import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
 import OperatorManagement from './components/OperatorManagement';
@@ -73,6 +74,14 @@ const App: Component = () => {
   const [showLogin, setShowLogin] = createSignal(false);
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
   const [sessionRestored, setSessionRestored] = createSignal(false);
+
+  // ── Mobile breakpoint ─────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = createSignal(window.innerWidth <= 600);
+  onMount(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 600);
+    window.addEventListener('resize', handler);
+    onCleanup(() => window.removeEventListener('resize', handler));
+  });
 
   // ── Drag-and-drop state (lifted here so NetworkTree and InstanceList share it)
   const [dragData, setDragData] = createSignal<DragAppData | null>(null);
@@ -387,62 +396,79 @@ const App: Component = () => {
 
         {/* Main layout (authenticated) */}
         <Match when={showMainLayout()}>
-          <div class="main-layout">
-            <NetworkTree
+          <Show
+            when={isMobile()}
+            fallback={
+              <div class="main-layout">
+                <NetworkTree
+                  selection={selection()}
+                  onSelect={setSelection}
+                  store={store}
+                  dragData={dragData}
+                  onDrop={handleDrop}
+                />
+                <div class="main-layout__right">
+                  <OperationProgress store={store} commandLogStore={commandLogStore} />
+                  <CommandHistory commandLogStore={commandLogStore} />
+                  <Switch>
+                    <Match when={rightPanel() === 'empty-disk'}>
+                      <EmptyDiskPanel
+                        disk={() => store()?.diskDB[selection().id]}
+                        store={store}
+                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                      />
+                    </Match>
+                    <Match when={rightPanel() === 'backup-disk'}>
+                      <RestorePanel
+                        disk={() => store()?.diskDB[selection().id]}
+                        store={store}
+                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                      />
+                    </Match>
+                    <Match when={true}>
+                      <InstanceList
+                        selection={selection()}
+                        store={store}
+                        onDragStart={(data) => setDragData(data)}
+                        onDragEnd={() => setDragData(null)}
+                      />
+                    </Match>
+                  </Switch>
+                </div>
+
+                {/* Copy/Move modal — shown when an app is dropped onto a disk */}
+                <Show when={pendingMove()}>
+                  {(pm) => (
+                    <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move">
+                      <div class="copy-move-modal">
+                        <div class="copy-move-modal__title">Copy or Move?</div>
+                        <p class="copy-move-modal__desc">
+                          <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em>
+                        </p>
+                        <div class="copy-move-modal__actions">
+                          <button class="btn" onClick={() => setPendingMove(null)}>Cancel</button>
+                          <button class="btn" onClick={() => handleCopyMoveChoice('move')}>Move</button>
+                          <button class="btn btn--primary" onClick={() => handleCopyMoveChoice('copy')}>Copy</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Show>
+              </div>
+            }
+          >
+            <MobileLayout
+              store={store}
+              commandLogStore={commandLogStore}
               selection={selection()}
               onSelect={setSelection}
-              store={store}
               dragData={dragData}
               onDrop={handleDrop}
+              pendingMove={pendingMove}
+              onCopyMoveChoice={handleCopyMoveChoice}
+              onCancelMove={() => setPendingMove(null)}
             />
-            <div class="main-layout__right">
-              <OperationProgress store={store} commandLogStore={commandLogStore} />
-              <CommandHistory commandLogStore={commandLogStore} />
-              <Switch>
-                <Match when={rightPanel() === 'empty-disk'}>
-                  <EmptyDiskPanel
-                    disk={() => store()?.diskDB[selection().id]}
-                    store={store}
-                    engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
-                  />
-                </Match>
-                <Match when={rightPanel() === 'backup-disk'}>
-                  <RestorePanel
-                    disk={() => store()?.diskDB[selection().id]}
-                    store={store}
-                    engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
-                  />
-                </Match>
-                <Match when={true}>
-                  <InstanceList
-                    selection={selection()}
-                    store={store}
-                    onDragStart={(data) => setDragData(data)}
-                    onDragEnd={() => setDragData(null)}
-                  />
-                </Match>
-              </Switch>
-            </div>
-
-            {/* Copy/Move modal — shown when an app is dropped onto a disk */}
-            <Show when={pendingMove()}>
-              {(pm) => (
-                <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move">
-                  <div class="copy-move-modal">
-                    <div class="copy-move-modal__title">Copy or Move?</div>
-                    <p class="copy-move-modal__desc">
-                      <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em>
-                    </p>
-                    <div class="copy-move-modal__actions">
-                      <button class="btn" onClick={() => setPendingMove(null)}>Cancel</button>
-                      <button class="btn" onClick={() => handleCopyMoveChoice('move')}>Move</button>
-                      <button class="btn btn--primary" onClick={() => handleCopyMoveChoice('copy')}>Copy</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </Show>
-          </div>
+          </Show>
         </Match>
 
         {/* Unauthenticated main view (default / fallback) */}

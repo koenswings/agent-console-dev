@@ -165,6 +165,28 @@ async function main() {
       console.log('⚠ No command-history element — skipping S5-command-history');
     }
 
+    // Mobile screenshots — shrink viewport to iPhone 14 size
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.waitForTimeout(400);
+    await snap(p, 'S-mobile-apps');   // Tab 1: Apps (default)
+    const mobileNetTab = p.locator('.mobile-tab-bar__item').nth(1);
+    if (await mobileNetTab.count() > 0) {
+      await mobileNetTab.click();
+      await p.waitForTimeout(300);
+      await snap(p, 'S-mobile-network');
+      await p.locator('.mobile-tab-bar__item').nth(2).click();
+      await p.waitForTimeout(300);
+      await snap(p, 'S-mobile-activity');
+      // Return to apps tab
+      await p.locator('.mobile-tab-bar__item').nth(0).click();
+      await p.waitForTimeout(200);
+    } else {
+      console.log('⚠ No mobile tab bar found — skipping mobile screenshots');
+    }
+    // Restore desktop viewport
+    await p.setViewportSize({ width: 1280, height: 800 });
+    await p.waitForTimeout(400);
+
     // S6: Operator management
     await p.locator('.status-bar__operator-mgmt-btn').click();
     await p.locator('.operator-mgmt').waitFor({ timeout: 5_000 });
