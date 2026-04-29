@@ -7,6 +7,7 @@ import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
 import RestorePanel from './components/RestorePanel';
 import OperationProgress from './components/OperationProgress';
+import CommandHistory from './components/CommandHistory';
 import AppBrowser from './components/AppBrowser';
 import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
@@ -28,6 +29,7 @@ import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
+import type { CommandLogStore } from './types/commandLog';
 import type { DragAppData } from './types/drag';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,7 @@ const App: Component = () => {
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
+  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogStore | null>(null);
   const [demo, setDemo] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
@@ -113,6 +116,7 @@ const App: Component = () => {
     setStore(conn.store());
     setConnected(conn.connected());
     setSendCommandFn(conn.sendCommand);
+    setCommandLogStore(conn.commandLogStore());
   });
 
   createEffect(() => {
@@ -125,6 +129,12 @@ const App: Component = () => {
     const conn = connection();
     if (!conn) return;
     setConnected(conn.connected());
+  });
+
+  createEffect(() => {
+    const conn = connection();
+    if (!conn) return;
+    setCommandLogStore(conn.commandLogStore());
   });
 
   // ── Session restore (once per connection, when store first arrives) ───────
@@ -386,7 +396,8 @@ const App: Component = () => {
               onDrop={handleDrop}
             />
             <div class="main-layout__right">
-              <OperationProgress store={store} />
+              <OperationProgress store={store} commandLogStore={commandLogStore} />
+              <CommandHistory commandLogStore={commandLogStore} />
               <Switch>
                 <Match when={rightPanel() === 'empty-disk'}>
                   <EmptyDiskPanel
