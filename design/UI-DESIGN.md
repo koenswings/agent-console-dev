@@ -1,6 +1,6 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.24  
+**Version:** 0.2.27  
 **Date:** 2026-04-29  
 **Author:** Pixel (Console UI Developer)
 
@@ -252,6 +252,46 @@ Each `InstanceRow` shows:
 - Lists all instances linked to this backup disk
 - Per-instance: last backup time, target disk selector, Restore button
 - On submit: success state with [Back]
+
+---
+
+---
+
+## Mobile Layout (≤600px)
+
+**Files:** `src/components/MobileLayout.tsx`, `src/components/MobileAppList.tsx`  
+**When shown:** Automatically on screens ≤600px wide (phones). Desktop layout is unchanged.
+
+On mobile the main layout is replaced by a **bottom tab bar** with three tabs. The status bar remains at the top on all tabs.
+
+### Tab 1 — Apps (default)
+
+![Mobile Apps tab](screenshots/S-mobile-apps.png)
+
+- Full-width app cards — name never truncated
+- Engine filter chips at top to narrow by engine
+- Status dot + name + disk name (right-aligned)
+- Status line (Running · CPU% · RAM) below name
+- Contextual action buttons per status:
+  - Running: **Stop**, **Open ↗**, **Back up** (disabled during active op)
+  - Stopped: **Start**, **Back up**
+  - Error: **Restart**
+- Inline progress bar + label when a backup op is active for that instance
+- Error cards have a red left border
+
+### Tab 2 — Network
+
+![Mobile Network tab](screenshots/S-mobile-network.png)
+
+- Full-screen NetworkTree (no height cap)
+- Same tree structure and behaviour as desktop
+
+### Tab 3 — Activity
+
+![Mobile Activity tab](screenshots/S-mobile-activity.png)
+
+- OperationProgress + CommandHistory stacked vertically
+- Red badge on the tab icon shows count of active operations (Running/Pending)
 
 ---
 
