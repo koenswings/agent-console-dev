@@ -1,7 +1,7 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.1  
-**Date:** 2026-04-25  
+**Version:** 0.2.24  
+**Date:** 2026-04-29  
 **Author:** Pixel (Console UI Developer)
 
 > Screenshots captured automatically with Playwright headless Chromium via `scripts/screenshot-screens.ts`.
@@ -189,7 +189,15 @@ Each `InstanceRow` shows:
 
 **c) Restore Panel** — shown when a backup disk is selected → **Screen 8**
 
-**Operation Progress bar** — thin bar above the right panel, shows active engine operations (install, backup, restore, etc.) with a progress percentage and label.
+**Operation Progress bar** — thin bar above the right panel, shows active engine operations (install, backup, restore, etc.) with a progress percentage and label. Running operations additionally show a **live log panel** (`LogLines`) that streams the command's log output in real time.
+
+**Command History panel** — shown below the Operation Progress bar, above the right-panel content area. Lists recently completed commands (newest first). Each row shows:
+- ✓ / ✗ status icon + command name + time-ago label
+- Click to expand → `LogLines` viewer showing the full captured log for that trace
+- Error message shown inline for failed commands
+- "No command history yet" placeholder when empty
+
+**Files:** `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
 
 ---
 
