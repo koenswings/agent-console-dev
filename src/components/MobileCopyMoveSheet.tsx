@@ -5,10 +5,10 @@
  * Supports Move, Copy (to another app disk) and Back up (to a backup disk).
  */
 import { For, Show, createSignal, createMemo, type Component } from 'solid-js';
-import { copyApp, moveApp, backupApp } from '../store/commands';
+import { copyApp, moveApp } from '../store/commands';
 import type { Store, Instance, Disk } from '../types/store';
 
-type Op = 'copy' | 'move' | 'backup';
+type Op = 'copy' | 'move';
 
 interface TargetDisk {
   disk: Disk;
@@ -54,26 +54,7 @@ const MobileCopyMoveSheet: Component<MobileCopyMoveSheetProps> = (props) => {
       .sort((a, b) => a.engineHostname.localeCompare(b.engineHostname));
   });
 
-  /** Backup disks on the same engine that are linked to this instance */
-  const backupDisks = createMemo((): TargetDisk[] => {
-    const s = props.store();
-    if (!s) return [];
-    const engineId = sourceEngineId();
-    if (!engineId) return [];
-    return Object.values(s.diskDB)
-      .filter(
-        (d) =>
-          d.device !== null &&
-          (d.diskTypes ?? []).includes('backup') &&
-          String(d.dockedTo) === engineId &&
-          d.backupConfig?.links.includes(props.instance.id)
-      )
-      .map((d) => ({ disk: d, engineHostname: diskLabel(d, s) }));
-  });
-
-  const targetDisks = createMemo((): TargetDisk[] =>
-    op() === 'backup' ? backupDisks() : appDisks()
-  );
+  const targetDisks = createMemo((): TargetDisk[] => appDisks());
 
   const selectOp = (next: Op) => {
     setOp(next);
@@ -87,14 +68,11 @@ const MobileCopyMoveSheet: Component<MobileCopyMoveSheetProps> = (props) => {
     const src = sourceDisk();
     if (!diskId || !operation || !engineId) return;
 
-    if (operation === 'copy' && src) {
+    if (!src) return;
+    if (operation === 'copy') {
       copyApp(engineId, props.instance.name, String(src.id), diskId);
-    } else if (operation === 'move' && src) {
+    } else if (operation === 'move') {
       moveApp(engineId, props.instance.name, String(src.id), diskId);
-    } else if (operation === 'backup') {
-      const s = props.store();
-      const targetDisk = s?.diskDB[diskId];
-      if (targetDisk) backupApp(engineId, props.instance.name, String(targetDisk.name));
     }
     props.onClose();
   };
@@ -102,10 +80,8 @@ const MobileCopyMoveSheet: Component<MobileCopyMoveSheetProps> = (props) => {
   const confirmLabel = (): string => {
     const diskName = targetDisks().find((t) => String(t.disk.id) === selectedDiskId())?.disk.name;
     if (!op()) return 'Select an action';
-    if (!diskName) return op() === 'backup' ? 'Back up' : op() === 'move' ? 'Move' : 'Copy';
-    if (op() === 'backup') return `Back up to ${diskName}`;
-    if (op() === 'move') return `Move to ${diskName}`;
-    return `Copy to ${diskName}`;
+    if (!diskName) return op() === 'move' ? 'Move' : 'Copy';
+    return op() === 'move' ? `Move to ${diskName}` : `Copy to ${diskName}`;
   };
 
   const isReady = () => !!selectedDiskId() && !!op();
@@ -139,28 +115,14 @@ const MobileCopyMoveSheet: Component<MobileCopyMoveSheetProps> = (props) => {
           >
             📋 Copy
           </button>
-          <button
-            class={`mobile-sheet__op-btn${op() === 'backup' ? ' mobile-sheet__op-btn--active' : ''}`}
-            onClick={() => selectOp('backup')}
-          >
-            🔒 Back up
-          </button>
         </div>
 
         {/* Target disk list — only shown once an op is selected */}
         <Show when={op()}>
-          <div class="mobile-sheet__section-label">
-            {op() === 'backup' ? 'Backup disk' : 'Target disk'}
-          </div>
+          <div class="mobile-sheet__section-label">Target disk</div>
           <Show
             when={targetDisks().length > 0}
-            fallback={
-              <div class="mobile-sheet__empty">
-                {op() === 'backup'
-                  ? 'No backup disks linked to this instance'
-                  : 'No other app disks available'}
-              </div>
-            }
+            fallback={<div class="mobile-sheet__empty">No other app disks available</div>}
           >
             <div class="mobile-sheet__disk-list">
               <For each={targetDisks()}>

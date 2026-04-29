@@ -2855,6 +2855,12 @@ body {
   height: 100%;
 }
 
+/* On mobile the eject + reboot buttons are always visible (no hover) */
+.mobile-network-tab .tree-item .tree-item__eject-btn,
+.mobile-network-tab .tree-item .tree-item__reboot-btn {
+  opacity: 1 !important;
+}
+
 /* Activity tab */
 .mobile-activity-tab {
   padding: 12px;
