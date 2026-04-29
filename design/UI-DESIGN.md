@@ -1,6 +1,6 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.28  
+**Version:** 0.2.32  
 **Date:** 2026-04-29  
 **Author:** Pixel (Console UI Developer)
 
@@ -290,7 +290,7 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 
 - Full-width app cards — name never truncated
 - Engine filter chips at top to narrow by engine
-- Status dot + name + disk name (right-aligned)
+- Status dot + name + disk name (right-aligned) + **⋯** menu button
 - Status line (Running · CPU% · RAM) below name
 - Contextual action buttons per status:
   - Running: **Stop**, **Open ↗**, **Back up** (disabled during active op)
@@ -299,12 +299,24 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 - Inline progress bar + label when a backup op is active for that instance
 - Error cards have a red left border
 
+**Action sheet** — tap **⋯** on any card to open:
+
+![Mobile action sheet](screenshots/S-mobile-sheet.png)
+
+- Choose **Move** or **Copy**
+- Disk list appears below (app disks, source disk excluded)
+- Confirm button label updates to reflect op + target (e.g. *Copy to nextcloud-disk*)
+- Back up is on the card itself, not duplicated here
+
+**File:** `src/components/MobileCopyMoveSheet.tsx`
+
 ### Tab 2 — Network
 
 ![Mobile Network tab](screenshots/S-mobile-network.png)
 
 - Full-screen NetworkTree (no height cap)
 - Same tree structure and behaviour as desktop
+- **Eject (⏏) and Reboot (↺) buttons always visible** (not hover-only like on desktop)
 
 ### Tab 3 — Activity
 

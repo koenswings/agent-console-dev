@@ -2855,6 +2855,12 @@ body {
   height: 100%;
 }
 
+/* On mobile the eject + reboot buttons are always visible (no hover) */
+.mobile-network-tab .tree-item .tree-item__eject-btn,
+.mobile-network-tab .tree-item .tree-item__reboot-btn {
+  opacity: 1 !important;
+}
+
 /* Activity tab */
 .mobile-activity-tab {
   padding: 12px;
@@ -2862,3 +2868,162 @@ body {
   flex-direction: column;
   gap: 10px;
 }
+
+/* ── Mobile app card ⋯ button ──────────────────────────────────────── */
+.mobile-app-card__more-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--colour-text-dim);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+.mobile-app-card__more-btn:hover { color: var(--colour-text); }
+
+/* ── Mobile copy/move bottom sheet ─────────────────────────────── */
+.mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+}
+
+.mobile-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--colour-surface);
+  border-radius: 16px 16px 0 0;
+  padding: 12px 16px 32px;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.mobile-sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--colour-border);
+  margin: 0 auto 4px;
+}
+
+.mobile-sheet__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mobile-sheet__subtitle {
+  font-size: 13px;
+  color: var(--colour-text-muted);
+  margin-top: -6px;
+}
+
+.mobile-sheet__op-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-sheet__op-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--colour-border);
+  background: var(--colour-surface);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--colour-text-muted);
+  cursor: pointer;
+  text-align: center;
+}
+
+.mobile-sheet__op-btn--active {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.mobile-sheet__section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--colour-text-dim);
+}
+
+.mobile-sheet__disk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--colour-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mobile-sheet__disk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--colour-surface);
+  border: none;
+  border-bottom: 1px solid var(--colour-border);
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+
+.mobile-sheet__disk-row:last-child { border-bottom: none; }
+
+.mobile-sheet__disk-row--selected {
+  background: #eff6ff;
+}
+
+.mobile-sheet__disk-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.mobile-sheet__disk-engine {
+  font-size: 11px;
+  color: var(--colour-text-dim);
+}
+
+.mobile-sheet__check {
+  color: #2563eb;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.mobile-sheet__empty {
+  font-size: 13px;
+  color: var(--colour-text-dim);
+  padding: 12px 0;
+  text-align: center;
+}
+
+.mobile-sheet__confirm {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 10px;
+}
+
+.mobile-sheet__cancel {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  background: none;
+  border: none;
+  color: var(--colour-text-muted);
+  cursor: pointer;
+  border-radius: 10px;
+}
+.mobile-sheet__cancel:hover { background: var(--colour-surface-hover); }

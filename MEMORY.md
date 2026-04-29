@@ -32,7 +32,9 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #59 (v0.2.27) — mobile bottom tab bar merged
+- main is up to date as of PR #61 (v0.2.29)
+  - PR #60: drag-drop highlight + engine name in modal
+  - PR #61: show log on Failed/Done operation cards (matchingTrace fallback fix)
   - CommandHistory + LogLines components
   - OperationProgress shows live log for running ops
   - Mock store has running demo operation for screenshots

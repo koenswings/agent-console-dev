@@ -1,5 +1,6 @@
 import { createSignal, createMemo, For, Show, type Accessor, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
+import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance } from '../store/operations';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
@@ -21,6 +22,7 @@ const formatMB = (bytes: number | null): string => {
 
 const MobileAppList: Component<MobileAppListProps> = (props) => {
   const [selectedEngineId, setSelectedEngineId] = createSignal<string | null>(null);
+  const [copyMoveInstance, setCopyMoveInstance] = createSignal<Instance | null>(null);
 
   const engines = createMemo(() => {
     const s = props.store();
@@ -116,6 +118,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
   };
 
   return (
+    <>
     <div class="mobile-app-list">
       {/* Filter chips */}
       <div class="mobile-filter-chips">
@@ -152,6 +155,12 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 <StatusDot status={inst.status} size={9} />
                 <span class="mobile-app-card__name">{inst.name}</span>
                 <span class="mobile-app-card__disk">{disk()?.name ?? '—'}</span>
+                <button
+                  class="mobile-app-card__more-btn"
+                  title="More actions"
+                  aria-label="More actions"
+                  onClick={() => setCopyMoveInstance(inst)}
+                >⋯</button>
               </div>
 
               <div class="mobile-app-card__status">{statusText(inst)}</div>
@@ -226,6 +235,18 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
         }}
       </For>
     </div>
+
+    {/* Copy/Move bottom sheet */}
+    <Show when={copyMoveInstance()}>
+      {(inst) => (
+        <MobileCopyMoveSheet
+          instance={inst()}
+          store={props.store}
+          onClose={() => setCopyMoveInstance(null)}
+        />
+      )}
+    </Show>
+    </>
   );
 };
 
