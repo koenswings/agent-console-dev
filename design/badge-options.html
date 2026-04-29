@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Disk badge options</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; margin: 0; padding: 24px; display: flex; gap: 20px; flex-wrap: wrap; }
+  h3 { margin: 0 0 10px; font-size: 13px; color: #475569; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .card { background: #fff; border-radius: 10px; padding: 16px; width: 220px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; font-size: 13px; color: #1e293b; }
+  .row:hover { background: #f1f5f9; }
+  .icon { flex-shrink: 0; font-size: 13px; }
+  .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── A: Current (for reference) ─────────── */
+  .a-badge { font-size: 11px; padding: 1px 5px; border-radius: 3px; font-weight: 500; border: 1px solid transparent; }
+  .a-app    { color:#2563eb; border-color:#bfdbfe; background:#eff6ff; }
+  .a-backup { color:#7c3aed; border-color:#ddd6fe; background:#f5f3ff; }
+  .a-empty  { color:#94a3b8; border-color:#e2e8f0; background:#f8fafc; }
+  .a-files  { color:#0891b2; border-color:#bae6fd; background:#f0f9ff; }
+  .a-upgrade{ color:#d97706; border-color:#fde68a; background:#fffbeb; }
+
+  /* ── B: Uniform filled pills, fixed width ─── */
+  .b-badge { font-size: 11px; padding: 2px 0; border-radius: 10px; font-weight: 500; min-width: 52px; text-align: center; }
+  .b-app    { color:#2563eb; background:#dbeafe; }
+  .b-backup { color:#7c3aed; background:#ede9fe; }
+  .b-empty  { color:#64748b; background:#f1f5f9; }
+  .b-files  { color:#0e7490; background:#cffafe; }
+  .b-upgrade{ color:#b45309; background:#fef3c7; }
+
+  /* ── C: Dot only ─────────────────────────── */
+  .c-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .c-app    { background:#2563eb; }
+  .c-backup { background:#7c3aed; }
+  .c-empty  { background:#cbd5e1; }
+  .c-files  { background:#0891b2; }
+  .c-upgrade{ background:#d97706; }
+
+  /* ── D: Icon chip ────────────────────────── */
+  .d-chip { font-size: 12px; padding: 1px 5px; border-radius: 4px; background: #f1f5f9; color: #64748b; display: flex; align-items: center; gap: 3px; }
+  .d-chip span.ico { font-size: 11px; }
+
+  /* ── E: Left-border accent on row ───────── */
+  .e-row { border-left: 3px solid transparent; padding-left: 5px !important; }
+  .e-app    { border-left-color: #2563eb; }
+  .e-backup { border-left-color: #7c3aed; }
+  .e-empty  { border-left-color: #cbd5e1; }
+  .e-files  { border-left-color: #0891b2; }
+  .e-upgrade{ border-left-color: #d97706; }
+  .e-label  { font-size: 10px; color: #94a3b8; font-weight: 500; margin-left: auto; }
+</style>
+</head>
+<body>
+
+<!-- Current -->
+<div class="card">
+  <h3>Current (reference)</h3>
+  <div class="row"><span class="icon">💾</span><span class="label">kolibri-disk</span><span class="a-badge a-app">app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">nextcloud-disk</span><span class="a-badge a-app">app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">wikipedia-disk</span><span class="a-badge a-app">app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">backup-disk</span><span class="a-badge a-backup">backup</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">empty-disk</span><span class="a-badge a-empty">empty</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">files-disk</span><span class="a-badge a-files">files</span></div>
+</div>
+
+<!-- B: Uniform pills -->
+<div class="card">
+  <h3>B — Uniform pills</h3>
+  <p style="font-size:11px;color:#94a3b8;margin:0 0 10px">Fixed width, all filled, consistent padding</p>
+  <div class="row"><span class="icon">💾</span><span class="label">kolibri-disk</span><span class="b-badge b-app">app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">nextcloud-disk</span><span class="b-badge b-app">app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">wikipedia-disk</span><span class="b-badge b-app">app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">backup-disk</span><span class="b-badge b-backup">backup</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">empty-disk</span><span class="b-badge b-empty">empty</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">files-disk</span><span class="b-badge b-files">files</span></div>
+</div>
+
+<!-- C: Dot only -->
+<div class="card">
+  <h3>C — Dot only</h3>
+  <p style="font-size:11px;color:#94a3b8;margin:0 0 10px">Minimal coloured dot, no text</p>
+  <div class="row"><span class="icon">💾</span><span class="label">kolibri-disk</span><span class="c-dot c-app" title="app"></span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">nextcloud-disk</span><span class="c-dot c-app" title="app"></span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">wikipedia-disk</span><span class="c-dot c-app" title="app"></span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">backup-disk</span><span class="c-dot c-backup" title="backup"></span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">empty-disk</span><span class="c-dot c-empty" title="empty"></span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">files-disk</span><span class="c-dot c-files" title="files"></span></div>
+</div>
+
+<!-- D: Icon chip -->
+<div class="card">
+  <h3>D — Icon chip</h3>
+  <p style="font-size:11px;color:#94a3b8;margin:0 0 10px">Emoji icon + short text, neutral grey chip</p>
+  <div class="row"><span class="icon">💾</span><span class="label">kolibri-disk</span><span class="d-chip"><span class="ico">📦</span>app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">nextcloud-disk</span><span class="d-chip"><span class="ico">📦</span>app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">wikipedia-disk</span><span class="d-chip"><span class="ico">📦</span>app</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">backup-disk</span><span class="d-chip"><span class="ico">🔒</span>backup</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">empty-disk</span><span class="d-chip"><span class="ico">⬜</span>empty</span></div>
+  <div class="row"><span class="icon">💾</span><span class="label">files-disk</span><span class="d-chip"><span class="ico">📁</span>files</span></div>
+</div>
+
+<!-- E: Left border accent -->
+<div class="card">
+  <h3>E — Left-border accent</h3>
+  <p style="font-size:11px;color:#94a3b8;margin:0 0 10px">Coloured left border on row, dim text label far right</p>
+  <div class="row e-row e-app"><span class="icon">💾</span><span class="label">kolibri-disk</span><span class="e-label">app</span></div>
+  <div class="row e-row e-app"><span class="icon">💾</span><span class="label">nextcloud-disk</span><span class="e-label">app</span></div>
+  <div class="row e-row e-app"><span class="icon">💾</span><span class="label">wikipedia-disk</span><span class="e-label">app</span></div>
+  <div class="row e-row e-backup"><span class="icon">💾</span><span class="label">backup-disk</span><span class="e-label">backup</span></div>
+  <div class="row e-row e-empty"><span class="icon">💾</span><span class="label">empty-disk</span><span class="e-label">empty</span></div>
+  <div class="row e-row e-files"><span class="icon">💾</span><span class="label">files-disk</span><span class="e-label">files</span></div>
+</div>
+
+</body>
+</html>

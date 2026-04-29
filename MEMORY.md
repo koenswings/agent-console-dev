@@ -32,8 +32,11 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #47 (v0.2.3) — login works, empty disk panel redesigned, settings close button removed
-- LoginDebug.tsx removed in PR #48 — main is clean
+- main is up to date as of PR #57 (v0.2.24) — command log panel merged
+  - CommandHistory + LogLines components
+  - OperationProgress shows live log for running ops
+  - Mock store has running demo operation for screenshots
+  - UI-DESIGN.md updated with 3 new screenshots
 
 ## Autonomous testing plan (to implement)
 - Write Playwright e2e tests that actually run the UI

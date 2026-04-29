@@ -135,9 +135,6 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   </svg>
                 </span>
                 <span class="tree-item__label">{engine()?.hostname}</span>
-                <span class={`tree-item__badge ${online() ? 'tree-item__badge--online' : 'tree-item__badge--offline'}`}>
-                  {online() ? 'online' : 'offline'}
-                </span>
                 <button
                   class="tree-item__reboot-btn"
                   title={`Reboot ${engine()?.hostname}`}
@@ -152,6 +149,11 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 >
                   ↺
                 </button>
+                <span
+                  class={`tree-item__status-dot ${online() ? 'tree-item__status-dot--online' : 'tree-item__status-dot--offline'}`}
+                  title={online() ? 'Online' : 'Offline'}
+                  aria-label={online() ? 'Online' : 'Offline'}
+                />
               </div>
 
               {/* ── Per-disk sub-rows ────────────────────────────── */}
@@ -196,11 +198,6 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                       >
                         <span class="tree-item__icon">💾</span>
                         <span class="tree-item__label">{disk()?.name}</span>
-                        <Show when={diskTypeLabel(disk()!, props.store())}>
-                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!, props.store())}`}>
-                            {diskTypeLabel(disk()!, props.store())}
-                          </span>
-                        </Show>
                         <Show when={canEject(disk()!)}>
                           <button
                             class="tree-item__eject-btn"
@@ -220,6 +217,11 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           >
                             ⏏
                           </button>
+                        </Show>
+                        <Show when={diskTypeLabel(disk()!, props.store())}>
+                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!, props.store())}`}>
+                            {diskTypeLabel(disk()!, props.store())}
+                          </span>
                         </Show>
                       </div>
                     </Show>

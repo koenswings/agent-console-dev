@@ -389,6 +389,16 @@ body {
   color: var(--colour-error);
 }
 
+/* Engine status dot — right-aligned coloured circle */
+.tree-item__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tree-item__status-dot--online  { background: #22c55e; }
+.tree-item__status-dot--offline { background: #ef4444; }
+
 .tree-item__eject-btn {
   font-size: var(--font-size-xs);
   color: var(--colour-text-dim);
@@ -400,6 +410,7 @@ body {
   flex-shrink: 0;
   line-height: 1;
   opacity: 0;
+  margin-left: auto;
   transition: opacity 0.1s, color 0.1s;
 }
 
@@ -423,8 +434,8 @@ body {
   flex-shrink: 0;
   line-height: 1;
   opacity: 0;
+  margin-left: auto;
   transition: opacity 0.1s, color 0.1s;
-  margin-left: 4px;
 }
 
 .tree-item:hover .tree-item__reboot-btn {
@@ -441,7 +452,6 @@ body {
   padding: 1px 5px;
   border-radius: 3px;
   font-weight: 500;
-  margin-left: auto;
   flex-shrink: 0;
   border: 1px solid transparent;
 }
@@ -1508,7 +1518,6 @@ body {
   padding: 1px 5px;
   border-radius: 3px;
   font-weight: 500;
-  margin-left: auto;
   flex-shrink: 0;
   border: 1px solid transparent;
 }
