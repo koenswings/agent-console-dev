@@ -8,6 +8,25 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Persistent Chrome: Status Bar](#persistent-chrome-status-bar)
+- [Screen Inventory](#screen-inventory)
+- [Screen 1: Onboarding](#screen-1-onboarding)
+- [Screen 2: Settings Panel](#screen-2-settings-panel)
+- [Screen 3: First-Time Setup](#screen-3-first-time-setup)
+- [Screen 4: App Browser (Unauthenticated)](#screen-4-app-browser-unauthenticated)
+- [Modal M1: Login Form](#modal-m1-login-form)
+- [Screen 5: Main Layout (Authenticated)](#screen-5-main-layout-authenticated)
+- [Screen 6: Operator Management](#screen-6-operator-management)
+- [Screen 7: Empty Disk Panel](#screen-7-empty-disk-panel)
+- [Screen 8: Restore Panel](#screen-8-restore-panel)
+- [Mobile Layout (≤600px)](#mobile-layout-600px)
+- [Screen Flow Diagram](#screen-flow-diagram)
+
+---
+
 ## Overview
 
 IDEA Console is a web app (also packaged as a Chrome extension) for managing offline educational apps on IDEA Engines in schools. Operators (administrators) manage instances, disks, and users. Non-authenticated visitors can browse and launch apps.
