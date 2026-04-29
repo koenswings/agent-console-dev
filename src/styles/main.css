@@ -334,6 +334,13 @@ body {
   color: var(--colour-text);
 }
 
+.tree-item--drag-over {
+  background: #eff6ff;
+  border-left-color: #2563eb;
+  outline: 1px dashed #93c5fd;
+  outline-offset: -2px;
+}
+
 .tree-item--engine {
   font-weight: 500;
   padding-left: 12px;

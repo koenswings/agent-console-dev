@@ -1,6 +1,6 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.27  
+**Version:** 0.2.28  
 **Date:** 2026-04-29  
 **Author:** Pixel (Console UI Developer)
 
@@ -188,8 +188,9 @@ Hierarchical tree:
 4. **📦 Instance rows** (under each disk) — draggable; drag to another disk triggers Copy/Move modal
 
 **Copy/Move modal** — appears inline in NetworkTree when an instance is dropped on a different disk:
-- Instance name, source disk → target disk
+- Instance name, source disk → target disk **on engine hostname** (e.g. *kolibri* from *src-disk* → *dst-disk* on *idea03*)
 - [Cancel] [Move] [Copy]
+- While dragging, valid target disks highlight with a blue dashed outline
 
 ### Right Panel
 
