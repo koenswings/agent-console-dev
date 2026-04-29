@@ -1,6 +1,6 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.30  
+**Version:** 0.2.31  
 **Date:** 2026-04-29  
 **Author:** Pixel (Console UI Developer)
 
@@ -299,10 +299,13 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 - Inline progress bar + label when a backup op is active for that instance
 - Error cards have a red left border
 
-**Copy/Move bottom sheet** — tap **⋯** on any card to open:
-- Choose Move or Copy
-- Pick a target disk (disk name + engine hostname listed)
-- Tap confirm to execute
+**Action sheet** — tap **⋯** on any card to open:
+
+![Mobile action sheet](screenshots/S-mobile-sheet.png)
+
+- Choose **Move**, **Copy**, or **Back up**
+- Disk list appears below (app disks for Move/Copy; linked backup disks for Back up; source disk excluded)
+- Confirm button label updates to reflect op + target (e.g. *Copy to nextcloud-disk*)
 
 **File:** `src/components/MobileCopyMoveSheet.tsx`
 
