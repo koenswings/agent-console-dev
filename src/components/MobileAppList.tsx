@@ -157,8 +157,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 <span class="mobile-app-card__disk">{disk()?.name ?? '—'}</span>
                 <button
                   class="mobile-app-card__more-btn"
-                  title="Copy or move"
-                  aria-label="Copy or move"
+                  title="More actions"
+                  aria-label="More actions"
                   onClick={() => setCopyMoveInstance(inst)}
                 >⋯</button>
               </div>
