@@ -1,6 +1,6 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.31  
+**Version:** 0.2.32  
 **Date:** 2026-04-29  
 **Author:** Pixel (Console UI Developer)
 
@@ -303,9 +303,10 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 
 ![Mobile action sheet](screenshots/S-mobile-sheet.png)
 
-- Choose **Move**, **Copy**, or **Back up**
-- Disk list appears below (app disks for Move/Copy; linked backup disks for Back up; source disk excluded)
+- Choose **Move** or **Copy**
+- Disk list appears below (app disks, source disk excluded)
 - Confirm button label updates to reflect op + target (e.g. *Copy to nextcloud-disk*)
+- Back up is on the card itself, not duplicated here
 
 **File:** `src/components/MobileCopyMoveSheet.tsx`
 
@@ -315,6 +316,7 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 
 - Full-screen NetworkTree (no height cap)
 - Same tree structure and behaviour as desktop
+- **Eject (⏏) and Reboot (↺) buttons always visible** (not hover-only like on desktop)
 
 ### Tab 3 — Activity
 
