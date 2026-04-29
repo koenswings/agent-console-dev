@@ -76,15 +76,19 @@ const OpCard: Component<OpCardProps> = (props) => {
 
   const [logExpanded, setLogExpanded] = createSignal(false);
 
-  // Find the most recent running trace whose command matches op.kind (case-insensitive)
+  // Find the most relevant trace for this operation.
+  // Prefer a currently-running trace; fall back to the most recent completed/errored
+  // trace so Failed/Done cards still show their logs.
   const matchingTrace = createMemo((): CommandTrace | null => {
     const cls = props.commandLogStore();
     if (!cls) return null;
-    const running = Object.values(cls.traces).filter(
-      (t) => t.status === 'running' && t.command.toLowerCase() === props.op.kind.toLowerCase()
+    const all = Object.values(cls.traces).filter(
+      (t) => t.command.toLowerCase() === props.op.kind.toLowerCase()
     );
-    if (running.length === 0) return null;
-    return running.reduce((a, b) => (b.startedAt > a.startedAt ? b : a));
+    if (all.length === 0) return null;
+    const running = all.filter((t) => t.status === 'running');
+    const candidates = running.length > 0 ? running : all;
+    return candidates.reduce((a, b) => (b.startedAt > a.startedAt ? b : a));
   });
 
   // Auto-dismiss Done cards after 3s
