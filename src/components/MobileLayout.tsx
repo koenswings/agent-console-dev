@@ -13,6 +13,7 @@ interface PendingMove {
   data: DragAppData;
   targetDiskId: string;
   targetDiskName: string;
+  targetEngineHostname: string;
 }
 
 interface MobileLayoutProps {
@@ -101,7 +102,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
             <div class="copy-move-modal">
               <div class="copy-move-modal__title">Copy or Move?</div>
               <p class="copy-move-modal__desc">
-                <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em>
+                <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em> on <em>{pm().targetEngineHostname}</em>
               </p>
               <div class="copy-move-modal__actions">
                 <button class="btn" onClick={props.onCancelMove}>Cancel</button>

@@ -90,6 +90,7 @@ const App: Component = () => {
     data: DragAppData;
     targetDiskId: string;
     targetDiskName: string;
+    targetEngineHostname: string;
   }
   const [pendingMove, setPendingMove] = createSignal<PendingMove | null>(null);
 
@@ -98,7 +99,13 @@ const App: Component = () => {
     if (!s) return;
     const targetDisk = s.diskDB[targetDiskId];
     if (!targetDisk?.dockedTo) return;
-    setPendingMove({ data, targetDiskId, targetDiskName: String(targetDisk.name) });
+    const targetEngine = s.engineDB[String(targetDisk.dockedTo)];
+    setPendingMove({
+      data,
+      targetDiskId,
+      targetDiskName: String(targetDisk.name),
+      targetEngineHostname: targetEngine ? String(targetEngine.hostname) : String(targetDisk.dockedTo),
+    });
   };
 
   const handleCopyMoveChoice = (op: 'copy' | 'move') => {
@@ -443,7 +450,7 @@ const App: Component = () => {
                       <div class="copy-move-modal">
                         <div class="copy-move-modal__title">Copy or Move?</div>
                         <p class="copy-move-modal__desc">
-                          <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em>
+                          <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em> on <em>{pm().targetEngineHostname}</em>
                         </p>
                         <div class="copy-move-modal__actions">
                           <button class="btn" onClick={() => setPendingMove(null)}>Cancel</button>
