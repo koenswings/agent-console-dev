@@ -2620,3 +2620,49 @@ body {
 .operation-card__cancel:hover {
   color: var(--colour-danger, #e05);
 }
+
+/* ── CommandHistory ─────────────────────────────────────────────────────── */
+.command-history {
+  background: var(--colour-surface-alt);
+  border: 1px solid var(--colour-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.command-history__header {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--colour-text-dim);
+  margin-bottom: 6px;
+}
+
+.command-history__empty { font-size: 0.8rem; color: var(--colour-text-dim); padding: 4px 0; }
+.command-history__row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--colour-border); cursor: pointer; }
+.command-history__row:last-child { border-bottom: none; }
+.command-history__row:hover { background: var(--colour-surface); }
+.command-history__status { font-size: 0.85rem; flex-shrink: 0; }
+.command-history__name { font-size: 0.8rem; font-family: monospace; color: var(--colour-text); flex: 1; }
+.command-history__time { font-size: 0.75rem; color: var(--colour-text-dim); flex-shrink: 0; }
+.command-history__error { font-size: 0.75rem; color: var(--colour-danger, #e05); padding: 2px 0 4px 0; }
+.command-history__logs { margin-top: 4px; }
+
+/* ── LogLines ───────────────────────────────────────────────────────────── */
+.log-lines { max-height: 180px; overflow-y: auto; background: var(--colour-surface); border: 1px solid var(--colour-border); border-radius: 4px; padding: 6px 8px; font-family: monospace; font-size: 0.73rem; }
+.log-lines__row { display: flex; gap: 8px; line-height: 1.5; }
+.log-lines__ts { color: var(--colour-text-dim); flex-shrink: 0; }
+.log-lines__msg { color: var(--colour-text); word-break: break-word; }
+.log-lines__msg--warn { color: #f59e0b; }
+.log-lines__msg--error { color: var(--colour-danger, #e05); }
+.log-lines__msg--debug { color: var(--colour-text-dim); }
+
+/* ── OperationProgress log additions ────────────────────────────────────── */
+.operation-card__log-toggle { background: none; border: none; cursor: pointer; font-size: 0.75rem; color: var(--colour-text-dim); padding: 0 2px; line-height: 1; }
+.operation-card__log-toggle:hover { color: var(--colour-text); }
+.operation-card__logs { margin-top: 4px; }
+.operation-card__no-log { font-size: 0.78rem; color: var(--colour-text-dim); padding: 4px 0; }

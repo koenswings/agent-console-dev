@@ -14,6 +14,8 @@ describe('NetworkTree component', () => {
           store={() => MOCK_STORE}
           selection={defaultSelection}
           onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
         />
       ))
     ).not.toThrow();
@@ -25,6 +27,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     expect(container.textContent).toContain('All apps');
@@ -36,6 +40,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     expect(container.textContent).toContain('appdocker01');
@@ -48,6 +54,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const engineItems = container.querySelectorAll('.tree-item--engine');
@@ -60,6 +68,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const diskItems = container.querySelectorAll('.tree-item--disk');
@@ -72,6 +82,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     expect(container.textContent).toContain('kolibri-disk');
@@ -87,6 +99,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const onlineBadges = container.querySelectorAll('.tree-item__badge--online');
@@ -100,6 +114,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={{ type: 'network', id: '' }}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const networkItem = container.querySelector('.tree-item--network');
@@ -112,6 +128,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={{ type: 'engine', id: MOCK_IDS.ENGINE_1_ID }}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const engineItems = container.querySelectorAll('.tree-item--engine');
@@ -128,6 +146,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={(s) => calls.push(s)}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const firstEngine = container.querySelector('.tree-item--engine') as HTMLElement;
@@ -143,6 +163,8 @@ describe('NetworkTree component', () => {
         store={() => MOCK_STORE}
         selection={defaultSelection}
         onSelect={(s) => calls.push(s)}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     const firstDisk = container.querySelector('.tree-item--disk') as HTMLElement;
@@ -157,6 +179,8 @@ describe('NetworkTree component', () => {
         store={() => null}
         selection={defaultSelection}
         onSelect={() => {}}
+          dragData={() => null}
+          onDrop={() => {}}
       />
     ));
     expect(container.textContent).toContain('All apps');

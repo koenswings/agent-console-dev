@@ -7,7 +7,7 @@ import type { Engine } from '../types/store';
 // isEngineOnline
 // ---------------------------------------------------------------------------
 describe('isEngineOnline', () => {
-  it('returns true when lastRun is within the last 2 minutes', () => {
+  it('returns true when lastRun is within the last 90 seconds', () => {
     const engine: Engine = {
       id: 'ENG_001',
       hostname: 'test-engine',
@@ -15,14 +15,14 @@ describe('isEngineOnline', () => {
       hostOS: 'Linux',
       created: Date.now() - 60_000,
       lastBooted: Date.now() - 60_000,
-      lastRun: Date.now() - 30_000,   // 30 seconds ago
+      lastRun: Date.now() - 30_000,   // 30 seconds ago — one heartbeat
       lastHalted: null,
       commands: [],
     };
     expect(isEngineOnline(engine)).toBe(true);
   });
 
-  it('returns false when lastRun is older than 2 minutes', () => {
+  it('returns false when lastRun is older than 90 seconds', () => {
     const engine: Engine = {
       id: 'ENG_002',
       hostname: 'stale-engine',
@@ -30,14 +30,14 @@ describe('isEngineOnline', () => {
       hostOS: 'Linux',
       created: Date.now() - 3_600_000,
       lastBooted: Date.now() - 3_600_000,
-      lastRun: Date.now() - 3 * 60_000,  // 3 minutes ago
+      lastRun: Date.now() - 120_000,  // 2 minutes ago
       lastHalted: null,
       commands: [],
     };
     expect(isEngineOnline(engine)).toBe(false);
   });
 
-  it('returns false when lastRun is exactly 2 minutes ago (boundary)', () => {
+  it('returns false when lastRun is exactly 90 seconds ago (boundary)', () => {
     const engine: Engine = {
       id: 'ENG_003',
       hostname: 'boundary-engine',
@@ -45,11 +45,11 @@ describe('isEngineOnline', () => {
       hostOS: 'Linux',
       created: Date.now() - 3_600_000,
       lastBooted: Date.now() - 3_600_000,
-      lastRun: Date.now() - 2 * 60_000,  // exactly 2 minutes
+      lastRun: Date.now() - 90_000,  // exactly 90 seconds
       lastHalted: null,
       commands: [],
     };
-    // Date.now() - 2*60*1000 equals twoMinutesAgo, so it is NOT > twoMinutesAgo
+    // lastRun === ninetySecondsAgo, so NOT > ninetySecondsAgo
     expect(isEngineOnline(engine)).toBe(false);
   });
 

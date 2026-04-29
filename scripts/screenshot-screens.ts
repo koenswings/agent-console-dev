@@ -133,6 +133,38 @@ async function main() {
       console.log('⚠ No backup disk in demo data — skipping S8');
     }
 
+    // S5-ops: Operation progress + live log panel
+    // First go back to All instances view to make sure OperationProgress is visible
+    await p.locator('.tree-item--network').click();
+    await p.waitForTimeout(400);
+    const opProgress = p.locator('.operation-progress');
+    if (await opProgress.count() > 0) {
+      // Expand the log on the running operation card
+      const logToggle = p.locator('.operation-card__log-toggle').first();
+      if (await logToggle.count() > 0) {
+        await logToggle.click();
+        await p.waitForTimeout(300);
+      }
+      await snap(p, 'S5-operation-progress');
+    } else {
+      console.log('⚠ No operation-progress element — skipping S5-operation-progress');
+    }
+
+    // S5-command-history: Command history panel (collapsed and expanded)
+    const cmdHistory = p.locator('.command-history');
+    if (await cmdHistory.count() > 0) {
+      await snap(p, 'S5-command-history');
+      // Expand the first trace row
+      const firstRow = p.locator('.command-history__row').first();
+      if (await firstRow.count() > 0) {
+        await firstRow.click();
+        await p.waitForTimeout(300);
+        await snap(p, 'S5-command-history-expanded');
+      }
+    } else {
+      console.log('⚠ No command-history element — skipping S5-command-history');
+    }
+
     // S6: Operator management
     await p.locator('.status-bar__operator-mgmt-btn').click();
     await p.locator('.operator-mgmt').waitFor({ timeout: 5_000 });

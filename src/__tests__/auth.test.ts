@@ -50,6 +50,7 @@ const makeStore = (users: User[] = []): Store => ({
   diskDB: {},
   appDB: {},
   instanceDB: {},
+  operationDB: {},
   userDB: Object.fromEntries(users.map((u) => [u.id, u])),
 });
 

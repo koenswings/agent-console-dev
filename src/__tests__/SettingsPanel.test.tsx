@@ -50,6 +50,7 @@ const makeConnection = (): StoreConnection => ({
   connected: () => true,
   sendCommand: vi.fn(),
   changeDoc: vi.fn((fn) => fn(makeStore())),
+  commandLogStore: () => null,
 });
 
 const makeUser = (overrides: Partial<User> = {}): User => ({

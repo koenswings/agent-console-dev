@@ -8,6 +8,7 @@ import type {
   Instance,
   BackupMode,
 } from '../types/store';
+import type { CommandLogStore } from '../types/commandLog';
 
 // ---------------------------------------------------------------------------
 // StoreConnection interface — shared by mock and real store implementations
@@ -17,6 +18,7 @@ export interface StoreConnection {
   connected: Accessor<boolean>;
   sendCommand: (engineId: string, command: string) => void;
   changeDoc: (fn: (doc: Store) => void) => void;
+  commandLogStore: Accessor<CommandLogStore | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +41,7 @@ const engine1: Engine = {
   hostOS: 'Linux',
   created: ONE_HOUR_AGO,
   lastBooted: ONE_HOUR_AGO,
-  lastRun: NOW - 30 * 1000,       // 30 seconds ago — online
+  lastRun: NOW - 5 * 1000,        // 5 seconds ago — online
   lastHalted: null,
   commands: [],
 };
@@ -51,7 +53,7 @@ const engine2: Engine = {
   hostOS: 'Linux',
   created: ONE_HOUR_AGO,
   lastBooted: ONE_HOUR_AGO,
-  lastRun: NOW - 45 * 1000,       // 45 seconds ago — online
+  lastRun: NOW - 10 * 1000,       // 10 seconds ago — online
   lastHalted: null,
   commands: [],
 };
@@ -338,7 +340,86 @@ export const MOCK_STORE: Store = {
       created: 0,
     },
   },
-  operationDB: {},
+  operationDB: {
+    'op-demo-001': {
+      id: 'op-demo-001',
+      kind: 'backupApp' as const,
+      args: { instanceName: 'kolibri', targetDiskName: 'backup-disk' },
+      engineId: ENGINE_1_ID,
+      status: 'Running' as const,
+      progressPercent: 62,
+      startedAt: Date.now() - 45 * 1000,
+      completedAt: null,
+      error: null,
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Mock CommandLogStore
+// ---------------------------------------------------------------------------
+const CL_NOW = Date.now();
+const mockCommandLogData: CommandLogStore = {
+  traces: {
+    'trace-001': {
+      traceId: 'trace-001',
+      command: 'backupApp',
+      args: JSON.stringify({ instanceId: INST_KOLIBRI_ID }),
+      startedAt: CL_NOW - 5 * 60 * 1000,
+      completedAt: CL_NOW - 4 * 60 * 1000,
+      status: 'ok',
+      errorMessage: null,
+      logs: [
+        { level: 'log', message: 'Starting backup of kolibri…', timestamp: CL_NOW - 5 * 60 * 1000 },
+        { level: 'debug', message: 'Compressing data directory (1.2 GB)', timestamp: CL_NOW - 4.8 * 60 * 1000 },
+        { level: 'log', message: 'Transferred to backup-disk', timestamp: CL_NOW - 4.2 * 60 * 1000 },
+        { level: 'log', message: 'Backup complete.', timestamp: CL_NOW - 4 * 60 * 1000 },
+      ],
+    },
+    'trace-002': {
+      traceId: 'trace-002',
+      command: 'copyApp',
+      args: JSON.stringify({ instanceId: INST_NEXTCLOUD_ID, targetDiskId: DISK_3_ID }),
+      startedAt: CL_NOW - 30 * 60 * 1000,
+      completedAt: CL_NOW - 28 * 60 * 1000,
+      status: 'ok',
+      errorMessage: null,
+      logs: [
+        { level: 'log', message: 'Initiating copy: nextcloud → wikipedia-disk', timestamp: CL_NOW - 30 * 60 * 1000 },
+        { level: 'debug', message: 'rsync started', timestamp: CL_NOW - 29.5 * 60 * 1000 },
+        { level: 'log', message: 'Transferred 2.1 GB', timestamp: CL_NOW - 29 * 60 * 1000 },
+        { level: 'log', message: 'Copy complete.', timestamp: CL_NOW - 28 * 60 * 1000 },
+      ],
+    },
+    'trace-003': {
+      traceId: 'trace-003',
+      command: 'upgradeEngine',
+      args: JSON.stringify({}),
+      startedAt: CL_NOW - 2 * 60 * 60 * 1000,
+      completedAt: CL_NOW - 2 * 60 * 60 * 1000 + 5 * 60 * 1000,
+      status: 'error',
+      errorMessage: 'Upgrade failed: incompatible version',
+      logs: [
+        { level: 'log', message: 'Downloading engine update…', timestamp: CL_NOW - 2 * 60 * 60 * 1000 },
+        { level: 'warn', message: 'Version mismatch detected', timestamp: CL_NOW - 2 * 60 * 60 * 1000 + 2 * 60 * 1000 },
+        { level: 'error', message: 'Upgrade failed: incompatible version', timestamp: CL_NOW - 2 * 60 * 60 * 1000 + 5 * 60 * 1000 },
+      ],
+    },
+    'trace-004': {
+      traceId: 'trace-004',
+      command: 'backupApp',
+      args: JSON.stringify({ instanceId: INST_NEXTCLOUD_ID }),
+      startedAt: CL_NOW - 30 * 1000,
+      completedAt: null,
+      status: 'running',
+      errorMessage: null,
+      logs: [
+        { level: 'log', message: 'Starting backup of nextcloud…', timestamp: CL_NOW - 30 * 1000 },
+        { level: 'log', message: 'Compressing data directory…', timestamp: CL_NOW - 15 * 1000 },
+      ],
+    },
+  },
+  recentTraceIds: ['trace-001', 'trace-002', 'trace-003', 'trace-004'],
 };
 
 // ---------------------------------------------------------------------------
@@ -410,7 +491,9 @@ export function createMockConnection(): StoreConnection {
     });
   };
 
-  return { store, connected, sendCommand, changeDoc };
+  const [commandLogStore] = createSignal<CommandLogStore | null>(mockCommandLogData);
+
+  return { store, connected, sendCommand, changeDoc, commandLogStore };
 }
 
 // ---------------------------------------------------------------------------

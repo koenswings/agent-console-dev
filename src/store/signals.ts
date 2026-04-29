@@ -17,12 +17,13 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true when the engine has been seen within the last 2 minutes.
- * The Engine writes lastRun on each heartbeat tick.
+ * Returns true when the engine has been seen within the last 90 seconds.
+ * The Engine heartbeats every 30 s; 90 s (3×) gives tolerance for jitter.
+ * Pass `now` (e.g. from a reactive clock signal) so the comparison is reactive.
  */
-export const isEngineOnline = (engine: Engine): boolean => {
-  const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-  return engine.lastRun > twoMinutesAgo;
+export const isEngineOnline = (engine: Engine, now: number = Date.now()): boolean => {
+  const ninetySecondsAgo = now - 90 * 1000;
+  return engine.lastRun > ninetySecondsAgo;
 };
 
 export interface EngineTreeNode {

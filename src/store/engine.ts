@@ -12,6 +12,7 @@
 import { createSignal } from 'solid-js';
 import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
+import { createCommandLogConnection } from './commandLog';
 
 const ENGINE_WS_PORT = 4321;
 const STORAGE_KEY_HOSTNAME = 'engineHostname';
@@ -129,7 +130,7 @@ export async function createEngineConnection(): Promise<StoreConnection> {
 
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
-      return { store, connected, sendCommand: noopSend, changeDoc: noopChange };
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => null };
     }
 
     // --- Connect via Automerge WebSocket ---
@@ -156,6 +157,9 @@ export async function createEngineConnection(): Promise<StoreConnection> {
     await adapter.whenReady();
     setConnected(true);
     console.log('[engine] WS ready — waiting for document sync');
+
+    // Connect to the command-log doc (same WS repo, separate Automerge doc)
+    const commandLogStore = await createCommandLogConnection(hostname, repo);
 
     // If the doc is already ready (cached / fast server), apply it immediately.
     const initialDoc = handle.doc();
@@ -189,10 +193,10 @@ export async function createEngineConnection(): Promise<StoreConnection> {
       handle.change(fn);
     };
 
-    return { store, connected, sendCommand, changeDoc };
+    return { store, connected, sendCommand, changeDoc, commandLogStore };
   } catch (err) {
     console.error('[engine] Failed to connect:', err);
     setConnected(false);
-    return { store, connected, sendCommand: noopSend, changeDoc: noopChange };
+    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => null };
   }
 }

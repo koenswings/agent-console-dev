@@ -5,8 +5,11 @@
  * - Failed: shown with error, dismissed manually
  */
 import { For, Show, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
+import type { Accessor } from 'solid-js';
 import type { Operation, OperationKind, Store } from '../types/store';
+import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import { cancelOperation } from '../store/commands';
+import LogLines from './LogLines';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,6 +62,7 @@ const argsSummary = (op: Operation, store: Store | null): string => {
 interface OpCardProps {
   op: Operation;
   store: Store | null;
+  commandLogStore: Accessor<CommandLogStore | null>;
   onDismiss: () => void;
   onCancel: () => void;
 }
@@ -69,6 +73,19 @@ const OpCard: Component<OpCardProps> = (props) => {
   const pct      = () => props.op.progressPercent ?? 0;
 
   const isActive = () => props.op.status === 'Pending' || props.op.status === 'Running';
+
+  const [logExpanded, setLogExpanded] = createSignal(false);
+
+  // Find the most recent running trace whose command matches op.kind (case-insensitive)
+  const matchingTrace = createMemo((): CommandTrace | null => {
+    const cls = props.commandLogStore();
+    if (!cls) return null;
+    const running = Object.values(cls.traces).filter(
+      (t) => t.status === 'running' && t.command.toLowerCase() === props.op.kind.toLowerCase()
+    );
+    if (running.length === 0) return null;
+    return running.reduce((a, b) => (b.startedAt > a.startedAt ? b : a));
+  });
 
   // Auto-dismiss Done cards after 3s
   if (isDone()) {
@@ -84,6 +101,13 @@ const OpCard: Component<OpCardProps> = (props) => {
           <span class="operation-card__status">
             {isDone() ? '✓ Done' : props.op.status}
           </span>
+          <button
+            class="operation-card__log-toggle"
+            title={logExpanded() ? 'Hide log' : 'Show log'}
+            onClick={() => setLogExpanded((v) => !v)}
+          >
+            {logExpanded() ? '▲' : '▼'}
+          </button>
           <Show when={isActive()}>
             <button class="operation-card__cancel" onClick={props.onCancel} title="Cancel operation" aria-label="Cancel">✕</button>
           </Show>
@@ -106,6 +130,17 @@ const OpCard: Component<OpCardProps> = (props) => {
       <Show when={isFailed() && props.op.error}>
         <div class="operation-card__error">{props.op.error}</div>
       </Show>
+
+      <Show when={logExpanded()}>
+        <div class="operation-card__logs">
+          <Show
+            when={matchingTrace()}
+            fallback={<div class="operation-card__no-log">No log available</div>}
+          >
+            {(trace) => <LogLines logs={trace().logs} />}
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 };
@@ -116,6 +151,7 @@ const OpCard: Component<OpCardProps> = (props) => {
 
 interface OperationProgressProps {
   store: () => Store | null;
+  commandLogStore: Accessor<CommandLogStore | null>;
 }
 
 const OperationProgress: Component<OperationProgressProps> = (props) => {
@@ -168,6 +204,7 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
             <OpCard
               op={op}
               store={props.store()}
+              commandLogStore={props.commandLogStore}
               onDismiss={() => { cancel(op); }}
               onCancel={() => cancel(op)}
             />

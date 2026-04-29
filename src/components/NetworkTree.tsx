@@ -1,5 +1,9 @@
-import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import { isEngineOnline } from '../store/signals';
+
+// Reactive clock — ticks every 15 s so online badges flip promptly
+const [now, setNow] = createSignal(Date.now());
+const _clockInterval = setInterval(() => setNow(Date.now()), 15_000);
 import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import type { Disk, DiskType, Store } from '../types/store';
@@ -98,7 +102,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           const engine = () => props.store()?.engineDB[engineId];
           const online = () => {
             const e = engine();
-            return e ? isEngineOnline(e) : false;
+            return e ? isEngineOnline(e, now()) : false;
           };
 
           // Disk IDs docked to this engine
