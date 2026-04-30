@@ -436,6 +436,7 @@ const App: Component = () => {
                       <InstanceList
                         selection={selection()}
                         store={store}
+                        commandLogStore={commandLogStore}
                         onDragStart={(data) => setDragData(data)}
                         onDragEnd={() => setDragData(null)}
                       />

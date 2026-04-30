@@ -1,22 +1,27 @@
-import { Show, For, createSignal, createEffect, onCleanup, type Component } from 'solid-js';
+import { Show, For, createSignal, createEffect, createMemo, onCleanup, type Component } from 'solid-js';
+import type { Accessor } from 'solid-js';
 import StatusDot from './StatusDot';
+import LogLines from './LogLines';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
+import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 
 interface InstanceRowProps {
-  instance:     () => Instance | undefined;
-  app:          () => App | undefined;
-  engine:       () => Engine | undefined;
+  instance:         () => Instance | undefined;
+  app:              () => App | undefined;
+  engine:           () => Engine | undefined;
   /** Backup disks docked on the same engine and linked to this instance. */
-  backupDisks?: () => Disk[];
+  backupDisks?:     () => Disk[];
   /** The instance ID — used for operation locking lookups. */
-  instanceId?:  string;
+  instanceId?:      string;
   /** Reactive store accessor — used for operation locking lookups. */
-  store?:       () => Store | null;
+  store?:           () => Store | null;
+  /** Command log store — used for showing recent trace logs in expanded view. */
+  commandLogStore?: Accessor<CommandLogStore | null>;
   /** Called when a drag starts on this row. */
   onDragStart?: (data: DragAppData) => void;
   /** Called when a drag ends (dropped or cancelled). */
@@ -133,6 +138,7 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
 const InstanceRow: Component<InstanceRowProps> = (props) => {
   const [expanded, setExpanded] = createSignal(false);
   const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [pendingAction, setPendingAction] = createSignal<'starting' | 'stopping' | null>(null);
   let pickerRef: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -144,6 +150,17 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     };
     document.addEventListener('mousedown', handleDocClick);
     onCleanup(() => document.removeEventListener('mousedown', handleDocClick));
+  });
+
+  // Clear pending start/stop once the instance reaches its expected state
+  createEffect(() => {
+    const status = props.instance()?.status;
+    if (pendingAction() === 'starting' && (status === 'Running' || status === 'Error')) {
+      setPendingAction(null);
+    }
+    if (pendingAction() === 'stopping' && (status === 'Stopped' || status === 'Docked' || status === 'Error')) {
+      setPendingAction(null);
+    }
   });
 
   // ── Operation locking ────────────────────────────────────────────────────
@@ -177,6 +194,25 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
   };
 
+  // Most recent CommandTrace for this instance — matched by instanceId or instanceName in args
+  const recentTrace = createMemo((): CommandTrace | null => {
+    if (!props.commandLogStore) return null;
+    const cls = props.commandLogStore();
+    if (!cls) return null;
+    const instanceId = props.instanceId;
+    const instanceName = props.instance()?.name;
+    const candidates = Object.values(cls.traces).filter((t) => {
+      try {
+        const args = JSON.parse(t.args) as Record<string, string>;
+        return args['instanceId'] === instanceId || args['instanceName'] === instanceName;
+      } catch {
+        return false;
+      }
+    });
+    if (candidates.length === 0) return null;
+    return candidates.reduce((a, b) => (b.startedAt > a.startedAt ? b : a));
+  });
+
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleStart = () => {
@@ -185,6 +221,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const disk = inst?.storedOn;
     if (!engine || !inst || !disk) return;
     startInstance(engine.id, inst.name, disk);
+    setPendingAction('starting');
   };
 
   const handleStop = () => {
@@ -193,6 +230,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const disk = inst?.storedOn;
     if (!engine || !inst || !disk) return;
     stopInstance(engine.id, inst.name, disk);
+    setPendingAction('stopping');
   };
 
   const handleBackup = () => {
@@ -296,6 +334,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               </div>
             </div>
           )}
+        </Show>
+        <Show when={pendingAction() && !firstActiveOp()}>
+          <div class="instance-row__progress instance-row__progress--indeterminate">
+            <div class="instance-row__progress-label">
+              {pendingAction() === 'starting' ? 'Starting…' : 'Stopping…'}
+            </div>
+            <div class="instance-row__progress-bar">
+              <div class="instance-row__progress-fill" />
+            </div>
+          </div>
         </Show>
         <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded()}>
           <div class="instance-row__error-hint">
@@ -423,6 +471,17 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           </dl>
 
           <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
+
+          <Show when={recentTrace()}>
+            {(trace) => (
+              <div class="instance-row__trace-logs">
+                <div class="instance-row__trace-logs-title">
+                  {trace().command} — {trace().status === 'running' ? 'Running' : trace().status === 'ok' ? '✓ Done' : '✗ Failed'}
+                </div>
+                <LogLines logs={trace().logs} />
+              </div>
+            )}
+          </Show>
         </div>
       </Show>
     </div>

@@ -40,6 +40,10 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
     <div class="command-history">
       <div class="command-history__header">Command History</div>
       <Show
+        when={props.commandLogStore() !== null}
+        fallback={<div class="command-history__empty">Loading…</div>}
+      >
+      <Show
         when={finishedTraces().length > 0}
         fallback={<div class="command-history__empty">No command history yet</div>}
       >
@@ -66,6 +70,7 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
             </>
           )}
         </For>
+      </Show>
       </Show>
     </div>
   );

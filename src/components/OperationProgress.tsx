@@ -34,7 +34,7 @@ const argsSummary = (op: Operation, store: Store | null): string => {
     : String(op.args['instanceName'] ?? '');
   if (instanceName) parts.push(instanceName);
 
-  // Disk labels — resolve engine hostname from disk ID, fall back to disk name or raw field
+  // Disk labels — show "<diskName> on <engineHostname>", fall back to disk name if no engine
   const srcId = op.args['sourceDiskId'];
   const dstId = op.args['targetDiskId'];
   if (srcId && dstId && store) {
@@ -42,8 +42,12 @@ const argsSummary = (op: Operation, store: Store | null): string => {
     const dst = store.diskDB?.[dstId];
     const srcEng = src?.dockedTo ? store.engineDB?.[String(src.dockedTo)] : null;
     const dstEng = dst?.dockedTo ? store.engineDB?.[String(dst.dockedTo)] : null;
-    const srcLabel = srcEng ? String(srcEng.hostname) : String(src?.name ?? srcId);
-    const dstLabel = dstEng ? String(dstEng.hostname) : String(dst?.name ?? dstId);
+    const srcLabel = srcEng
+      ? `${String(src!.name)} on ${String(srcEng.hostname)}`
+      : String(src?.name ?? srcId);
+    const dstLabel = dstEng
+      ? `${String(dst!.name)} on ${String(dstEng.hostname)}`
+      : String(dst?.name ?? dstId);
     parts.push(`${srcLabel} → ${dstLabel}`);
   } else {
     // Fall back to raw name fields (legacy / test data)
@@ -192,10 +196,15 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
     const db = props.store()?.operationDB;
     if (!db) return [];
     const d = dismissed();
+    const now = Date.now();
     return Object.values(db).filter(
       (op) =>
         !d.has(op.id) &&
-        (op.status === 'Pending' || op.status === 'Running' || op.status === 'Done' || op.status === 'Failed')
+        (op.status === 'Pending' ||
+          op.status === 'Running' ||
+          // Done: only show if completed within the last 5s — prevents stale ops from flashing on load
+          (op.status === 'Done' && op.completedAt != null && now - op.completedAt < 5000) ||
+          op.status === 'Failed')
     );
   });
 

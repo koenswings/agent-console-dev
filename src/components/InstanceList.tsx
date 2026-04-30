@@ -1,8 +1,9 @@
-import { For, Show, createMemo, type Component } from 'solid-js';
+import { For, Show, createMemo, type Accessor, type Component } from 'solid-js';
 import InstanceRow from './InstanceRow';
 import { getInstanceIdsForSelection } from '../store/signals';
 import type { Selection } from './NetworkTree';
 import type { Instance, Engine, Disk, Store } from '../types/store';
+import type { CommandLogStore } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 
 // ---------------------------------------------------------------------------
@@ -55,6 +56,8 @@ interface InstanceListProps {
   selection: Selection;
   /** Accessor for the raw Store — passed from App to avoid coupling to global signal */
   store: () => Store | null;
+  /** Command log store — threaded down to InstanceRow for trace log display. */
+  commandLogStore?: Accessor<CommandLogStore | null>;
   /** Called when a drag starts on an app row. */
   onDragStart?: (data: DragAppData) => void;
   /** Called when a drag ends (dropped or cancelled). */
@@ -110,6 +113,7 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                     backupDisks={backupDisks}
                     instanceId={id}
                     store={props.store}
+                    commandLogStore={props.commandLogStore}
                     onDragStart={props.onDragStart}
                     onDragEnd={props.onDragEnd}
                   />

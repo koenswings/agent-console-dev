@@ -1,12 +1,14 @@
-import { createSignal, createMemo, For, Show, type Accessor, type Component } from 'solid-js';
+import { createSignal, createEffect, createMemo, For, Show, type Accessor, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance } from '../store/operations';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
+import type { CommandLogStore } from '../types/commandLog';
 
 interface MobileAppListProps {
   store: Accessor<Store | null>;
+  commandLogStore?: Accessor<CommandLogStore | null>;
 }
 
 const statusSortOrder = (status: string): number => {
@@ -23,6 +25,33 @@ const formatMB = (bytes: number | null): string => {
 const MobileAppList: Component<MobileAppListProps> = (props) => {
   const [selectedEngineId, setSelectedEngineId] = createSignal<string | null>(null);
   const [copyMoveInstance, setCopyMoveInstance] = createSignal<Instance | null>(null);
+  const [pendingActions, setPendingActions] = createSignal<Map<string, 'starting' | 'stopping'>>(new Map());
+
+  const setPending = (id: string, action: 'starting' | 'stopping' | null) => {
+    setPendingActions((prev) => {
+      const next = new Map(prev);
+      if (action === null) next.delete(id);
+      else next.set(id, action);
+      return next;
+    });
+  };
+
+  // Auto-clear pending start/stop when instance reaches expected status
+  createEffect(() => {
+    const s = props.store();
+    if (!s) return;
+    const pending = pendingActions();
+    for (const [id, action] of pending) {
+      const inst = s.instanceDB[id];
+      if (!inst) continue;
+      if (action === 'starting' && (inst.status === 'Running' || inst.status === 'Error')) {
+        setPending(id, null);
+      }
+      if (action === 'stopping' && (inst.status === 'Stopped' || inst.status === 'Docked' || inst.status === 'Error')) {
+        setPending(id, null);
+      }
+    }
+  });
 
   const engines = createMemo(() => {
     const s = props.store();
@@ -102,12 +131,14 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const engine = resolveEngine(inst);
     if (!engine || !inst.storedOn) return;
     startInstance(engine.id, inst.name, inst.storedOn);
+    setPending(inst.id, 'starting');
   };
 
   const handleStop = (inst: Instance) => {
     const engine = resolveEngine(inst);
     if (!engine || !inst.storedOn) return;
     stopInstance(engine.id, inst.name, inst.storedOn);
+    setPending(inst.id, 'stopping');
   };
 
   const handleBackup = (inst: Instance) => {
@@ -148,6 +179,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           const backupOp = () => getBackupOp(inst);
           const isOpRunning = () => getActiveOpsForInstance(props.store(), inst.id).length > 0;
           const hasBackupDisks = () => resolveBackupDisks(inst).length > 0;
+          const pendingAction = () => pendingActions().get(inst.id) ?? null;
 
           return (
             <div class={`mobile-app-card${inst.status === 'Error' ? ' mobile-app-card--error' : ''}`}>
@@ -180,6 +212,13 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                     </div>
                   </>
                 )}
+              </Show>
+
+              {/* Pending start/stop feedback */}
+              <Show when={pendingAction() && !isOpRunning()}>
+                <div class="mobile-app-card__progress-label">
+                  {pendingAction() === 'starting' ? 'Starting…' : 'Stopping…'}
+                </div>
               </Show>
 
               {/* Action buttons */}
