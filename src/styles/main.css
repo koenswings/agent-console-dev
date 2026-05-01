@@ -2647,6 +2647,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .command-history__header {
@@ -2656,6 +2658,11 @@ body {
   letter-spacing: 0.06em;
   color: var(--colour-text-dim);
   margin-bottom: 6px;
+  position: sticky;
+  top: 0;
+  background: var(--colour-surface-alt);
+  z-index: 1;
+  padding-bottom: 4px;
 }
 
 .command-history__empty { font-size: 0.8rem; color: var(--colour-text-dim); padding: 4px 0; }
