@@ -194,24 +194,39 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
   };
 
-  // Most recent CommandTrace for this instance — matched by instanceId or instanceName in args
-  const recentTrace = createMemo((): CommandTrace | null => {
-    if (!props.commandLogStore) return null;
+  // All CommandTraces for this instance — matched by instanceId or instanceName in args, newest first
+  const instanceTraces = createMemo((): CommandTrace[] => {
+    if (!props.commandLogStore) return [];
     const cls = props.commandLogStore();
-    if (!cls) return null;
+    if (!cls) return [];
     const instanceId = props.instanceId;
     const instanceName = props.instance()?.name;
-    const candidates = Object.values(cls.traces).filter((t) => {
-      try {
-        const args = JSON.parse(t.args) as Record<string, string>;
-        return args['instanceId'] === instanceId || args['instanceName'] === instanceName;
-      } catch {
-        return false;
-      }
-    });
-    if (candidates.length === 0) return null;
-    return candidates.reduce((a, b) => (b.startedAt > a.startedAt ? b : a));
+    return Object.values(cls.traces)
+      .filter((t) => {
+        try {
+          const args = JSON.parse(t.args) as Record<string, string>;
+          return args['instanceId'] === instanceId || args['instanceName'] === instanceName;
+        } catch {
+          return false;
+        }
+      })
+      .sort((a, b) => b.startedAt - a.startedAt);
   });
+
+  // Keep the most recent running trace accessible for the inline progress bar
+  const recentTrace = createMemo((): CommandTrace | null => {
+    const running = instanceTraces().find((t) => t.status === 'running');
+    return running ?? instanceTraces()[0] ?? null;
+  });
+
+  const [expandedTraceIds, setExpandedTraceIds] = createSignal<Set<string>>(new Set());
+  const toggleTraceExpand = (id: string) => {
+    setExpandedTraceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -472,15 +487,38 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
           <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
 
-          <Show when={recentTrace()}>
-            {(trace) => (
-              <div class="instance-row__trace-logs">
-                <div class="instance-row__trace-logs-title">
-                  {trace().command} — {trace().status === 'running' ? 'Running' : trace().status === 'ok' ? '✓ Done' : '✗ Failed'}
-                </div>
-                <LogLines logs={trace().logs} />
-              </div>
-            )}
+          <Show when={instanceTraces().length > 0}>
+            <div class="instance-row__trace-history">
+              <div class="instance-row__trace-history-title">Command Log</div>
+              <For each={instanceTraces()}>
+                {(trace) => (
+                  <>
+                    <div
+                      class="instance-row__trace-row"
+                      onClick={() => toggleTraceExpand(trace.traceId)}
+                    >
+                      <span class={`instance-row__trace-status instance-row__trace-status--${trace.status}`}>
+                        {trace.status === 'running' ? '▶' : trace.status === 'ok' ? '✓' : '✗'}
+                      </span>
+                      <span class="instance-row__trace-cmd">{trace.command}</span>
+                      <span class="instance-row__trace-chevron">
+                        {expandedTraceIds().has(trace.traceId) ? '▲' : '▼'}
+                      </span>
+                    </div>
+                    <Show when={expandedTraceIds().has(trace.traceId)}>
+                      <div class="instance-row__trace-logs">
+                        <Show
+                          when={trace.logs.length > 0}
+                          fallback={<div class="instance-row__trace-no-logs">No log output</div>}
+                        >
+                          <LogLines logs={trace.logs} />
+                        </Show>
+                      </div>
+                    </Show>
+                  </>
+                )}
+              </For>
+            </div>
           </Show>
         </div>
       </Show>
