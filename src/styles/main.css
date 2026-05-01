@@ -2677,6 +2677,9 @@ body {
 .command-history__logs { margin-top: 4px; }
 
 /* ── LogLines ───────────────────────────────────────────────────────────── */
+.log-lines-wrapper { position: relative; }
+.log-lines__copy { position: absolute; top: 4px; right: 6px; z-index: 1; font-size: 0.7rem; padding: 1px 7px; border-radius: 3px; border: 1px solid var(--colour-border); background: var(--colour-surface-alt); color: var(--colour-text-dim); cursor: pointer; line-height: 1.6; }
+.log-lines__copy:hover { color: var(--colour-text); border-color: var(--colour-text-dim); }
 .log-lines { max-height: 180px; overflow-y: auto; background: var(--colour-surface); border: 1px solid var(--colour-border); border-radius: 4px; padding: 6px 8px; font-family: monospace; font-size: 0.73rem; }
 .log-lines__row { display: flex; gap: 8px; line-height: 1.5; }
 .log-lines__ts { color: var(--colour-text-dim); flex-shrink: 0; }

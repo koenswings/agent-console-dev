@@ -1,4 +1,4 @@
-import { For, createEffect, type Component } from 'solid-js';
+import { For, createEffect, createSignal, type Component } from 'solid-js';
 import type { LogEntry } from '../types/commandLog';
 
 interface LogLinesProps {
@@ -17,6 +17,7 @@ const msgClass = (level: LogEntry['level']): string => {
 
 const LogLines: Component<LogLinesProps> = (props) => {
   let containerRef!: HTMLDivElement;
+  const [copied, setCopied] = createSignal(false);
 
   // Auto-scroll to bottom whenever logs change
   createEffect(() => {
@@ -24,16 +25,31 @@ const LogLines: Component<LogLinesProps> = (props) => {
     if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
   });
 
+  const handleCopy = () => {
+    const text = props.logs
+      .map((e) => `[${formatTime(e.timestamp)}] ${e.message}`)
+      .join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {/* silent — clipboard may be blocked */});
+  };
+
   return (
-    <div class="log-lines" ref={containerRef}>
-      <For each={props.logs}>
-        {(entry) => (
-          <div class="log-lines__row">
-            <span class="log-lines__ts">[{formatTime(entry.timestamp)}]</span>
-            <span class={msgClass(entry.level)}>{entry.message}</span>
-          </div>
-        )}
-      </For>
+    <div class="log-lines-wrapper">
+      <button class="log-lines__copy" onClick={handleCopy} title="Copy log to clipboard">
+        {copied() ? '✓ Copied' : 'Copy'}
+      </button>
+      <div class="log-lines" ref={containerRef}>
+        <For each={props.logs}>
+          {(entry) => (
+            <div class="log-lines__row">
+              <span class="log-lines__ts">[{formatTime(entry.timestamp)}]</span>
+              <span class={msgClass(entry.level)}>{entry.message}</span>
+            </div>
+          )}
+        </For>
+      </div>
     </div>
   );
 };
