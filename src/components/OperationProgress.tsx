@@ -66,7 +66,7 @@ const argsSummary = (op: Operation, store: Store | null): string => {
 interface OpCardProps {
   op: Operation;
   store: Store | null;
-  commandLogStore: Accessor<CommandLogStore | null>;
+  commandLogStore: Accessor<CommandLogStore | null | false>;
   onDismiss: () => void;
   onCancel: () => void;
 }
@@ -159,7 +159,7 @@ const OpCard: Component<OpCardProps> = (props) => {
 
 interface OperationProgressProps {
   store: () => Store | null;
-  commandLogStore: Accessor<CommandLogStore | null>;
+  commandLogStore: Accessor<CommandLogStore | null | false>;
 }
 
 const OperationProgress: Component<OperationProgressProps> = (props) => {

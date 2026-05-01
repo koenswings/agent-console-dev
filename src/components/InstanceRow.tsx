@@ -21,7 +21,7 @@ interface InstanceRowProps {
   /** Reactive store accessor — used for operation locking lookups. */
   store?:           () => Store | null;
   /** Command log store — used for showing recent trace logs in expanded view. */
-  commandLogStore?: Accessor<CommandLogStore | null>;
+  commandLogStore?: Accessor<CommandLogStore | null | false>;
   /** Called when a drag starts on this row. */
   onDragStart?: (data: DragAppData) => void;
   /** Called when a drag ends (dropped or cancelled). */

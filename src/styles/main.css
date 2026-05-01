@@ -2659,6 +2659,7 @@ body {
 }
 
 .command-history__empty { font-size: 0.8rem; color: var(--colour-text-dim); padding: 4px 0; }
+.command-history__empty--error { color: var(--colour-error, #e55); }
 .command-history__row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--colour-border); cursor: pointer; }
 .command-history__row:last-child { border-bottom: none; }
 .command-history__row:hover { background: var(--colour-surface); }
