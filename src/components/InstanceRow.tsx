@@ -355,9 +355,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       <div class="instance-row__actions">
         <button
           class="btn btn--start"
-          disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked()}
+          disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'starting'}
           onClick={handleStart}
-          title={locked() ? 'Operation in progress' : 'Start app'}
+          title={locked() ? 'Operation in progress' : pendingAction() === 'starting' ? 'Starting…' : 'Start app'}
           aria-label={`Start ${props.instance()?.name}`}
         >
           Start
@@ -365,9 +365,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         <button
           class="btn btn--stop"
-          disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked()}
+          disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'stopping'}
           onClick={handleStop}
-          title={locked() ? 'Operation in progress' : 'Stop app'}
+          title={locked() ? 'Operation in progress' : pendingAction() === 'stopping' ? 'Stopping…' : 'Stop app'}
           aria-label={`Stop ${props.instance()?.name}`}
         >
           Stop

@@ -10,6 +10,8 @@ import type { CommandLogStore } from '../types/commandLog';
  * Returns () => null gracefully on any failure so the app never crashes.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const EMPTY_STORE: CommandLogStore = { traces: {}, recentTraceIds: [] };
+
 export async function createCommandLogConnection(
   hostname: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,10 +23,10 @@ export async function createCommandLogConnection(
     const res = await fetch(`http://${hostname}/api/command-log-url`, {
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return () => null;
+    if (!res.ok) { setCommandLogStore(EMPTY_STORE); return commandLogStore; }
     const json = await res.json() as { url?: string };
     const url = json.url;
-    if (!url) return () => null;
+    if (!url) { setCommandLogStore(EMPTY_STORE); return commandLogStore; }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handle: any = await (repo.find(url as any) as unknown as Promise<any>);
@@ -45,6 +47,7 @@ export async function createCommandLogConnection(
     return commandLogStore;
   } catch (err) {
     console.warn('[commandLog] Failed to connect:', err);
-    return () => null;
+    setCommandLogStore(EMPTY_STORE);
+    return commandLogStore;
   }
 }
