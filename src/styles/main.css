@@ -270,6 +270,13 @@ body {
   overflow: hidden;
 }
 
+.main-layout__right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* Mobile: stack network tree above instance list */
 @media (max-width: 600px) {
   .main-layout {
@@ -507,6 +514,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 600px) {
