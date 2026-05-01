@@ -2682,6 +2682,8 @@ body {
 .command-history__status { font-size: 0.85rem; flex-shrink: 0; }
 .command-history__name { font-size: 0.8rem; font-family: monospace; color: var(--colour-text); flex: 1; }
 .command-history__time { font-size: 0.75rem; color: var(--colour-text-dim); flex-shrink: 0; }
+.command-history__chevron { font-size: 0.65rem; color: var(--colour-text-dim); flex-shrink: 0; margin-left: 2px; }
+.command-history__no-logs { font-size: 0.75rem; color: var(--colour-text-dim); padding: 4px 0; font-style: italic; }
 .command-history__error { font-size: 0.75rem; color: var(--colour-danger, #e05); padding: 2px 0 4px 0; }
 .command-history__logs { margin-top: 4px; }
 

@@ -1,6 +1,6 @@
 {
   "name": "idea-console",
-  "version": "0.2.39",
+  "version": "0.2.40",
   "private": true,
   "description": "IDEA Console — real-time operator dashboard for the IDEA Engine network",
   "scripts": {

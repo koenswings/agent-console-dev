@@ -62,13 +62,21 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
                     <span class="command-history__time">
                       {timeAgo(trace.completedAt ?? trace.startedAt)}
                     </span>
+                    <span class="command-history__chevron">
+                      {expandedIds().has(trace.traceId) ? '▲' : '▼'}
+                    </span>
                   </div>
                   <Show when={trace.errorMessage}>
                     <div class="command-history__error">{trace.errorMessage}</div>
                   </Show>
                   <Show when={expandedIds().has(trace.traceId)}>
                     <div class="command-history__logs">
-                      <LogLines logs={trace.logs} />
+                      <Show
+                        when={trace.logs.length > 0}
+                        fallback={<div class="command-history__no-logs">No log output</div>}
+                      >
+                        <LogLines logs={trace.logs} />
+                      </Show>
                     </div>
                   </Show>
                 </>

@@ -32,7 +32,7 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #62 (v0.2.32)
+- main is up to date as of PR #67 (v0.2.39)
   - PR #60: drag-drop highlight + engine name in modal
   - PR #61: show log on Failed/Done operation cards
   - PR #62: mobile ⋯ action sheet (Move/Copy), eject always visible on Network tab
