@@ -46,7 +46,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
       {/* Tab content */}
       <div class="mobile-tab-content">
         <Show when={activeTab() === 'apps'}>
-          <MobileAppList store={props.store} />
+          <MobileAppList store={props.store} commandLogStore={props.commandLogStore} />
         </Show>
         <Show when={activeTab() === 'network'}>
           <div class="mobile-network-tab">

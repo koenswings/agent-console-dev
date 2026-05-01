@@ -1,10 +1,11 @@
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
+
 import LogLines from './LogLines';
 
 interface CommandHistoryProps {
-  commandLogStore: Accessor<CommandLogStore | null>;
+  commandLogStore: Accessor<CommandLogStore | null | false>;
 }
 
 const timeAgo = (ts: number): string => {
@@ -26,46 +27,55 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
     });
   };
 
+  const cls = () => props.commandLogStore();
+
   // Finished traces only, newest first (reverse of insertion order)
   const finishedTraces = createMemo((): CommandTrace[] => {
-    const cls = props.commandLogStore();
-    if (!cls) return [];
-    return [...cls.recentTraceIds]
+    const store = cls();
+    if (!store) return [];
+    return [...store.recentTraceIds]
       .reverse()
-      .map((id) => cls.traces[id])
+      .map((id) => store.traces[id])
       .filter((t): t is CommandTrace => t != null && t.status !== 'running');
   });
 
   return (
     <div class="command-history">
       <div class="command-history__header">Command History</div>
-      <Show
-        when={finishedTraces().length > 0}
-        fallback={<div class="command-history__empty">No command history yet</div>}
-      >
-        <For each={finishedTraces()}>
-          {(trace) => (
-            <>
-              <div class="command-history__row" onClick={() => toggleExpand(trace.traceId)}>
-                <span class="command-history__status">
-                  {trace.status === 'ok' ? '✓' : '✗'}
-                </span>
-                <span class="command-history__name">{trace.command}</span>
-                <span class="command-history__time">
-                  {timeAgo(trace.completedAt ?? trace.startedAt)}
-                </span>
-              </div>
-              <Show when={trace.errorMessage}>
-                <div class="command-history__error">{trace.errorMessage}</div>
-              </Show>
-              <Show when={expandedIds().has(trace.traceId)}>
-                <div class="command-history__logs">
-                  <LogLines logs={trace.logs} />
-                </div>
-              </Show>
-            </>
-          )}
-        </For>
+      <Show when={cls() !== null} fallback={<div class="command-history__empty">Loading…</div>}>
+        <Show
+          when={cls() !== false}
+          fallback={<div class="command-history__empty command-history__empty--error">⚠️ Error loading history</div>}
+        >
+          <Show
+            when={finishedTraces().length > 0}
+            fallback={<div class="command-history__empty">No command history yet</div>}
+          >
+            <For each={finishedTraces()}>
+              {(trace) => (
+                <>
+                  <div class="command-history__row" onClick={() => toggleExpand(trace.traceId)}>
+                    <span class="command-history__status">
+                      {trace.status === 'ok' ? '✓' : '✗'}
+                    </span>
+                    <span class="command-history__name">{trace.command}</span>
+                    <span class="command-history__time">
+                      {timeAgo(trace.completedAt ?? trace.startedAt)}
+                    </span>
+                  </div>
+                  <Show when={trace.errorMessage}>
+                    <div class="command-history__error">{trace.errorMessage}</div>
+                  </Show>
+                  <Show when={expandedIds().has(trace.traceId)}>
+                    <div class="command-history__logs">
+                      <LogLines logs={trace.logs} />
+                    </div>
+                  </Show>
+                </>
+              )}
+            </For>
+          </Show>
+        </Show>
       </Show>
     </div>
   );

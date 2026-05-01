@@ -130,7 +130,7 @@ export async function createEngineConnection(): Promise<StoreConnection> {
 
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
-      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => null };
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => false };
     }
 
     // --- Connect via Automerge WebSocket ---
@@ -197,6 +197,6 @@ export async function createEngineConnection(): Promise<StoreConnection> {
   } catch (err) {
     console.error('[engine] Failed to connect:', err);
     setConnected(false);
-    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => null };
+    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => false };
   }
 }

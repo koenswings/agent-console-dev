@@ -61,7 +61,7 @@ const App: Component = () => {
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
-  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogStore | null>(null);
+  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogStore | null | false>(null);
   const [demo, setDemo] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
@@ -436,6 +436,7 @@ const App: Component = () => {
                       <InstanceList
                         selection={selection()}
                         store={store}
+                        commandLogStore={commandLogStore}
                         onDragStart={(data) => setDragData(data)}
                         onDragEnd={() => setDragData(null)}
                       />
