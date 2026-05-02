@@ -7,7 +7,7 @@ export interface LogEntry {
 export interface CommandTrace {
   traceId: string;
   command: string;       // e.g. "backupApp"
-  args: string;          // JSON.stringify of raw args
+  args: string | Record<string, string>;  // named args — object in Automerge, JSON string in legacy/mock
   startedAt: number;
   completedAt: number | null;
   status: 'running' | 'ok' | 'error';

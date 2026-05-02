@@ -29,10 +29,32 @@ const LogLines: Component<LogLinesProps> = (props) => {
     const text = props.logs
       .map((e) => `[${formatTime(e.timestamp)}] ${e.message}`)
       .join('\n');
-    navigator.clipboard.writeText(text).then(() => {
+
+    const finish = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {/* silent — clipboard may be blocked */});
+    };
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(finish).catch(() => execCommandCopy(text, finish));
+    } else {
+      execCommandCopy(text, finish);
+    }
+  };
+
+  const execCommandCopy = (text: string, onSuccess: () => void) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      if (document.execCommand('copy')) onSuccess();
+    } finally {
+      document.body.removeChild(ta);
+    }
   };
 
   return (

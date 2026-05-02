@@ -1717,6 +1717,23 @@ body {
   color: var(--colour-text-muted);
 }
 
+/* Instance trace history (expanded panel) */
+.instance-row__trace-history { margin-top: 12px; border-top: 1px solid var(--colour-border); padding-top: 10px; }
+.instance-row__trace-history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.instance-row__trace-history-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--colour-text-dim); }
+.instance-row__trace-show-all { font-size: 0.7rem; color: var(--colour-accent); background: none; border: none; cursor: pointer; padding: 0; }
+.instance-row__trace-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--colour-border); cursor: pointer; }
+.instance-row__trace-row:last-of-type { border-bottom: none; }
+.instance-row__trace-row:hover { background: var(--colour-surface-hover); }
+.instance-row__trace-status { font-size: 0.8rem; flex-shrink: 0; width: 14px; text-align: center; }
+.instance-row__trace-status--ok { color: var(--colour-success, #22c55e); }
+.instance-row__trace-status--error { color: var(--colour-danger, #e05); }
+.instance-row__trace-status--running { color: var(--colour-accent); }
+.instance-row__trace-cmd { font-size: 0.8rem; font-family: monospace; flex: 1; color: var(--colour-text); }
+.instance-row__trace-chevron { font-size: 0.65rem; color: var(--colour-text-dim); flex-shrink: 0; }
+.instance-row__trace-logs { margin: 4px 0 6px 22px; }
+.instance-row__trace-no-logs { font-size: 0.75rem; color: var(--colour-text-dim); font-style: italic; padding: 4px 0; }
+
 /* --------------------------------------------------------
    Settings Panel
    -------------------------------------------------------- */

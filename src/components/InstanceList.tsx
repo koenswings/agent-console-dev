@@ -57,7 +57,7 @@ interface InstanceListProps {
   /** Accessor for the raw Store — passed from App to avoid coupling to global signal */
   store: () => Store | null;
   /** Command log store — threaded down to InstanceRow for trace log display. */
-  commandLogStore?: Accessor<CommandLogStore | null>;
+  commandLogStore?: Accessor<CommandLogStore | null | false>;
   /** Called when a drag starts on an app row. */
   onDragStart?: (data: DragAppData) => void;
   /** Called when a drag ends (dropped or cancelled). */
