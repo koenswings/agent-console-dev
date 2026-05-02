@@ -112,7 +112,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
       (op) =>
         (op.status === 'Running' || op.status === 'Pending') &&
         op.kind === 'backupApp' &&
-        op.args['instanceId'] === inst.id
+        String(op.args['instanceId']) === String(inst.id)
     );
   };
 
