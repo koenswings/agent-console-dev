@@ -221,7 +221,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     if (activeOps().length > 0) return null; // active ops take precedence
     const failed = Object.values(store.operationDB ?? {}).filter(
       (op) => op.status === 'Failed'
-        && op.args['instanceId'] === props.instanceId
+        && String(op.args['instanceId']) === String(props.instanceId)
         && RUNTIME_OP_KINDS.has(op.kind)
     );
     if (failed.length === 0) return null;
@@ -241,7 +241,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           const args: Record<string, string> = typeof t.args === 'string'
             ? JSON.parse(t.args) as Record<string, string>
             : t.args as Record<string, string>;
-          return args['instanceId'] === instanceId || args['instanceName'] === instanceName;
+          return String(args['instanceId']) === String(instanceId) || String(args['instanceName']) === String(instanceName);
         } catch {
           return false;
         }
