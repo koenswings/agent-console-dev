@@ -230,6 +230,18 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     });
   };
 
+  const [showAllTraces, setShowAllTraces] = createSignal(false);
+
+  // The single most relevant trace to show by default:
+  // prefer running, then most recent
+  const primaryTrace = createMemo((): CommandTrace | null =>
+    instanceTraces().find((t) => t.status === 'running') ?? instanceTraces()[0] ?? null
+  );
+
+  const visibleTraces = createMemo((): CommandTrace[] =>
+    showAllTraces() ? instanceTraces() : (primaryTrace() ? [primaryTrace()!] : [])
+  );
+
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleStart = () => {
@@ -490,9 +502,19 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
 
           <div class="instance-row__trace-history">
-            <div class="instance-row__trace-history-title">Command Log</div>
+            <div class="instance-row__trace-history-header">
+              <span class="instance-row__trace-history-title">Last command</span>
+              <Show when={instanceTraces().length > 1}>
+                <button
+                  class="instance-row__trace-show-all"
+                  onClick={() => setShowAllTraces((v) => !v)}
+                >
+                  {showAllTraces() ? 'Show less' : `All (${instanceTraces().length})`}
+                </button>
+              </Show>
+            </div>
             <Show
-              when={instanceTraces().length > 0}
+              when={visibleTraces().length > 0}
               fallback={
                 <div class="instance-row__trace-no-logs">
                   {!props.commandLogStore
@@ -501,11 +523,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
                     ? 'Loading…'
                     : props.commandLogStore() === false
                     ? '⚠️ Error loading logs'
-                    : 'No commands run on this app yet'}
+                    : 'No commands logged yet'}
                 </div>
               }
             >
-              <For each={instanceTraces()}>
+              <For each={visibleTraces()}>
                 {(trace) => (
                   <>
                     <div

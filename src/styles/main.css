@@ -1719,7 +1719,9 @@ body {
 
 /* Instance trace history (expanded panel) */
 .instance-row__trace-history { margin-top: 12px; border-top: 1px solid var(--colour-border); padding-top: 10px; }
-.instance-row__trace-history-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--colour-text-dim); margin-bottom: 6px; }
+.instance-row__trace-history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.instance-row__trace-history-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--colour-text-dim); }
+.instance-row__trace-show-all { font-size: 0.7rem; color: var(--colour-accent); background: none; border: none; cursor: pointer; padding: 0; }
 .instance-row__trace-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--colour-border); cursor: pointer; }
 .instance-row__trace-row:last-of-type { border-bottom: none; }
 .instance-row__trace-row:hover { background: var(--colour-surface-hover); }
