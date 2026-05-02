@@ -204,7 +204,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return Object.values(cls.traces)
       .filter((t) => {
         try {
-          const args = JSON.parse(t.args) as Record<string, string>;
+          const args: Record<string, string> = typeof t.args === 'string'
+            ? JSON.parse(t.args) as Record<string, string>
+            : t.args as Record<string, string>;
           return args['instanceId'] === instanceId || args['instanceName'] === instanceName;
         } catch {
           return false;
