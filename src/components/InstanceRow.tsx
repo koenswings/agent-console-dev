@@ -29,6 +29,40 @@ interface InstanceRowProps {
 }
 
 // ---------------------------------------------------------------------------
+// ErrorCopyButton — inline copy button for the error text
+// ---------------------------------------------------------------------------
+
+const ErrorCopyButton: Component<{ text: () => string }> = (props) => {
+  const [copied, setCopied] = createSignal(false);
+
+  const handleCopy = () => {
+    const text = props.text();
+    const finish = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
+    const execFallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { if (document.execCommand('copy')) finish(); } finally { document.body.removeChild(ta); }
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(finish).catch(execFallback);
+    } else {
+      execFallback();
+    }
+  };
+
+  return (
+    <button class="instance-details__error-copy" onClick={handleCopy} title="Copy error to clipboard">
+      {copied() ? '✓' : 'Copy'}
+    </button>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Pure formatting helpers
 // ---------------------------------------------------------------------------
 
@@ -487,7 +521,10 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </div>
             <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition}>
               <div class="instance-details__item instance-details__item--full instance-details__item--error">
-                <dt>Error</dt>
+                <dt>
+                  Error
+                  <ErrorCopyButton text={() => props.instance()!.statusCondition!} />
+                </dt>
                 <dd class="instance-details__error-text">{props.instance()!.statusCondition}</dd>
               </div>
             </Show>

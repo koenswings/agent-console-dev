@@ -1630,6 +1630,24 @@ body {
 
 .instance-details__item--error dt {
   color: var(--colour-error);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.instance-details__error-copy {
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--colour-error) 40%, transparent);
+  background: color-mix(in srgb, var(--colour-error) 10%, transparent);
+  color: var(--colour-error);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.instance-details__error-copy:hover {
+  background: color-mix(in srgb, var(--colour-error) 20%, transparent);
 }
 
 .instance-details__error-text {
