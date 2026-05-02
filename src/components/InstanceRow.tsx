@@ -489,9 +489,22 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
           <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
 
-          <Show when={instanceTraces().length > 0}>
-            <div class="instance-row__trace-history">
-              <div class="instance-row__trace-history-title">Command Log</div>
+          <div class="instance-row__trace-history">
+            <div class="instance-row__trace-history-title">Command Log</div>
+            <Show
+              when={instanceTraces().length > 0}
+              fallback={
+                <div class="instance-row__trace-no-logs">
+                  {!props.commandLogStore
+                    ? 'No log store'
+                    : props.commandLogStore() === null
+                    ? 'Loading…'
+                    : props.commandLogStore() === false
+                    ? '⚠️ Error loading logs'
+                    : 'No commands run on this app yet'}
+                </div>
+              }
+            >
               <For each={instanceTraces()}>
                 {(trace) => (
                   <>
@@ -520,8 +533,8 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
                   </>
                 )}
               </For>
-            </div>
-          </Show>
+            </Show>
+          </div>
         </div>
       </Show>
     </div>
