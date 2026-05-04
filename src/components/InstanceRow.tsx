@@ -413,6 +413,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             <div class="instance-row__progress-label">
               {pendingAction() === 'starting' ? 'Starting…' : 'Stopping…'}
             </div>
+            <Show when={recentTrace()?.status === 'running' && recentTrace()!.logs.length > 0}>
+              <div class="instance-row__progress-log-hint">
+                {recentTrace()!.logs[recentTrace()!.logs.length - 1].message}
+              </div>
+            </Show>
             <div class="instance-row__progress-bar">
               <div class="instance-row__progress-fill" />
             </div>
