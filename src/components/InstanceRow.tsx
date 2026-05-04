@@ -173,7 +173,17 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const [expanded, setExpanded] = createSignal(false);
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [pendingAction, setPendingAction] = createSignal<'starting' | 'stopping' | null>(null);
+  let pendingActionTimer: ReturnType<typeof setTimeout> | null = null;
   let pickerRef: HTMLDivElement | undefined;
+
+  const setPendingWithTimeout = (action: 'starting' | 'stopping' | null) => {
+    if (pendingActionTimer !== null) { clearTimeout(pendingActionTimer); pendingActionTimer = null; }
+    setPendingAction(action);
+    if (action !== null) {
+      pendingActionTimer = setTimeout(() => { setPendingAction(null); pendingActionTimer = null; }, 15000);
+    }
+  };
+  onCleanup(() => { if (pendingActionTimer !== null) clearTimeout(pendingActionTimer); });
 
   createEffect(() => {
     if (!pickerOpen()) return;
@@ -190,10 +200,10 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   createEffect(() => {
     const status = props.instance()?.status;
     if (pendingAction() === 'starting' && (status === 'Running' || status === 'Error')) {
-      setPendingAction(null);
+      setPendingWithTimeout(null);
     }
     if (pendingAction() === 'stopping' && (status === 'Stopped' || status === 'Docked' || status === 'Error')) {
-      setPendingAction(null);
+      setPendingWithTimeout(null);
     }
   });
 
@@ -284,7 +294,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const disk = inst?.storedOn;
     if (!engine || !inst || !disk) return;
     startInstance(engine.id, inst.name, disk);
-    setPendingAction('starting');
+    setPendingWithTimeout('starting');
   };
 
   const handleStop = () => {
@@ -293,7 +303,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const disk = inst?.storedOn;
     if (!engine || !inst || !disk) return;
     stopInstance(engine.id, inst.name, disk);
-    setPendingAction('stopping');
+    setPendingWithTimeout('stopping');
   };
 
   const handleBackup = () => {

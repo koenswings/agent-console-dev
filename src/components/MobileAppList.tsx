@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, For, Show, type Accessor, type Component } from 'solid-js';
+import { createSignal, createEffect, createMemo, For, Show, onCleanup, type Accessor, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
@@ -26,15 +26,25 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
   const [selectedEngineId, setSelectedEngineId] = createSignal<string | null>(null);
   const [copyMoveInstance, setCopyMoveInstance] = createSignal<Instance | null>(null);
   const [pendingActions, setPendingActions] = createSignal<Map<string, 'starting' | 'stopping'>>(new Map());
+  const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const setPending = (id: string, action: 'starting' | 'stopping' | null) => {
+    const existing = pendingTimers.get(id);
+    if (existing !== undefined) { clearTimeout(existing); pendingTimers.delete(id); }
     setPendingActions((prev) => {
       const next = new Map(prev);
       if (action === null) next.delete(id);
       else next.set(id, action);
       return next;
     });
+    if (action !== null) {
+      pendingTimers.set(id, setTimeout(() => {
+        pendingTimers.delete(id);
+        setPendingActions((prev) => { const next = new Map(prev); next.delete(id); return next; });
+      }, 15000));
+    }
   };
+  onCleanup(() => { for (const t of pendingTimers.values()) clearTimeout(t); pendingTimers.clear(); });
 
   // Auto-clear pending start/stop when instance reaches expected status
   createEffect(() => {
