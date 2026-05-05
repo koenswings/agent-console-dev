@@ -625,6 +625,16 @@ body {
   margin-bottom: 3px;
 }
 
+.instance-row__progress-log-hint {
+  font-size: 0.68rem;
+  color: var(--colour-text-dim);
+  font-family: monospace;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .instance-row__progress-bar {
   position: relative;
   height: 4px;
