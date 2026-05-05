@@ -259,31 +259,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       .sort((a, b) => b.startedAt - a.startedAt);
   });
 
-  // Keep the most recent running trace accessible for the inline progress bar
-  const recentTrace = createMemo((): CommandTrace | null => {
-    const running = instanceTraces().find((t) => t.status === 'running');
-    return running ?? instanceTraces()[0] ?? null;
-  });
-
-  const [expandedTraceIds, setExpandedTraceIds] = createSignal<Set<string>>(new Set());
-  const toggleTraceExpand = (id: string) => {
-    setExpandedTraceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const [showAllTraces, setShowAllTraces] = createSignal(false);
-
-  // The single most relevant trace to show by default:
-  // prefer running, then most recent
-  const primaryTrace = createMemo((): CommandTrace | null =>
-    instanceTraces().find((t) => t.status === 'running') ?? instanceTraces()[0] ?? null
+  // Running trace → live steps; fallback to most recent finished trace for the expanded panel
+  const activeTrace = createMemo((): CommandTrace | null =>
+    instanceTraces().find((t) => t.status === 'running') ?? null
   );
-
-  const visibleTraces = createMemo((): CommandTrace[] =>
-    showAllTraces() ? instanceTraces() : (primaryTrace() ? [primaryTrace()!] : [])
+  const recentTrace = createMemo((): CommandTrace | null =>
+    activeTrace() ?? instanceTraces()[0] ?? null
   );
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -411,7 +392,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         <Show when={pendingAction() && !firstActiveOp()}>
           <div class="instance-row__progress instance-row__progress--indeterminate">
             <div class="instance-row__progress-label">
-              {pendingAction() === 'starting' ? 'Starting…' : 'Stopping…'}
+              {(() => {
+                const trace = activeTrace();
+                const lastLog = trace && trace.logs.length > 0 ? trace.logs[trace.logs.length - 1].message : null;
+                const base = pendingAction() === 'starting' ? 'Starting…' : 'Stopping…';
+                return lastLog ? lastLog : base;
+              })()}
             </div>
             <Show when={recentTrace()?.status === 'running' && recentTrace()!.logs.length > 0}>
               <div class="instance-row__progress-log-hint">
@@ -553,62 +539,24 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
           <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
 
-          <div class="instance-row__trace-history">
-            <div class="instance-row__trace-history-header">
-              <span class="instance-row__trace-history-title">Last command</span>
-              <Show when={instanceTraces().length > 1}>
-                <button
-                  class="instance-row__trace-show-all"
-                  onClick={() => setShowAllTraces((v) => !v)}
-                >
-                  {showAllTraces() ? 'Show less' : `All (${instanceTraces().length})`}
-                </button>
-              </Show>
-            </div>
-            <Show
-              when={visibleTraces().length > 0}
-              fallback={
-                <div class="instance-row__trace-no-logs">
-                  {!props.commandLogStore
-                    ? 'No log store'
-                    : props.commandLogStore() === null
-                    ? 'Loading…'
-                    : props.commandLogStore() === false
-                    ? '⚠️ Error loading logs'
-                    : 'No commands logged yet'}
+          <Show when={recentTrace()}>
+            {(trace) => (
+              <div class="instance-row__cmd-log">
+                <div class="instance-row__cmd-log-header">
+                  <span class={`instance-row__trace-status instance-row__trace-status--${trace().status}`}>
+                    {trace().status === 'running' ? '▶' : trace().status === 'ok' ? '✓' : '✗'}
+                  </span>
+                  <span class="instance-row__cmd-log-name">{trace().command}</span>
                 </div>
-              }
-            >
-              <For each={visibleTraces()}>
-                {(trace) => (
-                  <>
-                    <div
-                      class="instance-row__trace-row"
-                      onClick={() => toggleTraceExpand(trace.traceId)}
-                    >
-                      <span class={`instance-row__trace-status instance-row__trace-status--${trace.status}`}>
-                        {trace.status === 'running' ? '▶' : trace.status === 'ok' ? '✓' : '✗'}
-                      </span>
-                      <span class="instance-row__trace-cmd">{trace.command}</span>
-                      <span class="instance-row__trace-chevron">
-                        {expandedTraceIds().has(trace.traceId) ? '▲' : '▼'}
-                      </span>
-                    </div>
-                    <Show when={expandedTraceIds().has(trace.traceId)}>
-                      <div class="instance-row__trace-logs">
-                        <Show
-                          when={trace.logs.length > 0}
-                          fallback={<div class="instance-row__trace-no-logs">No log output</div>}
-                        >
-                          <LogLines logs={trace.logs} />
-                        </Show>
-                      </div>
-                    </Show>
-                  </>
-                )}
-              </For>
-            </Show>
-          </div>
+                <Show
+                  when={trace().logs.length > 0}
+                  fallback={<div class="instance-row__trace-no-logs">{trace().status === 'running' ? 'Waiting for output…' : 'No log output'}</div>}
+                >
+                  <LogLines logs={trace().logs} />
+                </Show>
+              </div>
+            )}
+          </Show>
         </div>
       </Show>
     </div>
