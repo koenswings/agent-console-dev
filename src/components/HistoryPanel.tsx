@@ -57,7 +57,12 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
         <Show when={cls() !== null} fallback={<div class="history-panel__empty">Loading…</div>}>
           <Show
             when={cls() !== false}
-            fallback={<div class="history-panel__empty history-panel__empty--error">⚠️ Could not load command history</div>}
+            fallback={
+              <div class="history-panel__empty history-panel__empty--unavailable">
+                Command history is not available on this engine.<br />
+                This feature requires a newer engine version.
+              </div>
+            }
           >
             <Show
               when={finishedTraces().length > 0}

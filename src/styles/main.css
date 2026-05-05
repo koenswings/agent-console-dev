@@ -2789,8 +2789,9 @@ body {
   gap: 0;
 }
 
-.history-panel__empty { font-size: 0.85rem; color: var(--colour-text-dim); padding: 8px 0; }
+.history-panel__empty { font-size: 0.85rem; color: var(--colour-text-dim); padding: 8px 0; line-height: 1.5; }
 .history-panel__empty--error { color: var(--colour-error, #e55); }
+.history-panel__empty--unavailable { color: var(--colour-text-dim); font-style: italic; }
 
 .history-entry {
   border-bottom: 1px solid var(--colour-border);
