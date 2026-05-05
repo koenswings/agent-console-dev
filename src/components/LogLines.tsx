@@ -5,6 +5,10 @@ interface LogLinesProps {
   logs: LogEntry[];
 }
 
+// Strip ANSI escape sequences (colours, cursor codes, etc.) from engine log output
+const ANSI_RE = /\u001b\[[0-9;]*[mGKHFABCDJsu]|\u001b[\[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g;
+const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
+
 const formatTime = (ts: number): string => {
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
@@ -67,7 +71,7 @@ const LogLines: Component<LogLinesProps> = (props) => {
           {(entry) => (
             <div class="log-lines__row">
               <span class="log-lines__ts">[{formatTime(entry.timestamp)}]</span>
-              <span class={msgClass(entry.level)}>{entry.message}</span>
+              <span class={msgClass(entry.level)}>{stripAnsi(entry.message)}</span>
             </div>
           )}
         </For>

@@ -1,6 +1,10 @@
 import { Show, For, createSignal, createEffect, createMemo, onCleanup, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import StatusDot from './StatusDot';
+
+// Strip ANSI escape sequences from engine log messages
+const ANSI_RE = /\u001b\[[0-9;]*[mGKHFABCDJsu]|\u001b[\[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g;
+const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
 import LogLines from './LogLines';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
@@ -207,6 +211,19 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     }
   });
 
+  // Also clear pending state when the active command trace finishes with an error
+  // (engine may reject the command before the instance status ever updates)
+  createEffect(() => {
+    const trace = activeTrace();
+    if (trace === null && pendingAction() !== null) {
+      // Trace disappeared — check the most recent finished trace for this instance
+      const last = instanceTraces()[0];
+      if (last && last.status === 'error') {
+        setPendingWithTimeout(null);
+      }
+    }
+  });
+
   // ── Operation locking ────────────────────────────────────────────────────
   const activeOps = (): Operation[] => {
     if (!props.instanceId || !props.store) return [];
@@ -394,7 +411,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             <div class="instance-row__progress-label">
               {(() => {
                 const trace = activeTrace();
-                const lastLog = trace && trace.logs.length > 0 ? trace.logs[trace.logs.length - 1].message : null;
+                const lastLog = trace && trace.logs.length > 0 ? stripAnsi(trace.logs[trace.logs.length - 1].message) : null;
                 const base = pendingAction() === 'starting' ? 'Starting…' : 'Stopping…';
                 return lastLog ? lastLog : base;
               })()}
