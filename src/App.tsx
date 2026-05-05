@@ -7,7 +7,7 @@ import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
 import RestorePanel from './components/RestorePanel';
 import OperationProgress from './components/OperationProgress';
-import CommandHistory from './components/CommandHistory';
+import HistoryPanel from './components/HistoryPanel';
 import AppBrowser from './components/AppBrowser';
 import MobileLayout from './components/MobileLayout';
 import LoginForm from './components/LoginForm';
@@ -71,6 +71,7 @@ const App: Component = () => {
   const [ready, setReady] = createSignal(false);
   const [selection, setSelection] = createSignal<Selection>({ type: 'network', id: '' });
   const [showSettings, setShowSettings] = createSignal(false);
+  const [showHistory, setShowHistory] = createSignal(false);
   const [showLogin, setShowLogin] = createSignal(false);
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
   const [sessionRestored, setSessionRestored] = createSignal(false);
@@ -334,10 +335,20 @@ const App: Component = () => {
           </button>
         </Show>
 
+        <Show when={connected() || demo()}>
+          <button
+            class="status-bar__history-btn"
+            title="Command History"
+            onClick={() => { setShowHistory((v) => !v); setShowSettings(false); }}
+          >
+            {showHistory() ? '✕' : '📋'}
+          </button>
+        </Show>
+
         <button
           class="status-bar__settings-btn"
           title="Settings"
-          onClick={() => setShowSettings((v) => !v)}
+          onClick={() => { setShowSettings((v) => !v); setShowHistory(false); }}
         >
           {showSettings() ? '✕' : '⚙'}
         </button>
@@ -345,6 +356,14 @@ const App: Component = () => {
 
       {/* ── Page content — exactly one Match renders at a time ────────────── */}
       <Switch>
+
+        {/* History panel */}
+        <Match when={showHistory()}>
+          <HistoryPanel
+            commandLogStore={commandLogStore}
+            onClose={() => setShowHistory(false)}
+          />
+        </Match>
 
         {/* Settings panel */}
         <Match when={showSettings()}>
@@ -416,7 +435,6 @@ const App: Component = () => {
                 />
                 <div class="main-layout__right">
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
-                  <CommandHistory commandLogStore={commandLogStore} />
                   <Switch>
                     <Match when={rightPanel() === 'empty-disk'}>
                       <EmptyDiskPanel
