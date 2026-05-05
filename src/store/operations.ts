@@ -2,11 +2,14 @@ import type { Store, Operation } from '../types/store';
 
 const ACTIVE_STATUSES = new Set<string>(['Pending', 'Running']);
 
-/** Returns all active (Pending | Running) operations for a given instanceId. */
+/** Returns all active (Pending | Running) operations for a given instanceId.
+ * Uses subject.id for O(1) lookup (engine PR #93+) with args fallback for older records. */
 export function getActiveOpsForInstance(store: Store | null, instanceId: string): Operation[] {
   if (!store) return [];
   return Object.values(store.operationDB ?? {}).filter(
-    (op) => ACTIVE_STATUSES.has(op.status) && op.args['instanceId'] === instanceId
+    (op) =>
+      ACTIVE_STATUSES.has(op.status) &&
+      (String(op.subject?.id) === String(instanceId) || op.args['instanceId'] === instanceId)
   );
 }
 

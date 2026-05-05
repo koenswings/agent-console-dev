@@ -22,6 +22,8 @@ const KIND_LABEL: Record<OperationKind, string> = {
   restoreApp:    'Restore',
   upgradeApp:    'Upgrade app',
   upgradeEngine: 'Upgrade engine',
+  startApp:      'Starting',
+  stopApp:       'Stopping',
 };
 
 const argsSummary = (op: Operation, store: Store | null): string => {
@@ -127,6 +129,10 @@ const OpCard: Component<OpCardProps> = (props) => {
 
       <Show when={argsSummary(props.op, props.store)}>
         <div class="operation-card__args">{argsSummary(props.op, props.store)}</div>
+      </Show>
+
+      <Show when={props.op.stepLabel && (props.op.kind === 'startApp' || props.op.kind === 'stopApp')}>
+        <div class="operation-card__step-label">{props.op.stepLabel}</div>
       </Show>
 
       <Show when={!isFailed()}>

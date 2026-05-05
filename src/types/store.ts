@@ -160,16 +160,52 @@ export interface User {
 // Progress tracking for long-running engine operations written to operationDB.
 // ---------------------------------------------------------------------------
 export type OperationStatus = 'Pending' | 'Running' | 'Done' | 'Failed';
-export type OperationKind = 'copyApp' | 'moveApp' | 'backupApp' | 'restoreApp' | 'upgradeApp' | 'upgradeEngine';
+export type OperationKind =
+  | 'copyApp'
+  | 'moveApp'
+  | 'backupApp'
+  | 'restoreApp'
+  | 'upgradeApp'
+  | 'upgradeEngine'
+  | 'startApp'
+  | 'stopApp';
+
+export type OperationCause =
+  | 'console-command'
+  | 'cli-command'
+  | 'cross-engine-cmd'
+  | 'post-copy'
+  | 'post-move'
+  | 'disk-docked'
+  | 'disk-undocked'
+  | 'backup-pre-stop'
+  | 'backup-post-start'
+  | 'backup-stale-lock'
+  | 'backup-app-docked'
+  | 'crash-recovery';
+
+export interface OperationSubject {
+  type: 'instance' | 'disk' | 'engine';
+  id: string;
+}
+
 export type OperationID = string;
 
 export interface Operation {
   id: OperationID;
   kind: OperationKind;
   args: Record<string, string>;
+  /** What triggered this operation. */
+  cause: OperationCause;
+  /** The primary entity this operation acts on (for O(1) UI lookup). */
+  subject: OperationSubject | null;
   engineId: EngineID;
   status: OperationStatus;
   progressPercent: number | null;
+  /** Step progress — mirrored from instance fields for startApp/stopApp. */
+  currentStep: number | null;
+  totalSteps: number | null;
+  stepLabel: string | null;
   startedAt: Timestamp;
   completedAt: Timestamp | null;
   error: string | null;
