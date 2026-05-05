@@ -8,7 +8,7 @@ import type { CommandLogStore } from '../types/commandLog';
 
 interface MobileAppListProps {
   store: Accessor<Store | null>;
-  commandLogStore?: Accessor<CommandLogStore | null>;
+  commandLogStore?: Accessor<CommandLogStore | null | false>;
 }
 
 const statusSortOrder = (status: string): number => {

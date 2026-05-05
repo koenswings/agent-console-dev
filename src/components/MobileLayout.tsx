@@ -18,7 +18,7 @@ interface PendingMove {
 
 interface MobileLayoutProps {
   store: Accessor<Store | null>;
-  commandLogStore: Accessor<CommandLogStore | null>;
+  commandLogStore: Accessor<CommandLogStore | null | false>;
   selection: Selection;
   onSelect: (s: Selection) => void;
   dragData: Accessor<DragAppData | null>;
