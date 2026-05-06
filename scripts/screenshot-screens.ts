@@ -150,19 +150,24 @@ async function main() {
       console.log('⚠ No operation-progress element — skipping S5-operation-progress');
     }
 
-    // S5-command-history: Command history panel (collapsed and expanded)
-    const cmdHistory = p.locator('.command-history');
-    if (await cmdHistory.count() > 0) {
-      await snap(p, 'S5-command-history');
-      // Expand the first trace row
-      const firstRow = p.locator('.command-history__row').first();
+    // S5-history-panel: History panel (opened via 📋 status bar button)
+    const historyBtn = p.locator('.status-bar__history-btn');
+    if (await historyBtn.count() > 0) {
+      await historyBtn.click();
+      await p.waitForTimeout(400);
+      await snap(p, 'S5-history-panel');
+      // Expand the first trace row if present
+      const firstRow = p.locator('.history-panel .command-history__row').first();
       if (await firstRow.count() > 0) {
         await firstRow.click();
         await p.waitForTimeout(300);
-        await snap(p, 'S5-command-history-expanded');
+        await snap(p, 'S5-history-panel-expanded');
       }
+      // Close the panel again
+      await historyBtn.click();
+      await p.waitForTimeout(300);
     } else {
-      console.log('⚠ No command-history element — skipping S5-command-history');
+      console.log('⚠ No history button — skipping S5-history-panel');
     }
 
     // Mobile screenshots — shrink viewport to iPhone 14 size

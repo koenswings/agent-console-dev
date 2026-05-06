@@ -223,6 +223,12 @@ Each `InstanceRow` shows:
 
 The history is **not** always visible — it is opt-in via the status bar button, keeping the main app list uncluttered.
 
+![S5 History Panel](screenshots/S5-history-panel.png)
+
+*Expanded trace (click a row to reveal log lines):*
+
+![S5 History Panel Expanded](screenshots/S5-history-panel-expanded.png)
+
 **Files:** `src/components/HistoryPanel.tsx`, `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
 
 ---

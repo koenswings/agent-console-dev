@@ -32,14 +32,13 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #67 (v0.2.39)
-  - PR #60: drag-drop highlight + engine name in modal
-  - PR #61: show log on Failed/Done operation cards
-  - PR #62: mobile ⋯ action sheet (Move/Copy), eject always visible on Network tab
-  - CommandHistory + LogLines components
-  - OperationProgress shows live log for running ops
-  - Mock store has running demo operation for screenshots
-  - UI-DESIGN.md updated with 3 new screenshots
+- main is up to date as of PR #78 (v0.2.54)
+  - PR #73: auto-clear Starting… spinner after 15s timeout
+  - PR #74: live command log in expanded panel
+  - PR #75: inline log detail (latest line beneath Starting/Stopping)
+  - PR #76: strip ANSI codes from log output, clear pending on trace error
+  - PR #78: integrate engine PR #93 — startApp/stopApp in operationDB with cause/subject/stepLabel
+- Clean working tree, on main branch
 
 ## Autonomous testing plan (to implement)
 - Write Playwright e2e tests that actually run the UI
