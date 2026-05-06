@@ -385,9 +385,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           {(op) => {
             const label = OP_LABEL[op().kind] ?? op().kind;
             const pct = op().progressPercent;
-            // For startApp/stopApp prefer the engine's step label
+            // For startApp/stopApp: read stepLabel directly from the instance —
+            // the engine writes it via setStep() to both instanceDB and operationDB,
+            // but instanceDB updates are more reliably reactive in the console.
             const stepLabel = (op().kind === 'startApp' || op().kind === 'stopApp')
-              ? op().stepLabel
+              ? (props.instance()?.stepLabel ?? op().stepLabel)
               : null;
             const labelText = stepLabel
               ? stepLabel

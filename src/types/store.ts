@@ -135,6 +135,10 @@ export interface Instance {
    * Null when status is not Error or no diagnosis is available.
    */
   statusCondition: string | null;
+  /** Step-based progress for start/stop operations. Written by the engine via setStep(). */
+  currentStep: number | null;
+  totalSteps: number | null;
+  stepLabel: string | null;
   /** Live Docker container metrics. Null when instance is not Running. */
   metrics: DockerMetrics | null;
 }
