@@ -382,7 +382,8 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         {/* ── Inline operation progress ─────────────────────── */}
         {/* Hide when expanded: log output in the expanded panel is the source of truth */}
-        <Show when={firstActiveOp() && !expanded()}>
+        {/* NOTE: !expanded() must come first — && returns the last value, so op() accessor = the Operation */}
+        <Show when={!expanded() && firstActiveOp()}>
           {(op) => {
             const label = OP_LABEL[op().kind] ?? op().kind;
             const pct = op().progressPercent;
@@ -418,7 +419,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           )}
         </Show>
         {/* Fallback spinner - shown only briefly before the engine's startApp/stopApp op lands in operationDB */}
-        <Show when={pendingAction() && !firstActiveOp() && !expanded()}>
+        <Show when={!expanded() && !firstActiveOp() && pendingAction()}>
           <div class="instance-row__progress instance-row__progress--indeterminate">
             <div class="instance-row__progress-label">
               {pendingAction() === 'starting' ? 'Starting...' : 'Stopping...'}
