@@ -286,6 +286,25 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     activeTrace() ?? instanceTraces()[0] ?? null
   );
 
+  // Reactive step label for startApp/stopApp inline progress.
+  // Must be a memo — reading props.instance()?.stepLabel inside a Show child accessor
+  // is not tracked; the memo ensures it re-evaluates on every store update.
+  const activeOpStepLabel = createMemo((): string | null => {
+    const op = firstActiveOp();
+    if (!op || (op.kind !== 'startApp' && op.kind !== 'stopApp')) return null;
+    return props.instance()?.stepLabel ?? op.stepLabel ?? null;
+  });
+
+  const activeOpProgressLabel = createMemo((): string => {
+    const op = firstActiveOp();
+    if (!op) return '';
+    const stepLabel = activeOpStepLabel();
+    if (stepLabel) return stepLabel;
+    const pct = op.progressPercent;
+    const label = OP_LABEL[op.kind] ?? op.kind;
+    return pct != null ? `${label}\u2026 ${pct}%` : `${label}\u2026`;
+  });
+
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleStart = () => {
@@ -381,33 +400,17 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </div>
 
         {/* ── Inline operation progress ─────────────────────── */}
-        {/* Hide when expanded: log output in the expanded panel is the source of truth */}
-        {/* NOTE: !expanded() must come first — && returns the last value, so op() accessor = the Operation */}
+        {/* Hide when expanded: the log panel in expanded view is the source of truth */}
         <Show when={!expanded() && firstActiveOp()}>
-          {(op) => {
-            const label = OP_LABEL[op().kind] ?? op().kind;
-            const pct = op().progressPercent;
-            // For startApp/stopApp: read stepLabel directly from the instance -
-            // the engine writes it via setStep() to both instanceDB and operationDB,
-            // but instanceDB updates are more reliably reactive in the console.
-            const stepLabel = (op().kind === 'startApp' || op().kind === 'stopApp')
-              ? (props.instance()?.stepLabel ?? op().stepLabel)
-              : null;
-            const labelText = stepLabel
-              ? stepLabel
-              : pct != null ? `${label}... ${pct}%` : `${label}...`;
-            return (
-              <div class={`instance-row__progress${pct == null ? ' instance-row__progress--indeterminate' : ''}`}>
-                <div class="instance-row__progress-label">{labelText}</div>
-                <div class="instance-row__progress-bar">
-                  <div
-                    class="instance-row__progress-fill"
-                    style={pct != null ? { width: `${pct}%` } : {}}
-                  />
-                </div>
-              </div>
-            );
-          }}
+          <div class={`instance-row__progress${firstActiveOp()?.progressPercent == null ? ' instance-row__progress--indeterminate' : ''}`}>
+            <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
+            <div class="instance-row__progress-bar">
+              <div
+                class="instance-row__progress-fill"
+                style={firstActiveOp()?.progressPercent != null ? { width: `${firstActiveOp()!.progressPercent}%` } : {}}
+              />
+            </div>
+          </div>
         </Show>
         <Show when={failedOp()}>
           {(op) => (
@@ -511,6 +514,26 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           role="region"
           aria-label={`Details for ${props.instance()?.name}`}
         >
+          {/* Log output — top of expanded panel so it's immediately visible during an op */}
+          <Show when={recentTrace()}>
+            {(trace) => (
+              <div class="instance-row__cmd-log">
+                <div class="instance-row__cmd-log-header">
+                  <span class={`instance-row__trace-status instance-row__trace-status--${trace().status}`}>
+                    {trace().status === 'running' ? '▶' : trace().status === 'ok' ? '✓' : '✗'}
+                  </span>
+                  <span class="instance-row__cmd-log-name">{trace().command}</span>
+                </div>
+                <Show
+                  when={trace().logs.length > 0}
+                  fallback={<div class="instance-row__trace-no-logs">{trace().status === 'running' ? 'Waiting for output…' : 'No log output'}</div>}
+                >
+                  <LogLines logs={trace().logs} />
+                </Show>
+              </div>
+            )}
+          </Show>
+
           <dl class="instance-details">
             <div class="instance-details__item">
               <dt>Status</dt>
@@ -556,26 +579,6 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               </div>
             </Show>
           </dl>
-
-          {/* Log output — shown at top of expanded panel when there's an active or recent trace */}
-          <Show when={recentTrace()}>
-            {(trace) => (
-              <div class="instance-row__cmd-log">
-                <div class="instance-row__cmd-log-header">
-                  <span class={`instance-row__trace-status instance-row__trace-status--${trace().status}`}>
-                    {trace().status === 'running' ? '▶' : trace().status === 'ok' ? '✓' : '✗'}
-                  </span>
-                  <span class="instance-row__cmd-log-name">{trace().command}</span>
-                </div>
-                <Show
-                  when={trace().logs.length > 0}
-                  fallback={<div class="instance-row__trace-no-logs">{trace().status === 'running' ? 'Waiting for output…' : 'No log output'}</div>}
-                >
-                  <LogLines logs={trace().logs} />
-                </Show>
-              </div>
-            )}
-          </Show>
 
           <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
         </div>
