@@ -14,6 +14,11 @@ const baseInstance: Instance = {
   lastBackup: null,
   lastStarted: 0,
   storedOn: 'disk-001',
+  statusCondition: null,
+  currentStep: null,
+  totalSteps: null,
+  stepLabel: null,
+  metrics: null,
 };
 
 const baseApp: App = {

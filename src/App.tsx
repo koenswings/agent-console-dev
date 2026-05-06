@@ -218,11 +218,8 @@ const App: Component = () => {
     setDiscoveryResults([]);
     discoverAllEngines().then(async (results) => {
       setDiscovering(false);
-      if (results.length === 1) {
-        await handleDiscoverySelect(results[0]);
-      } else {
-        setDiscoveryResults(results);
-      }
+      // Always show results — OnboardingCard handles the picker; no auto-connect
+      setDiscoveryResults(results);
     });
   };
 

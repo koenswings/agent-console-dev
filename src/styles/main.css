@@ -1124,6 +1124,110 @@ body {
   cursor: not-allowed;
 }
 
+/* Unified onboarding card — new styles */
+
+.onboarding__scan-state {
+  margin-bottom: 16px;
+}
+
+.onboarding__no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+}
+
+.onboarding__rescan-btn {
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--colour-accent);
+  color: var(--colour-accent);
+  background: transparent;
+  cursor: pointer;
+}
+.onboarding__rescan-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.onboarding__refreshing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--colour-text-muted);
+  margin-top: 8px;
+}
+
+.onboarding__scan-spinner--small {
+  width: 8px;
+  height: 8px;
+}
+
+.onboarding__manual-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.onboarding__manual-link:hover {
+  color: var(--colour-text);
+}
+
+.onboarding__manual {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.onboarding__back-link {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.onboarding__back-link:hover {
+  color: var(--colour-text);
+}
+
+.onboarding__manual-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.onboarding__manual-row .form-field__input {
+  flex: 1;
+}
+
+.onboarding__manual-error {
+  font-size: var(--font-size-sm);
+  color: var(--colour-danger, #e05);
+  margin: 0;
+}
+
+.onboarding__demo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--colour-border);
+}
+
 /* --------------------------------------------------------
    Scrollbar styling
    -------------------------------------------------------- */

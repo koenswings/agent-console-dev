@@ -19,6 +19,7 @@ import { readEngineHistory } from '../store/storage';
 
 const defaultProps = () => ({
   currentHostname: 'appdocker01.local',
+  demo: false,
   onConnect: vi.fn(),
   onDemoMode: vi.fn(),
   onCancel: vi.fn(),
