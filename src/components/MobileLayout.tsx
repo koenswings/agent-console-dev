@@ -1,7 +1,7 @@
 import { createSignal, createMemo, For, Show, type Accessor, type Component } from 'solid-js';
 import NetworkTree from './NetworkTree';
 import OperationProgress from './OperationProgress';
-import CommandHistory from './CommandHistory';
+import HistoryPanel from './HistoryPanel';
 import MobileAppList from './MobileAppList';
 import type { Store } from '../types/store';
 import type { CommandLogStore } from '../types/commandLog';
@@ -28,7 +28,7 @@ interface MobileLayoutProps {
   onCancelMove: () => void;
 }
 
-type TabId = 'apps' | 'network' | 'activity';
+type TabId = 'apps' | 'network' | 'activity' | 'history';
 
 const MobileLayout: Component<MobileLayoutProps> = (props) => {
   const [activeTab, setActiveTab] = createSignal<TabId>('apps');
@@ -62,8 +62,13 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
         <Show when={activeTab() === 'activity'}>
           <div class="mobile-activity-tab">
             <OperationProgress store={props.store} commandLogStore={props.commandLogStore} />
-            <CommandHistory commandLogStore={props.commandLogStore} />
           </div>
+        </Show>
+        <Show when={activeTab() === 'history'}>
+          <HistoryPanel
+            commandLogStore={props.commandLogStore}
+            onClose={() => setActiveTab('apps')}
+          />
         </Show>
       </div>
 
@@ -92,6 +97,13 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
             <span class="mobile-tab-bar__badge">{activeOpCount()}</span>
           </Show>
           <span>Activity</span>
+        </button>
+        <button
+          class={`mobile-tab-bar__item${activeTab() === 'history' ? ' mobile-tab-bar__item--active' : ''}`}
+          onClick={() => setActiveTab('history')}
+        >
+          <span class="mobile-tab-bar__icon">📋</span>
+          <span>History</span>
         </button>
       </div>
 
