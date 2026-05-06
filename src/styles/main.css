@@ -1763,7 +1763,7 @@ body {
 }
 
 /* Instance command log (expanded panel) */
-.instance-row__cmd-log { margin-top: 12px; border-top: 1px solid var(--colour-border); padding-top: 10px; }
+.instance-row__cmd-log { margin-bottom: 12px; border-bottom: 1px solid var(--colour-border); padding-bottom: 10px; }
 .instance-row__cmd-log-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .instance-row__cmd-log-name { font-size: 0.75rem; font-family: monospace; color: var(--colour-text-dim); }
 .instance-row__trace-status { font-size: 0.8rem; flex-shrink: 0; width: 14px; text-align: center; }
