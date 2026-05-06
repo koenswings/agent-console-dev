@@ -114,6 +114,8 @@ const OP_LABEL: Record<OperationKind, string> = {
   restoreApp:    'Restoring',
   upgradeApp:    'Upgrading',
   upgradeEngine: 'Upgrading engine',
+  startApp:      'Starting',
+  stopApp:       'Stopping',
 };
 
 // ---------------------------------------------------------------------------
@@ -383,7 +385,13 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           {(op) => {
             const label = OP_LABEL[op().kind] ?? op().kind;
             const pct = op().progressPercent;
-            const labelText = pct != null ? `${label}… ${pct}%` : `${label}…`;
+            // For startApp/stopApp prefer the engine's step label
+            const stepLabel = (op().kind === 'startApp' || op().kind === 'stopApp')
+              ? op().stepLabel
+              : null;
+            const labelText = stepLabel
+              ? stepLabel
+              : pct != null ? `${label}… ${pct}%` : `${label}…`;
             return (
               <div class={`instance-row__progress${pct == null ? ' instance-row__progress--indeterminate' : ''}`}>
                 <div class="instance-row__progress-label">{labelText}</div>
@@ -406,21 +414,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </div>
           )}
         </Show>
+        {/* Fallback spinner — shown only briefly before the engine’s startApp/stopApp op lands in operationDB */}
         <Show when={pendingAction() && !firstActiveOp()}>
           <div class="instance-row__progress instance-row__progress--indeterminate">
             <div class="instance-row__progress-label">
-              {(() => {
-                const trace = activeTrace();
-                const lastLog = trace && trace.logs.length > 0 ? stripAnsi(trace.logs[trace.logs.length - 1].message) : null;
-                const base = pendingAction() === 'starting' ? 'Starting…' : 'Stopping…';
-                return lastLog ? lastLog : base;
-              })()}
+              {pendingAction() === 'starting' ? 'Starting…' : 'Stopping…'}
             </div>
-            <Show when={recentTrace()?.status === 'running' && recentTrace()!.logs.length > 0}>
-              <div class="instance-row__progress-log-hint">
-                {recentTrace()!.logs[recentTrace()!.logs.length - 1].message}
-              </div>
-            </Show>
             <div class="instance-row__progress-bar">
               <div class="instance-row__progress-fill" />
             </div>

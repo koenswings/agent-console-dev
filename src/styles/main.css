@@ -2657,6 +2657,13 @@ body {
   color: var(--colour-danger, #e05);
 }
 
+.operation-card__step-label {
+  font-size: 0.78rem;
+  color: var(--colour-text-dim);
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
 /* ── OperationProgress additions ─────────────────────────────────────────── */
 .operation-card--done .operation-card__progress-fill {
   background: var(--colour-success, #22c55e);
