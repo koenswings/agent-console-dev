@@ -39,7 +39,9 @@ export function isProductionWebMode(): boolean {
   if (import.meta.env.DEV) return false;
   if (isExtensionContext()) return false;
   const h = window.location.hostname;
-  return h !== '' && h !== 'localhost' && h !== '127.0.0.1' && !h.startsWith('100.');
+  // Treat any non-empty hostname as production web mode — including Tailscale IPs (100.x)
+  // and fleet Pi hostnames. Only exclude empty string and localhost/loopback.
+  return h !== '' && h !== 'localhost' && h !== '127.0.0.1';
 }
 
 // ---------------------------------------------------------------------------
