@@ -206,6 +206,9 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
     return Object.values(db).filter(
       (op) =>
         !d.has(op.id) &&
+        // startApp/stopApp feedback is shown inline on the app row — exclude from this panel
+        op.kind !== 'startApp' &&
+        op.kind !== 'stopApp' &&
         (op.status === 'Pending' ||
           op.status === 'Running' ||
           // Done: only show if completed within the last 5s — prevents stale ops from flashing on load

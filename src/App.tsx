@@ -335,15 +335,13 @@ const App: Component = () => {
           </button>
         </Show>
 
-        <Show when={connected() || demo()}>
-          <button
-            class="status-bar__history-btn"
-            title="Command History"
-            onClick={() => { setShowHistory((v) => !v); setShowSettings(false); }}
-          >
-            {showHistory() ? '✕' : '📋'}
-          </button>
-        </Show>
+        <button
+          class="status-bar__history-btn"
+          title="Command History"
+          onClick={() => { setShowHistory((v) => !v); setShowSettings(false); }}
+        >
+          {showHistory() ? '✕' : '📋'}
+        </button>
 
         <button
           class="status-bar__settings-btn"
