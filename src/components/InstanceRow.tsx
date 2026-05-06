@@ -20,11 +20,11 @@ interface InstanceRowProps {
   engine:           () => Engine | undefined;
   /** Backup disks docked on the same engine and linked to this instance. */
   backupDisks?:     () => Disk[];
-  /** The instance ID — used for operation locking lookups. */
+  /** The instance ID - used for operation locking lookups. */
   instanceId?:      string;
-  /** Reactive store accessor — used for operation locking lookups. */
+  /** Reactive store accessor - used for operation locking lookups. */
   store?:           () => Store | null;
-  /** Command log store — used for showing recent trace logs in expanded view. */
+  /** Command log store - used for showing recent trace logs in expanded view. */
   commandLogStore?: Accessor<CommandLogStore | null | false>;
   /** Called when a drag starts on this row. */
   onDragStart?: (data: DragAppData) => void;
@@ -33,7 +33,7 @@ interface InstanceRowProps {
 }
 
 // ---------------------------------------------------------------------------
-// ErrorCopyButton — inline copy button for the error text
+// ErrorCopyButton - inline copy button for the error text
 // ---------------------------------------------------------------------------
 
 const ErrorCopyButton: Component<{ text: () => string }> = (props) => {
@@ -81,7 +81,7 @@ const formatTs = (ts: number | null | undefined): string => {
 export const formatLastBackup = (ts: number | null | undefined): string => formatTs(ts);
 
 const formatBytes = (bytes: number | null): string => {
-  if (bytes == null) return '—';
+  if (bytes == null) return '-';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -89,7 +89,7 @@ const formatBytes = (bytes: number | null): string => {
 };
 
 const formatPercent = (p: number | null): string =>
-  p == null ? '—' : `${p.toFixed(2)}%`;
+  p == null ? '-' : `${p.toFixed(2)}%`;
 
 /** Returns true when the Start button should be disabled. */
 export const isStartDisabled = (status: Status): boolean =>
@@ -119,7 +119,7 @@ const OP_LABEL: Record<OperationKind, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// DockerMetricsPanel — pure display component
+// DockerMetricsPanel - pure display component
 // ---------------------------------------------------------------------------
 
 interface MetricsPanelProps {
@@ -135,7 +135,7 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
         when={m() != null}
         fallback={
           <p class="docker-metrics__unavailable">
-            No metrics — app is not running.
+            No metrics - app is not running.
           </p>
         }
       >
@@ -218,7 +218,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   createEffect(() => {
     const trace = activeTrace();
     if (trace === null && pendingAction() !== null) {
-      // Trace disappeared — check the most recent finished trace for this instance
+      // Trace disappeared - check the most recent finished trace for this instance
       const last = instanceTraces()[0];
       if (last && last.status === 'error') {
         setPendingWithTimeout(null);
@@ -257,7 +257,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
   };
 
-  // All CommandTraces for this instance — matched by instanceId or instanceName in args, newest first
+  // All CommandTraces for this instance - matched by instanceId or instanceName in args, newest first
   const instanceTraces = createMemo((): CommandTrace[] => {
     if (!props.commandLogStore) return [];
     const cls = props.commandLogStore();
@@ -381,11 +381,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </div>
 
         {/* ── Inline operation progress ─────────────────────── */}
-        <Show when={firstActiveOp()}>
+        {/* Hide when expanded: log output in the expanded panel is the source of truth */}
+        <Show when={firstActiveOp() && !expanded()}>
           {(op) => {
             const label = OP_LABEL[op().kind] ?? op().kind;
             const pct = op().progressPercent;
-            // For startApp/stopApp: read stepLabel directly from the instance —
+            // For startApp/stopApp: read stepLabel directly from the instance -
             // the engine writes it via setStep() to both instanceDB and operationDB,
             // but instanceDB updates are more reliably reactive in the console.
             const stepLabel = (op().kind === 'startApp' || op().kind === 'stopApp')
@@ -393,7 +394,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               : null;
             const labelText = stepLabel
               ? stepLabel
-              : pct != null ? `${label}… ${pct}%` : `${label}…`;
+              : pct != null ? `${label}... ${pct}%` : `${label}...`;
             return (
               <div class={`instance-row__progress${pct == null ? ' instance-row__progress--indeterminate' : ''}`}>
                 <div class="instance-row__progress-label">{labelText}</div>
@@ -411,16 +412,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           {(op) => (
             <div class="instance-row__progress instance-row__progress--failed">
               <div class="instance-row__progress-label">
-                Failed: {op().error ?? 'Unknown error'} — Try again
+                Failed: {op().error ?? 'Unknown error'} - Try again
               </div>
             </div>
           )}
         </Show>
-        {/* Fallback spinner — shown only briefly before the engine’s startApp/stopApp op lands in operationDB */}
-        <Show when={pendingAction() && !firstActiveOp()}>
+        {/* Fallback spinner - shown only briefly before the engine's startApp/stopApp op lands in operationDB */}
+        <Show when={pendingAction() && !firstActiveOp() && !expanded()}>
           <div class="instance-row__progress instance-row__progress--indeterminate">
             <div class="instance-row__progress-label">
-              {pendingAction() === 'starting' ? 'Starting…' : 'Stopping…'}
+              {pendingAction() === 'starting' ? 'Starting...' : 'Stopping...'}
             </div>
             <div class="instance-row__progress-bar">
               <div class="instance-row__progress-fill" />
@@ -439,7 +440,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--start"
           disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'starting'}
           onClick={handleStart}
-          title={locked() ? 'Operation in progress' : pendingAction() === 'starting' ? 'Starting…' : 'Start app'}
+          title={locked() ? 'Operation in progress' : pendingAction() === 'starting' ? 'Starting...' : 'Start app'}
           aria-label={`Start ${props.instance()?.name}`}
         >
           Start
@@ -449,7 +450,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--stop"
           disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'stopping'}
           onClick={handleStop}
-          title={locked() ? 'Operation in progress' : pendingAction() === 'stopping' ? 'Stopping…' : 'Stop app'}
+          title={locked() ? 'Operation in progress' : pendingAction() === 'stopping' ? 'Stopping...' : 'Stop app'}
           aria-label={`Stop ${props.instance()?.name}`}
         >
           Stop
@@ -512,19 +513,19 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           <dl class="instance-details">
             <div class="instance-details__item">
               <dt>Status</dt>
-              <dd>{props.instance()?.status ?? '—'}</dd>
+              <dd>{props.instance()?.status ?? '-'}</dd>
             </div>
             <div class="instance-details__item">
               <dt>Version</dt>
-              <dd>{props.app()?.version ?? '—'}</dd>
+              <dd>{props.app()?.version ?? '-'}</dd>
             </div>
             <div class="instance-details__item">
               <dt>Engine</dt>
-              <dd>{props.engine()?.hostname ?? '—'}</dd>
+              <dd>{props.engine()?.hostname ?? '-'}</dd>
             </div>
             <div class="instance-details__item">
               <dt>Port</dt>
-              <dd>{props.instance()?.port ?? '—'}</dd>
+              <dd>{props.instance()?.port ?? '-'}</dd>
             </div>
             <div class="instance-details__item">
               <dt>Created</dt>
@@ -555,8 +556,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </Show>
           </dl>
 
-          <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
-
+          {/* Log output — shown at top of expanded panel when there's an active or recent trace */}
           <Show when={recentTrace()}>
             {(trace) => (
               <div class="instance-row__cmd-log">
@@ -575,6 +575,8 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               </div>
             )}
           </Show>
+
+          <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
         </div>
       </Show>
     </div>
