@@ -1,9 +1,9 @@
 /**
  * discovery.ts — Engine auto-discovery
  *
- * Probes a list of candidate hostnames in parallel. The first to respond to
- * GET /api/store-url wins. Returns the hostname and store URL so the caller
- * can connect without any manual configuration.
+ * Probes a list of candidate hostnames in parallel. Each candidate is probed
+ * against GET /api/store-url. Returns all successful results so the caller
+ * can auto-connect (1 result) or show a picker (2+ results).
  *
  * Used on first load when no hostname is stored. Non-blocking: the caller
  * shows the onboarding form immediately and auto-connects when discovery
@@ -16,18 +16,34 @@ export interface DiscoveryResult {
 }
 
 // ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+/** Hostname prefixes to probe. Add new fleet naming schemes here. */
+export const DISCOVERY_PREFIXES = ['appdocker', 'idea', 'engine'];
+
+/** Probe hostnames from 01 up to and including this number. */
+export const DISCOVERY_MAX_NUMBER = 10;
+
+/** Per-host probe timeout in milliseconds. */
+export const DISCOVERY_TIMEOUT_MS = 5000;
+
+/** How often (ms) to re-probe while the picker is visible. */
+export const DISCOVERY_REFRESH_INTERVAL_MS = 10_000;
+
+// ---------------------------------------------------------------------------
 // Candidate list
 // ---------------------------------------------------------------------------
 
-const PREFIXES = ['appdocker', 'idea', 'engine'];
-const NUMBERS = ['01', '02', '03'];
-
 /** All hostnames to probe: bare names + .local variants. */
-function buildCandidates(): string[] {
+export function buildCandidates(
+  prefixes = DISCOVERY_PREFIXES,
+  maxNumber = DISCOVERY_MAX_NUMBER,
+): string[] {
   const candidates: string[] = [];
-  for (const prefix of PREFIXES) {
-    for (const n of NUMBERS) {
-      const name = `${prefix}${n}`;
+  for (const prefix of prefixes) {
+    for (let n = 1; n <= maxNumber; n++) {
+      const name = `${prefix}${String(n).padStart(2, '0')}`;
       candidates.push(name);
       candidates.push(`${name}.local`);
     }
@@ -42,7 +58,7 @@ function buildCandidates(): string[] {
 async function probeHost(hostname: string): Promise<DiscoveryResult | null> {
   try {
     const res = await fetch(`http://${hostname}/api/store-url`, {
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = await res.json();

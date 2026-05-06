@@ -27,7 +27,7 @@ import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
 import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl, saveDemoMode } from './components/Onboarding';
 import { isProductionWebMode } from './store/engine';
-import { discoverAllEngines, type DiscoveryResult } from './store/discovery';
+import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 import type { CommandLogStore } from './types/commandLog';
@@ -238,6 +238,31 @@ const App: Component = () => {
     localStorage.removeItem('engineHostname');
     runDiscovery();
   };
+
+  // While the picker is visible (2+ results, no hostname selected), re-probe
+  // every DISCOVERY_REFRESH_INTERVAL_MS so engines that were slow or came back
+  // online appear automatically. Merges new results with existing ones.
+  createEffect(() => {
+    const showing = discoveryResults().length > 0 && !hostname();
+    if (!showing) return;
+
+    const interval = setInterval(() => {
+      discoverAllEngines().then((fresh) => {
+        if (discoveryResults().length === 0 || hostname()) return; // picker closed in the meantime
+        // Merge: keep existing order, append any new hostnames found
+        setDiscoveryResults((prev) => {
+          const known = new Set(prev.map((r) => r.hostname));
+          const merged = [...prev];
+          for (const r of fresh) {
+            if (!known.has(r.hostname)) merged.push(r);
+          }
+          return merged;
+        });
+      });
+    }, DISCOVERY_REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  });
 
   // Reconnect after 15s of disconnection (not in demo / production mode)
   createEffect(() => {
