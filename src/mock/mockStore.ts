@@ -340,24 +340,7 @@ export const MOCK_STORE: Store = {
       created: 0,
     },
   },
-  operationDB: {
-    'op-demo-001': {
-      id: 'op-demo-001',
-      kind: 'backupApp' as const,
-      args: { instanceName: 'kolibri', targetDiskName: 'backup-disk' },
-      cause: 'console-command' as const,
-      subject: { type: 'instance' as const, id: INST_KOLIBRI_ID },
-      engineId: ENGINE_1_ID,
-      status: 'Running' as const,
-      progressPercent: 62,
-      currentStep: 2,
-      totalSteps: 3,
-      stepLabel: 'Running backup…',
-      startedAt: Date.now() - 45 * 1000,
-      completedAt: null,
-      error: null,
-    },
-  },
+  operationDB: {},
 };
 
 // ---------------------------------------------------------------------------

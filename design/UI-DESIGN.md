@@ -46,6 +46,7 @@ Present on **every screen**, always at the top.
 | DEMO badge | Orange badge | Demo mode only |
 | Username | Logged-in operator's name | Authenticated only |
 | 👥 button | Toggles Operator Management screen | Authenticated only |
+| 📋 button | Toggles History panel (command history overlay) | Connected or Demo mode only |
 | Log out | Logs out current operator | Authenticated only |
 | ⚙ button | Toggles Settings panel (✕ to close) | Always |
 
@@ -213,19 +214,22 @@ Each `InstanceRow` shows:
 
 ![S5 Operation Progress](screenshots/S5-operation-progress.png)
 
-**Command History panel** — shown below the Operation Progress bar, always visible while logged in. Lists recently completed commands (newest first). Each row shows:
+**History panel** — opened via the 📋 button in the status bar (toggles open/closed; 📋 turns to ✕ while open). Overlays the right-panel content area. Lists recently completed commands (newest first). Each row shows:
 - ✓ / ✗ status icon + command name + time-ago label
 - Click to expand → `LogLines` viewer with the full captured log for that trace
 - Error message shown inline for failed commands
 - "No command history yet" placeholder when empty
+- "Not available on this engine" message when the engine doesn't expose the command log endpoint
 
-![S5 Command History](screenshots/S5-command-history.png)
+The history is **not** always visible — it is opt-in via the status bar button, keeping the main app list uncluttered.
+
+![S5 History Panel](screenshots/S5-history-panel.png)
 
 *Expanded trace (click a row to reveal log lines):*
 
-![S5 Command History Expanded](screenshots/S5-command-history-expanded.png)
+![S5 History Panel Expanded](screenshots/S5-history-panel-expanded.png)
 
-**Files:** `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
+**Files:** `src/components/HistoryPanel.tsx`, `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
 
 ---
 
@@ -322,7 +326,7 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 
 ![Mobile Activity tab](screenshots/S-mobile-activity.png)
 
-- OperationProgress + CommandHistory stacked vertically
+- OperationProgress + History panel (📋) accessible via status bar button
 - Red badge on the tab icon shows count of active operations (Running/Pending)
 
 ---
@@ -343,7 +347,7 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
                                   │ Create account           │
                  ┌────────────────▼──────────────────────┐   │
   ⚙ (any screen)│        STATUS BAR (persistent)        │   │
-  ──────────────▶│  ⚙ Settings · 👥 Ops Mgmt · Log out  │◀──┘
+  ──────────────▶│  ⚙ Settings · 📋 History · 👥 Ops Mgmt · Log out  │◀──┘
                  └──────┬──────────────┬─────────────────┘
                         │              │
               Not logged in         Logged in
