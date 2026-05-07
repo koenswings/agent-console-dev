@@ -1,6 +1,11 @@
-import { createSignal, onMount, Show, type Component } from 'solid-js';
-import { discoverAllEngines, type DiscoveryResult } from '../store/discovery';
-import EnginePickerPanel from './EnginePickerPanel';
+import { createSignal, createEffect, onMount, Show, For, type Component } from 'solid-js';
+import {
+  discoverAllEngines,
+  discoverEnginesByPrefix,
+  extractHostnameBase,
+  DISCOVERY_REFRESH_INTERVAL_MS,
+  type DiscoveryResult,
+} from '../store/discovery';
 import {
   csGet,
   csSet,
@@ -21,9 +26,6 @@ export {
  * Normalise a hostname entered by the user:
  * - If it looks like an IP address (digits and dots only), return as-is
  * - Otherwise strip any trailing .local and re-append it
- * e.g. "appdocker01" -> "appdocker01.local"
- *      "appdocker01.local" -> "appdocker01.local"
- *      "100.115.60.6" -> "100.115.60.6"
  */
 export function normaliseHostname(raw: string): string {
   const h = raw.trim();
@@ -33,15 +35,11 @@ export function normaliseHostname(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Onboarding / Settings component
+// OnboardingCard — unified discovery + connection panel
 // ---------------------------------------------------------------------------
 
 interface OnboardingProps {
   onComplete: () => void;
-  /**
-   * Called when a live setting (e.g. demo toggle) should trigger a reconnect
-   * without closing the Settings panel. Falls back to onComplete if not provided.
-   */
   onReconnect?: () => void;
   /** True while App.tsx background discovery is running */
   discovering?: boolean;
@@ -50,62 +48,151 @@ interface OnboardingProps {
   onDiscoverySelect?: (result: DiscoveryResult) => void;
 }
 
+type ScanState = 'scanning' | 'done' | 'refreshing';
+
 const Onboarding: Component<OnboardingProps> = (props) => {
-  const [hostname, setHostname] = createSignal('');
-  const [storeUrl, setStoreUrl] = createSignal('');
-  const [demoMode, setDemoMode] = createSignal(true);
-  const [saving, setSaving] = createSignal(false);
-  const [scanning, setScanning] = createSignal(false);
-  const [scanStatus, setScanStatus] = createSignal<string | null>(null);
-  const [localResults, setLocalResults] = createSignal<DiscoveryResult[]>([]);
+  const [demoMode, setDemoMode] = createSignal(false);
+  const [results, setResults] = createSignal<DiscoveryResult[]>([]);
+  const [scanState, setScanState] = createSignal<ScanState>('scanning');
   const [showManual, setShowManual] = createSignal(false);
+  const [manualInput, setManualInput] = createSignal('');
+  const [manualConnecting, setManualConnecting] = createSignal(false);
+  const [manualError, setManualError] = createSignal<string | null>(null);
 
-  // All discovery results: prefer prop (from App.tsx background scan), else local
-  const allResults = () => props.discoveryResults ?? localResults();
-  // Show picker when 2+ results and not explicitly showing manual form
-  const showPicker = () => !showManual() && !demoMode() && allResults().length >= 2;
-
-  // Pre-fill with whatever is already stored
-  onMount(async () => {
-    const r = await csGet([STORAGE_KEY_HOSTNAME, STORAGE_KEY_STORE_URL, STORAGE_KEY_DEMO]);
-    setHostname(r[STORAGE_KEY_HOSTNAME] ?? '');
-    setStoreUrl(r[STORAGE_KEY_STORE_URL] ?? '');
-
-    if (STORAGE_KEY_DEMO in r) {
-      setDemoMode(r[STORAGE_KEY_DEMO] === 'true');
-    } else {
-      setDemoMode(!(r[STORAGE_KEY_HOSTNAME] ?? ''));
-    }
-  });
-
-  // Save demo mode immediately on change and trigger App reconnect so status bar updates
-  const handleDemoChange = async (val: boolean) => {
-    setDemoMode(val);
-    await csSet({ [STORAGE_KEY_DEMO]: String(val) });
-    if (props.onReconnect) props.onReconnect();
-    else props.onComplete();
+  // Merge results: keep existing order, append new hostnames
+  const mergeResults = (fresh: DiscoveryResult[]) => {
+    setResults((prev) => {
+      const known = new Set(prev.map((r) => r.hostname));
+      const merged = [...prev];
+      for (const r of fresh) {
+        if (!known.has(r.hostname)) merged.push(r);
+      }
+      return merged;
+    });
   };
 
-  const handleSubmit = async (e: Event) => {
-    e.preventDefault();
-    const isDemo = demoMode();
-    const h = isDemo ? '' : normaliseHostname(hostname());
-    if (!isDemo && !h) return;
-    if (h) setHostname(h);
+  // Initial scan on mount
+  const runScan = async () => {
+    setScanState('scanning');
+    setResults([]);
+    const found = await discoverAllEngines();
+    mergeResults(found);
+    setScanState('done');
+  };
 
-    setSaving(true);
+  onMount(async () => {
+    // Load stored demo preference
+    const r = await csGet([STORAGE_KEY_HOSTNAME, STORAGE_KEY_DEMO]);
+    const storedDemo = STORAGE_KEY_DEMO in r
+      ? r[STORAGE_KEY_DEMO] === 'true'
+      : !(r[STORAGE_KEY_HOSTNAME] ?? '');
+    setDemoMode(storedDemo);
+
+    await runScan();
+  });
+
+  // Background refresh every 10s while the panel is shown
+  createEffect(() => {
+    if (demoMode()) return;
+    const interval = setInterval(async () => {
+      setScanState('refreshing');
+      const fresh = await discoverAllEngines();
+      mergeResults(fresh);
+      setScanState('done');
+    }, DISCOVERY_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  });
+
+  // Sync with parent-provided discovery results (from App.tsx background scan)
+  createEffect(() => {
+    const parentResults = props.discoveryResults;
+    if (parentResults && parentResults.length > 0) mergeResults(parentResults);
+  });
+
+  const handleConnect = (result: DiscoveryResult) => {
+    if (props.onDiscoverySelect) {
+      props.onDiscoverySelect(result);
+    }
+  };
+
+  const handleDemoToggle = async (val: boolean) => {
+    setDemoMode(val);
+    await csSet({ [STORAGE_KEY_DEMO]: String(val) });
+    if (val) {
+      if (props.onReconnect) props.onReconnect();
+      else props.onComplete();
+    }
+  };
+
+  const handleManualConnect = async () => {
+    const raw = manualInput().trim();
+    if (!raw) return;
+    setManualError(null);
+    setManualConnecting(true);
+
     try {
-      await csSet({
-        ...(h ? { [STORAGE_KEY_HOSTNAME]: h } : {}),
-        [STORAGE_KEY_DEMO]: String(isDemo),
-        ...(storeUrl().trim() ? { [STORAGE_KEY_STORE_URL]: storeUrl().trim() } : {}),
-      });
-      if (!storeUrl().trim()) {
-        localStorage.removeItem(STORAGE_KEY_STORE_URL);
+      const base = extractHostnameBase(raw);
+
+      if (base) {
+        // Probe siblings using the extracted prefix
+        const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal);
+        const normalised = normaliseHostname(raw);
+
+        // Check if the entered host itself is in the results
+        const enteredResult = siblings.find(
+          (r) => r.hostname === normalised || r.hostname === raw.trim()
+        );
+
+        if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {
+          // No siblings found (or only the host itself) — connect directly
+          const directResult = enteredResult ?? siblings[0];
+          if (directResult) {
+            setShowManual(false);
+            handleConnect(directResult);
+          } else {
+            // Probe the entered hostname directly as a last resort
+            const res = await fetch(`http://${normalised}/api/store-url`, {
+              signal: AbortSignal.timeout(5000),
+            });
+            if (res.ok) {
+              const json = await res.json() as { url?: string };
+              if (json.url) {
+                setShowManual(false);
+                handleConnect({ hostname: normalised, storeUrl: json.url });
+              } else {
+                setManualError('Engine found but no store URL returned.');
+              }
+            } else {
+              setManualError('Could not reach engine. Check the hostname.');
+            }
+          }
+        } else {
+          // Multiple siblings found — merge into results and let user pick
+          mergeResults(siblings);
+          setShowManual(false);
+        }
+      } else {
+        // IP address or no number — probe directly
+        const normalised = normaliseHostname(raw);
+        const res = await fetch(`http://${normalised}/api/store-url`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          const json = await res.json() as { url?: string };
+          if (json.url) {
+            setShowManual(false);
+            handleConnect({ hostname: normalised, storeUrl: json.url });
+          } else {
+            setManualError('Engine found but no store URL returned.');
+          }
+        } else {
+          setManualError('Could not reach engine. Check the hostname.');
+        }
       }
-      props.onComplete();
+    } catch {
+      setManualError('Could not reach engine. Check the hostname.');
     } finally {
-      setSaving(false);
+      setManualConnecting(false);
     }
   };
 
@@ -113,112 +200,118 @@ const Onboarding: Component<OnboardingProps> = (props) => {
     <div class="onboarding">
       <div class="onboarding__card">
         <h1 class="onboarding__title">IDEA Console</h1>
-        <p class="onboarding__subtitle">
-          Configure the Engine connection and display preferences.
-        </p>
 
-        {/* Background discovery indicator */}
-        <Show when={props.discovering && !showPicker()}>
-          <div class="onboarding__discovering">
-            <span class="onboarding__discovering-dot" />
-            <span>Scanning for engine on the network…</span>
-          </div>
-        </Show>
-
-        {/* Engine picker — shown when 2+ engines found */}
-        <Show when={showPicker()}>
-          <EnginePickerPanel
-            results={allResults()}
-            onSelect={(result) => {
-              if (props.onDiscoverySelect) props.onDiscoverySelect(result);
-            }}
-            onManual={() => setShowManual(true)}
-          />
-        </Show>
-
-        {/* Form — shown when picker is not active */}
-        <Show when={!showPicker()}>
-          <form class="onboarding__form" onSubmit={handleSubmit}>
-
-            {/* Demo mode */}
-            <div class="form-field">
-              <label class="toggle-row">
-                <span class="toggle-row__label">Demo mode</span>
+        <Show when={!demoMode()}>
+          {/* ── Manual entry ───────────────────────────────────── */}
+          <Show when={showManual()}>
+            <div class="onboarding__manual">
+              <button
+                class="onboarding__back-link"
+                onClick={() => { setShowManual(false); setManualError(null); }}
+              >
+                ← Back
+              </button>
+              <div class="onboarding__manual-row">
                 <input
-                  type="checkbox"
-                  checked={demoMode()}
-                  onChange={(e) => handleDemoChange(e.currentTarget.checked)}
-                />
-              </label>
-              <span class="form-field__hint">
-                Show mock data — use this to explore the UI without a running Engine.
-              </span>
-            </div>
-
-            {/* Engine hostname — only when not in demo mode */}
-            <Show when={!demoMode()}>
-              <div class="onboarding__scan">
-                <button
-                  type="button"
-                  class={`onboarding__scan-btn ${scanning() ? 'onboarding__scan-btn--active' : ''}`}
-                  disabled={scanning()}
-                  onClick={async () => {
-                    setScanning(true);
-                    setScanStatus(null);
-                    setShowManual(false);
-                    const results = await discoverAllEngines();
-                    setLocalResults(results);
-                    setScanning(false);
-                    if (results.length === 1) {
-                      setHostname(results[0].hostname);
-                      setStoreUrl(results[0].storeUrl);
-                      setScanStatus(`Found: ${results[0].hostname}`);
-                    } else if (results.length === 0) {
-                      setScanStatus('No engine found — enter hostname manually');
-                    }
-                  }}
-                >
-                  <Show when={scanning()}>
-                    <span class="onboarding__scan-spinner" />
-                  </Show>
-                  {scanning() ? 'Scanning…' : 'Scan for engine'}
-                </button>
-                <Show when={scanStatus() && !scanning()}>
-                  <span class="onboarding__scan-status">{scanStatus()}</span>
-                </Show>
-              </div>
-
-              <div class="form-field">
-                <label class="form-field__label" for="engine-hostname">
-                  Engine hostname
-                </label>
-                <input
-                  id="engine-hostname"
                   class="form-field__input"
                   type="text"
-                  placeholder="appdocker01 or 192.168.1.10"
-                  value={hostname()}
-                  onInput={(e) => setHostname(e.currentTarget.value)}
-                  required
+                  placeholder="idea01 or 192.168.1.10"
+                  value={manualInput()}
+                  onInput={(e) => setManualInput(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handleManualConnect(); }}
                   autocomplete="off"
                   spellcheck={false}
+                  autofocus
                 />
-                <span class="form-field__hint">
-                  e.g. appdocker01.local or the Tailscale IP of the Engine
-                </span>
+                <button
+                  class="engine-picker__connect-btn"
+                  disabled={manualConnecting() || !manualInput().trim()}
+                  onClick={handleManualConnect}
+                >
+                  <Show when={manualConnecting()}>
+                    <span class="onboarding__scan-spinner" />
+                  </Show>
+                  {manualConnecting() ? 'Connecting…' : 'Connect'}
+                </button>
               </div>
+              <Show when={manualError()}>
+                <p class="onboarding__manual-error">{manualError()}</p>
+              </Show>
+            </div>
+          </Show>
+
+          {/* ── Results / scanning state ────────────────────────── */}
+          <Show when={!showManual()}>
+            <Show
+              when={results().length > 0}
+              fallback={
+                <div class="onboarding__scan-state">
+                  <Show
+                    when={scanState() !== 'done'}
+                    fallback={
+                      <div class="onboarding__no-results">
+                        <p>No engines found on network.</p>
+                        <button class="onboarding__rescan-btn" onClick={runScan}>
+                          Scan again
+                        </button>
+                      </div>
+                    }
+                  >
+                    <div class="onboarding__discovering">
+                      <span class="onboarding__scan-spinner" />
+                      <span>Scanning for engines…</span>
+                    </div>
+                  </Show>
+                </div>
+              }
+            >
+              <ul class="engine-picker__list">
+                <For each={results()}>
+                  {(result) => (
+                    <li class="engine-picker__item">
+                      <span class="engine-picker__hostname">{result.hostname}</span>
+                      <button
+                        class="engine-picker__connect-btn"
+                        onClick={() => handleConnect(result)}
+                      >
+                        Connect
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+              <Show when={scanState() === 'refreshing'}>
+                <div class="onboarding__refreshing">
+                  <span class="onboarding__scan-spinner onboarding__scan-spinner--small" />
+                  <span>Still scanning…</span>
+                </div>
+              </Show>
             </Show>
 
             <button
-              class="onboarding__submit"
-              type="submit"
-              disabled={(!demoMode() && !hostname().trim()) || saving()}
+              class="onboarding__manual-link"
+              onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
             >
-              {saving() ? 'Saving…' : 'Save & Connect'}
+              Enter hostname manually ›
             </button>
-
-          </form>
+          </Show>
         </Show>
+
+        {/* ── Demo mode toggle — always visible ───────────────── */}
+        <div class="onboarding__demo-row">
+          <label class="toggle-row">
+            <input
+              type="checkbox"
+              checked={demoMode()}
+              onChange={(e) => void handleDemoToggle(e.currentTarget.checked)}
+            />
+            <span class="toggle-row__label">Demo mode</span>
+          </label>
+          <span class="form-field__hint">
+            Show mock data — explore the UI without a running engine.
+          </span>
+        </div>
+
       </div>
     </div>
   );

@@ -65,6 +65,7 @@ const makeStore = (): Store => ({
       lastBackup: null,
       lastStarted: 0,
       storedOn: 'disk-1',
+      statusCondition: null, currentStep: null, totalSteps: null, stepLabel: null, metrics: null,
     },
     'inst-2': {
       id: 'inst-2',
@@ -77,9 +78,11 @@ const makeStore = (): Store => ({
       lastBackup: null,
       lastStarted: 0,
       storedOn: 'disk-1',
+      statusCondition: null, currentStep: null, totalSteps: null, stepLabel: null, metrics: null,
     },
   },
   userDB: {},
+  operationDB: {},
 });
 
 describe('AppBrowser', () => {

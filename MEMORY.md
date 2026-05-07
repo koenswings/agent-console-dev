@@ -32,7 +32,12 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #78 (v0.2.54)
+- main is up to date as of PR #87 (v0.2.63)
+  - Lesson: SolidJS <Show when={a && b}> — child accessor returns LAST value of &&. Put the truthy object last.
+  - Lesson: Signal reads inside a Show child accessor are NOT individually tracked. Use createMemo for any derived value that needs to update reactively inside a Show child.
+  - PR #77: History panel button (📋) replaces inline CommandHistory
+  - PR #80: Remove mock running op, add History panel screenshot
+  - PR #81: Fix isProductionWebMode — Tailscale IPs (100.x) now treated as production web mode; fixes command history on fleet Pis
   - PR #73: auto-clear Starting… spinner after 15s timeout
   - PR #74: live command log in expanded panel
   - PR #75: inline log detail (latest line beneath Starting/Stopping)
