@@ -23,15 +23,20 @@ export {
 } from '../store/storage';
 
 /**
- * Normalise a hostname entered by the user:
- * - If it looks like an IP address (digits and dots only), return as-is
+ * Normalise a hostname entered by the user.
+ * Accepts optional :port suffix (e.g. "idea01:8080" or "100.115.60.6:8080").
+ * Returns { host, port } where host is normalised and port defaults to 80.
+ * - If the host looks like an IP address (digits and dots only), return as-is
  * - Otherwise strip any trailing .local and re-append it
  */
-export function normaliseHostname(raw: string): string {
-  const h = raw.trim();
-  if (!h) return h;
-  if (/^[\d.]+$/.test(h)) return h;
-  return h.replace(/\.local$/i, '') + '.local';
+export function normaliseHostname(raw: string): { host: string; port: number } {
+  const trimmed = raw.trim();
+  const portMatch = trimmed.match(/:(\d+)$/);
+  const port = portMatch ? parseInt(portMatch[1], 10) : 80;
+  const h = portMatch ? trimmed.slice(0, -portMatch[0].length) : trimmed;
+  if (!h) return { host: h, port };
+  const host = /^[\d.]+$/.test(h) ? h : h.replace(/\.local$/i, '') + '.local';
+  return { host, port };
 }
 
 // ---------------------------------------------------------------------------
@@ -132,15 +137,16 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
     try {
       const base = extractHostnameBase(raw);
+      const { host: normHost, port } = normaliseHostname(raw);
+      const portProp = port !== 80 ? { port } : {};
 
       if (base) {
         // Probe siblings using the extracted prefix
         const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal);
-        const normalised = normaliseHostname(raw);
 
         // Check if the entered host itself is in the results
         const enteredResult = siblings.find(
-          (r) => r.hostname === normalised || r.hostname === raw.trim()
+          (r) => r.hostname === normHost || r.hostname === raw.replace(/:\d+$/, '').trim()
         );
 
         if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {
@@ -148,17 +154,17 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           const directResult = enteredResult ?? siblings[0];
           if (directResult) {
             setShowManual(false);
-            handleConnect(directResult);
+            handleConnect({ ...directResult, ...portProp });
           } else {
             // Probe the entered hostname directly as a last resort
-            const res = await fetch(`http://${normalised}/api/store-url`, {
+            const res = await fetch(`http://${normHost}:${port}/api/store-url`, {
               signal: AbortSignal.timeout(5000),
             });
             if (res.ok) {
               const json = await res.json() as { url?: string };
               if (json.url) {
                 setShowManual(false);
-                handleConnect({ hostname: normalised, storeUrl: json.url });
+                handleConnect({ hostname: normHost, storeUrl: json.url, ...portProp });
               } else {
                 setManualError('Engine found but no store URL returned.');
               }
@@ -173,15 +179,14 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         }
       } else {
         // IP address or no number — probe directly
-        const normalised = normaliseHostname(raw);
-        const res = await fetch(`http://${normalised}/api/store-url`, {
+        const res = await fetch(`http://${normHost}:${port}/api/store-url`, {
           signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
           const json = await res.json() as { url?: string };
           if (json.url) {
             setShowManual(false);
-            handleConnect({ hostname: normalised, storeUrl: json.url });
+            handleConnect({ hostname: normHost, storeUrl: json.url, ...portProp });
           } else {
             setManualError('Engine found but no store URL returned.');
           }
@@ -215,7 +220,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="text"
-                  placeholder="idea01 or 192.168.1.10"
+                  placeholder="idea01, 192.168.1.10, or host:8080"
                   value={manualInput()}
                   onInput={(e) => setManualInput(e.currentTarget.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') void handleManualConnect(); }}
