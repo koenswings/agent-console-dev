@@ -5,7 +5,16 @@ import AppCard from './AppCard';
 
 interface AppBrowserProps {
   store: Accessor<Store | null>;
+  connected: () => boolean;
   onLogin?: () => void;
+}
+
+/** Add .local suffix if hostname is a bare name (not an IP, not already .local) */
+function ensureLocal(hostname: string): string {
+  if (!hostname || hostname === 'localhost') return hostname;
+  if (/^[\d.]+$/.test(hostname)) return hostname; // IP address — leave as-is
+  if (hostname.endsWith('.local')) return hostname;
+  return `${hostname}.local`;
 }
 
 const AppBrowser: Component<AppBrowserProps> = (props) => {
@@ -18,7 +27,7 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
     const disk = store.diskDB[inst.storedOn];
     if (!disk?.dockedTo) return 'localhost';
     const engine = store.engineDB[disk.dockedTo];
-    return engine?.hostname ?? 'localhost';
+    return ensureLocal(engine?.hostname ?? 'localhost');
   };
 
   // ID list of all instances (Running and non-Running alike).
@@ -36,9 +45,11 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
       <Show
         when={instanceIds().length > 0}
         fallback={
-          <div class="app-browser__empty">
-            No apps available on this network yet.
-          </div>
+          <Show when={props.connected()}>
+            <div class="app-browser__empty">
+              No apps available on this network yet.
+            </div>
+          </Show>
         }
       >
         <div class="app-browser__grid">
