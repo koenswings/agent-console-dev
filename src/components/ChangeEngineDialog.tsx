@@ -21,9 +21,9 @@ interface ProbeResult {
   storeUrl: string;
 }
 
-async function probeHost(hostname: string): Promise<ProbeResult | null> {
+async function probeHost(hostname: string, port = 80): Promise<ProbeResult | null> {
   try {
-    const res = await fetch(`http://${hostname}/api/store-url`, {
+    const res = await fetch(`http://${hostname}:${port}/api/store-url`, {
       signal: AbortSignal.timeout(2000),
     });
     if (!res.ok) return null;
@@ -34,6 +34,13 @@ async function probeHost(hostname: string): Promise<ProbeResult | null> {
   } catch {
     return null;
   }
+}
+
+function parseHostPort(input: string): { host: string; port: number } {
+  const portMatch = input.match(/:(\d+)$/);
+  const port = portMatch ? parseInt(portMatch[1], 10) : 80;
+  const host = portMatch ? input.slice(0, -portMatch[0].length) : input;
+  return { host, port };
 }
 
 /**
@@ -78,11 +85,12 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
     setHistory(await readEngineHistory());
   });
 
-  const runProbes = async (bare: string) => {
-    if (!bare.trim()) { setSuggestions([]); return; }
+  const runProbes = async (raw: string) => {
+    if (!raw.trim()) { setSuggestions([]); return; }
     setProbing(true);
-    const candidates = buildProbeCandidates(bare.trim());
-    const results = await Promise.all(candidates.map(probeHost));
+    const { host, port } = parseHostPort(raw.trim());
+    const candidates = buildProbeCandidates(host);
+    const results = await Promise.all(candidates.map((c) => probeHost(c, port)));
     setSuggestions(results.filter((r): r is ProbeResult => r !== null));
     setProbing(false);
   };
@@ -114,18 +122,19 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
   };
 
   const handleConnectButton = async () => {
-    const bare = input().trim();
-    if (!bare) return;
+    const raw = input().trim();
+    if (!raw) return;
     setConnecting(true);
     setError('');
+    const { host, port } = parseHostPort(raw);
     let result: ProbeResult | null = null;
     try {
-      result = await probeHost(`${bare}.local`) ?? await probeHost(bare);
+      result = await probeHost(`${host}.local`, port) ?? await probeHost(host, port);
     } finally {
       setConnecting(false);
     }
     if (!result) {
-      setError(`Could not reach "${bare}". Check the name and try again.`);
+      setError(`Could not reach "${raw}". Check the name and try again.`);
       return;
     }
     await connect(result.hostname, result.storeUrl);
@@ -178,7 +187,7 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
           <input
             class="change-engine-dialog__input"
             type="text"
-            placeholder="Engine name, e.g. appdocker01"
+            placeholder="Engine name or host:port, e.g. appdocker01 or 192.168.1.10:8080"
             value={input()}
             onInput={(e) => handleInput(e.currentTarget.value)}
             autocomplete="off"

@@ -13,6 +13,8 @@
 export interface DiscoveryResult {
   hostname: string;
   storeUrl: string;
+  /** Only set when the user specified a non-default port (e.g. host:8080). */
+  port?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,16 +57,16 @@ export function buildCandidates(
 // Core probe
 // ---------------------------------------------------------------------------
 
-async function probeHost(hostname: string): Promise<DiscoveryResult | null> {
+async function probeHost(hostname: string, port = 80): Promise<DiscoveryResult | null> {
   try {
-    const res = await fetch(`http://${hostname}/api/store-url`, {
+    const res = await fetch(`http://${hostname}:${port}/api/store-url`, {
       signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = await res.json();
     const storeUrl = json?.url as string | undefined;
     if (!storeUrl || !storeUrl.startsWith('automerge:')) return null;
-    return { hostname, storeUrl };
+    return { hostname, storeUrl, ...(port !== 80 ? { port } : {}) };
   } catch {
     return null;
   }
@@ -124,7 +126,7 @@ export interface HostnameBase {
  *   "appdocker"    → null  (no number to strip)
  */
 export function extractHostnameBase(input: string): HostnameBase | null {
-  const h = input.trim();
+  const h = input.trim().replace(/:\d+$/, ''); // strip :port before processing
   // IP address — don't try to scan a fleet
   if (/^[\d.]+$/.test(h)) return null;
   const hasDotLocal = /\.local$/i.test(h);
