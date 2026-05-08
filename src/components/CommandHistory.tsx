@@ -5,7 +5,7 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import LogLines from './LogLines';
 
 interface CommandHistoryProps {
-  commandLogStore: Accessor<CommandLogStore | null | false>;
+  commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
 }
 
 const timeAgo = (ts: number): string => {
@@ -32,10 +32,10 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
   // Finished traces only, newest first (reverse of insertion order)
   const finishedTraces = createMemo((): CommandTrace[] => {
     const store = cls();
-    if (!store) return [];
-    return [...store.recentTraceIds]
+    if (!store || (typeof store === 'object' && 'error' in store)) return [];
+    return [...(store as import('../types/commandLog').CommandLogStore).recentTraceIds]
       .reverse()
-      .map((id) => store.traces[id])
+      .map((id) => (store as import('../types/commandLog').CommandLogStore).traces[id])
       .filter((t): t is CommandTrace => t != null && t.status !== 'running');
   });
 
@@ -44,7 +44,7 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
       <div class="command-history__header">Command History</div>
       <Show when={cls() !== null} fallback={<div class="command-history__empty">Loading…</div>}>
         <Show
-          when={cls() !== false}
+          when={!(cls() && typeof cls() === 'object' && 'error' in (cls() as object))}
           fallback={<div class="command-history__empty command-history__empty--error">⚠️ Error loading history</div>}
         >
           <Show

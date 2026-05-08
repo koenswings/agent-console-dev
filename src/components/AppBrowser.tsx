@@ -5,7 +5,7 @@ import AppCard from './AppCard';
 
 interface AppBrowserProps {
   store: Accessor<Store | null>;
-  onLogin: () => void;
+  onLogin?: () => void;
 }
 
 const AppBrowser: Component<AppBrowserProps> = (props) => {
@@ -31,9 +31,6 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
     <div class="app-browser">
       <div class="app-browser__header">
         <h1 class="app-browser__title">Apps</h1>
-        <button class="app-browser__login-link" onClick={props.onLogin}>
-          Log in
-        </button>
       </div>
 
       <Show

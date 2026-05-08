@@ -10,8 +10,6 @@
 import { createSignal, onMount, For, Show, type Component } from 'solid-js';
 import { discoverAllEngines } from '../store/discovery';
 import {
-  csSet,
-  STORAGE_KEY_DEMO,
   readEngineHistory,
   addToEngineHistory,
 } from '../store/storage';
@@ -143,11 +141,6 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
     }
   };
 
-  const handleDemoMode = async () => {
-    await csSet({ [STORAGE_KEY_DEMO]: 'true' });
-    props.onDemoMode();
-  };
-
   return (
     <div
       class="change-engine-dialog"
@@ -225,21 +218,6 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
         >
           {scanning() ? 'Scanning…' : 'Scan network for engines'}
         </button>
-
-        {/* Demo mode toggle */}
-        <div class="change-engine-dialog__demo-section">
-          <p class="change-engine-dialog__section-label">Developer / testing</p>
-          <Show
-            when={props.demo}
-            fallback={
-              <button class="btn btn--secondary" onClick={handleDemoMode}>
-                Switch to demo mode
-              </button>
-            }
-          >
-            <p class="change-engine-dialog__probing">Currently in demo mode. Enter an engine name above to switch to a real engine.</p>
-          </Show>
-        </div>
 
         {/* Cancel */}
         <button class="change-engine-dialog__cancel" onClick={props.onCancel}>

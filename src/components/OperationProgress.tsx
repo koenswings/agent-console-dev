@@ -68,7 +68,7 @@ const argsSummary = (op: Operation, store: Store | null): string => {
 interface OpCardProps {
   op: Operation;
   store: Store | null;
-  commandLogStore: Accessor<CommandLogStore | null | false>;
+  commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
   onDismiss: () => void;
   onCancel: () => void;
 }
@@ -87,7 +87,7 @@ const OpCard: Component<OpCardProps> = (props) => {
   // trace so Failed/Done cards still show their logs.
   const matchingTrace = createMemo((): CommandTrace | null => {
     const cls = props.commandLogStore();
-    if (!cls) return null;
+    if (!cls || (typeof cls === 'object' && 'error' in cls)) return null;
     const all = Object.values(cls.traces).filter(
       (t) => t.command.toLowerCase() === props.op.kind.toLowerCase()
     );
@@ -165,7 +165,7 @@ const OpCard: Component<OpCardProps> = (props) => {
 
 interface OperationProgressProps {
   store: () => Store | null;
-  commandLogStore: Accessor<CommandLogStore | null | false>;
+  commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
 }
 
 const OperationProgress: Component<OperationProgressProps> = (props) => {

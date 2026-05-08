@@ -4,7 +4,6 @@ import OperationProgress from './OperationProgress';
 import HistoryPanel from './HistoryPanel';
 import MobileAppList from './MobileAppList';
 import type { Store } from '../types/store';
-import type { CommandLogStore } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 import type { Selection } from './NetworkTree';
 
@@ -18,7 +17,7 @@ interface PendingMove {
 
 interface MobileLayoutProps {
   store: Accessor<Store | null>;
-  commandLogStore: Accessor<CommandLogStore | null | false>;
+  commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
   selection: Selection;
   onSelect: (s: Selection) => void;
   dragData: Accessor<DragAppData | null>;

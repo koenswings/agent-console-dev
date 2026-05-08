@@ -1,10 +1,11 @@
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
+import type { CommandLogState, CommandLogError } from '../store/commandLog';
 import LogLines from './LogLines';
 
 interface HistoryPanelProps {
-  commandLogStore: Accessor<CommandLogStore | null | false>;
+  commandLogStore: Accessor<CommandLogState>;
   onClose: () => void;
 }
 
@@ -36,13 +37,18 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
   };
 
   const cls = () => props.commandLogStore();
+  const clsError = (): CommandLogError | null => {
+    const s = cls();
+    if (s && typeof s === 'object' && 'error' in s) return s as CommandLogError;
+    return null;
+  };
 
   const finishedTraces = createMemo((): CommandTrace[] => {
     const store = cls();
-    if (!store) return [];
-    return [...store.recentTraceIds]
+    if (!store || (typeof store === 'object' && 'error' in store)) return [];
+    return [...(store as CommandLogStore).recentTraceIds]
       .reverse()
-      .map((id) => store.traces[id])
+      .map((id) => (store as CommandLogStore).traces[id])
       .filter((t): t is CommandTrace => t != null && t.status !== 'running');
   });
 
@@ -56,11 +62,15 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
       <div class="history-panel__body">
         <Show when={cls() !== null} fallback={<div class="history-panel__empty">Loading…</div>}>
           <Show
-            when={cls() !== false}
+            when={!clsError()}
             fallback={
               <div class="history-panel__empty history-panel__empty--unavailable">
-                Command history is not available on this engine.<br />
-                This feature requires a newer engine version.
+                <p>Command history is not available on this engine.</p>
+                <p>
+                  Tried: <code>{clsError()?.url}</code>
+                  {clsError()?.status != null ? ` — HTTP ${clsError()!.status}` : ' — connection failed'}
+                </p>
+                <p>Please report this to Axle with the URL above.</p>
               </div>
             }
           >

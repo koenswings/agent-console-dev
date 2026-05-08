@@ -2,32 +2,36 @@ import { createSignal } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import type { CommandLogStore } from '../types/commandLog';
 
+export type CommandLogError = { error: true; url: string; status: number | null };
+export type CommandLogState = CommandLogStore | null | CommandLogError;
+
 /**
  * Connects to the engine's command-log Automerge document.
  * Fetches the doc URL from GET /api/command-log-url, then calls repo.find()
  * on the same WS-connected repo that syncs the main store.
  *
  * Returns a reactive signal:
- *   null  → still loading
- *   false → failed to connect (show error)
- *   CommandLogStore → connected (may have 0 traces = "no history yet")
+ *   null             → still loading
+ *   CommandLogError  → failed to connect (show error with URL)
+ *   CommandLogStore  → connected (may have 0 traces = "no history yet")
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createCommandLogConnection(
   hostname: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   repo: any
-): Promise<Accessor<CommandLogStore | null | false>> {
-  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogStore | null | false>(null);
+): Promise<Accessor<CommandLogState>> {
+  const apiUrl = `http://${hostname}/api/command-log-url`;
+  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogState>(null);
 
   try {
-    const res = await fetch(`http://${hostname}/api/command-log-url`, {
+    const res = await fetch(apiUrl, {
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) { setCommandLogStore(false); return commandLogStore; }
+    if (!res.ok) { setCommandLogStore({ error: true, url: apiUrl, status: res.status }); return commandLogStore; }
     const json = await res.json() as { url?: string };
     const url = json.url;
-    if (!url) { setCommandLogStore(false); return commandLogStore; }
+    if (!url) { setCommandLogStore({ error: true, url: apiUrl, status: null }); return commandLogStore; }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handle: any = await (repo.find(url as any) as unknown as Promise<any>);
@@ -48,7 +52,7 @@ export async function createCommandLogConnection(
     return commandLogStore;
   } catch (err) {
     console.warn('[commandLog] Failed to connect:', err);
-    setCommandLogStore(false);
+    setCommandLogStore({ error: true, url: apiUrl, status: null });
     return commandLogStore;
   }
 }

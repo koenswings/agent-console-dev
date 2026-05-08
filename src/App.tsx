@@ -30,7 +30,7 @@ import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
-import type { CommandLogStore } from './types/commandLog';
+import type { CommandLogState } from './store/commandLog';
 import type { DragAppData } from './types/drag';
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ const App: Component = () => {
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
-  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogStore | null | false>(null);
+  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogState>(null);
   const [demo, setDemo] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
@@ -357,6 +357,12 @@ const App: Component = () => {
           </button>
         </Show>
 
+        <Show when={!isOperator() && !demo() && !!hostname()}>
+          <button class="status-bar__logout-btn" onClick={() => setShowLogin(true)}>
+            Log in
+          </button>
+        </Show>
+
         <button
           class="status-bar__history-btn"
           title="Command History"
@@ -407,6 +413,16 @@ const App: Component = () => {
               await logout();
               setHostname(await readStoredHostname());
               await initConnection();
+            }}
+            onDemoToggle={async (val) => {
+              await saveDemoMode(val);
+              if (val) {
+                await logout();
+                setHostname(await readStoredHostname());
+                await initConnection();
+              } else {
+                await initConnection();
+              }
             }}
           />
         </Match>
@@ -519,7 +535,7 @@ const App: Component = () => {
 
         {/* Unauthenticated main view (default / fallback) */}
         <Match when={true}>
-          <AppBrowser store={store} onLogin={() => setShowLogin(true)} />
+          <AppBrowser store={store} />
         </Match>
 
       </Switch>
