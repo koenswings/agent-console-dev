@@ -32,7 +32,11 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #87 (v0.2.63)
+- main is up to date as of PR #92 (v0.2.66)
+  - PR #90: `host:port` syntax in ChangeEngineDialog manual input
+  - PR #91: better history error msg (shows URL tried + ask Axle), demo toggle in Settings panel, login btn in status bar
+  - PR #92: always-visible status bar buttons (login + history), simplified scan panel with corner spinner
+- Clean working tree, on main branch
   - Lesson: SolidJS <Show when={a && b}> — child accessor returns LAST value of &&. Put the truthy object last.
   - Lesson: Signal reads inside a Show child accessor are NOT individually tracked. Use createMemo for any derived value that needs to update reactively inside a Show child.
   - PR #77: History panel button (📋) replaces inline CommandHistory

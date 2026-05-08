@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, Switch, Match, onMount, onCleanup, batch, type Component } from 'solid-js';
+import { createSignal, createEffect, createMemo, Show, Switch, Match, onMount, onCleanup, batch, type Component } from 'solid-js';
 import pkg from '../package.json';
 import Onboarding from './components/Onboarding';
 import SettingsPanel from './components/SettingsPanel';
@@ -61,7 +61,9 @@ const App: Component = () => {
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
-  const [commandLogStore, setCommandLogStore] = createSignal<CommandLogState>(null);
+  // commandLogStore is derived reactively from the connection's accessor
+  // so it updates automatically as the async connection resolves.
+  const commandLogStore = createMemo<CommandLogState>(() => connection()?.commandLogStore() ?? null);
   const [demo, setDemo] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
@@ -133,7 +135,6 @@ const App: Component = () => {
     setStore(conn.store());
     setConnected(conn.connected());
     setSendCommandFn(conn.sendCommand);
-    setCommandLogStore(conn.commandLogStore());
   });
 
   createEffect(() => {
@@ -146,12 +147,6 @@ const App: Component = () => {
     const conn = connection();
     if (!conn) return;
     setConnected(conn.connected());
-  });
-
-  createEffect(() => {
-    const conn = connection();
-    if (!conn) return;
-    setCommandLogStore(conn.commandLogStore());
   });
 
   // ── Session restore (once per connection, when store first arrives) ───────
@@ -535,7 +530,7 @@ const App: Component = () => {
 
         {/* Unauthenticated main view (default / fallback) */}
         <Match when={true}>
-          <AppBrowser store={store} />
+          <AppBrowser store={store} connected={connected} />
         </Match>
 
       </Switch>

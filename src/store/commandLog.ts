@@ -26,7 +26,9 @@ export async function createCommandLogConnection(
 
   try {
     const res = await fetch(apiUrl, {
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(8000),
+      mode: 'cors',
+      credentials: 'omit',
     });
     if (!res.ok) { setCommandLogStore({ error: true, url: apiUrl, status: res.status }); return commandLogStore; }
     const json = await res.json() as { url?: string };
