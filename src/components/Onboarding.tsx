@@ -6,13 +6,6 @@ import {
   DISCOVERY_REFRESH_INTERVAL_MS,
   type DiscoveryResult,
 } from '../store/discovery';
-import {
-  csGet,
-  csSet,
-  STORAGE_KEY_HOSTNAME,
-  STORAGE_KEY_STORE_URL,
-  STORAGE_KEY_DEMO,
-} from '../store/storage';
 
 // Re-export storage helpers for backward compatibility with App.tsx
 export {
@@ -51,7 +44,6 @@ interface OnboardingProps {
 type ScanState = 'scanning' | 'done' | 'refreshing';
 
 const Onboarding: Component<OnboardingProps> = (props) => {
-  const [demoMode, setDemoMode] = createSignal(false);
   const [results, setResults] = createSignal<DiscoveryResult[]>([]);
   const [scanState, setScanState] = createSignal<ScanState>('scanning');
   const [showManual, setShowManual] = createSignal(false);
@@ -81,19 +73,11 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   };
 
   onMount(async () => {
-    // Load stored demo preference
-    const r = await csGet([STORAGE_KEY_HOSTNAME, STORAGE_KEY_DEMO]);
-    const storedDemo = STORAGE_KEY_DEMO in r
-      ? r[STORAGE_KEY_DEMO] === 'true'
-      : !(r[STORAGE_KEY_HOSTNAME] ?? '');
-    setDemoMode(storedDemo);
-
     await runScan();
   });
 
   // Background refresh every 10s while the panel is shown
   createEffect(() => {
-    if (demoMode()) return;
     const interval = setInterval(async () => {
       setScanState('refreshing');
       const fresh = await discoverAllEngines();
@@ -112,15 +96,6 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   const handleConnect = (result: DiscoveryResult) => {
     if (props.onDiscoverySelect) {
       props.onDiscoverySelect(result);
-    }
-  };
-
-  const handleDemoToggle = async (val: boolean) => {
-    setDemoMode(val);
-    await csSet({ [STORAGE_KEY_DEMO]: String(val) });
-    if (val) {
-      if (props.onReconnect) props.onReconnect();
-      else props.onComplete();
     }
   };
 
@@ -201,116 +176,99 @@ const Onboarding: Component<OnboardingProps> = (props) => {
       <div class="onboarding__card">
         <h1 class="onboarding__title">IDEA Console</h1>
 
-        <Show when={!demoMode()}>
-          {/* ── Manual entry ───────────────────────────────────── */}
-          <Show when={showManual()}>
-            <div class="onboarding__manual">
-              <button
-                class="onboarding__back-link"
-                onClick={() => { setShowManual(false); setManualError(null); }}
-              >
-                ← Back
-              </button>
-              <div class="onboarding__manual-row">
-                <input
-                  class="form-field__input"
-                  type="text"
-                  placeholder="idea01 or 192.168.1.10"
-                  value={manualInput()}
-                  onInput={(e) => setManualInput(e.currentTarget.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void handleManualConnect(); }}
-                  autocomplete="off"
-                  spellcheck={false}
-                  autofocus
-                />
-                <button
-                  class="engine-picker__connect-btn"
-                  disabled={manualConnecting() || !manualInput().trim()}
-                  onClick={handleManualConnect}
-                >
-                  <Show when={manualConnecting()}>
-                    <span class="onboarding__scan-spinner" />
-                  </Show>
-                  {manualConnecting() ? 'Connecting…' : 'Connect'}
-                </button>
-              </div>
-              <Show when={manualError()}>
-                <p class="onboarding__manual-error">{manualError()}</p>
-              </Show>
-            </div>
-          </Show>
-
-          {/* ── Results / scanning state ────────────────────────── */}
-          <Show when={!showManual()}>
-            <Show
-              when={results().length > 0}
-              fallback={
-                <div class="onboarding__scan-state">
-                  <Show
-                    when={scanState() !== 'done'}
-                    fallback={
-                      <div class="onboarding__no-results">
-                        <p>No engines found on network.</p>
-                        <button class="onboarding__rescan-btn" onClick={runScan}>
-                          Scan again
-                        </button>
-                      </div>
-                    }
-                  >
-                    <div class="onboarding__discovering">
-                      <span class="onboarding__scan-spinner" />
-                      <span>Scanning for engines…</span>
-                    </div>
-                  </Show>
-                </div>
-              }
-            >
-              <ul class="engine-picker__list">
-                <For each={results()}>
-                  {(result) => (
-                    <li class="engine-picker__item">
-                      <span class="engine-picker__hostname">{result.hostname}</span>
-                      <button
-                        class="engine-picker__connect-btn"
-                        onClick={() => handleConnect(result)}
-                      >
-                        Connect
-                      </button>
-                    </li>
-                  )}
-                </For>
-              </ul>
-              <Show when={scanState() === 'refreshing'}>
-                <div class="onboarding__refreshing">
-                  <span class="onboarding__scan-spinner onboarding__scan-spinner--small" />
-                  <span>Still scanning…</span>
-                </div>
-              </Show>
-            </Show>
-
+        {/* ── Manual entry ───────────────────────────────────── */}
+        <Show when={showManual()}>
+          <div class="onboarding__manual">
             <button
-              class="onboarding__manual-link"
-              onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
+              class="onboarding__back-link"
+              onClick={() => { setShowManual(false); setManualError(null); }}
             >
-              Enter hostname manually ›
+              ← Back
             </button>
-          </Show>
+            <div class="onboarding__manual-row">
+              <input
+                class="form-field__input"
+                type="text"
+                placeholder="idea01 or 192.168.1.10"
+                value={manualInput()}
+                onInput={(e) => setManualInput(e.currentTarget.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleManualConnect(); }}
+                autocomplete="off"
+                spellcheck={false}
+                autofocus
+              />
+              <button
+                class="engine-picker__connect-btn"
+                disabled={manualConnecting() || !manualInput().trim()}
+                onClick={handleManualConnect}
+              >
+                <Show when={manualConnecting()}>
+                  <span class="onboarding__scan-spinner" />
+                </Show>
+                {manualConnecting() ? 'Connecting…' : 'Connect'}
+              </button>
+            </div>
+            <Show when={manualError()}>
+              <p class="onboarding__manual-error">{manualError()}</p>
+            </Show>
+          </div>
         </Show>
 
-        {/* ── Demo mode toggle — always visible ───────────────── */}
-        <div class="onboarding__demo-row">
-          <label class="toggle-row">
-            <input
-              type="checkbox"
-              checked={demoMode()}
-              onChange={(e) => void handleDemoToggle(e.currentTarget.checked)}
-            />
-            <span class="toggle-row__label">Demo mode</span>
-          </label>
-          <span class="form-field__hint">
-            Show mock data — explore the UI without a running engine.
-          </span>
-        </div>
+        {/* ── Results / scanning state ────────────────────────── */}
+        <Show when={!showManual()}>
+          <Show
+            when={results().length > 0}
+            fallback={
+              <div class="onboarding__scan-state">
+                <Show
+                  when={scanState() !== 'done'}
+                  fallback={
+                    <div class="onboarding__no-results">
+                      <p>No engines found on network.</p>
+                      <button class="onboarding__rescan-btn" onClick={runScan}>
+                        Scan again
+                      </button>
+                    </div>
+                  }
+                >
+                  <div class="onboarding__discovering">
+                    <span class="onboarding__scan-spinner" />
+                    <span>Scanning for engines…</span>
+                  </div>
+                </Show>
+              </div>
+            }
+          >
+            <ul class="engine-picker__list">
+              <For each={results()}>
+                {(result) => (
+                  <li class="engine-picker__item">
+                    <span class="engine-picker__hostname">{result.hostname}</span>
+                    <button
+                      class="engine-picker__connect-btn"
+                      onClick={() => handleConnect(result)}
+                    >
+                      Connect
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+            <Show when={scanState() === 'refreshing'}>
+              <div class="onboarding__refreshing">
+                <span class="onboarding__scan-spinner onboarding__scan-spinner--small" />
+                <span>Still scanning…</span>
+              </div>
+            </Show>
+          </Show>
+
+          <button
+            class="onboarding__manual-link"
+            onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
+          >
+            Enter hostname manually ›
+          </button>
+        </Show>
 
       </div>
     </div>

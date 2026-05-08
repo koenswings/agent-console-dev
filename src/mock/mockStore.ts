@@ -18,7 +18,7 @@ export interface StoreConnection {
   connected: Accessor<boolean>;
   sendCommand: (engineId: string, command: string) => void;
   changeDoc: (fn: (doc: Store) => void) => void;
-  commandLogStore: Accessor<CommandLogStore | null | false>;
+  commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
 }
 
 // ---------------------------------------------------------------------------

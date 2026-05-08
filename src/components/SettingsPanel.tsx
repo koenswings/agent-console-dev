@@ -17,6 +17,7 @@ export interface SettingsPanelProps {
   onComplete: () => void;
   onConnect: (hostname: string, storeUrl: string) => void;
   onDemoMode: () => void;
+  onDemoToggle?: (val: boolean) => Promise<void>;
 }
 
 const SettingsPanel: Component<SettingsPanelProps> = (props) => {
@@ -131,6 +132,19 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
                 <span class="settings-panel__status-dot" style="background:var(--colour-error)" />
                 <span class="settings-panel__current-label">Not connected</span>
               </Show>
+            </div>
+
+            {/* Demo mode toggle — always visible */}
+            <div class="settings-panel__toggle-row">
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={props.demo}
+                  onChange={(e) => void props.onDemoToggle?.(e.currentTarget.checked)}
+                />
+                <span class="toggle-row__label">Demo mode</span>
+              </label>
+              <span class="form-field__hint">Simulated data, no engine required</span>
             </div>
 
             {/* Change engine — operator only */}

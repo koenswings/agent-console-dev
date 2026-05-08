@@ -25,7 +25,7 @@ interface InstanceRowProps {
   /** Reactive store accessor - used for operation locking lookups. */
   store?:           () => Store | null;
   /** Command log store - used for showing recent trace logs in expanded view. */
-  commandLogStore?: Accessor<CommandLogStore | null | false>;
+  commandLogStore?: Accessor<import('../store/commandLog').CommandLogState>;
   /** Called when a drag starts on this row. */
   onDragStart?: (data: DragAppData) => void;
   /** Called when a drag ends (dropped or cancelled). */
@@ -261,7 +261,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const instanceTraces = createMemo((): CommandTrace[] => {
     if (!props.commandLogStore) return [];
     const cls = props.commandLogStore();
-    if (!cls) return [];
+    if (!cls || (typeof cls === 'object' && 'error' in cls)) return [];
     const instanceId = props.instanceId;
     const instanceName = props.instance()?.name;
     return Object.values(cls.traces)

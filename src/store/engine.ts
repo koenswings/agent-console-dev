@@ -13,6 +13,7 @@ import { createSignal } from 'solid-js';
 import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
+import type { CommandLogError } from './commandLog';
 
 const ENGINE_WS_PORT = 4321;
 const STORAGE_KEY_HOSTNAME = 'engineHostname';
@@ -132,7 +133,8 @@ export async function createEngineConnection(): Promise<StoreConnection> {
 
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
-      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => false };
+      const clsErr: CommandLogError = { error: true, url: `http://${hostname}/api/command-log-url`, status: null };
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr };
     }
 
     // --- Connect via Automerge WebSocket ---
@@ -199,6 +201,7 @@ export async function createEngineConnection(): Promise<StoreConnection> {
   } catch (err) {
     console.error('[engine] Failed to connect:', err);
     setConnected(false);
-    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => false };
+    const clsErr: CommandLogError = { error: true, url: '', status: null };
+    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr };
   }
 }

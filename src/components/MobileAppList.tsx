@@ -4,11 +4,9 @@ import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance } from '../store/operations';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
-import type { CommandLogStore } from '../types/commandLog';
-
 interface MobileAppListProps {
   store: Accessor<Store | null>;
-  commandLogStore?: Accessor<CommandLogStore | null | false>;
+  commandLogStore?: Accessor<import('../store/commandLog').CommandLogState>;
 }
 
 const statusSortOrder = (status: string): number => {
