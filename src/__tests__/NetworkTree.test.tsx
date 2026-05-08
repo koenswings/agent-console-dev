@@ -103,7 +103,7 @@ describe('NetworkTree component', () => {
           onDrop={() => {}}
       />
     ));
-    const onlineBadges = container.querySelectorAll('.tree-item__badge--online');
+    const onlineBadges = container.querySelectorAll('.tree-item__status-dot--online');
     // Both mock engines are online (lastRun within 2 minutes)
     expect(onlineBadges.length).toBeGreaterThanOrEqual(2);
   });

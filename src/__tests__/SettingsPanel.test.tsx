@@ -124,7 +124,8 @@ describe('SettingsPanel', () => {
 
   it('shows demo mode label when demo is true', () => {
     render(() => <SettingsPanel {...defaultProps()} demo={true} hostname="" />);
-    expect(screen.getByText(/Demo mode/)).toBeInTheDocument();
+    // "Demo mode" appears in both the status label and the toggle row
+    expect(screen.getAllByText(/Demo mode/).length).toBeGreaterThan(0);
   });
 
   it('shows not connected label when no hostname and not demo', () => {

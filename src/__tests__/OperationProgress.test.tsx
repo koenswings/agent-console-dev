@@ -39,7 +39,7 @@ describe('OperationProgress', () => {
   });
 
   it('shows Done operations briefly with done class before auto-dismiss', () => {
-    const op = makeOp({ status: 'Done', progressPercent: 100 });
+    const op = makeOp({ status: 'Done', progressPercent: 100, completedAt: Date.now() });
     const { container } = render(() => (
       <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />
     ));
