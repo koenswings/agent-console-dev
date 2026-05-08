@@ -174,7 +174,12 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   return (
     <div class="onboarding">
       <div class="onboarding__card">
-        <h1 class="onboarding__title">IDEA Console</h1>
+        <div class="onboarding__title-row">
+          <h1 class="onboarding__title">IDEA Console</h1>
+          <Show when={scanState() === "scanning" || scanState() === "refreshing"}>
+            <span class="onboarding__corner-spinner" />
+          </Show>
+        </div>
 
         {/* ── Manual entry ───────────────────────────────────── */}
         <Show when={showManual()}>
@@ -216,50 +221,32 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
         {/* ── Results / scanning state ────────────────────────── */}
         <Show when={!showManual()}>
-          <Show
-            when={results().length > 0}
-            fallback={
-              <div class="onboarding__scan-state">
-                <Show
-                  when={scanState() !== 'done'}
-                  fallback={
-                    <div class="onboarding__no-results">
-                      <p>No engines found on network.</p>
-                      <button class="onboarding__rescan-btn" onClick={runScan}>
-                        Scan again
-                      </button>
-                    </div>
-                  }
-                >
-                  <div class="onboarding__discovering">
-                    <span class="onboarding__scan-spinner" />
-                    <span>Scanning for engines…</span>
-                  </div>
-                </Show>
-              </div>
-            }
-          >
+          {/* Status label */}
+          <p class="onboarding__scan-label">
+            <Show when={scanState() === "scanning"}>Scanning for engines…</Show>
+            <Show when={scanState() !== "scanning" && results().length === 0}>No engine found</Show>
+            <Show when={results().length > 0}>{results().length} engine{results().length > 1 ? "s" : ""} found</Show>
+          </p>
+
+          {/* Engine list */}
+          <Show when={results().length > 0}>
             <ul class="engine-picker__list">
               <For each={results()}>
                 {(result) => (
                   <li class="engine-picker__item">
                     <span class="engine-picker__hostname">{result.hostname}</span>
-                    <button
-                      class="engine-picker__connect-btn"
-                      onClick={() => handleConnect(result)}
-                    >
+                    <button class="engine-picker__connect-btn" onClick={() => handleConnect(result)}>
                       Connect
                     </button>
                   </li>
                 )}
               </For>
             </ul>
-            <Show when={scanState() === 'refreshing'}>
-              <div class="onboarding__refreshing">
-                <span class="onboarding__scan-spinner onboarding__scan-spinner--small" />
-                <span>Still scanning…</span>
-              </div>
-            </Show>
+          </Show>
+
+          {/* No results + rescan */}
+          <Show when={scanState() === "done" && results().length === 0}>
+            <button class="onboarding__rescan-btn" onClick={runScan}>Scan again</button>
           </Show>
 
           <button
