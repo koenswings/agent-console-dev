@@ -357,8 +357,8 @@ const App: Component = () => {
           </button>
         </Show>
 
-        <Show when={!isOperator() && !demo() && !!hostname()}>
-          <button class="status-bar__logout-btn" onClick={() => setShowLogin(true)}>
+        <Show when={!isOperator() && !demo()}>
+          <button class="status-bar__login-btn" onClick={() => setShowLogin(true)}>
             Log in
           </button>
         </Show>

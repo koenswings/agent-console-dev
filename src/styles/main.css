@@ -825,6 +825,30 @@ body {
   padding: 32px;
 }
 
+.onboarding__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.onboarding__corner-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--colour-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.onboarding__scan-label {
+  font-size: 0.85rem;
+  color: var(--colour-text-dim);
+  margin: 0.25rem 0 0.75rem;
+}
+
 .onboarding__title {
   font-size: 18px;
   font-weight: 700;
@@ -1219,14 +1243,6 @@ body {
   margin: 0;
 }
 
-.onboarding__demo-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--colour-border);
-}
 
 /* --------------------------------------------------------
    Scrollbar styling
@@ -1285,6 +1301,20 @@ body {
 }
 
 .status-bar__logout-btn:hover {
+  background: var(--colour-surface-alt);
+}
+
+.status-bar__login-btn {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border: 1px solid var(--colour-border);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--colour-text);
+}
+
+.status-bar__login-btn:hover {
   background: var(--colour-surface-alt);
 }
 
