@@ -78,9 +78,10 @@ describe('ChangeEngineDialog', () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-  it('shows demo mode button', () => {
+  it('does not show demo mode button (moved to Settings panel)', () => {
+    // Demo mode toggle was moved to SettingsPanel in v0.2.66
     render(() => <ChangeEngineDialog {...defaultProps()} />);
-    expect(screen.getByRole('button', { name: /demo mode/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /demo mode/i })).not.toBeInTheDocument();
   });
 
   it('shows scan network button', () => {
