@@ -61,11 +61,11 @@ const App: Component = () => {
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
+  const [demo, setDemo] = createSignal(false);
+  const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   // commandLogStore is derived reactively from the connection's accessor
   // so it updates automatically as the async connection resolves.
   const commandLogStore = createMemo<CommandLogState>(() => connection()?.commandLogStore() ?? null);
-  const [demo, setDemo] = createSignal(false);
-  const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   const [discovering, setDiscovering] = createSignal(false);
   const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
 
