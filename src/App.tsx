@@ -340,39 +340,44 @@ const App: Component = () => {
 
         <Show when={isOperator()}>
           <span class="status-bar__username">{currentUser()?.username}</span>
+        </Show>
+
+        <div class="status-bar__actions">
+          <Show when={isOperator()}>
+            <button
+              class="status-bar__operator-mgmt-btn"
+              title="Manage operators"
+              onClick={() => setShowOperatorMgmt((v) => !v)}
+            >
+              {showOperatorMgmt() ? '✕' : '👤'}
+            </button>
+            <button class="status-bar__logout-btn" onClick={handleLogout}>
+              Log out
+            </button>
+          </Show>
+
+          <Show when={!isOperator() && !demo()}>
+            <button class="status-bar__login-btn" title="Log in" onClick={() => setShowLogin(true)}>
+              👤
+            </button>
+          </Show>
+
           <button
-            class="status-bar__operator-mgmt-btn"
-            title="Manage operators"
-            onClick={() => setShowOperatorMgmt((v) => !v)}
+            class="status-bar__history-btn"
+            title="Command History"
+            onClick={() => { setShowHistory((v) => !v); setShowSettings(false); }}
           >
-            {showOperatorMgmt() ? '✕' : '👥'}
+            {showHistory() ? '✕' : '📋'}
           </button>
-          <button class="status-bar__logout-btn" onClick={handleLogout}>
-            Log out
+
+          <button
+            class="status-bar__settings-btn"
+            title="Settings"
+            onClick={() => { setShowSettings((v) => !v); setShowHistory(false); }}
+          >
+            {showSettings() ? '✕' : '⚙'}
           </button>
-        </Show>
-
-        <Show when={!isOperator() && !demo()}>
-          <button class="status-bar__login-btn" onClick={() => setShowLogin(true)}>
-            Log in
-          </button>
-        </Show>
-
-        <button
-          class="status-bar__history-btn"
-          title="Command History"
-          onClick={() => { setShowHistory((v) => !v); setShowSettings(false); }}
-        >
-          {showHistory() ? '✕' : '📋'}
-        </button>
-
-        <button
-          class="status-bar__settings-btn"
-          title="Settings"
-          onClick={() => { setShowSettings((v) => !v); setShowHistory(false); }}
-        >
-          {showSettings() ? '✕' : '⚙'}
-        </button>
+        </div>
       </div>
 
       {/* ── Page content — exactly one Match renders at a time ────────────── */}

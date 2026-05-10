@@ -124,6 +124,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
   min-height: 480px;
   min-width: 380px;
 }
@@ -157,10 +158,6 @@ body {
     flex-wrap: wrap;
     padding: 8px 12px;
     gap: 6px;
-  }
-
-  .status-bar__settings-btn {
-    margin-left: auto;
   }
 }
 
@@ -259,8 +256,14 @@ body {
   background: var(--colour-surface-hover);
 }
 
-.status-bar__settings-btn {
+.status-bar__actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-bar__settings-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -1305,17 +1308,20 @@ body {
 }
 
 .status-bar__login-btn {
-  font-size: 0.78rem;
-  padding: 2px 8px;
-  border: 1px solid var(--colour-border);
-  border-radius: 3px;
-  background: transparent;
+  background: none;
+  border: none;
   cursor: pointer;
-  color: var(--colour-text);
+  font-size: 14px;
+  color: var(--colour-text-dim);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  line-height: 1;
+  transition: color 0.1s, background 0.1s;
 }
 
 .status-bar__login-btn:hover {
-  background: var(--colour-surface-alt);
+  color: var(--colour-text);
+  background: var(--colour-surface-hover);
 }
 
 .status-bar__operator-mgmt-btn {
