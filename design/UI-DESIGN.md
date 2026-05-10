@@ -1,6 +1,6 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.70  
+**Version:** 0.2.71  
 **Date:** 2026-05-10  
 **Author:** Pixel (Console UI Developer)
 
@@ -221,7 +221,17 @@ Each `InstanceRow` shows:
 
 **c) Restore Panel** — shown when a backup disk is selected → **Screen 8**
 
-**Operation Progress bar** — shown above the right-panel content area when active operations exist. Shows kind label, args summary, progress bar, and status. Running operations additionally show a **live log panel** (`LogLines`) that streams captured command output in real time.
+**Operation Progress bar** — shown above the right-panel content area when active operations exist. Shows kind label, args summary, step label, progress indicator, and status. Running operations additionally show a **live log panel** (`LogLines`) that streams captured command output in real time.
+
+Progress uses a **segmented step bar** (`StepProgressBar`) when the engine provides `currentStep` / `totalSteps`:
+- Each step is an equal-width segment
+- Completed steps → solid green
+- Current active step → pulsing green (flash animation)
+- Future steps → grey
+- Fallback: smooth percentage fill bar when only `progressPercent` is available
+- Fallback: indeterminate flowing animation when neither is present
+
+The same `StepProgressBar` is used inline in **InstanceRow** (collapsed view, below the instance name) for start/stop operations.
 
 ![S5 Operation Progress](screenshots/S5-operation-progress.png)
 
