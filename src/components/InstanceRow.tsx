@@ -306,6 +306,20 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return pct != null ? `${label}\u2026 ${pct}%` : `${label}\u2026`;
   });
 
+  // Step data — memos so signal reads are tracked outside Show child accessors.
+  const activeOpCurrentStep = createMemo((): number | null =>
+    props.instance()?.currentStep ?? firstActiveOp()?.currentStep ?? null
+  );
+  const activeOpTotalSteps = createMemo((): number | null =>
+    props.instance()?.totalSteps ?? firstActiveOp()?.totalSteps ?? null
+  );
+  const activeOpProgressPct = createMemo((): number | null =>
+    firstActiveOp()?.progressPercent ?? null
+  );
+  const activeOpDone = createMemo((): boolean =>
+    firstActiveOp()?.status === 'Done'
+  );
+
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleStart = () => {
@@ -403,17 +417,15 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         {/* ── Inline operation progress ─────────────────────── */}
         {/* Hide when expanded: the log panel in expanded view is the source of truth */}
         <Show when={!expanded() && firstActiveOp()}>
-          {(op) => (
-            <div class="instance-row__progress">
-              <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
-              <StepProgressBar
-                currentStep={props.instance()?.currentStep ?? op().currentStep}
-                totalSteps={props.instance()?.totalSteps ?? op().totalSteps}
-                progressPercent={op().progressPercent}
-                done={op().status === 'Done'}
-              />
-            </div>
-          )}
+          <div class="instance-row__progress">
+            <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
+            <StepProgressBar
+              currentStep={activeOpCurrentStep()}
+              totalSteps={activeOpTotalSteps()}
+              progressPercent={activeOpProgressPct()}
+              done={activeOpDone()}
+            />
+          </div>
         </Show>
         <Show when={failedOp()}>
           {(op) => (
