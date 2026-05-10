@@ -12,7 +12,7 @@ import { chromium, type Page, type BrowserContext } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BASE_URL = 'http://localhost:5173';
+const BASE_URL = process.env.BASE_URL ?? 'http://localhost:5173';
 const OUT_DIR = path.join(__dirname, '..', 'design', 'screenshots');
 const DEMO_USER = 'admin';
 const DEMO_PASS = 'admin911!';
@@ -44,7 +44,7 @@ async function cleanPage(ctx: BrowserContext): Promise<Page> {
 
 /** Log in via the modal and wait for the main layout */
 async function loginDemo(p: Page) {
-  await p.locator('.app-browser__login-link').click();
+  await p.locator('.status-bar__login-btn').click();
   await p.locator('.modal').waitFor({ timeout: 5_000 });
   await p.locator('input[autocomplete="username"]').fill(DEMO_USER);
   await p.locator('input[autocomplete="current-password"]').fill(DEMO_PASS);
@@ -75,8 +75,8 @@ async function main() {
     await p.locator('.app-browser').waitFor({ timeout: 15_000 });
     await snap(p, 'S4-app-browser-logged-out');
 
-    // ── M1: Login Modal ──────────────────────────────────────────────────
-    await p.locator('.app-browser__login-link').click();
+    // ── M1: Login Modal — trigger via status bar 👤 button ───────────────
+    await p.locator('.status-bar__login-btn').click();
     await p.locator('.modal').waitFor({ timeout: 5_000 });
     await snap(p, 'M1-login-modal');
     await p.close();

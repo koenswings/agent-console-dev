@@ -1,7 +1,7 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.32  
-**Date:** 2026-04-29  
+**Version:** 0.2.70  
+**Date:** 2026-05-10  
 **Author:** Pixel (Console UI Developer)
 
 > Screenshots captured automatically with Playwright headless Chromium via `scripts/screenshot-screens.ts`.
@@ -41,14 +41,18 @@ Present on **every screen**, always at the top.
 
 | Element | Description | Visibility |
 |---|---|---|
-| Title + version | "IDEA Console v0.2.1" | Always |
-| Status dot + label | Green dot + hostname when connected; orange "Scanning…"; red "No engine found" | Always |
+| Title + version | "IDEA Console v0.2.x" | Always |
+| Status dot + label | Green dot + hostname when connected; orange pulsing "Scanning…"; red "No engine found" | Always |
 | DEMO badge | Orange badge | Demo mode only |
 | Username | Logged-in operator's name | Authenticated only |
-| 👥 button | Toggles Operator Management screen | Authenticated only |
-| 📋 button | Toggles History panel (command history overlay) | Connected or Demo mode only |
+| **Right-side action group** (`status-bar__actions`) | Always flush to the far right; contains the buttons below in order | — |
+| 👤 button | Opens Login Form modal | Not authenticated only |
+| 👤 button | Toggles Operator Management screen | Authenticated only |
 | Log out | Logs out current operator | Authenticated only |
+| 📋 button | Toggles History panel (command history overlay) | Always |
 | ⚙ button | Toggles Settings panel (✕ to close) | Always |
+
+All action buttons (👤, 📋, ⚙) are icon-style, borderless, and grouped together on the right side via `margin-left: auto` on the `status-bar__actions` container.
 
 ---
 
@@ -82,10 +86,17 @@ Additionally, one **modal overlay** can appear on top of any screen:
 
 ![S1 Onboarding](screenshots/S1-onboarding.png)
 
-**Sub-state: Engine Picker** — if 2+ engines are found on the network, a list of discovered engines appears instead of the manual form. The user picks one or chooses "Enter manually".
+**States:**
+- **Scanning** — corner spinner animates; label shows "Scanning for engines…"
+- **Found** — engine list appears; user clicks Connect
+- **Not found** — label shows "No engine found"; only "Enter hostname manually ›" link is shown (no Scan Again button — the background re-scan is automatic and indicated by the corner spinner)
+
+**Sub-state: Engine Picker** — if 2+ engines are found on the network, a list of discovered engines appears. The user picks one or chooses "Enter hostname manually ›".
+
+**Sub-state: Manual Entry** — hostname input + Connect button; ← Back link returns to the picker.
 
 **Flows from here:**
-- Save & Connect → **Screen 3** (First-Time Setup) or **Screen 4** (App Browser)
+- Connect → **Screen 3** (First-Time Setup) or **Screen 4** (App Browser)
 - Demo mode on → **Screen 4** (App Browser, demo data)
 
 ---
@@ -143,17 +154,17 @@ _(No screenshot — requires a fresh engine with empty userDB. Hard to reproduce
 - App cards show all instances (Running and non-Running)
 - Running apps show an "Open ↗" link to the app's URL on the engine
 - Non-running apps are greyed out / unavailable
-- "Log in" button → **Modal M1** (Login Form)
+- No login button in the app content area — login is always accessed via the 👤 icon in the status bar (top-right)
 
 **Flows from here:**
-- Log in → **Modal M1** → on success → **Screen 5** (Main Layout)
+- 👤 in status bar → **Modal M1** (Login Form) → on success → **Screen 5** (Main Layout)
 
 ---
 
 ## Modal M1: Login Form
 
 **File:** `src/components/LoginForm.tsx`  
-**When shown:** Floats above App Browser (or any screen) when "Log in" is clicked. Rendered outside the Switch so it survives screen transitions.
+**When shown:** Floats above any screen when the 👤 icon in the status bar is clicked. Rendered outside the Switch so it survives screen transitions.
 
 ![M1 Login Modal](screenshots/M1-login-modal.png)
 
