@@ -6,6 +6,7 @@ import StatusDot from './StatusDot';
 const ANSI_RE = /\u001b\[[0-9;]*[mGKHFABCDJsu]|\u001b[\[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g;
 const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
 import LogLines from './LogLines';
+import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
@@ -402,15 +403,17 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         {/* ── Inline operation progress ─────────────────────── */}
         {/* Hide when expanded: the log panel in expanded view is the source of truth */}
         <Show when={!expanded() && firstActiveOp()}>
-          <div class={`instance-row__progress${firstActiveOp()?.progressPercent == null ? ' instance-row__progress--indeterminate' : ''}`}>
-            <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
-            <div class="instance-row__progress-bar">
-              <div
-                class="instance-row__progress-fill"
-                style={firstActiveOp()?.progressPercent != null ? { width: `${firstActiveOp()!.progressPercent}%` } : {}}
+          {(op) => (
+            <div class="instance-row__progress">
+              <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
+              <StepProgressBar
+                currentStep={props.instance()?.currentStep ?? op().currentStep}
+                totalSteps={props.instance()?.totalSteps ?? op().totalSteps}
+                progressPercent={op().progressPercent}
+                done={op().status === 'Done'}
               />
             </div>
-          </div>
+          )}
         </Show>
         <Show when={failedOp()}>
           {(op) => (
@@ -423,13 +426,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </Show>
         {/* Fallback spinner - shown only briefly before the engine's startApp/stopApp op lands in operationDB */}
         <Show when={!expanded() && !firstActiveOp() && pendingAction()}>
-          <div class="instance-row__progress instance-row__progress--indeterminate">
+          <div class="instance-row__progress">
             <div class="instance-row__progress-label">
               {pendingAction() === 'starting' ? 'Starting...' : 'Stopping...'}
             </div>
-            <div class="instance-row__progress-bar">
-              <div class="instance-row__progress-fill" />
-            </div>
+            <StepProgressBar currentStep={null} totalSteps={null} progressPercent={null} />
           </div>
         </Show>
         <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded()}>

@@ -3001,6 +3001,75 @@ body {
 .log-lines__msg--debug { color: var(--colour-text-dim); }
 
 /* ── OperationProgress log additions ────────────────────────────────────── */
+/* --------------------------------------------------------
+   StepProgressBar
+   -------------------------------------------------------- */
+.step-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  overflow: visible;
+}
+
+/* Smooth / percentage fallback */
+.step-progress-bar--smooth {
+  background: var(--colour-border);
+  overflow: hidden;
+}
+
+.step-progress-bar__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--colour-running);
+  transition: width 0.3s ease;
+}
+
+/* Indeterminate flowing animation */
+.step-progress-bar--indeterminate {
+  position: relative;
+}
+.step-progress-bar--indeterminate .step-progress-bar__fill {
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  animation: step-bar-flow 1.5s ease-in-out infinite;
+}
+@keyframes step-bar-flow {
+  0%   { left: -40%; }
+  100% { left: 110%; }
+}
+
+/* Segmented step bar */
+.step-progress-bar--segmented {
+  display: flex;
+  gap: 3px;
+  background: transparent;
+  height: 6px;
+  align-items: center;
+}
+
+.step-progress-bar__segment {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--colour-border);
+  transition: background 0.2s ease;
+}
+
+.step-progress-bar__segment--done {
+  background: var(--colour-running);
+}
+
+.step-progress-bar__segment--active {
+  background: var(--colour-running);
+  animation: step-segment-pulse 1s ease-in-out infinite;
+}
+
+@keyframes step-segment-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
 .operation-card__log-toggle { background: none; border: none; cursor: pointer; font-size: 0.75rem; color: var(--colour-text-dim); padding: 0 2px; line-height: 1; }
 .operation-card__log-toggle:hover { color: var(--colour-text); }
 .operation-card__logs { margin-top: 4px; }
