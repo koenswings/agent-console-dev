@@ -244,11 +244,6 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             </ul>
           </Show>
 
-          {/* No results + rescan */}
-          <Show when={scanState() === "done" && results().length === 0}>
-            <button class="onboarding__rescan-btn" onClick={runScan}>Scan again</button>
-          </Show>
-
           <button
             class="onboarding__manual-link"
             onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
