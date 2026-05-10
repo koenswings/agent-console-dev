@@ -10,6 +10,7 @@ import type { Operation, OperationKind, Store } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import { cancelOperation } from '../store/commands';
 import LogLines from './LogLines';
+import StepProgressBar from './StepProgressBar';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -131,14 +132,17 @@ const OpCard: Component<OpCardProps> = (props) => {
         <div class="operation-card__args">{argsSummary(props.op, props.store)}</div>
       </Show>
 
-      <Show when={props.op.stepLabel && (props.op.kind === 'startApp' || props.op.kind === 'stopApp')}>
+      <Show when={props.op.stepLabel}>
         <div class="operation-card__step-label">{props.op.stepLabel}</div>
       </Show>
 
       <Show when={!isFailed()}>
-        <div class="operation-card__progress-bar" role="progressbar" aria-valuenow={pct()} aria-valuemin={0} aria-valuemax={100}>
-          <div class="operation-card__progress-fill" style={{ width: `${isDone() ? 100 : pct()}%` }} />
-        </div>
+        <StepProgressBar
+          currentStep={props.op.currentStep}
+          totalSteps={props.op.totalSteps}
+          progressPercent={isDone() ? 100 : pct()}
+          done={isDone()}
+        />
       </Show>
 
       <Show when={isFailed() && props.op.error}>
