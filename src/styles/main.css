@@ -1211,33 +1211,29 @@ body {
   color: var(--colour-text);
 }
 
-.onboarding__manual {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.onboarding__back-link {
-  font-size: var(--font-size-sm);
-  color: var(--colour-text-muted);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-}
-.onboarding__back-link:hover {
-  color: var(--colour-text);
-}
-
 .onboarding__manual-row {
   display: flex;
   gap: 8px;
   align-items: center;
+  margin-top: 12px;
 }
 .onboarding__manual-row .form-field__input {
   flex: 1;
+  min-width: 0;
+}
+
+.onboarding__manual-cancel {
+  font-size: var(--font-size-sm);
+  color: var(--colour-text-muted);
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.onboarding__manual-cancel:hover {
+  color: var(--colour-text);
 }
 
 .onboarding__manual-error {

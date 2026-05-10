@@ -181,75 +181,76 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           </Show>
         </div>
 
-        {/* ── Manual entry ───────────────────────────────────── */}
-        <Show when={showManual()}>
-          <div class="onboarding__manual">
-            <button
-              class="onboarding__back-link"
-              onClick={() => { setShowManual(false); setManualError(null); }}
-            >
-              ← Back
-            </button>
-            <div class="onboarding__manual-row">
-              <input
-                class="form-field__input"
-                type="text"
-                placeholder="idea01 or 192.168.1.10"
-                value={manualInput()}
-                onInput={(e) => setManualInput(e.currentTarget.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void handleManualConnect(); }}
-                autocomplete="off"
-                spellcheck={false}
-                autofocus
-              />
-              <button
-                class="engine-picker__connect-btn"
-                disabled={manualConnecting() || !manualInput().trim()}
-                onClick={handleManualConnect}
-              >
-                <Show when={manualConnecting()}>
-                  <span class="onboarding__scan-spinner" />
-                </Show>
-                {manualConnecting() ? 'Connecting…' : 'Connect'}
-              </button>
-            </div>
-            <Show when={manualError()}>
-              <p class="onboarding__manual-error">{manualError()}</p>
-            </Show>
-          </div>
+        {/* Status label */}
+        <p class="onboarding__scan-label">
+          <Show when={scanState() === "scanning"}>Scanning for engines…</Show>
+          <Show when={scanState() !== "scanning" && results().length === 0}>No engine found</Show>
+          <Show when={results().length > 0}>{results().length} engine{results().length > 1 ? "s" : ""} found</Show>
+        </p>
+
+        {/* Engine list */}
+        <Show when={results().length > 0}>
+          <ul class="engine-picker__list">
+            <For each={results()}>
+              {(result) => (
+                <li class="engine-picker__item">
+                  <span class="engine-picker__hostname">{result.hostname}</span>
+                  <button class="engine-picker__connect-btn" onClick={() => handleConnect(result)}>
+                    Connect
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
         </Show>
 
-        {/* ── Results / scanning state ────────────────────────── */}
-        <Show when={!showManual()}>
-          {/* Status label */}
-          <p class="onboarding__scan-label">
-            <Show when={scanState() === "scanning"}>Scanning for engines…</Show>
-            <Show when={scanState() !== "scanning" && results().length === 0}>No engine found</Show>
-            <Show when={results().length > 0}>{results().length} engine{results().length > 1 ? "s" : ""} found</Show>
-          </p>
-
-          {/* Engine list */}
-          <Show when={results().length > 0}>
-            <ul class="engine-picker__list">
-              <For each={results()}>
-                {(result) => (
-                  <li class="engine-picker__item">
-                    <span class="engine-picker__hostname">{result.hostname}</span>
-                    <button class="engine-picker__connect-btn" onClick={() => handleConnect(result)}>
-                      Connect
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
+        {/* Inline manual entry — replaces the link in place */}
+        <Show
+          when={showManual()}
+          fallback={
+            <button
+              class="onboarding__manual-link"
+              onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
+            >
+              Enter hostname manually ›
+            </button>
+          }
+        >
+          <div class="onboarding__manual-row">
+            <input
+              class="form-field__input"
+              type="text"
+              placeholder="idea01 or 192.168.1.10"
+              value={manualInput()}
+              onInput={(e) => setManualInput(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleManualConnect();
+                if (e.key === 'Escape') { setShowManual(false); setManualError(null); }
+              }}
+              autocomplete="off"
+              spellcheck={false}
+              autofocus
+            />
+            <button
+              class="engine-picker__connect-btn"
+              disabled={manualConnecting() || !manualInput().trim()}
+              onClick={handleManualConnect}
+            >
+              <Show when={manualConnecting()}>
+                <span class="onboarding__scan-spinner" />
+              </Show>
+              {manualConnecting() ? 'Connecting…' : 'Connect'}
+            </button>
+            <button
+              class="onboarding__manual-cancel"
+              onClick={() => { setShowManual(false); setManualError(null); }}
+            >
+              Cancel
+            </button>
+          </div>
+          <Show when={manualError()}>
+            <p class="onboarding__manual-error">{manualError()}</p>
           </Show>
-
-          <button
-            class="onboarding__manual-link"
-            onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
-          >
-            Enter hostname manually ›
-          </button>
         </Show>
 
       </div>
