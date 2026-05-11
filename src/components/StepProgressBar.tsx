@@ -10,7 +10,7 @@
  * When no step data is available, falls back to a smooth percentage fill bar
  * (or an indeterminate flowing animation if progressPercent is also null).
  */
-import { For, Show, type Component } from 'solid-js';
+import { For, Show, createMemo, type Component } from 'solid-js';
 
 interface StepProgressBarProps {
   currentStep: number | null;   // 1-based index of the active step
@@ -20,10 +20,15 @@ interface StepProgressBarProps {
 }
 
 const StepProgressBar: Component<StepProgressBarProps> = (props) => {
-  const hasSteps = () =>
+  const hasSteps = createMemo(() =>
     props.currentStep != null &&
     props.totalSteps != null &&
-    props.totalSteps > 0;
+    props.totalSteps > 0
+  );
+
+  const isIndeterminate = createMemo(() =>
+    !hasSteps() && props.progressPercent == null && !props.done
+  );
 
   return (
     <Show
@@ -32,19 +37,22 @@ const StepProgressBar: Component<StepProgressBarProps> = (props) => {
         /* ── Smooth / indeterminate fallback ─── */
         <div
           class={`step-progress-bar step-progress-bar--smooth${
-            props.progressPercent == null && !props.done
-              ? ' step-progress-bar--indeterminate'
-              : ''
+            isIndeterminate() ? ' step-progress-bar--indeterminate' : ''
           }`}
           role="progressbar"
           aria-valuenow={props.done ? 100 : (props.progressPercent ?? undefined)}
           aria-valuemin={0}
           aria-valuemax={100}
         >
-          <div
-            class="step-progress-bar__fill"
-            style={{ width: `${props.done ? 100 : (props.progressPercent ?? 0)}%` }}
-          />
+          <Show when={!isIndeterminate()}>
+            <div
+              class="step-progress-bar__fill"
+              style={{ width: `${props.done ? 100 : (props.progressPercent ?? 0)}%` }}
+            />
+          </Show>
+          <Show when={isIndeterminate()}>
+            <div class="step-progress-bar__fill" />
+          </Show>
         </div>
       }
     >
