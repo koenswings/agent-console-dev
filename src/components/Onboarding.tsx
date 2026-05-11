@@ -194,7 +194,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             <For each={results()}>
               {(result) => (
                 <li class="engine-picker__item">
-                  <span class="engine-picker__hostname">{result.hostname}</span>
+                  <span class="engine-picker__hostname">{result.hostname.replace(/\.local$/i, '')}</span>
                   <button class="engine-picker__connect-btn" onClick={() => handleConnect(result)}>
                     Connect
                   </button>

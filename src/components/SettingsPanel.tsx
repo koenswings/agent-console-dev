@@ -126,7 +126,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               </Show>
               <Show when={!props.demo && props.hostname}>
                 <span class="settings-panel__status-dot settings-panel__status-dot--connected" />
-                <span class="settings-panel__current-label">Connected to <strong>{props.hostname}</strong></span>
+                <span class="settings-panel__current-label">Connected to <strong>{props.hostname.replace(/\.local$/i, '')}</strong></span>
               </Show>
               <Show when={!props.demo && !props.hostname}>
                 <span class="settings-panel__status-dot" style="background:var(--colour-error)" />
