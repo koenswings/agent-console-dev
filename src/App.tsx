@@ -61,6 +61,7 @@ const App: Component = () => {
   const [hostname, setHostname] = createSignal('');
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
+  const [hasEverConnected, setHasEverConnected] = createSignal(false);
   const [demo, setDemo] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   // commandLogStore is derived reactively from the connection's accessor
@@ -146,7 +147,9 @@ const App: Component = () => {
   createEffect(() => {
     const conn = connection();
     if (!conn) return;
-    setConnected(conn.connected());
+    const isConn = conn.connected();
+    setConnected(isConn);
+    if (isConn) setHasEverConnected(true);
   });
 
   // ── Session restore (once per connection, when store first arrives) ───────
@@ -256,11 +259,12 @@ const App: Component = () => {
     return () => clearInterval(interval);
   });
 
-  // Reconnect after 15s of disconnection (not in demo / production mode)
+  // Reconnect after 15s of disconnection (not in demo / production mode).
+  // Only fires after first successful connection to avoid cancelling in-progress connects.
   createEffect(() => {
     const isConn = connected();
     const host = hostname();
-    if (!isConn && host && !demo() && !isProductionWebMode()) {
+    if (!isConn && host && hasEverConnected() && !demo() && !isProductionWebMode()) {
       const timer = setTimeout(() => {
         if (!connected() && hostname()) handleConnectionFailure();
       }, 15_000);
@@ -299,11 +303,12 @@ const App: Component = () => {
   const handleLogout = async () => {
     await logout();
     setShowOperatorMgmt(false);
+    setShowLogin(true);
   };
 
   // ── Computed screen conditions ────────────────────────────────────────────
   const showOnboarding   = () => ready() && !hostname() && !demo();
-  const showFirstSetup   = () => ready() && isFirstTimeSetup(store());
+  const showFirstSetup   = () => ready() && !isOperator() && isFirstTimeSetup(store());
   const showMainLayout   = () => isOperator() && !showOperatorMgmt();
   const rightPanel       = () => rightPanelFor(selection(), store());
 
