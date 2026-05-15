@@ -315,7 +315,7 @@ const App: Component = () => {
   };
 
   const statusLabel = () => {
-    if (connected()) return hostname();
+    if (connected()) return hostname().replace(/\.local$/i, '');
     if (demo()) return '';
     if (discovering()) return 'Scanning…';
     if (hostname()) return 'Connecting…';

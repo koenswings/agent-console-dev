@@ -32,13 +32,15 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #92 (v0.2.66)
+- main is up to date as of PR #101 (v0.2.73)
   - PR #90: `host:port` syntax in ChangeEngineDialog manual input
   - PR #91: better history error msg (shows URL tried + ask Axle), demo toggle in Settings panel, login btn in status bar
   - PR #92: always-visible status bar buttons (login + history), simplified scan panel with corner spinner
 - Clean working tree, on main branch
   - Lesson: SolidJS <Show when={a && b}> — child accessor returns LAST value of &&. Put the truthy object last.
   - Lesson: Signal reads inside a Show child accessor are NOT individually tracked. Use createMemo for any derived value that needs to update reactively inside a Show child.
+  - Lesson: Never use the {(accessor) => ...} pattern inside Show to read reactive props — same issue. Always extract to createMemo outside the JSX.
+  - Lesson: CSS animations can be killed by inline style overrides. When a fallback/indeterminate state needs animation, never apply an inline width/height style — render the element unconditionally and only add the style attribute when a concrete value exists.
   - PR #77: History panel button (📋) replaces inline CommandHistory
   - PR #80: Remove mock running op, add History panel screenshot
   - PR #81: Fix isProductionWebMode — Tailscale IPs (100.x) now treated as production web mode; fixes command history on fleet Pis
