@@ -158,7 +158,12 @@ export async function createEngineConnection(): Promise<StoreConnection> {
     // We do NOT await the full document sync here — the Automerge doc may take
     // 30–60 s to sync on slow networks. Instead we mark connected once the WS
     // is up and update the store reactively as changes arrive.
-    await adapter.whenReady();
+    await Promise.race([
+      adapter.whenReady(),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error("WS adapter timeout")), 10_000)
+      ),
+    ]);
     setConnected(true);
     console.log('[engine] WS ready — waiting for document sync');
 
