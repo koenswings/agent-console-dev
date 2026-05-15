@@ -200,6 +200,7 @@ const App: Component = () => {
     setSessionRestored(false);
     setStore(null);
     setConnected(false);
+    setHasEverConnected(false);
 
     const isDemo = await readStoredDemoMode();
     setDemo(isDemo);
@@ -257,6 +258,19 @@ const App: Component = () => {
     }, DISCOVERY_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(interval);
+  });
+
+  // Initial connection timeout — if hostname is set but never connected after 12s,
+  // the engine is unreachable; go back to scanning so the user isn't stuck.
+  createEffect(() => {
+    const host = hostname();
+    const everConn = hasEverConnected();
+    if (host && !everConn && !demo() && !isProductionWebMode()) {
+      const timer = setTimeout(() => {
+        if (!hasEverConnected() && hostname()) handleConnectionFailure();
+      }, 12_000);
+      return () => clearTimeout(timer);
+    }
   });
 
   // Reconnect after 15s of disconnection (not in demo / production mode).
