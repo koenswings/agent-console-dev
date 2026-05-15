@@ -125,19 +125,32 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             setShowManual(false);
             handleConnect(directResult);
           } else {
-            // Probe the entered hostname directly as a last resort
-            const res = await fetch(`http://${normalised}/api/store-url`, {
-              signal: AbortSignal.timeout(5000),
-            });
-            if (res.ok) {
-              const json = await res.json() as { url?: string };
-              if (json.url) {
-                setShowManual(false);
-                handleConnect({ hostname: normalised, storeUrl: json.url });
-              } else {
-                setManualError('Engine found but no store URL returned.');
+            // Probe the entered hostname directly as a last resort.
+            // Try bare name first (Tailscale-reachable), then .local.
+            const bare = raw.trim().replace(/\.local$/i, '');
+            const probes = bare === normalised.replace(/\.local$/i, '')
+              ? [bare, normalised]
+              : [normalised];
+            let found = false;
+            for (const candidate of probes) {
+              try {
+                const res = await fetch(`http://${candidate}/api/store-url`, {
+                  signal: AbortSignal.timeout(5000),
+                });
+                if (res.ok) {
+                  const json = await res.json() as { url?: string };
+                  if (json.url) {
+                    setShowManual(false);
+                    handleConnect({ hostname: candidate, storeUrl: json.url });
+                    found = true;
+                    break;
+                  }
+                }
+              } catch {
+                // try next
               }
-            } else {
+            }
+            if (!found) {
               setManualError('Could not reach engine. Check the hostname.');
             }
           }
@@ -147,20 +160,32 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           setShowManual(false);
         }
       } else {
-        // IP address or no number — probe directly
-        const normalised = normaliseHostname(raw);
-        const res = await fetch(`http://${normalised}/api/store-url`, {
-          signal: AbortSignal.timeout(5000),
-        });
-        if (res.ok) {
-          const json = await res.json() as { url?: string };
-          if (json.url) {
-            setShowManual(false);
-            handleConnect({ hostname: normalised, storeUrl: json.url });
-          } else {
-            setManualError('Engine found but no store URL returned.');
+        // IP address or bare name with no trailing number (e.g. "wizardly-hugle", "192.168.1.10").
+        // Try the bare/IP form first (works over Tailscale), then .local as fallback.
+        const isIp = /^[\d.]+$/.test(raw.trim());
+        const bare = raw.trim().replace(/\.local$/i, '');
+        const candidates = isIp ? [bare] : [bare, `${bare}.local`];
+
+        let found = false;
+        for (const candidate of candidates) {
+          try {
+            const res = await fetch(`http://${candidate}/api/store-url`, {
+              signal: AbortSignal.timeout(5000),
+            });
+            if (res.ok) {
+              const json = await res.json() as { url?: string };
+              if (json.url) {
+                setShowManual(false);
+                handleConnect({ hostname: candidate, storeUrl: json.url });
+                found = true;
+                break;
+              }
+            }
+          } catch {
+            // try next candidate
           }
-        } else {
+        }
+        if (!found) {
           setManualError('Could not reach engine. Check the hostname.');
         }
       }
