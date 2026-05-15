@@ -209,6 +209,13 @@ const App: Component = () => {
       ? createMockConnection()
       : await (await import('./store/engine')).createEngineConnection();
 
+    // If the connection failed immediately (e.g. document unavailable, WS error),
+    // go back to scanning instead of silently landing on a blank screen.
+    if (!isDemo && !conn.connected()) {
+      handleConnectionFailure();
+      return;
+    }
+
     setConnection(conn);
   };
 
