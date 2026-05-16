@@ -85,7 +85,7 @@ async function fetchStoreUrlFromEngine(hostname: string): Promise<string | null>
 // createEngineConnection
 // ---------------------------------------------------------------------------
 
-export async function createEngineConnection(): Promise<StoreConnection> {
+export async function createEngineConnection(retries = 3): Promise<StoreConnection> {
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
 
@@ -204,6 +204,14 @@ export async function createEngineConnection(): Promise<StoreConnection> {
 
     return { store, connected, sendCommand, changeDoc, commandLogStore };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // 'Document ... is unavailable' means the peer hasn't synced the doc yet.
+    // This is transient — retry once after 3 s to give Automerge time to propagate.
+    if ((msg.includes('unavailable') || msg.includes('Unavailable')) && retries > 0) {
+      console.warn(`[engine] Document unavailable — retrying in 3 s... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 3_000));
+      return createEngineConnection(retries - 1);
+    }
     console.error('[engine] Failed to connect:', err);
     setConnected(false);
     const clsErr: CommandLogError = { error: true, url: '', status: null };
