@@ -16,12 +16,23 @@ export {
 } from '../store/storage';
 
 /**
- * Normalise a hostname entered by the user:
+ * Parse an optional :port suffix from user input.
+ * Returns { host, port } where port defaults to 80.
+ */
+function parseHostPort(input: string): { host: string; port: number } {
+  const m = input.trim().match(/:([0-9]+)$/);
+  const port = m ? parseInt(m[1], 10) : 80;
+  const host = m ? input.trim().slice(0, -m[0].length) : input.trim();
+  return { host, port };
+}
+
+/**
+ * Normalise a hostname entered by the user (strips :port before normalising):
  * - If it looks like an IP address (digits and dots only), return as-is
  * - Otherwise strip any trailing .local and re-append it
  */
 export function normaliseHostname(raw: string): string {
-  const h = raw.trim();
+  const { host: h } = parseHostPort(raw);
   if (!h) return h;
   if (/^[\d.]+$/.test(h)) return h;
   return h.replace(/\.local$/i, '') + '.local';
@@ -106,16 +117,21 @@ const Onboarding: Component<OnboardingProps> = (props) => {
     setManualConnecting(true);
 
     try {
-      const base = extractHostnameBase(raw);
+      const { host: rawHost, port } = parseHostPort(raw);
+      const base = extractHostnameBase(rawHost);
+      const portProp = port !== 80 ? { port } : {};
+
+      const probeUrl = (candidate: string) =>
+        fetch(`http://${candidate}:${port}/api/store-url`, { signal: AbortSignal.timeout(5000) });
 
       if (base) {
         // Probe siblings using the extracted prefix
         const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal);
-        const normalised = normaliseHostname(raw);
+        const normalised = normaliseHostname(rawHost);
 
         // Check if the entered host itself is in the results
         const enteredResult = siblings.find(
-          (r) => r.hostname === normalised || r.hostname === raw.trim()
+          (r) => r.hostname === normalised || r.hostname === rawHost
         );
 
         if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {
@@ -123,25 +139,23 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           const directResult = enteredResult ?? siblings[0];
           if (directResult) {
             setShowManual(false);
-            handleConnect(directResult);
+            handleConnect({ ...directResult, ...portProp });
           } else {
             // Probe the entered hostname directly as a last resort.
             // Try bare name first (Tailscale-reachable), then .local.
-            const bare = raw.trim().replace(/\.local$/i, '');
+            const bare = rawHost.replace(/\.local$/i, '');
             const probes = bare === normalised.replace(/\.local$/i, '')
               ? [bare, normalised]
               : [normalised];
             let found = false;
             for (const candidate of probes) {
               try {
-                const res = await fetch(`http://${candidate}/api/store-url`, {
-                  signal: AbortSignal.timeout(5000),
-                });
+                const res = await probeUrl(candidate);
                 if (res.ok) {
                   const json = await res.json() as { url?: string };
                   if (json.url) {
                     setShowManual(false);
-                    handleConnect({ hostname: candidate, storeUrl: json.url });
+                    handleConnect({ hostname: candidate, storeUrl: json.url, ...portProp });
                     found = true;
                     break;
                   }
@@ -162,21 +176,19 @@ const Onboarding: Component<OnboardingProps> = (props) => {
       } else {
         // IP address or bare name with no trailing number (e.g. "wizardly-hugle", "192.168.1.10").
         // Try the bare/IP form first (works over Tailscale), then .local as fallback.
-        const isIp = /^[\d.]+$/.test(raw.trim());
-        const bare = raw.trim().replace(/\.local$/i, '');
+        const isIp = /^[\d.]+$/.test(rawHost);
+        const bare = rawHost.replace(/\.local$/i, '');
         const candidates = isIp ? [bare] : [bare, `${bare}.local`];
 
         let found = false;
         for (const candidate of candidates) {
           try {
-            const res = await fetch(`http://${candidate}/api/store-url`, {
-              signal: AbortSignal.timeout(5000),
-            });
+            const res = await probeUrl(candidate);
             if (res.ok) {
               const json = await res.json() as { url?: string };
               if (json.url) {
                 setShowManual(false);
-                handleConnect({ hostname: candidate, storeUrl: json.url });
+                handleConnect({ hostname: candidate, storeUrl: json.url, ...portProp });
                 found = true;
                 break;
               }
@@ -245,7 +257,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             <input
               class="form-field__input"
               type="text"
-              placeholder="idea01 or 192.168.1.10"
+              placeholder="idea01, 192.168.1.10, or host:8080"
               value={manualInput()}
               onInput={(e) => setManualInput(e.currentTarget.value)}
               onKeyDown={(e) => {
