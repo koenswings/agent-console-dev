@@ -110,6 +110,36 @@ const Onboarding: Component<OnboardingProps> = (props) => {
     }
   };
 
+  /**
+   * Probe a list of candidates in parallel and return the first that has a valid
+   * store URL, or null if none respond. Uses a shared AbortController so that
+   * once a winner is found we stop waiting on the rest.
+   */
+  const probeFirst = async (
+    candidates: string[],
+    port: number,
+  ): Promise<{ hostname: string; storeUrl: string } | null> => {
+    const ac = new AbortController();
+    const probeOne = async (candidate: string) => {
+      const res = await fetch(`http://${candidate}:${port}/api/store-url`, {
+        signal: AbortSignal.any
+          ? AbortSignal.any([ac.signal, AbortSignal.timeout(5000)])
+          : ac.signal,
+      });
+      if (!res.ok) throw new Error('not ok');
+      const json = await res.json() as { url?: string };
+      if (!json.url) throw new Error('no url');
+      return { hostname: candidate, storeUrl: json.url };
+    };
+    try {
+      const result = await Promise.any(candidates.map(probeOne));
+      ac.abort();
+      return result;
+    } catch {
+      return null;
+    }
+  };
+
   const handleManualConnect = async () => {
     const raw = manualInput().trim();
     if (!raw) return;
@@ -120,9 +150,6 @@ const Onboarding: Component<OnboardingProps> = (props) => {
       const { host: rawHost, port } = parseHostPort(raw);
       const base = extractHostnameBase(rawHost);
       const portProp = port !== 80 ? { port } : {};
-
-      const probeUrl = (candidate: string) =>
-        fetch(`http://${candidate}:${port}/api/store-url`, { signal: AbortSignal.timeout(5000) });
 
       if (base) {
         // Probe siblings using the extracted prefix
@@ -141,30 +168,16 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             setShowManual(false);
             handleConnect({ ...directResult, ...portProp });
           } else {
-            // Probe the entered hostname directly as a last resort.
-            // Try bare name first (Tailscale-reachable), then .local.
+            // Probe bare and .local in parallel as a last resort
             const bare = rawHost.replace(/\.local$/i, '');
             const probes = bare === normalised.replace(/\.local$/i, '')
               ? [bare, normalised]
               : [normalised];
-            let found = false;
-            for (const candidate of probes) {
-              try {
-                const res = await probeUrl(candidate);
-                if (res.ok) {
-                  const json = await res.json() as { url?: string };
-                  if (json.url) {
-                    setShowManual(false);
-                    handleConnect({ hostname: candidate, storeUrl: json.url, ...portProp });
-                    found = true;
-                    break;
-                  }
-                }
-              } catch {
-                // try next
-              }
-            }
-            if (!found) {
+            const result = await probeFirst(probes, port);
+            if (result) {
+              setShowManual(false);
+              handleConnect({ ...result, ...portProp });
+            } else {
               setManualError('Could not reach engine. Check the hostname.');
             }
           }
@@ -175,29 +188,15 @@ const Onboarding: Component<OnboardingProps> = (props) => {
         }
       } else {
         // IP address or bare name with no trailing number (e.g. "wizardly-hugle", "192.168.1.10").
-        // Try the bare/IP form first (works over Tailscale), then .local as fallback.
+        // Probe bare and .local in parallel — fastest wins.
         const isIp = /^[\d.]+$/.test(rawHost);
         const bare = rawHost.replace(/\.local$/i, '');
         const candidates = isIp ? [bare] : [bare, `${bare}.local`];
-
-        let found = false;
-        for (const candidate of candidates) {
-          try {
-            const res = await probeUrl(candidate);
-            if (res.ok) {
-              const json = await res.json() as { url?: string };
-              if (json.url) {
-                setShowManual(false);
-                handleConnect({ hostname: candidate, storeUrl: json.url, ...portProp });
-                found = true;
-                break;
-              }
-            }
-          } catch {
-            // try next candidate
-          }
-        }
-        if (!found) {
+        const result = await probeFirst(candidates, port);
+        if (result) {
+          setShowManual(false);
+          handleConnect({ ...result, ...portProp });
+        } else {
           setManualError('Could not reach engine. Check the hostname.');
         }
       }

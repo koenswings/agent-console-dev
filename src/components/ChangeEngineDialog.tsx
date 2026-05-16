@@ -127,7 +127,10 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
     const { host, port } = parseHostPort(raw);
     let result: ProbeResult | null = null;
     try {
-      result = await probeHost(`${host}.local`, port) ?? await probeHost(host, port);
+      // Probe bare and .local in parallel — fastest wins
+      const isIp = /^[\d.]+$/.test(host);
+      const candidates = isIp ? [host] : [`${host}.local`, host];
+      [result] = (await Promise.all(candidates.map((c) => probeHost(c, port)))).filter(Boolean) as ProbeResult[];
     } finally {
       setConnecting(false);
     }
@@ -142,7 +145,7 @@ const ChangeEngineDialog: Component<ChangeEngineDialogProps> = (props) => {
     setInput(bare);
     setSuggestions([]);
     setError('');
-    const result = await probeHost(`${bare}.local`) ?? await probeHost(bare);
+    const [result] = (await Promise.all([probeHost(`${bare}.local`), probeHost(bare)])).filter(Boolean) as ProbeResult[];
     if (result) {
       await connect(result.hostname, result.storeUrl);
     } else {
