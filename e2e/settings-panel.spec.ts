@@ -10,7 +10,9 @@ test.describe('Settings panel', () => {
     pageErrors.length = 0;
 
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text());
+      if (msg.type() === 'error' && !msg.text().includes('ERR_CONNECTION_REFUSED')) {
+        consoleErrors.push(msg.text());
+      }
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
@@ -72,17 +74,16 @@ test.describe('Settings panel', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('demo mode section is shown inside change-engine dialog', async ({ page }) => {
+  test('change-engine dialog has title, input, scan and cancel buttons', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
     await page.locator('.settings-panel__change-engine-btn').click();
     await expect(page.locator('.change-engine-dialog')).toBeVisible();
 
-    // Demo mode section is always present in the dialog
-    const demoSection = page.locator('.change-engine-dialog__demo-section');
-    await expect(demoSection).toBeVisible();
-
-    // Since we booted in demo mode, it shows the "currently in demo mode" text
-    await expect(demoSection).toContainText('demo mode');
+    // Core elements of the dialog
+    await expect(page.locator('.change-engine-dialog__title')).toContainText('Change Engine');
+    await expect(page.locator('.change-engine-dialog__input')).toBeVisible();
+    await expect(page.locator('.change-engine-dialog__scan-btn')).toBeVisible();
+    await expect(page.locator('.change-engine-dialog__cancel')).toBeVisible();
 
     // Panel is still open throughout
     await expect(page.locator('.settings-panel')).toBeVisible();

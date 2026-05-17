@@ -59,8 +59,7 @@ test.describe('Post-login flow', () => {
     await expect(page.locator('.main-layout')).not.toBeVisible();
     await expect(page.locator('.status-bar__username')).not.toBeVisible();
 
-    // Re-login
-    await page.locator('.app-browser__login-link').click();
+    // Re-login — logout auto-opens the login modal, so just wait for it
     await page.locator('.modal').waitFor({ state: 'visible' });
 
     await page.locator('input[autocomplete="username"]').fill(DEMO_USERNAME);

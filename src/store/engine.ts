@@ -161,7 +161,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     await Promise.race([
       adapter.whenReady(),
       new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error("WS adapter timeout")), 10_000)
+        setTimeout(() => reject(new Error("WS adapter timeout")), 25_000)
       ),
     ]);
     setConnected(true);

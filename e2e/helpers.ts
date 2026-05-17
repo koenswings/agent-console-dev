@@ -24,8 +24,8 @@ export async function loginAsDemo(page: Page): Promise<void> {
   // Wait for the app to boot in demo mode (DEMO badge in status bar)
   await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
-  // Click the login button in AppBrowser
-  await page.locator('.app-browser__login-link').click();
+  // Click the login button in the status bar
+  await page.locator('.status-bar__login-btn').click();
 
   // Wait for the login modal
   await page.locator('.modal').waitFor({ state: 'visible' });
