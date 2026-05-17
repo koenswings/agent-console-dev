@@ -275,7 +275,7 @@ const App: Component = () => {
     if (host && !everConn && !demo() && !isProductionWebMode()) {
       const timer = setTimeout(() => {
         if (!hasEverConnected() && hostname()) handleConnectionFailure();
-      }, 12_000);
+      }, 30_000);
       return () => clearTimeout(timer);
     }
   });
