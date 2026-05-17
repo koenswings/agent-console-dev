@@ -121,11 +121,13 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   ): Promise<{ hostname: string; storeUrl: string } | null> => {
     const ac = new AbortController();
     const probeOne = async (candidate: string) => {
-      const res = await fetch(`http://${candidate}:${port}/api/store-url`, {
-        signal: AbortSignal.any
-          ? AbortSignal.any([ac.signal, AbortSignal.timeout(5000)])
-          : ac.signal,
-      });
+      // Use a per-probe timeout so a hung DNS lookup doesn't block indefinitely.
+      // AbortSignal.any combines it with the shared cancel signal (winner aborts rest).
+      const timeoutSignal = AbortSignal.timeout(5000);
+      const signal = AbortSignal.any
+        ? AbortSignal.any([ac.signal, timeoutSignal])
+        : timeoutSignal;
+      const res = await fetch(`http://${candidate}:${port}/api/store-url`, { signal });
       if (!res.ok) throw new Error('not ok');
       const json = await res.json() as { url?: string };
       if (!json.url) throw new Error('no url');
