@@ -1,7 +1,7 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.71  
-**Date:** 2026-05-10  
+**Version:** 0.2.82  
+**Date:** 2026-05-17  
 **Author:** Pixel (Console UI Developer)
 
 > Screenshots captured automatically with Playwright headless Chromium via `scripts/screenshot-screens.ts`.
@@ -75,7 +75,7 @@ Additionally, one **modal overlay** can appear on top of any screen:
 
 | # | Modal | Trigger |
 |---|---|---|
-| M1 | Login Form | "Log in" button in App Browser |
+| M1 | Login Form | 👤 button in status bar, or automatically after logout |
 
 ---
 
@@ -87,13 +87,13 @@ Additionally, one **modal overlay** can appear on top of any screen:
 ![S1 Onboarding](screenshots/S1-onboarding.png)
 
 **States:**
-- **Scanning** — corner spinner animates; label shows "Scanning for engines…"
-- **Found** — engine list appears; user clicks Connect
-- **Not found** — label shows "No engine found"; only "Enter hostname manually ›" link is shown (no Scan Again button — the background re-scan is automatic and indicated by the corner spinner)
+- **Scanning** — corner spinner in the title row animates; label shows "Scanning for engines…"
+- **Found** — engine list appears with Connect buttons; background refresh runs every 10s, merging new results in
+- **Not found** — label shows "No engine found"; corner spinner continues while background re-scan is active
 
-**Sub-state: Engine Picker** — if 2+ engines are found on the network, a list of discovered engines appears. The user picks one or chooses "Enter hostname manually ›".
+**Engine list** — discovered engines shown as `hostname` (`.local` stripped) + Connect button.
 
-**Sub-state: Manual Entry** — hostname input + Connect button; ← Back link returns to the picker.
+**Manual entry (inline)** — clicking "Enter hostname manually ›" replaces the link in-place with a text input, Connect button, and Cancel button. Supports `host:port` syntax. No separate sub-panel or Back navigation.
 
 **Flows from here:**
 - Connect → **Screen 3** (First-Time Setup) or **Screen 4** (App Browser)
@@ -119,16 +119,31 @@ Additionally, one **modal overlay** can appear on top of any screen:
 ![S2c Settings — About](screenshots/S2c-settings-about.png)
 
 **Tabs:**
-- **Engine Connection** — shows current connection status; "Change engine" opens `ChangeEngineDialog` sub-panel inline (hostname input + demo toggle + scan)
+- **Engine Connection** — shows current connection status; **Demo mode toggle** (checkbox, always visible); "Change engine" button opens the `ChangeEngineDialog` overlay
 - **Account** — change password form (current / new / confirm); only shown when logged in
 - **About** — app name, version, display mode selector (extension only)
 
 **Flows from here:**
 - ⚙ button again (toggles closed) → returns to previous screen
-- Change engine → triggers reconnect, stays in Settings
-- Switch to demo mode → reconnects in demo
+- "Change engine" → opens `ChangeEngineDialog` overlay; after connecting, returns to Settings
+- Demo mode toggle → switches to/from demo mode without leaving Settings
 
 > Note: there is no separate Close button inside the panel — the ⚙ status bar button toggles it open/closed.
+
+### Change Engine Dialog
+
+**File:** `src/components/ChangeEngineDialog.tsx`  
+**When shown:** Overlay opened by the "Change engine" button in Settings → Engine Connection tab.
+
+**Sections (top to bottom):**
+- **Previously connected** — engine hostnames from history (shown when input is empty); one-click reconnect
+- **Hostname input + Connect button** — accepts bare name, `.local`, IP, or `host:port`; as-you-type probing shows live suggestions
+- **Live suggestions** — engines found while typing, each with its own Connect button
+- **Error message** — shown when Connect fails
+- **Scan network** button — full mDNS discovery; results appear as suggestions
+- **Cancel** button (or click outside card) — closes, returns to Settings
+
+**Probing:** Bare name + `.local` probed in parallel (300 ms debounce on input, simultaneous on Connect).
 
 ---
 
@@ -152,12 +167,13 @@ _(No screenshot — requires a fresh engine with empty userDB. Hard to reproduce
 ![S4 App Browser — logged out](screenshots/S4-app-browser-logged-out.png)
 
 - App cards show all instances (Running and non-Running)
-- Running apps show an "Open ↗" link to the app's URL on the engine
-- Non-running apps are greyed out / unavailable
-- No login button in the app content area — login is always accessed via the 👤 icon in the status bar (top-right)
+- Running apps show an "Open" button linking to the app's URL
+- Non-running apps show "Not available"
+- No login link in the app content area — login is via the 👤 icon in the status bar only
 
 **Flows from here:**
 - 👤 in status bar → **Modal M1** (Login Form) → on success → **Screen 5** (Main Layout)
+- Logout → returns to App Browser; Modal M1 opens automatically (no extra click needed)
 
 ---
 
@@ -247,8 +263,6 @@ The history is **not** always visible — it is opt-in via the status bar button
 ![S5 History Panel](screenshots/S5-history-panel.png)
 
 *Expanded trace (click a row to reveal log lines):*
-
-![S5 History Panel Expanded](screenshots/S5-history-panel-expanded.png)
 
 **Files:** `src/components/HistoryPanel.tsx`, `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
 
