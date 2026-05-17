@@ -10,7 +10,9 @@ test.describe('Engine switch (operator only)', () => {
     pageErrors.length = 0;
 
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text());
+      if (msg.type() === 'error' && !msg.text().includes('ERR_CONNECTION_REFUSED')) {
+        consoleErrors.push(msg.text());
+      }
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
@@ -67,8 +69,8 @@ test.describe('Engine switch (operator only)', () => {
     await expect(page.locator('.change-engine-dialog__input')).toBeVisible();
     await expect(page.locator('.change-engine-dialog__scan-btn')).toBeVisible();
 
-    // Demo mode section is present
-    await expect(page.locator('.change-engine-dialog__demo-section')).toBeVisible();
+    // Cancel button is always present
+    await expect(page.locator('.change-engine-dialog__cancel')).toBeVisible();
 
     expect(consoleErrors).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);

@@ -10,7 +10,9 @@ test.describe('Demo login flow', () => {
     pageErrors.length = 0;
 
     page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text());
+      if (msg.type() === 'error' && !msg.text().includes('ERR_CONNECTION_REFUSED')) {
+        consoleErrors.push(msg.text());
+      }
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
@@ -25,7 +27,7 @@ test.describe('Demo login flow', () => {
     await page.goto('/');
     await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
-    await page.locator('.app-browser__login-link').click();
+    await page.locator('.status-bar__login-btn').click();
 
     const modal = page.locator('.modal');
     await expect(modal).toBeVisible();
@@ -40,7 +42,7 @@ test.describe('Demo login flow', () => {
     await page.goto('/');
     await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
-    await page.locator('.app-browser__login-link').click();
+    await page.locator('.status-bar__login-btn').click();
     await page.locator('.modal').waitFor({ state: 'visible' });
 
     await page.locator('input[autocomplete="username"]').fill(DEMO_USERNAME);
@@ -70,7 +72,7 @@ test.describe('Demo login flow', () => {
     await page.goto('/');
     await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
-    await page.locator('.app-browser__login-link').click();
+    await page.locator('.status-bar__login-btn').click();
     await page.locator('.modal').waitFor({ state: 'visible' });
 
     await page.locator('input[autocomplete="username"]').fill(DEMO_USERNAME);

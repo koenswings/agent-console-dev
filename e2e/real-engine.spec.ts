@@ -105,7 +105,7 @@ test.describe('Real engine', () => {
     await bootRealEngine(page);
     await waitForConnectedDot(page);
 
-    const loginBtn = page.locator('.app-browser__login-link');
+    const loginBtn = page.locator('.status-bar__login-btn');
     const firstTimeSetup = page.locator('.first-time-setup');
 
     // The store sync can take 20-40s on first connect (Automerge CRDT transfer).
