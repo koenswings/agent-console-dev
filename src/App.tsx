@@ -194,7 +194,16 @@ const App: Component = () => {
   });
 
   // ── Connection management ─────────────────────────────────────────────────
+  // Tracks the current in-progress initConnection() call so that if a new one
+  // starts before the previous resolves, the stale one can be abandoned.
+  let currentInitId = 0;
+
   const initConnection = async () => {
+    // Dispose the old connection before starting a new one to stop stale WS
+    // retries (BrowserWebSocketClientAdapter retries every 5 s indefinitely).
+    const oldConn = connection();
+    if (oldConn?.dispose) oldConn.dispose();
+
     sessionRestoreRan = false;
     provisioningRan = false;
     setSessionRestored(false);
@@ -202,17 +211,19 @@ const App: Component = () => {
     setConnected(false);
     setHasEverConnected(false);
 
+    const myId = ++currentInitId;
+
     const isDemo = await readStoredDemoMode();
+    if (myId !== currentInitId) return; // superseded
     setDemo(isDemo);
 
     const conn = isDemo
       ? createMockConnection()
       : await (await import('./store/engine')).createEngineConnection();
 
-    // If the connection failed immediately (e.g. document unavailable, WS error),
-    // go back to scanning instead of silently landing on a blank screen.
-    if (!isDemo && !conn.connected()) {
-      handleConnectionFailure();
+    if (myId !== currentInitId) {
+      // Superseded — clean up immediately so we don't leak a WS connection
+      conn.dispose?.();
       return;
     }
 
@@ -267,15 +278,20 @@ const App: Component = () => {
     return () => clearInterval(interval);
   });
 
-  // Initial connection timeout — if hostname is set but never connected after 12s,
-  // the engine is unreachable; go back to scanning so the user isn't stuck.
+  // Initial connection timeout — if hostname is set but we never receive document
+  // data after 15 s, the engine is unreachable; go back to scanning.
+  // This catches the case where the WS adapter "forceReady" fires after 1 s but
+  // the engine never actually delivers any Automerge document content.
   createEffect(() => {
     const host = hostname();
     const everConn = hasEverConnected();
     if (host && !everConn && !demo() && !isProductionWebMode()) {
       const timer = setTimeout(() => {
-        if (!hasEverConnected() && hostname()) handleConnectionFailure();
-      }, 30_000);
+        if (!hasEverConnected() && hostname()) {
+          console.log('[app] Connection timeout — engine unreachable, returning to onboarding');
+          handleConnectionFailure();
+        }
+      }, 15_000);
       return () => clearTimeout(timer);
     }
   });
