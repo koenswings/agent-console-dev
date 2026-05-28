@@ -56,7 +56,6 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
     <div class="history-panel">
       <div class="history-panel__header">
         <span class="history-panel__title">Command History</span>
-        <button class="history-panel__close" onClick={props.onClose} aria-label="Close history">✕</button>
       </div>
 
       <div class="history-panel__body">
