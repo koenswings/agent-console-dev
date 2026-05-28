@@ -318,6 +318,10 @@ const App: Component = () => {
       return;
     }
 
+    // EXTENSION-ONLY: Reading saved hostname and trying last-used or preconfigured hostnames
+    // is only needed when the app runs as a Chrome extension. In web mode, the hostname is
+    // auto-detected from window.location. If we ship as an extension, this path must be
+    // tested thoroughly including the chrome.storage.local silent hang risk (see MEMORY.md).
     const host = await readStoredHostname();
     setHostname(host);
     setReady(true);

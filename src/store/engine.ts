@@ -129,7 +129,8 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
         storeUrl = localStorage.getItem(STORAGE_KEY_STORE_URL);
       }
     } else {
-      // Extension or manual configuration
+      // EXTENSION-ONLY: hostname from storage is only used in extension mode.
+      // Web deployments always derive hostname from window.location via isProductionWebMode().
       hostname = (await readFromStorage(STORAGE_KEY_HOSTNAME)) ?? 'appdocker01.local';
       const envStoreUrl = import.meta.env.VITE_STORE_URL as string | undefined;
       storeUrl = envStoreUrl ?? (await readFromStorage(STORAGE_KEY_STORE_URL));
