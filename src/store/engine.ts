@@ -88,6 +88,19 @@ async function fetchStoreUrlFromEngine(hostname: string): Promise<string | null>
 export async function createEngineConnection(retries = 3): Promise<StoreConnection> {
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
+  let disposed = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let repoRef: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let adapterRef: any = null;
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    console.log('[engine] dispose — tearing down connection');
+    try { adapterRef?.disconnect?.(); } catch { /* ignore */ }
+    try { void repoRef?.shutdown?.(); } catch { /* ignore */ }
+  };
 
   const noopSend = (_e: string, _c: string) => {
     console.warn('[engine] Not connected — command dropped');
@@ -134,7 +147,13 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
       const clsErr: CommandLogError = { error: true, url: `http://${hostname}/api/command-log-url`, status: null };
-      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr };
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr, dispose };
+    }
+
+    // Bail immediately if dispose() was called while we were awaiting storage/fetch.
+    if (disposed) {
+      const clsErr: CommandLogError = { error: true, url: '', status: null };
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr, dispose };
     }
 
     // --- Connect via Automerge WebSocket ---
@@ -148,37 +167,52 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
 
     const adapter = new BrowserWebSocketClientAdapter(wsUrl);
     const repo = new Repo({ network: [adapter] });
+    adapterRef = adapter;
+    repoRef = repo;
+
+    // Bail if dispose() was called while we were awaiting module imports.
+    if (disposed) {
+      dispose();
+      const clsErr: CommandLogError = { error: true, url: '', status: null };
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr, dispose };
+    }
 
     // In automerge-repo 2.3.0-alpha+, repo.find() returns a Promise<DocHandle>.
     // In 2.2.x it returned a DocHandle directly. We await to handle both.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handle: any = await (repo.find(storeUrl as any) as unknown as Promise<any>);
 
-    // Wait for the network adapter to be ready (WS handshake complete).
-    // We do NOT await the full document sync here — the Automerge doc may take
-    // 30–60 s to sync on slow networks. Instead we mark connected once the WS
-    // is up and update the store reactively as changes arrive.
-    await Promise.race([
-      adapter.whenReady(),
-      new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error("WS adapter timeout")), 25_000)
-      ),
-    ]);
-    setConnected(true);
-    console.log('[engine] WS ready — waiting for document sync');
+    // NOTE: BrowserWebSocketClientAdapter.whenReady() is NOT a reliable signal
+    // of actual connectivity — the adapter calls forceReady() after just 1 second
+    // regardless of whether the WebSocket handshake actually succeeded. Waiting
+    // on it would cause us to incorrectly set connected=true and cancel the
+    // fallback timer even when the engine is unreachable.
+    //
+    // Instead we use document data as the connectivity signal:
+    //   • connected=true fires only when the first real document data arrives
+    //   • The 30 s fallback timer in App.tsx handles the "never connected" case
+    console.log(`[engine] Repo created — waiting for document data from ${wsUrl}`);
 
-    // Connect to the command-log doc (same WS repo, separate Automerge doc)
+    // Connect to the command-log doc (same WS repo, separate Automerge doc).
+    // This runs in parallel; don't let it block the main connection.
     const commandLogStore = await createCommandLogConnection(hostname, repo);
+
+    if (disposed) {
+      dispose();
+      return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => commandLogStore(), dispose };
+    }
 
     // If the doc is already ready (cached / fast server), apply it immediately.
     const initialDoc = handle.doc();
     if (initialDoc) {
       setStore(initialDoc as Store);
+      setConnected(true);
       console.log('[engine] Document already ready on connect');
     }
 
     // Subscribe to document changes — fires whenever Automerge syncs new data.
     handle.addListener?.('change', ({ doc: d }: { doc: unknown }) => {
+      if (disposed) return;
       setStore(d as Store);
       setConnected(true);
     });
@@ -186,8 +220,10 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     // Also listen for heads-changed which fires even when patches are empty
     // (e.g. first-time sync of a document that was created with no changes).
     handle.addListener?.('heads-changed', ({ doc: d }: { doc: unknown }) => {
-      if (d && !handle.doc() !== null) {
+      if (disposed) return;
+      if (d) {
         setStore(d as Store);
+        setConnected(true);
       }
     });
 
@@ -202,7 +238,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       handle.change(fn);
     };
 
-    return { store, connected, sendCommand, changeDoc, commandLogStore };
+    return { store, connected, sendCommand, changeDoc, commandLogStore, dispose };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // 'Document ... is unavailable' means the peer hasn't synced the doc yet.
@@ -214,7 +250,8 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     }
     console.error('[engine] Failed to connect:', err);
     setConnected(false);
+    dispose();
     const clsErr: CommandLogError = { error: true, url: '', status: null };
-    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr };
+    return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr, dispose };
   }
 }

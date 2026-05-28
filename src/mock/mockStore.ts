@@ -19,6 +19,8 @@ export interface StoreConnection {
   sendCommand: (engineId: string, command: string) => void;
   changeDoc: (fn: (doc: Store) => void) => void;
   commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
+  /** Tear down any background connections/timers held by this connection. */
+  dispose?: () => void;
 }
 
 // ---------------------------------------------------------------------------
