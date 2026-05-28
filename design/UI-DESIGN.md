@@ -1,7 +1,7 @@
 # IDEA Console — UI Design Document
 
-**Version:** 0.2.82  
-**Date:** 2026-05-17  
+**Version:** 0.2.85  
+**Date:** 2026-05-28  
 **Author:** Pixel (Console UI Developer)
 
 > Screenshots captured automatically with Playwright headless Chromium via `scripts/screenshot-screens.ts`.
@@ -13,15 +13,15 @@
 - [Overview](#overview)
 - [Persistent Chrome: Status Bar](#persistent-chrome-status-bar)
 - [Screen Inventory](#screen-inventory)
-- [Screen 1: Onboarding](#screen-1-onboarding)
+- [Screen 1: Connection Management](#screen-1-connection-management)
 - [Screen 2: Settings Panel](#screen-2-settings-panel)
 - [Screen 3: First-Time Setup](#screen-3-first-time-setup)
 - [Screen 4: App Browser (Unauthenticated)](#screen-4-app-browser-unauthenticated)
-- [Modal M1: Login Form](#modal-m1-login-form)
 - [Screen 5: Main Layout (Authenticated)](#screen-5-main-layout-authenticated)
-- [Screen 6: Operator Management](#screen-6-operator-management)
+- [Screen 6: Account Screen](#screen-6-account-screen)
 - [Screen 7: Empty Disk Panel](#screen-7-empty-disk-panel)
 - [Screen 8: Restore Panel](#screen-8-restore-panel)
+- [Screen 9: History](#screen-9-history)
 - [Mobile Layout (≤600px)](#mobile-layout-600px)
 - [Screen Flow Diagram](#screen-flow-diagram)
 
@@ -29,9 +29,9 @@
 
 ## Overview
 
-IDEA Console is a web app (also packaged as a Chrome extension) for managing offline educational apps on IDEA Engines in schools. Operators (administrators) manage instances, disks, and users. Non-authenticated visitors can browse and launch apps.
+IDEA Console is a web app for managing offline educational apps on IDEA Engines in schools. Operators (administrators) manage instances, disks, and users. Non-authenticated visitors can browse and launch apps.
 
-The UI is a single-page app built with SolidJS. All screens render inside one `<div class="app">` — a persistent **status bar** at the top, and one **content area** below it that switches between screens using a `<Switch>/<Match>` block.
+The UI is a single-page app built with SolidJS. All screens render inside one `<div class="app">` — a persistent **status bar** at the top, and one **content area** (Workspace Panel) below it that switches between screens using a `<Switch>/<Match>` block.
 
 ---
 
@@ -42,62 +42,60 @@ Present on **every screen**, always at the top.
 | Element | Description | Visibility |
 |---|---|---|
 | Title + version | "IDEA Console v0.2.x" | Always |
-| Status dot + label | Green dot + hostname when connected; orange pulsing "Scanning…"; red "No engine found" | Always |
+| Status dot + label | Green dot + hostname when connected; orange pulsing "Scanning for engines..."; red "No engine found" | Always |
 | DEMO badge | Orange badge | Demo mode only |
 | Username | Logged-in operator's name | Authenticated only |
 | **Right-side action group** (`status-bar__actions`) | Always flush to the far right; contains the buttons below in order | — |
-| 👤 button | Opens Login Form modal | Not authenticated only |
-| 👤 button | Toggles Operator Management screen | Authenticated only |
-| Log out | Logs out current operator | Authenticated only |
-| 📋 button | Toggles History panel (command history overlay) | Always |
+| 🔌 button | Toggles Connection Management screen | Always except demo mode |
+| 👤 button | Toggles Account Screen (shows login or user info depending on auth state) | Always |
+| 📋 button | Toggles History screen (command history) | Always |
 | ⚙ button | Toggles Settings panel (✕ to close) | Always |
 
-All action buttons (👤, 📋, ⚙) are icon-style, borderless, and grouped together on the right side via `margin-left: auto` on the `status-bar__actions` container.
+All action buttons (🔌, 👤, 📋, ⚙) are icon-style, borderless, and grouped together on the right side via `margin-left: auto` on the `status-bar__actions` container. Each button turns to ✕ while its panel is open. Opening one panel closes all others.
 
 ---
 
 ## Screen Inventory
 
-The app has **8 distinct screens** (content area states):
+The app has **9 distinct screens** (content area states):
 
 | # | Screen | Trigger condition |
 |---|---|---|
-| 1 | Onboarding | Not configured and not in demo mode |
+| 1 | Connection Management | No configured hostname and not in demo mode; or 🔌 button pressed |
 | 2 | Settings Panel | ⚙ button pressed |
 | 3 | First-Time Setup | Engine connected, no users exist yet |
 | 4 | App Browser (unauthenticated) | Connected, not logged in |
 | 5 | Main Layout (authenticated) | Logged in as operator |
-| 6 | Operator Management | 👥 button pressed while logged in |
+| 6 | Account Screen | 👤 button pressed |
 | 7 | Empty Disk Panel | Operator selects an empty disk in tree |
 | 8 | Restore Panel | Operator selects a backup disk in tree |
-
-Additionally, one **modal overlay** can appear on top of any screen:
-
-| # | Modal | Trigger |
-|---|---|---|
-| M1 | Login Form | 👤 button in status bar, or automatically after logout |
+| 9 | History | 📋 button pressed |
 
 ---
 
-## Screen 1: Onboarding
+## Screen 1: Connection Management
 
-**File:** `src/components/Onboarding.tsx`  
-**When shown:** App has no configured hostname and is not in demo mode. Also shown embedded within the Settings panel's "Change engine" flow.
+**File:** `src/components/ConnectionManagement.tsx`  
+**When shown:** App has no configured hostname and not in demo mode (auto-shown after ~5s of scanning with no single result). Also toggled explicitly by the 🔌 button in the status bar. Hidden in demo mode.
 
-![S1 Onboarding](screenshots/S1-onboarding.png)
+![S1 Connection Management](screenshots/S1-onboarding.png)
+
+**Silent background discovery on app start:**
+- When no saved hostname, non-production-web-mode, demo off: mDNS discovery starts immediately in background
+- **Single engine found:** auto-connect silently, Connection Management screen never shown
+- **Multiple engines found OR no engine after 5s:** Connection Management screen shown automatically
 
 **States:**
 - **Scanning** — corner spinner in the title row animates; label shows "Scanning for engines…"
 - **Found** — engine list appears with Connect buttons; background refresh runs every 10s, merging new results in
-- **Not found** — label shows "No engine found"; corner spinner continues while background re-scan is active
+- **Not found** — label shows "No engine found"
 
 **Engine list** — discovered engines shown as `hostname` (`.local` stripped) + Connect button.
 
-**Manual entry (inline)** — clicking "Enter hostname manually ›" replaces the link in-place with a text input, Connect button, and Cancel button. Supports `host:port` syntax. No separate sub-panel or Back navigation.
+**Manual entry (inline)** — clicking "Enter hostname manually ›" replaces the link in-place with a text input, Connect button, and Cancel button. Supports `host:port` syntax. No separate sub-panel or Back navigation. Uses "last-used hostname" terminology.
 
 **Flows from here:**
 - Connect → **Screen 3** (First-Time Setup) or **Screen 4** (App Browser)
-- Demo mode on → **Screen 4** (App Browser, demo data)
 
 ---
 
@@ -119,31 +117,15 @@ Additionally, one **modal overlay** can appear on top of any screen:
 ![S2c Settings — About](screenshots/S2c-settings-about.png)
 
 **Tabs:**
-- **Engine Connection** — shows current connection status; **Demo mode toggle** (checkbox, always visible); "Change engine" button opens the `ChangeEngineDialog` overlay
+- **Engine Connection** — shows current connection status; **Demo mode toggle** (checkbox, always visible)
 - **Account** — change password form (current / new / confirm); only shown when logged in
-- **About** — app name, version, display mode selector (extension only)
+- **About** — app name, version (no extension-specific options)
 
 **Flows from here:**
 - ⚙ button again (toggles closed) → returns to previous screen
-- "Change engine" → opens `ChangeEngineDialog` overlay; after connecting, returns to Settings
 - Demo mode toggle → switches to/from demo mode without leaving Settings
 
 > Note: there is no separate Close button inside the panel — the ⚙ status bar button toggles it open/closed.
-
-### Change Engine Dialog
-
-**File:** `src/components/ChangeEngineDialog.tsx`  
-**When shown:** Overlay opened by the "Change engine" button in Settings → Engine Connection tab.
-
-**Sections (top to bottom):**
-- **Previously connected** — engine hostnames from history (shown when input is empty); one-click reconnect
-- **Hostname input + Connect button** — accepts bare name, `.local`, IP, or `host:port`; as-you-type probing shows live suggestions
-- **Live suggestions** — engines found while typing, each with its own Connect button
-- **Error message** — shown when Connect fails
-- **Scan network** button — full mDNS discovery; results appear as suggestions
-- **Cancel** button (or click outside card) — closes, returns to Settings
-
-**Probing:** Bare name + `.local` probed in parallel (300 ms debounce on input, simultaneous on Connect).
 
 ---
 
@@ -172,28 +154,15 @@ _(No screenshot — requires a fresh engine with empty userDB. Hard to reproduce
 - No login link in the app content area — login is via the 👤 icon in the status bar only
 
 **Flows from here:**
-- 👤 in status bar → **Modal M1** (Login Form) → on success → **Screen 5** (Main Layout)
-- Logout → returns to App Browser; Modal M1 opens automatically (no extra click needed)
-
----
-
-## Modal M1: Login Form
-
-**File:** `src/components/LoginForm.tsx`  
-**When shown:** Floats above any screen when the 👤 icon in the status bar is clicked. Rendered outside the Switch so it survives screen transitions.
-
-![M1 Login Modal](screenshots/M1-login-modal.png)
-
-**Flows from here:**
-- ✕ / Cancel → modal closes, returns to App Browser
-- Successful login → modal closes → **Screen 5** (Main Layout)
+- 👤 in status bar → **Screen 6** (Account Screen, shows login form) → on success → **Screen 5** (Main Layout)
+- After logout: Account Screen shows login form (no auto modal)
 
 ---
 
 ## Screen 5: Main Layout (Authenticated)
 
 **File:** `src/App.tsx` + `NetworkTree.tsx` + `InstanceList.tsx`  
-**When shown:** Operator is logged in and Operator Management is not open.
+**When shown:** Operator is logged in.
 
 **All instances selected (default):**
 
@@ -220,7 +189,7 @@ Hierarchical tree:
 - [Cancel] [Move] [Copy]
 - While dragging, valid target disks highlight with a blue dashed outline
 
-### Right Panel
+### Right Panel: Workspace Panel
 
 Switches based on what's selected in the tree:
 
@@ -231,13 +200,15 @@ Each `InstanceRow` shows:
 - Start / Stop / Backup buttons (context-sensitive disabled states)
 - Docker metrics if running: CPU %, RAM used, Disk used
 - Last backup timestamp + backup disk chips
-- Operation progress bar (inline, when an op is running)
+- Operation progress bar (inline, when a start/stop op is running for this instance)
 
 **b) Empty Disk Panel** — shown when an empty disk is selected → **Screen 7**
 
 **c) Restore Panel** — shown when a backup disk is selected → **Screen 8**
 
-**Operation Progress bar** — shown above the right-panel content area when active operations exist. Shows kind label, args summary, step label, progress indicator, and status. Running operations additionally show a **live log panel** (`LogLines`) that streams captured command output in real time.
+**Operation Progress bar** — shown above the Workspace Panel when active operations exist for **non-instance-specific operations** (copyApp, moveApp, backupApp, restoreApp, upgradeApp, upgradeEngine). Instance-specific ops (startApp, stopApp) are shown inline in InstanceRow only.
+
+Shows kind label, args summary, step label, progress indicator, and status. Running operations additionally show a **live log panel** (`LogLines`) that streams captured command output in real time.
 
 Progress uses a **segmented step bar** (`StepProgressBar`) when the engine provides `currentStep` / `totalSteps`:
 - Each step is an equal-width segment
@@ -251,32 +222,30 @@ The same `StepProgressBar` is used inline in **InstanceRow** (collapsed view, be
 
 ![S5 Operation Progress](screenshots/S5-operation-progress.png)
 
-**History panel** — opened via the 📋 button in the status bar (toggles open/closed; 📋 turns to ✕ while open). Overlays the right-panel content area. Lists recently completed commands (newest first). Each row shows:
-- ✓ / ✗ status icon + command name + time-ago label
-- Click to expand → `LogLines` viewer with the full captured log for that trace
-- Error message shown inline for failed commands
-- "No command history yet" placeholder when empty
-- "Not available on this engine" message when the engine doesn't expose the command log endpoint
-
-The history is **not** always visible — it is opt-in via the status bar button, keeping the main app list uncluttered.
-
-![S5 History Panel](screenshots/S5-history-panel.png)
-
-*Expanded trace (click a row to reveal log lines):*
-
-**Files:** `src/components/HistoryPanel.tsx`, `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
-
 ---
 
-## Screen 6: Operator Management
+## Screen 6: Account Screen
 
-**File:** `src/components/OperatorManagement.tsx`  
-**When shown:** 👥 button in status bar (replaces main layout content area entirely).
+**File:** `src/components/AccountScreen.tsx`  
+**When shown:** 👤 button in status bar (always visible). Replaces content area entirely.
 
-![S6 Operator Management](screenshots/S6-operator-management.png)
+**When NOT logged in:**
+- Inline login form (username + password + Log in button)
+
+**When logged in:**
+- Username + role
+- Change password form
+- "Manage Operators" button — drills into `OperatorManagement` inline
+- "Log out" danger button at bottom
+
+After logout: Account Screen stays open showing the login form. No auto modal.
+
+> Note: there is no Close button inside the panel — the 👤 status bar button toggles it open/closed.
 
 **Flows from here:**
-- 👥 button again (✕) → returns to **Screen 5** (Main Layout)
+- Log in → Account Screen transitions to logged-in view; main layout appears behind
+- Manage Operators → sub-view within Account Screen (Back button to return)
+- Log out → Account Screen shows login form; content area shows App Browser behind
 
 ---
 
@@ -308,11 +277,36 @@ The history is **not** always visible — it is opt-in via the status bar button
 
 ![S8 Restore Panel](screenshots/S8-restore-panel.png)
 
-- Lists all instances linked to this backup disk
-- Per-instance: last backup time, target disk selector, Restore button
-- On submit: success state with [Back]
+**Header:** disk icon + backup disk name + "Backup Disk" subtitle + backup mode (Immediate / On demand / Scheduled).
+
+**Per-instance section:**
+- Instance name + last backup timestamp
+- Target disk selector (dropdown of available app/empty disks, excluding this backup disk)
+- "Restore" button (disabled until target disk selected)
+- On click: inline confirmation "Are you sure? This will overwrite [instance] on [target disk]" with Cancel / Confirm Restore
+- On confirm: restore command sent; button re-disables
+
+**Empty state:** "No instances backed up to this disk yet."
 
 ---
+
+## Screen 9: History
+
+**File:** `src/components/HistoryPanel.tsx`  
+**When shown:** 📋 button in status bar (toggles; 📋 turns to ✕ while open). Replaces content area entirely.
+
+![S5 History Panel](screenshots/S5-history-panel.png)
+
+Lists recently completed commands (newest first). Each row shows:
+- ✓ / ✗ status icon + command name + time-ago label
+- Click to expand → `LogLines` viewer with the full captured log for that trace
+- Error message shown inline for failed commands
+- "No command history yet" placeholder when empty
+- "Not available on this engine" message when the engine doesn't expose the command log endpoint
+
+> Note: there is no Close button inside the panel — the 📋 status bar button toggles it open/closed.
+
+**Files:** `src/components/HistoryPanel.tsx`, `src/components/CommandHistory.tsx`, `src/components/LogLines.tsx`, `src/store/commandLog.ts`, `src/types/commandLog.ts`
 
 ---
 
@@ -369,45 +363,46 @@ On mobile the main layout is replaced by a **bottom tab bar** with three tabs. T
 ## Screen Flow Diagram
 
 ```
-                         ┌──────────────┐
-                    ┌───▶│  Onboarding  │────────────────────┐
-                    │    │  (Screen 1)  │                     │
-                    │    └──────────────┘                     │
-                    │           │ Save & Connect              │
-   App starts       │           ▼                             │
-   no config ───────┘    ┌─────────────────┐                 │
-                         │ First-Time Setup │                 │
-                         │   (Screen 3)    │                 │
-                         └────────┬────────┘                 │
-                                  │ Create account           │
-                 ┌────────────────▼──────────────────────┐   │
-  ⚙ (any screen)│        STATUS BAR (persistent)        │   │
-  ──────────────▶│  ⚙ Settings · 📋 History · 👥 Ops Mgmt · Log out  │◀──┘
-                 └──────┬──────────────┬─────────────────┘
-                        │              │
-              Not logged in         Logged in
-                        │              │
-                        ▼              ▼
+                         ┌────────────────────────┐
+                    ┌───▶│  Connection Management  │──────────────────────┐
+                    │    │      (Screen 1)         │                      │
+                    │    └────────────────────────-┘                      │
+                    │           │ Connect                                  │
+   App starts       │           ▼                                          │
+   no config ───────┘    ┌─────────────────┐                              │
+   or 🔌 pressed         │ First-Time Setup │                              │
+                         │   (Screen 3)    │                              │
+                         └────────┬────────┘                              │
+                                  │ Create account                        │
+                 ┌────────────────▼──────────────────────┐                │
+  ⚙ (any screen)│        STATUS BAR (persistent)        │                │
+  ──────────────▶│  🔌 Connection · 👤 Account · 📋 History · ⚙ Settings │◀──┘
+                 └──────┬──────────────────┬─────────────┘
+                        │                  │
+              Not logged in             Logged in
+                        │                  │
+                        ▼                  ▼
               ┌─────────────┐   ┌──────────────────────────┐
               │ App Browser │   │     Main Layout           │
               │ (Screen 4)  │   │     (Screen 5)            │
               └──────┬──────┘   │                          │
-                     │ Log in   │  NetworkTree + right pane │
-                     ▼          │  ┌──────┬────────┬──────┐ │
-              ┌─────────────┐   │  │Inst. │ Empty  │Backup│ │
-              │ Login Modal │   │  │ List │  Disk  │Disk  │ │
-              │   (M1)      │   │  │(5a)  │ (S7)   │ (S8) │ │
-              └──────┬──────┘   │  └──────┴────────┴──────┘ │
-                     │ success  └──────────────┬─────────────┘
-                     └──────────────────────────┘
-                                               │ 👥
-                                               ▼
-                                    ┌─────────────────────┐
-                                    │ Operator Management  │
-                                    │    (Screen 6)        │
-                                    └─────────────────────┘
+                     │          │  NetworkTree + Workspace  │
+                     │          │  ┌──────┬────────┬──────┐ │
+              👤 Account        │  │Inst. │ Empty  │Backup│ │
+              (Screen 6)        │  │ List │  Disk  │Disk  │ │
+              shows login       │  │(5a)  │ (S7)   │ (S8) │ │
+              form inline       │  └──────┴────────┴──────┘ │
+                     │          └──────────────────────────-┘
+                     │ success            │ 👤
+                     └────────────────────┤
+                                          ▼
+                                ┌─────────────────────┐
+                                │   Account Screen     │
+                                │    (Screen 6)        │
+                                │  · Change password   │
+                                │  · Manage Operators  │
+                                │  · Log out           │
+                                └─────────────────────┘
 ```
 
 ---
-
-
