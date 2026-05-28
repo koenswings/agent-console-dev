@@ -2,6 +2,7 @@ import { createSignal, createEffect, createMemo, Show, Switch, Match, onMount, o
 import pkg from '../package.json';
 import ConnectionManagement from './components/ConnectionManagement';
 import SettingsPanel from './components/SettingsPanel';
+import AccountScreen from './components/AccountScreen';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
@@ -10,9 +11,7 @@ import OperationProgress from './components/OperationProgress';
 import HistoryPanel from './components/HistoryPanel';
 import AppBrowser from './components/AppBrowser';
 import MobileLayout from './components/MobileLayout';
-import LoginForm from './components/LoginForm';
 import FirstTimeSetup from './components/FirstTimeSetup';
-import OperatorManagement from './components/OperatorManagement';
 import { setSendCommandFn, copyApp, moveApp } from './store/commands';
 import {
   currentUser,
@@ -81,8 +80,7 @@ const App: Component = () => {
   const [selection, setSelection] = createSignal<Selection>({ type: 'network', id: '' });
   const [showSettings, setShowSettings] = createSignal(false);
   const [showHistory, setShowHistory] = createSignal(false);
-  const [showLogin, setShowLogin] = createSignal(false);
-  const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
+  const [showAccount, setShowAccount] = createSignal(false);
   const [showConnectionMgmt, setShowConnectionMgmt] = createSignal(false);
   const [sessionRestored, setSessionRestored] = createSignal(false);
 
@@ -362,16 +360,12 @@ const App: Component = () => {
     await initConnection();
   };
 
-  const handleLogout = async () => {
-    await logout();
-    setShowOperatorMgmt(false);
-    setShowLogin(true);
-  };
-
   // ── Computed screen conditions ────────────────────────────────────────────
   const showOnboarding   = () => ready() && !hostname() && !demo() && discoveryFailed();
   const showFirstSetup   = () => ready() && !isOperator() && isFirstTimeSetup(store());
-  const showMainLayout   = () => isOperator() && !showOperatorMgmt();
+  // showAccount overlays above the main layout in the Switch — showMainLayout doesn't
+  // need to exclude it; the Switch renders the first matching Match.
+  const showMainLayout   = () => isOperator();
   const rightPanel       = () => rightPanelFor(selection(), store());
 
   // ── Status-bar dot ────────────────────────────────────────────────────────
@@ -384,7 +378,7 @@ const App: Component = () => {
   const statusLabel = () => {
     if (connected()) return hostname().replace(/\.local$/i, '');
     if (demo()) return '';
-    if (discovering()) return 'Scanning…';
+    if (discovering()) return 'Scanning for engines...';
     if (hostname()) return 'Connecting…';
     return 'No engine found';
   };
@@ -417,6 +411,7 @@ const App: Component = () => {
               title="Connection Management"
               onClick={() => {
                 setShowConnectionMgmt((v) => !v);
+                setShowAccount(false);
                 setShowSettings(false);
                 setShowHistory(false);
               }}
@@ -425,29 +420,29 @@ const App: Component = () => {
             </button>
           </Show>
 
-          <Show when={isOperator()}>
-            <button
-              class="status-bar__operator-mgmt-btn"
-              title="Manage operators"
-              onClick={() => setShowOperatorMgmt((v) => !v)}
-            >
-              {showOperatorMgmt() ? '✕' : '👤'}
-            </button>
-            <button class="status-bar__logout-btn" onClick={handleLogout}>
-              Log out
-            </button>
-          </Show>
-
-          <Show when={!isOperator()}>
-            <button class="status-bar__login-btn" title="Log in" onClick={() => setShowLogin(true)}>
-              👤
-            </button>
-          </Show>
+          {/* 👤 Account — always visible */}
+          <button
+            class="status-bar__account-btn"
+            title="Account"
+            onClick={() => {
+              setShowAccount((v) => !v);
+              setShowConnectionMgmt(false);
+              setShowSettings(false);
+              setShowHistory(false);
+            }}
+          >
+            {showAccount() ? '✕' : '👤'}
+          </button>
 
           <button
             class="status-bar__history-btn"
             title="Command History"
-            onClick={() => { setShowHistory((v) => !v); setShowSettings(false); setShowConnectionMgmt(false); }}
+            onClick={() => {
+              setShowHistory((v) => !v);
+              setShowConnectionMgmt(false);
+              setShowAccount(false);
+              setShowSettings(false);
+            }}
           >
             {showHistory() ? '✕' : '📋'}
           </button>
@@ -455,7 +450,12 @@ const App: Component = () => {
           <button
             class="status-bar__settings-btn"
             title="Settings"
-            onClick={() => { setShowSettings((v) => !v); setShowHistory(false); setShowConnectionMgmt(false); }}
+            onClick={() => {
+              setShowSettings((v) => !v);
+              setShowConnectionMgmt(false);
+              setShowAccount(false);
+              setShowHistory(false);
+            }}
           >
             {showSettings() ? '✕' : '⚙'}
           </button>
@@ -465,11 +465,13 @@ const App: Component = () => {
       {/* ── Page content — exactly one Match renders at a time ────────────── */}
       <Switch>
 
-        {/* History panel */}
-        <Match when={showHistory()}>
-          <HistoryPanel
-            commandLogStore={commandLogStore}
-            onClose={() => setShowHistory(false)}
+        {/* Connection Management — toggled by 🔌 or auto-shown when discovery failed */}
+        <Match when={showConnectionMgmt() || showOnboarding()}>
+          <ConnectionManagement
+            onComplete={handleOnboardingComplete}
+            discovering={discovering()}
+            discoveryResults={discoveryResults()}
+            onDiscoverySelect={handleDiscoverySelect}
           />
         </Match>
 
@@ -509,13 +511,16 @@ const App: Component = () => {
           />
         </Match>
 
-        {/* Connection Management — toggled by 🔌 or auto-shown when discovery failed */}
-        <Match when={showConnectionMgmt() || showOnboarding()}>
-          <ConnectionManagement
-            onComplete={handleOnboardingComplete}
-            discovering={discovering()}
-            discoveryResults={discoveryResults()}
-            onDiscoverySelect={handleDiscoverySelect}
+        {/* Account screen — always accessible via 👤 button */}
+        <Match when={showAccount()}>
+          <AccountScreen store={store()} connection={connection()} />
+        </Match>
+
+        {/* History panel */}
+        <Match when={showHistory()}>
+          <HistoryPanel
+            commandLogStore={commandLogStore}
+            onClose={() => setShowHistory(false)}
           />
         </Match>
 
@@ -528,11 +533,6 @@ const App: Component = () => {
               setAuthenticatedUser(user);
             }}
           />
-        </Match>
-
-        {/* Operator management */}
-        <Match when={showOperatorMgmt() && isOperator() && store() && connection()}>
-          <OperatorManagement store={store()!} connection={connection()!} />
         </Match>
 
         {/* Main layout (authenticated) */}
@@ -618,21 +618,6 @@ const App: Component = () => {
         </Match>
 
       </Switch>
-
-      {/* ── Login modal ───────────────────────────────────────────────────── */}
-      {/* Lives outside the Switch so auth signal changes never affect it.      */}
-      <Show when={showLogin()}>
-        <LoginForm
-          store={store()}
-          onSuccess={(user) => {
-            batch(() => {
-              setShowLogin(false);
-              setAuthenticatedUser(user);
-            });
-          }}
-          onCancel={() => setShowLogin(false)}
-        />
-      </Show>
 
     </div>
   );
