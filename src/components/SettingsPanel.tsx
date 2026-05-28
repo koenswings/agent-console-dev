@@ -1,5 +1,4 @@
 import { createSignal, onMount, Show, For, type Component } from 'solid-js';
-import ChangeEngineDialog from './ChangeEngineDialog';
 import { currentUser, isOperator, changePassword } from '../store/auth';
 import { csGet, csSet, STORAGE_KEY_MODE, type DisplayMode } from '../store/storage';
 import { IS_EXTENSION } from '../store/context';
@@ -22,7 +21,6 @@ export interface SettingsPanelProps {
 
 const SettingsPanel: Component<SettingsPanelProps> = (props) => {
   const [activeTab, setActiveTab] = createSignal<Tab>('engine');
-  const [showChangeEngine, setShowChangeEngine] = createSignal(false);
   const [displayMode, setDisplayMode] = createSignal<DisplayMode>('sidePanel');
 
   // Change password state
@@ -37,11 +35,6 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
     const r = await csGet([STORAGE_KEY_MODE]);
     setDisplayMode((r[STORAGE_KEY_MODE] as DisplayMode) ?? 'sidePanel');
   });
-
-  const handleModeChange = async (mode: DisplayMode) => {
-    setDisplayMode(mode);
-    await csSet({ [STORAGE_KEY_MODE]: mode });
-  };
 
   const handleChangePassword = async (e: Event) => {
     e.preventDefault();
@@ -146,33 +139,6 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               </label>
               <span class="form-field__hint">Simulated data, no engine required</span>
             </div>
-
-            {/* Change engine — operator only */}
-            <Show when={isOperator()}>
-              <button
-                class="btn btn--primary settings-panel__change-engine-btn"
-                onClick={() => setShowChangeEngine(true)}
-              >
-                Change engine
-              </button>
-            </Show>
-
-            {/* Change engine dialog */}
-            <Show when={showChangeEngine()}>
-              <ChangeEngineDialog
-                currentHostname={props.hostname}
-                demo={props.demo}
-                onConnect={(h, s) => {
-                  setShowChangeEngine(false);
-                  props.onConnect(h, s);
-                }}
-                onDemoMode={() => {
-                  setShowChangeEngine(false);
-                  props.onDemoMode();
-                }}
-                onCancel={() => setShowChangeEngine(false)}
-              />
-            </Show>
           </div>
         </Show>
 
@@ -245,7 +211,10 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
                         name="displayMode"
                         value={opt.id}
                         checked={displayMode() === opt.id}
-                        onChange={() => handleModeChange(opt.id)}
+                        onChange={() => {
+                          setDisplayMode(opt.id);
+                          void csSet({ [STORAGE_KEY_MODE]: opt.id });
+                        }}
                       />
                       <span class="mode-option__label">{opt.label}</span>
                       <span class="mode-option__desc">{opt.desc}</span>

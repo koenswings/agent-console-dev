@@ -1,6 +1,6 @@
 import { createSignal, createEffect, createMemo, Show, Switch, Match, onMount, onCleanup, batch, type Component } from 'solid-js';
 import pkg from '../package.json';
-import Onboarding from './components/Onboarding';
+import ConnectionManagement from './components/ConnectionManagement';
 import SettingsPanel from './components/SettingsPanel';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
@@ -25,7 +25,12 @@ import {
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
-import { readStoredHostname, readStoredDemoMode, saveHostnameAndStoreUrl, saveDemoMode } from './components/Onboarding';
+import {
+  readStoredHostname,
+  readStoredDemoMode,
+  saveHostnameAndStoreUrl,
+  saveDemoMode,
+} from './store/storage';
 import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
@@ -69,6 +74,7 @@ const App: Component = () => {
   const commandLogStore = createMemo<CommandLogState>(() => connection()?.commandLogStore() ?? null);
   const [discovering, setDiscovering] = createSignal(false);
   const [discoveryResults, setDiscoveryResults] = createSignal<DiscoveryResult[]>([]);
+  const [discoveryFailed, setDiscoveryFailed] = createSignal(false);
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [ready, setReady] = createSignal(false);
@@ -77,6 +83,7 @@ const App: Component = () => {
   const [showHistory, setShowHistory] = createSignal(false);
   const [showLogin, setShowLogin] = createSignal(false);
   const [showOperatorMgmt, setShowOperatorMgmt] = createSignal(false);
+  const [showConnectionMgmt, setShowConnectionMgmt] = createSignal(false);
   const [sessionRestored, setSessionRestored] = createSignal(false);
 
   // ── Mobile breakpoint ─────────────────────────────────────────────────────
@@ -233,10 +240,23 @@ const App: Component = () => {
   const runDiscovery = () => {
     setDiscovering(true);
     setDiscoveryResults([]);
+
+    // After 5s of scanning with no single match, show Connection Management
+    const failTimer = setTimeout(() => {
+      if (discovering() && !hostname()) setDiscoveryFailed(true);
+    }, 5000);
+
     discoverAllEngines().then(async (results) => {
+      clearTimeout(failTimer);
       setDiscovering(false);
-      // Always show results — OnboardingCard handles the picker; no auto-connect
-      setDiscoveryResults(results);
+      if (results.length === 1 && !hostname()) {
+        // Single engine found: auto-connect, never show Connection Management screen
+        await handleDiscoverySelect(results[0]);
+      } else {
+        // Multiple engines found or none: show Connection Management so user can pick
+        setDiscoveryResults(results);
+        setDiscoveryFailed(true);
+      }
     });
   };
 
@@ -244,12 +264,14 @@ const App: Component = () => {
     await saveHostnameAndStoreUrl(result.hostname, result.storeUrl);
     setHostname(result.hostname);
     setDiscoveryResults([]);
+    setShowConnectionMgmt(false);
     await initConnection();
   };
 
   const handleConnectionFailure = async () => {
     setHostname('');
     localStorage.removeItem('engineHostname');
+    setDiscoveryFailed(false);
     runDiscovery();
   };
 
@@ -280,8 +302,6 @@ const App: Component = () => {
 
   // Initial connection timeout — if hostname is set but we never receive document
   // data after 15 s, the engine is unreachable; go back to scanning.
-  // This catches the case where the WS adapter "forceReady" fires after 1 s but
-  // the engine never actually delivers any Automerge document content.
   createEffect(() => {
     const host = hostname();
     const everConn = hasEverConnected();
@@ -337,6 +357,7 @@ const App: Component = () => {
   // ── Settings / reconnect helpers ─────────────────────────────────────────
   const handleOnboardingComplete = async () => {
     setHostname(await readStoredHostname());
+    setShowConnectionMgmt(false);
     setShowSettings(false);
     await initConnection();
   };
@@ -348,7 +369,7 @@ const App: Component = () => {
   };
 
   // ── Computed screen conditions ────────────────────────────────────────────
-  const showOnboarding   = () => ready() && !hostname() && !demo();
+  const showOnboarding   = () => ready() && !hostname() && !demo() && discoveryFailed();
   const showFirstSetup   = () => ready() && !isOperator() && isFirstTimeSetup(store());
   const showMainLayout   = () => isOperator() && !showOperatorMgmt();
   const rightPanel       = () => rightPanelFor(selection(), store());
@@ -389,6 +410,21 @@ const App: Component = () => {
         </Show>
 
         <div class="status-bar__actions">
+          {/* 🔌 Connection Management — hidden in demo mode */}
+          <Show when={!demo()}>
+            <button
+              class="status-bar__connection-btn"
+              title="Connection Management"
+              onClick={() => {
+                setShowConnectionMgmt((v) => !v);
+                setShowSettings(false);
+                setShowHistory(false);
+              }}
+            >
+              {showConnectionMgmt() ? '✕' : '🔌'}
+            </button>
+          </Show>
+
           <Show when={isOperator()}>
             <button
               class="status-bar__operator-mgmt-btn"
@@ -411,7 +447,7 @@ const App: Component = () => {
           <button
             class="status-bar__history-btn"
             title="Command History"
-            onClick={() => { setShowHistory((v) => !v); setShowSettings(false); }}
+            onClick={() => { setShowHistory((v) => !v); setShowSettings(false); setShowConnectionMgmt(false); }}
           >
             {showHistory() ? '✕' : '📋'}
           </button>
@@ -419,7 +455,7 @@ const App: Component = () => {
           <button
             class="status-bar__settings-btn"
             title="Settings"
-            onClick={() => { setShowSettings((v) => !v); setShowHistory(false); }}
+            onClick={() => { setShowSettings((v) => !v); setShowHistory(false); setShowConnectionMgmt(false); }}
           >
             {showSettings() ? '✕' : '⚙'}
           </button>
@@ -473,9 +509,9 @@ const App: Component = () => {
           />
         </Match>
 
-        {/* Engine discovery / onboarding */}
-        <Match when={showOnboarding()}>
-          <Onboarding
+        {/* Connection Management — toggled by 🔌 or auto-shown when discovery failed */}
+        <Match when={showConnectionMgmt() || showOnboarding()}>
+          <ConnectionManagement
             onComplete={handleOnboardingComplete}
             discovering={discovering()}
             discoveryResults={discoveryResults()}
@@ -489,9 +525,6 @@ const App: Component = () => {
             store={store()!}
             connection={connection()!}
             onComplete={(user) => {
-              // setAuthenticatedUser is synchronous; calling it here (post-finally
-              // in FirstTimeSetup) flips isOperator() which moves Switch to the
-              // mainLayout Match — clean transition with no disposal issues.
               setAuthenticatedUser(user);
             }}
           />
