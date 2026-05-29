@@ -24,11 +24,11 @@ export async function loginAsDemo(page: Page): Promise<void> {
   // Wait for the app to boot in demo mode (DEMO badge in status bar)
   await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
-  // Click the login button in the status bar
-  await page.locator('.status-bar__login-btn').click();
+  // Click the account button in the status bar — opens AccountScreen
+  await page.locator('.status-bar__account-btn').click();
 
-  // Wait for the login modal
-  await page.locator('.modal').waitFor({ state: 'visible' });
+  // Wait for the Account Screen with login form
+  await page.locator('.account-screen').waitFor({ state: 'visible' });
 
   // Fill credentials
   await page.locator('input[autocomplete="username"]').fill(DEMO_USERNAME);
@@ -37,6 +37,12 @@ export async function loginAsDemo(page: Page): Promise<void> {
   // Submit
   await page.locator('button.btn--primary[type="submit"]').click();
 
-  // Wait for operator UI — username appears in the status bar
-  await page.locator('.status-bar__username').waitFor({ state: 'visible', timeout: 15_000 });
+  // Wait for operator UI — username appears in the AccountScreen
+  await page.locator('.account-screen__username').waitFor({ state: 'visible', timeout: 15_000 });
+
+  // Close AccountScreen to return to main layout
+  await page.locator('.status-bar__account-btn').click();
+
+  // Main layout should now be visible
+  await page.locator('.main-layout').waitFor({ state: 'visible', timeout: 10_000 });
 }

@@ -31,63 +31,28 @@ test.describe('Settings panel', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('settings panel closes via the close button', async ({ page }) => {
+  test('settings panel closes via the gear button toggle', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
+    // Gear button is the only control — no internal close button
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).not.toBeVisible();
 
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('opening the change-engine dialog does NOT close the settings panel', async ({ page }) => {
+  test('engine connection tab shows demo mode status', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    // Change engine button is operator-only — should be visible after login
-    await page.locator('.settings-panel__change-engine-btn').click();
-    await expect(page.locator('.change-engine-dialog')).toBeVisible();
+    // In demo mode the status label says "Demo mode"
+    await expect(page.locator('.settings-panel__current-label')).toContainText('Demo mode');
 
-    // Settings panel is still in the DOM behind the dialog
-    await expect(page.locator('.settings-panel')).toBeVisible();
+    // Demo toggle checkbox is present
+    await expect(page.locator('.settings-panel input[type="checkbox"]')).toBeVisible();
 
     expect(consoleErrors).toHaveLength(0);
-    expect(pageErrors).toHaveLength(0);
-  });
-
-  test('cancelling the change-engine dialog leaves settings panel open', async ({ page }) => {
-    await page.locator('.status-bar__settings-btn').click();
-    await expect(page.locator('.settings-panel')).toBeVisible();
-
-    await page.locator('.settings-panel__change-engine-btn').click();
-    await expect(page.locator('.change-engine-dialog')).toBeVisible();
-
-    // Close dialog via Cancel
-    await page.locator('.change-engine-dialog__cancel').click();
-    await expect(page.locator('.change-engine-dialog')).not.toBeVisible();
-
-    // Settings panel must remain open
-    await expect(page.locator('.settings-panel')).toBeVisible();
-
-    expect(consoleErrors).toHaveLength(0);
-    expect(pageErrors).toHaveLength(0);
-  });
-
-  test('change-engine dialog has title, input, scan and cancel buttons', async ({ page }) => {
-    await page.locator('.status-bar__settings-btn').click();
-    await page.locator('.settings-panel__change-engine-btn').click();
-    await expect(page.locator('.change-engine-dialog')).toBeVisible();
-
-    // Core elements of the dialog
-    await expect(page.locator('.change-engine-dialog__title')).toContainText('Change Engine');
-    await expect(page.locator('.change-engine-dialog__input')).toBeVisible();
-    await expect(page.locator('.change-engine-dialog__scan-btn')).toBeVisible();
-    await expect(page.locator('.change-engine-dialog__cancel')).toBeVisible();
-
-    // Panel is still open throughout
-    await expect(page.locator('.settings-panel')).toBeVisible();
-
     expect(pageErrors).toHaveLength(0);
   });
 
@@ -116,7 +81,7 @@ test.describe('Settings panel', () => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    // Step 3: toggle settings closed
+    // Step 3: toggle settings closed via gear button
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).not.toBeVisible();
     await expect(page.locator('.main-layout')).toBeVisible();
