@@ -4,6 +4,11 @@
  * Uses chrome.storage.local when running as a real extension (IS_EXTENSION),
  * falls back to localStorage for web/dev mode. Detection is synchronous and
  * done once at module load — no async races, no timeouts.
+ *
+ * EXTENSION-ONLY: The chrome.storage.local path in csGet/csSet is EXTENSION-ONLY.
+ * In web mode (isProductionWebMode or any served-from-server deployment), localStorage
+ * is always used. If we ever ship the extension, restore the chrome.storage paths and
+ * test carefully — see MEMORY.md note about chrome.storage silent hangs.
  */
 import { IS_EXTENSION } from './context';
 

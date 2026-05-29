@@ -7,14 +7,6 @@ import {
   type DiscoveryResult,
 } from '../store/discovery';
 
-// Re-export storage helpers for backward compatibility with App.tsx
-export {
-  readStoredHostname,
-  readStoredDemoMode,
-  saveHostnameAndStoreUrl,
-  saveDemoMode,
-} from '../store/storage';
-
 /**
  * Parse an optional :port suffix from user input.
  * Returns { host, port } where port defaults to 80.
@@ -39,10 +31,10 @@ export function normaliseHostname(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// OnboardingCard — unified discovery + connection panel
+// ConnectionManagement — engine discovery + connection panel
 // ---------------------------------------------------------------------------
 
-interface OnboardingProps {
+interface ConnectionManagementProps {
   onComplete: () => void;
   onReconnect?: () => void;
   /** True while App.tsx background discovery is running */
@@ -54,7 +46,7 @@ interface OnboardingProps {
 
 type ScanState = 'scanning' | 'done' | 'refreshing';
 
-const Onboarding: Component<OnboardingProps> = (props) => {
+const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   const [results, setResults] = createSignal<DiscoveryResult[]>([]);
   const [scanState, setScanState] = createSignal<ScanState>('scanning');
   const [showManual, setShowManual] = createSignal(false);
@@ -112,8 +104,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
 
   /**
    * Probe a list of candidates in parallel and return the first that has a valid
-   * store URL, or null if none respond. Uses a shared AbortController so that
-   * once a winner is found we stop waiting on the rest.
+   * store URL, or null if none respond.
    */
   const probeFirst = async (
     candidates: string[],
@@ -121,8 +112,6 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   ): Promise<{ hostname: string; storeUrl: string } | null> => {
     const ac = new AbortController();
     const probeOne = async (candidate: string) => {
-      // Use a per-probe timeout so a hung DNS lookup doesn't block indefinitely.
-      // AbortSignal.any combines it with the shared cancel signal (winner aborts rest).
       const timeoutSignal = AbortSignal.timeout(5000);
       const signal = AbortSignal.any
         ? AbortSignal.any([ac.signal, timeoutSignal])
@@ -154,23 +143,19 @@ const Onboarding: Component<OnboardingProps> = (props) => {
       const portProp = port !== 80 ? { port } : {};
 
       if (base) {
-        // Probe siblings using the extracted prefix
         const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal);
         const normalised = normaliseHostname(rawHost);
 
-        // Check if the entered host itself is in the results
         const enteredResult = siblings.find(
           (r) => r.hostname === normalised || r.hostname === rawHost
         );
 
         if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {
-          // No siblings found (or only the host itself) — connect directly
           const directResult = enteredResult ?? siblings[0];
           if (directResult) {
             setShowManual(false);
             handleConnect({ ...directResult, ...portProp });
           } else {
-            // Probe bare and .local in parallel as a last resort
             const bare = rawHost.replace(/\.local$/i, '');
             const probes = bare === normalised.replace(/\.local$/i, '')
               ? [bare, normalised]
@@ -184,13 +169,10 @@ const Onboarding: Component<OnboardingProps> = (props) => {
             }
           }
         } else {
-          // Multiple siblings found — merge into results and let user pick
           mergeResults(siblings);
           setShowManual(false);
         }
       } else {
-        // IP address or bare name with no trailing number (e.g. "wizardly-hugle", "192.168.1.10").
-        // Probe bare and .local in parallel — fastest wins.
         const isIp = /^[\d.]+$/.test(rawHost);
         const bare = rawHost.replace(/\.local$/i, '');
         const candidates = isIp ? [bare] : [bare, `${bare}.local`];
@@ -213,7 +195,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
     <div class="onboarding">
       <div class="onboarding__card">
         <div class="onboarding__title-row">
-          <h1 class="onboarding__title">IDEA Console</h1>
+          <h1 class="onboarding__title">Connection Management</h1>
           <Show when={scanState() === "scanning" || scanState() === "refreshing"}>
             <span class="onboarding__corner-spinner" />
           </Show>
@@ -242,7 +224,7 @@ const Onboarding: Component<OnboardingProps> = (props) => {
           </ul>
         </Show>
 
-        {/* Inline manual entry — replaces the link in place */}
+        {/* Inline manual entry */}
         <Show
           when={showManual()}
           fallback={
@@ -296,4 +278,4 @@ const Onboarding: Component<OnboardingProps> = (props) => {
   );
 };
 
-export default Onboarding;
+export default ConnectionManagement;

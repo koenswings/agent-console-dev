@@ -28,7 +28,6 @@ test.describe('Post-login flow', () => {
     // Open settings
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
-    await expect(page.locator('.main-layout')).not.toBeVisible();
 
     // Toggle settings closed via gear button
     await page.locator('.status-bar__settings-btn').click();
@@ -47,26 +46,32 @@ test.describe('Post-login flow', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('logout returns to app-browser, re-login shows main-layout again', async ({ page }) => {
+  test('logout returns to login screen in AccountScreen, re-login shows main-layout', async ({ page }) => {
     await loginAsDemo(page);
 
     await expect(page.locator('.main-layout')).toBeVisible();
 
-    // Log out
-    await page.locator('.status-bar__logout-btn').click();
+    // Open AccountScreen to log out
+    await page.locator('.status-bar__account-btn').click();
+    await expect(page.locator('.account-screen')).toBeVisible();
+    await expect(page.locator('.account-screen__username')).toBeVisible();
 
-    await expect(page.locator('.app-browser')).toBeVisible();
-    await expect(page.locator('.main-layout')).not.toBeVisible();
-    await expect(page.locator('.status-bar__username')).not.toBeVisible();
+    // Click logout (danger button) in AccountScreen
+    await page.locator('.account-screen .btn--danger').click();
 
-    // Re-login — logout auto-opens the login modal, so just wait for it
-    await page.locator('.modal').waitFor({ state: 'visible' });
+    // AccountScreen should now show the login form
+    await expect(page.locator('input[autocomplete="username"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.account-screen__username')).not.toBeVisible();
 
+    // Re-login via the AccountScreen form
     await page.locator('input[autocomplete="username"]').fill(DEMO_USERNAME);
     await page.locator('input[autocomplete="current-password"]').fill(DEMO_PASSWORD);
     await page.locator('button.btn--primary[type="submit"]').click();
 
-    await page.locator('.status-bar__username').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.account-screen__username').waitFor({ state: 'visible', timeout: 15_000 });
+
+    // Close AccountScreen — main layout should be visible
+    await page.locator('.status-bar__account-btn').click();
     await expect(page.locator('.main-layout')).toBeVisible();
 
     expect(pageErrors).toHaveLength(0);

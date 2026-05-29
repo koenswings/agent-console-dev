@@ -51,26 +51,15 @@ test.describe('Engine switch (operator only)', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('change engine dialog is operator-only and opens from engine tab', async ({ page }) => {
+  test('engine tab shows demo toggle and no change-engine button', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    // Change engine button is only visible to operators
-    const changeEngineBtn = page.locator('.settings-panel__change-engine-btn');
-    await expect(changeEngineBtn).toBeVisible();
+    // Engine Connection tab: demo toggle is present
+    await expect(page.locator('.settings-panel input[type="checkbox"]')).toBeVisible();
 
-    await changeEngineBtn.click();
-
-    const dialog = page.locator('.change-engine-dialog');
-    await expect(dialog).toBeVisible();
-    await expect(page.locator('.change-engine-dialog__title')).toContainText('Change Engine');
-
-    // Hostname input and scan button are present
-    await expect(page.locator('.change-engine-dialog__input')).toBeVisible();
-    await expect(page.locator('.change-engine-dialog__scan-btn')).toBeVisible();
-
-    // Cancel button is always present
-    await expect(page.locator('.change-engine-dialog__cancel')).toBeVisible();
+    // Change Engine dialog button was removed in PR #112
+    await expect(page.locator('.settings-panel__change-engine-btn')).toHaveCount(0);
 
     expect(consoleErrors).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);

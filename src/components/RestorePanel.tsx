@@ -17,9 +17,10 @@ const BACKUP_MODE_LABELS: Record<string, string> = {
 };
 
 const RestorePanel: Component<RestorePanelProps> = (props) => {
-  const [activeInstanceId, setActiveInstanceId] = createSignal<string | null>(null);
-  const [selectedTargetDiskId, setSelectedTargetDiskId] = createSignal<string | null>(null);
-  const [submitted, setSubmitted] = createSignal(false);
+  // Per-instance target disk selections: instanceId → targetDiskId
+  const [targetSelections, setTargetSelections] = createSignal<Record<string, string>>({});
+  // Which instance is in the confirmation step
+  const [confirmingId, setConfirmingId] = createSignal<string | null>(null);
 
   const backupConfig = () => props.disk()?.backupConfig ?? null;
 
@@ -44,38 +45,39 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     );
   });
 
-  const activeInstance = (): Instance | undefined => {
-    const id = activeInstanceId();
-    if (!id) return undefined;
-    return props.store()?.instanceDB[id];
-  };
-
   const formatLastBackup = (ts: number | null): string => {
     if (!ts) return 'Never backed up';
     return `Last backup: ${new Date(ts).toLocaleString()}`;
   };
 
-  const handleRestoreClick = (instanceId: string) => {
-    setActiveInstanceId(instanceId);
-    setSelectedTargetDiskId(null);
+  const setTarget = (instanceId: string, diskId: string) => {
+    setTargetSelections((prev) => ({ ...prev, [instanceId]: diskId }));
+    setConfirmingId(null); // reset confirmation if target changes
   };
 
-  const handleSubmit = () => {
+  const handleRestoreClick = (instanceId: string) => {
+    setConfirmingId(instanceId);
+  };
+
+  const handleConfirm = (inst: Instance) => {
     const engineId = props.engineId();
-    const inst = activeInstance();
     const s = props.store();
-    const targetDiskId = selectedTargetDiskId();
-    if (!engineId || !inst || !targetDiskId || !s) return;
+    const targetDiskId = targetSelections()[inst.id];
+    if (!engineId || !targetDiskId || !s) return;
     const targetDisk = s.diskDB[targetDiskId];
     if (!targetDisk) return;
     restoreApp(engineId, inst.name, targetDisk.name);
-    setSubmitted(true);
+    setConfirmingId(null);
+    // Clear the target selection so the button re-disables
+    setTargetSelections((prev) => {
+      const next = { ...prev };
+      delete next[inst.id];
+      return next;
+    });
   };
 
-  const reset = () => {
-    setActiveInstanceId(null);
-    setSelectedTargetDiskId(null);
-    setSubmitted(false);
+  const handleCancel = () => {
+    setConfirmingId(null);
   };
 
   return (
@@ -95,34 +97,32 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
         </div>
       </header>
 
-      {/* ── Success state ─────────────────────────────────────────── */}
-      <Show when={submitted()}>
-        <div class="restore-panel__success">
-          <span class="restore-panel__success-icon">✓</span>
-          <p>Restore command sent.</p>
-          <button class="btn" onClick={reset}>Back</button>
-        </div>
-      </Show>
-
-      {/* ── No backup configuration ───────────────────────────────── */}
-      <Show when={!submitted() && !backupConfig()}>
+      {/* No backup configuration */}
+      <Show when={!backupConfig()}>
         <p class="restore-panel__empty">This disk has no backup configuration.</p>
       </Show>
 
-      {/* ── Instance list ─────────────────────────────────────────── */}
-      <Show when={!submitted() && backupConfig() && !activeInstanceId()}>
+      {/* Instance list */}
+      <Show when={backupConfig()}>
         <Show
           when={linkedInstances().length > 0}
           fallback={
-            <p class="restore-panel__empty">
-              No apps configured for backup on this disk.
-            </p>
+            <p class="restore-panel__empty">No instances backed up to this disk yet.</p>
           }
         >
           <div class="restore-panel__instance-list">
             <For each={linkedInstances()}>
               {(inst) => {
                 const locked = () => isInstanceLocked(props.store(), inst.id);
+                const selectedDiskId = () => targetSelections()[inst.id] ?? '';
+                const isConfirming = () => confirmingId() === inst.id;
+
+                const selectedDiskName = () => {
+                  const s = props.store();
+                  const id = selectedDiskId();
+                  return id && s ? (s.diskDB[id]?.name ?? id) : '';
+                };
+
                 return (
                   <div class="restore-panel__instance-row">
                     <div class="restore-panel__instance-info">
@@ -131,64 +131,57 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                         {formatLastBackup(inst.lastBackup)}
                       </span>
                     </div>
-                    <button
-                      class="btn"
-                      disabled={locked()}
-                      onClick={() => handleRestoreClick(inst.id)}
-                    >
-                      {locked() ? 'Operation in progress' : 'Restore to\u2026'}
-                    </button>
+
+                    {/* Target disk selector */}
+                    <Show when={targetDisks().length > 0} fallback={
+                      <p class="restore-panel__empty">No available target disks.</p>
+                    }>
+                      <select
+                        class="restore-panel__target-select"
+                        value={selectedDiskId()}
+                        disabled={locked() || isConfirming()}
+                        onChange={(e) => setTarget(inst.id, e.currentTarget.value)}
+                      >
+                        <option value="">Select target disk…</option>
+                        <For each={targetDisks()}>
+                          {(d) => (
+                            <option value={d.id}>{d.name}</option>
+                          )}
+                        </For>
+                      </select>
+                    </Show>
+
+                    {/* Restore button — disabled until target selected */}
+                    <Show when={!isConfirming()}>
+                      <button
+                        class="btn"
+                        disabled={locked() || !selectedDiskId()}
+                        onClick={() => handleRestoreClick(inst.id)}
+                      >
+                        {locked() ? 'Operation in progress' : 'Restore'}
+                      </button>
+                    </Show>
+
+                    {/* Inline confirmation */}
+                    <Show when={isConfirming()}>
+                      <div class="restore-panel__confirm">
+                        <p class="restore-panel__confirm-text">
+                          Are you sure? This will overwrite <strong>{inst.name}</strong> on <strong>{selectedDiskName()}</strong>.
+                        </p>
+                        <div class="restore-panel__confirm-actions">
+                          <button class="btn" onClick={handleCancel}>Cancel</button>
+                          <button class="btn btn--danger" onClick={() => handleConfirm(inst)}>
+                            Confirm Restore
+                          </button>
+                        </div>
+                      </div>
+                    </Show>
                   </div>
                 );
               }}
             </For>
           </div>
         </Show>
-      </Show>
-
-      {/* ── Target disk picker ────────────────────────────────────── */}
-      <Show when={!submitted() && activeInstanceId()}>
-        <div class="restore-panel__form">
-          <h3 class="restore-panel__form-title">
-            Restore <strong>{activeInstance()?.name}</strong> to…
-          </h3>
-          <Show
-            when={targetDisks().length > 0}
-            fallback={<p class="restore-panel__empty">No available target disks.</p>}
-          >
-            <div class="restore-panel__disk-list">
-              <For each={targetDisks()}>
-                {(d) => (
-                  <label
-                    class={`radio-option ${selectedTargetDiskId() === d.id ? 'radio-option--selected' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="targetDisk"
-                      value={d.id}
-                      checked={selectedTargetDiskId() === d.id}
-                      onChange={() => setSelectedTargetDiskId(d.id)}
-                    />
-                    <div>
-                      <div class="radio-option__label">{d.name}</div>
-                      <div class="radio-option__desc">{d.diskTypes.join(', ')}</div>
-                    </div>
-                  </label>
-                )}
-              </For>
-            </div>
-          </Show>
-          <div class="restore-panel__actions">
-            <button class="btn" onClick={reset}>Cancel</button>
-            <button
-              class="btn btn--primary"
-              disabled={!selectedTargetDiskId()}
-              onClick={handleSubmit}
-            >
-              Restore
-            </button>
-          </div>
-        </div>
       </Show>
     </section>
   );
