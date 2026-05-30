@@ -32,7 +32,14 @@
 - **Always give the full URL after every change:** `http://100.115.60.6:5173` (Tailscale) or `http://192.168.0.231:5173` (LAN)
 
 ## What to do at next session start
-- main is up to date as of PR #101 (v0.2.73)
+- main is up to date as of PR #112 (v0.2.85) — UI redesign batch 1 merged
+  - AccountScreen replaces login modal (👤 button in status bar)
+  - ChangeEngineDialog removed; engine tab has demo toggle only
+  - ConnectionManagement renamed from Onboarding
+  - RestorePanel redesigned with per-instance inline restore flow
+  - History promoted to full content-area screen
+  - e2e tests updated for new UI
+- Clean working tree, on main branch
   - PR #90: `host:port` syntax in ChangeEngineDialog manual input
   - PR #91: better history error msg (shows URL tried + ask Axle), demo toggle in Settings panel, login btn in status bar
   - PR #92: always-visible status bar buttons (login + history), simplified scan panel with corner spinner
