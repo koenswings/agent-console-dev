@@ -14,12 +14,12 @@ vi.mock('bcryptjs', () => ({
   },
 }));
 
-vi.mock('../store/bcryptCompare', () => ({
+vi.mock('../src/store/bcryptCompare', () => ({
   bcryptCompare: vi.fn(),
 }));
 
 import bcrypt from 'bcryptjs';
-import { bcryptCompare } from '../store/bcryptCompare';
+import { bcryptCompare } from '../src/store/bcryptCompare';
 import {
   login,
   logout,
@@ -29,8 +29,8 @@ import {
   changePassword,
   isFirstTimeSetup,
   currentUser,
-} from '../store/auth';
-import type { Store, User } from '../types/store';
+} from '../src/store/auth';
+import type { Store, User } from '../src/types/store';
 
 // ---------------------------------------------------------------------------
 // Helpers

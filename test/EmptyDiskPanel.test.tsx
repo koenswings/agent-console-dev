@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
-import EmptyDiskPanel from '../components/EmptyDiskPanel';
-import { setSendCommandFn } from '../store/commands';
-import { MOCK_STORE, MOCK_IDS } from '../mock/mockStore';
-import type { Disk } from '../types/store';
+import EmptyDiskPanel from '../src/components/EmptyDiskPanel';
+import { setSendCommandFn } from '../src/store/commands';
+import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
+import type { Disk } from '../src/types/store';
 
 const emptyDisk: Disk = {
   id: MOCK_IDS.DISK_5_ID,

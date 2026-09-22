@@ -21,7 +21,7 @@ import {
   restoreApp,
   cancelOperation,
   rebootEngine,
-} from '../store/commands';
+} from '../src/store/commands';
 
 // ---------------------------------------------------------------------------
 // Command string builders (pure, no side effects)

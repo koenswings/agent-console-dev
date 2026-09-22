@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@solidjs/testing-library';
-import StatusDot from '../components/StatusDot';
-import type { Status } from '../types/store';
+import StatusDot from '../src/components/StatusDot';
+import type { Status } from '../src/types/store';
 
 describe('StatusDot component', () => {
   it('renders a span element', () => {

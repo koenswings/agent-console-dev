@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
-import SettingsPanel from '../components/SettingsPanel';
-import type { Store, User } from '../types/store';
-import type { StoreConnection } from '../mock/mockStore';
+import SettingsPanel from '../src/components/SettingsPanel';
+import type { Store, User } from '../src/types/store';
+import type { StoreConnection } from '../src/mock/mockStore';
 
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
 
-vi.mock('../store/auth', () => ({
+vi.mock('../src/store/auth', () => ({
   isOperator: vi.fn(() => false),
   currentUser: vi.fn(() => null),
   changePassword: vi.fn(() => Promise.resolve(true)),
 }));
 
 // Stub storage to avoid chrome.storage calls
-vi.mock('../store/storage', () => ({
+vi.mock('../src/store/storage', () => ({
   csGet: vi.fn(() => Promise.resolve({})),
   csSet: vi.fn(() => Promise.resolve()),
   STORAGE_KEY_MODE: 'displayMode',
@@ -23,14 +23,14 @@ vi.mock('../store/storage', () => ({
 }));
 
 // Stub ChangeEngineDialog — we test it separately
-vi.mock('../components/ChangeEngineDialog', () => ({
+vi.mock('../src/components/ChangeEngineDialog', () => ({
   default: () => <div data-testid="change-engine-dialog-stub" />,
 }));
 
 // Prevent real network probes in tests
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no fetch in tests'))));
 
-import { isOperator, currentUser, changePassword } from '../store/auth';
+import { isOperator, currentUser, changePassword } from '../src/store/auth';
 
 // ---------------------------------------------------------------------------
 // Helpers

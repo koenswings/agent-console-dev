@@ -4,8 +4,8 @@ import {
   getActiveOpsForDisk,
   isInstanceLocked,
   isDiskLocked,
-} from '../store/operations';
-import type { Store, Operation } from '../types/store';
+} from '../src/store/operations';
+import type { Store, Operation } from '../src/types/store';
 
 // ---------------------------------------------------------------------------
 // Helpers
