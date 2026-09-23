@@ -97,6 +97,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    console.info('[engine] dispose — tearing down connection');
     try { adapterRef?.disconnect?.(); } catch { /* ignore */ }
     try { void repoRef?.shutdown?.(); } catch { /* ignore */ }
   };
@@ -117,9 +118,11 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     if (isProductionWebMode()) {
       // Served from the Engine — hostname is already in the URL
       hostname = window.location.hostname;
+      console.info(`[engine] Production web mode — using hostname from URL: ${hostname}`);
       // Try to fetch store URL from the Engine API; fall back to localStorage
       storeUrl = await fetchStoreUrlFromEngine(hostname);
       if (storeUrl) {
+        console.info(`[engine] Store URL from /api/store-url: ${storeUrl}`);
         localStorage.setItem(STORAGE_KEY_STORE_URL, storeUrl);
       } else {
         console.warn('[engine] /api/store-url not available yet — trying localStorage');
@@ -136,6 +139,9 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       // doesn't have to paste the store URL manually once Axle ships the endpoint.
       if (!storeUrl) {
         storeUrl = await fetchStoreUrlFromEngine(hostname);
+        if (storeUrl) {
+          console.info(`[engine] Store URL from /api/store-url: ${storeUrl}`);
+        }
       }
     }
 
@@ -158,6 +164,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     );
 
     const wsUrl = `ws://${hostname}:${ENGINE_WS_PORT}`;
+    console.info(`[engine] Connecting to ${wsUrl}`);
 
     const adapter = new BrowserWebSocketClientAdapter(wsUrl);
     const repo = new Repo({ network: [adapter] });
@@ -185,6 +192,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     // Instead we use document data as the connectivity signal:
     //   • connected=true fires only when the first real document data arrives
     //   • The 30 s fallback timer in App.tsx handles the "never connected" case
+    console.info(`[engine] Repo created — waiting for document data from ${wsUrl}`);
 
     // Connect to the command-log doc (same WS repo, separate Automerge doc).
     // This runs in parallel; don't let it block the main connection.
@@ -200,6 +208,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     if (initialDoc) {
       setStore(initialDoc as Store);
       setConnected(true);
+      console.info('[engine] Document already ready on connect');
     }
 
     // Subscribe to document changes — fires whenever Automerge syncs new data.
