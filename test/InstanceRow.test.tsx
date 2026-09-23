@@ -5,11 +5,11 @@ import InstanceRow, {
   isStopDisabled,
   isBackupDisabled,
   formatLastBackup,
-} from '../components/InstanceRow';
-import type { Instance, App, Engine, Disk, Status, Store, Operation } from '../types/store';
-import * as commands from '../store/commands';
+} from '../src/components/InstanceRow';
+import type { Instance, App, Engine, Disk, Status, Store, Operation } from '../src/types/store';
+import * as commands from '../src/store/commands';
 
-vi.mock('../store/commands', async (importOriginal) => {
+vi.mock('../src/store/commands', async (importOriginal) => {
   const mod = await importOriginal<typeof commands>();
   return { ...mod, backupApp: vi.fn() };
 });
@@ -17,7 +17,7 @@ vi.mock('../store/commands', async (importOriginal) => {
 // ---------------------------------------------------------------------------
 // Helper factories
 // ---------------------------------------------------------------------------
-const makeInstance = (status: Status, lastBackup: number | null = null, metrics = null as import('../types/store').DockerMetrics | null): Instance => ({
+const makeInstance = (status: Status, lastBackup: number | null = null, metrics = null as import('../src/types/store').DockerMetrics | null): Instance => ({
   id: 'inst-001',
   instanceOf: 'kolibri-1.0',
   name: 'kolibri',
@@ -644,7 +644,7 @@ describe('InstanceRow — inline progress indicator', () => {
 });
 
 describe('DockerMetricsPanel', () => {
-  const mockMetrics: import('../types/store').DockerMetrics = {
+  const mockMetrics: import('../src/types/store').DockerMetrics = {
     cpuPercent:      2.5,
     memUsageBytes:   256_000_000,
     memLimitBytes:   4_000_000_000,

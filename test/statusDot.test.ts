@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { statusColour, statusStyle } from '../components/StatusDot';
-import type { Status } from '../types/store';
+import { statusColour, statusStyle } from '../src/components/StatusDot';
+import type { Status } from '../src/types/store';
 
 describe('statusColour', () => {
   const cases: Array<[Status, string]> = [

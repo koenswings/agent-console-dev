@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@solidjs/testing-library';
-import OperationProgress from '../components/OperationProgress';
-import { MOCK_STORE } from '../mock/mockStore';
-import type { Operation, Store } from '../types/store';
-import type { CommandLogStore } from '../types/commandLog';
+import OperationProgress from '../src/components/OperationProgress';
+import { MOCK_STORE } from '../src/mock/mockStore';
+import type { Operation, Store } from '../src/types/store';
+import type { CommandLogStore } from '../src/types/commandLog';
 
 const NOW = Date.now();
 

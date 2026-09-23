@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
-import AppBrowser from '../components/AppBrowser';
-import type { Store } from '../types/store';
+import AppBrowser from '../src/components/AppBrowser';
+import type { Store } from '../src/types/store';
 
 const makeStore = (): Store => ({
   engineDB: {

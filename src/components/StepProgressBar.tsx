@@ -30,6 +30,11 @@ const StepProgressBar: Component<StepProgressBarProps> = (props) => {
     !hasSteps() && props.progressPercent == null && !props.done
   );
 
+  // Stable 1-based step IDs so <For> keys by ID, not array index.
+  const stepIds = createMemo(() =>
+    Array.from({ length: props.totalSteps ?? 0 }, (_, i) => i + 1)
+  );
+
   return (
     <Show
       when={hasSteps()}
@@ -64,12 +69,11 @@ const StepProgressBar: Component<StepProgressBarProps> = (props) => {
         aria-valuemin={1}
         aria-valuemax={props.totalSteps ?? undefined}
       >
-        <For each={Array.from({ length: props.totalSteps! })}>
-          {(_, i) => {
-            const stepNum = () => i() + 1;         // 1-based
+        <For each={stepIds()}>
+          {(stepId) => {
             const current = () => props.currentStep!;
-            const isDone  = () => props.done || stepNum() < current();
-            const isActive = () => !props.done && stepNum() === current();
+            const isDone  = () => props.done || stepId < current();
+            const isActive = () => !props.done && stepId === current();
             return (
               <div
                 class={`step-progress-bar__segment${

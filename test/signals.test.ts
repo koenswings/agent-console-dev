@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { isEngineOnline, getEngineTree } from '../store/signals';
-import { MOCK_STORE, MOCK_IDS } from '../mock/mockStore';
-import type { Engine } from '../types/store';
+import { isEngineOnline, getEngineTree } from '../src/store/signals';
+import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
+import type { Engine } from '../src/types/store';
 
 // ---------------------------------------------------------------------------
 // isEngineOnline

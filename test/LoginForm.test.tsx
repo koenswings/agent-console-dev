@@ -10,15 +10,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
-import LoginForm from '../components/LoginForm';
-import type { Store, User } from '../types/store';
+import LoginForm from '../src/components/LoginForm';
+import type { Store, User } from '../src/types/store';
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
 const mockBcryptCompare = vi.fn<[string, string], Promise<boolean>>();
-vi.mock('../store/bcryptCompare', () => ({
+vi.mock('../src/store/bcryptCompare', () => ({
   bcryptCompare: (...args: [string, string]) => mockBcryptCompare(...args),
 }));
 

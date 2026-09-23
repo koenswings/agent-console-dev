@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
-import RestorePanel from '../components/RestorePanel';
-import { setSendCommandFn } from '../store/commands';
-import { MOCK_STORE, MOCK_IDS } from '../mock/mockStore';
-import type { Disk, Store, Operation } from '../types/store';
+import RestorePanel from '../src/components/RestorePanel';
+import { setSendCommandFn } from '../src/store/commands';
+import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
+import type { Disk, Store, Operation } from '../src/types/store';
 
 const backupDisk: Disk = MOCK_STORE.diskDB[MOCK_IDS.DISK_4_ID];
 

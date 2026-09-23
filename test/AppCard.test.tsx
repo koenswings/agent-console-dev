@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
-import AppCard from '../components/AppCard';
-import type { Instance, App } from '../types/store';
+import AppCard from '../src/components/AppCard';
+import type { Instance, App } from '../src/types/store';
 
 const baseInstance: Instance = {
   id: 'inst-001',

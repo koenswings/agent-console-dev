@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@solidjs/testing-library';
-import NetworkTree from '../components/NetworkTree';
-import { MOCK_STORE, MOCK_IDS } from '../mock/mockStore';
-import type { Selection } from '../components/NetworkTree';
+import NetworkTree from '../src/components/NetworkTree';
+import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
+import type { Selection } from '../src/components/NetworkTree';
 
 const defaultSelection: Selection = { type: 'network', id: '' };
 
