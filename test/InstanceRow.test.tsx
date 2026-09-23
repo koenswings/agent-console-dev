@@ -610,7 +610,9 @@ describe('InstanceRow — inline progress indicator', () => {
         store={() => store}
       />
     ));
-    expect(container.querySelector('.instance-row__progress--indeterminate')).toBeTruthy();
+    const progress = container.querySelector('.instance-row__progress');
+    expect(progress).toBeTruthy();
+    expect(progress!.querySelector('.step-progress-bar--indeterminate')).toBeTruthy();
   });
 
   it('does not show progress area when no ops and no store', () => {

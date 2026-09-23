@@ -64,7 +64,7 @@ describe('OperationProgress', () => {
   it('renders the progress bar for Running ops', () => {
     const op = makeOp({ status: 'Running', progressPercent: 70 });
     const { container } = render(() => <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />);
-    const fill = container.querySelector('.operation-card__progress-fill') as HTMLElement;
+    const fill = container.querySelector('.step-progress-bar__fill') as HTMLElement;
     expect(fill).toBeTruthy();
     expect(fill.style.width).toBe('70%');
   });

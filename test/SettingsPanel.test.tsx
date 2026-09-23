@@ -22,11 +22,6 @@ vi.mock('../src/store/storage', () => ({
   STORAGE_KEY_DEMO: 'demoMode',
 }));
 
-// Stub ChangeEngineDialog — we test it separately
-vi.mock('../src/components/ChangeEngineDialog', () => ({
-  default: () => <div data-testid="change-engine-dialog-stub" />,
-}));
-
 // Prevent real network probes in tests
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no fetch in tests'))));
 
@@ -113,13 +108,14 @@ describe('SettingsPanel', () => {
     fireEvent.click(screen.getByText('About'));
     expect(screen.getByText('IDEA Console')).toBeInTheDocument();
     expect(screen.getByText('Offline web app management for schools')).toBeInTheDocument();
-    expect(screen.getByText('Version 0.1.0')).toBeInTheDocument();
+    expect(screen.getByText('v0.2.85')).toBeInTheDocument();
   });
 
-  it('shows connected hostname label', () => {
+  it('shows connected hostname label with .local stripped', () => {
     render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" demo={false} />);
     expect(screen.getByText(/Connected to/)).toBeInTheDocument();
-    expect(screen.getByText('appdocker01.local')).toBeInTheDocument();
+    expect(screen.getByText('appdocker01')).toBeInTheDocument();
+    expect(screen.queryByText('appdocker01.local')).not.toBeInTheDocument();
   });
 
   it('shows demo mode label when demo is true', () => {
@@ -133,23 +129,11 @@ describe('SettingsPanel', () => {
     expect(screen.getByText('Not connected')).toBeInTheDocument();
   });
 
-  it('shows Change engine button when operator is logged in', () => {
+  it('Engine tab shows Demo mode toggle and no Change engine control', () => {
     vi.mocked(isOperator).mockReturnValue(true);
     render(() => <SettingsPanel {...defaultProps()} />);
-    expect(screen.getByRole('button', { name: /change engine/i })).toBeInTheDocument();
-  });
-
-  it('does not show Change engine button when not operator', () => {
-    vi.mocked(isOperator).mockReturnValue(false);
-    render(() => <SettingsPanel {...defaultProps()} />);
+    expect(screen.getByText('Demo mode', { selector: '.toggle-row__label' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /change engine/i })).not.toBeInTheDocument();
-  });
-
-  it('opens ChangeEngineDialog when Change engine button clicked', () => {
-    vi.mocked(isOperator).mockReturnValue(true);
-    render(() => <SettingsPanel {...defaultProps()} />);
-    fireEvent.click(screen.getByRole('button', { name: /change engine/i }));
-    expect(screen.getByTestId('change-engine-dialog-stub')).toBeInTheDocument();
   });
 
   it('does not show display mode options in About tab when not extension', () => {
