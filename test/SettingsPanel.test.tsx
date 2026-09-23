@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
 import SettingsPanel from '../src/components/SettingsPanel';
+import pkg from '../package.json';
 import type { Store, User } from '../src/types/store';
 import type { StoreConnection } from '../src/mock/mockStore';
 
@@ -108,7 +109,7 @@ describe('SettingsPanel', () => {
     fireEvent.click(screen.getByText('About'));
     expect(screen.getByText('IDEA Console')).toBeInTheDocument();
     expect(screen.getByText('Offline web app management for schools')).toBeInTheDocument();
-    expect(screen.getByText('v0.2.85')).toBeInTheDocument();
+    expect(screen.getByText(`v${pkg.version}`)).toBeInTheDocument();
   });
 
   it('shows connected hostname label with .local stripped', () => {
