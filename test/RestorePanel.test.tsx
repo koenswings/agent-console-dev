@@ -16,6 +16,15 @@ const renderPanel = (opts?: { store?: Store; disk?: Disk }) =>
     />
   ));
 
+/** Select the first real target disk option (skips the placeholder). */
+const selectFirstTargetDisk = () => {
+  const select = screen.getByRole('combobox') as HTMLSelectElement;
+  const option = Array.from(select.options).find((o) => o.value !== '');
+  if (!option) throw new Error('No target disk options');
+  fireEvent.change(select, { target: { value: option.value } });
+  return option;
+};
+
 describe('RestorePanel', () => {
   it('renders linked instances from backupConfig.links', () => {
     renderPanel();
@@ -35,13 +44,13 @@ describe('RestorePanel', () => {
     expect(screen.getByText('On demand')).toBeInTheDocument();
   });
 
-  it('shows "No apps configured" when links is empty', () => {
+  it('shows empty copy when links is empty', () => {
     const emptyLinksDisk: Disk = {
       ...backupDisk,
       backupConfig: { mode: 'on-demand', links: [] },
     };
     renderPanel({ disk: emptyLinksDisk });
-    expect(screen.getByText(/no apps configured for backup on this disk/i)).toBeInTheDocument();
+    expect(screen.getByText(/no instances backed up to this disk yet/i)).toBeInTheDocument();
   });
 
   it('shows "no backup configuration" when backupConfig is null', () => {
@@ -73,55 +82,56 @@ describe('RestorePanel', () => {
     expect(btn).toBeDisabled();
   });
 
-  it('clicking Restore to… opens the target disk picker', () => {
+  it('Restore button is disabled until a target disk is selected', () => {
     renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /restore to/i }));
-    // Should now show the target disk picker heading
-    expect(screen.getByText(/restore/i, { selector: 'h3' })).toBeInTheDocument();
-    // Should have radio options for target disks
-    const radios = screen.getAllByRole('radio');
-    expect(radios.length).toBeGreaterThan(0);
+    const restoreBtn = screen.getByRole('button', { name: /^restore$/i });
+    expect(restoreBtn).toBeDisabled();
+    selectFirstTargetDisk();
+    expect(screen.getByRole('button', { name: /^restore$/i })).not.toBeDisabled();
   });
 
-  it('selecting target disk + clicking Restore calls sendCommand with correct args', () => {
+  it('clicking Restore opens inline Confirm Restore / Cancel', () => {
+    renderPanel();
+    selectFirstTargetDisk();
+    fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
+    expect(screen.getByRole('button', { name: /confirm restore/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    expect(screen.getByText(/are you sure/i)).toBeInTheDocument();
+  });
+
+  it('Confirm Restore calls sendCommand with correct args', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
     renderPanel();
-    // Click "Restore to…" for kolibri
-    fireEvent.click(screen.getByRole('button', { name: /restore to/i }));
-    // Select first radio — kolibri-disk (first app disk in MOCK_STORE)
-    const radios = screen.getAllByRole('radio');
-    fireEvent.click(radios[0]);
-    // Click Restore
+    const option = selectFirstTargetDisk();
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
     expect(mock).toHaveBeenCalledOnce();
     const [engineId, cmd] = mock.mock.calls[0];
     expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
-    expect(cmd).toBe('restoreApp kolibri kolibri-disk');
+    expect(cmd).toBe(`restoreApp kolibri ${option.textContent}`);
   });
 
-  it('Restore button in picker is disabled until a target disk is selected', () => {
-    renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /restore to/i }));
-    const restoreBtn = screen.getByRole('button', { name: /^restore$/i });
-    expect(restoreBtn).toBeDisabled();
-  });
-
-  it('shows success state after restore is submitted', () => {
+  it('after Confirm Restore, confirmation UI is dismissed', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
     renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /restore to/i }));
-    const radios = screen.getAllByRole('radio');
-    fireEvent.click(radios[0]);
+    selectFirstTargetDisk();
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    expect(screen.getByText(/restore command sent/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
+    expect(screen.queryByRole('button', { name: /confirm restore/i })).not.toBeInTheDocument();
+    expect(screen.getByText('kolibri')).toBeInTheDocument();
+    // Selection cleared → Restore disabled again
+    expect(screen.getByRole('button', { name: /^restore$/i })).toBeDisabled();
   });
 
-  it('Cancel in picker returns to instance list', () => {
+  it('Cancel in confirmation returns to instance list', () => {
     renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /restore to/i }));
+    selectFirstTargetDisk();
+    fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(screen.queryByRole('button', { name: /confirm restore/i })).not.toBeInTheDocument();
     expect(screen.getByText('kolibri')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^restore$/i })).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { createSignal, Show, For, type Component } from 'solid-js';
+import pkg from '../../package.json';
 import { currentUser, isOperator, changePassword } from '../store/auth';
 import type { Store } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
@@ -178,7 +179,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <h2 class="settings-panel__heading">About</h2>
             <p class="settings-panel__about-name">IDEA Console</p>
             <p class="settings-panel__about-desc">Offline web app management for schools</p>
-            <p class="settings-panel__about-version">v0.2.85</p>
+            <p class="settings-panel__about-version">v{pkg.version}</p>
           </div>
         </Show>
       </div>
