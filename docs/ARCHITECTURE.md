@@ -44,9 +44,15 @@ settings:
   consolePath: /home/pi/idea/agents/agent-console-dev/dist
 ```
 
-`consolePath` is empty by default — the Console is not served until explicitly configured.
-This keeps Engine and Console deployable independently. `GET /api/store-url` is always
-available on the HTTP server regardless of whether `consolePath` is set.
+The Engine's default `config.yaml` sets `consolePath` to the nested Console checkout's build
+output, `/home/pi/idea/agents/agent-console-dev/dist`, so a Pi using the standard checkout layout
+serves the Console as soon as `pnpm build` has produced `dist/`. The Engine checks the folder once
+at startup: if it is missing, it logs `consolePath "…" not found — Console UI will not be served`
+and carries on (non-API routes return 404 "Console UI not configured on this Engine"). Restart the
+Engine after the first build so it picks up `dist/`. Setting `consolePath` to an empty string
+disables Console serving explicitly. This keeps Engine and Console deployable independently.
+`GET /api/store-url` is always available on the HTTP server regardless of whether the Console is
+being served.
 
 ---
 
@@ -386,6 +392,8 @@ User mutations replicate to all peers via Automerge sync.
 
 ### 4. Console static file serving
 
-The Engine's `httpMonitor.ts` serves Console `dist/` as a single-page app when `consolePath`
-is configured in `config.yaml`. Falls back to `index.html` for all unmatched routes (SPA
-client-side routing). When `consolePath` is empty, only `/api/store-url` is served.
+The Engine's `httpMonitor.ts` serves Console `dist/` as a single-page app from `consolePath`
+in `config.yaml` (default `/home/pi/idea/agents/agent-console-dev/dist`). Falls back to
+`index.html` for all unmatched routes (SPA client-side routing). When `consolePath` is empty or
+the folder does not exist at Engine startup, the Engine logs it and continues, and only the
+`/api/*` endpoints are served.
