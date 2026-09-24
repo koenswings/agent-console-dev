@@ -4,7 +4,7 @@ You are Grok Build running on an ARM64 Raspberry Pi runner.
 
 ## What this repo is
 
-The IDEA Console — a Solid.js web app served by the Engine on port 80. Built via Vite → dist/ → deployed to Pi fleet via deploy-fleet.sh.
+The IDEA Console — a Solid.js web app served by the Engine on port 80. Built via Vite → `dist/`. On the Pi fleet, Engine serves that build from the nested idea checkout (see Deploy).
 
 Access:
 - `http://<engine-hostname>.local/` — primary (local, mDNS)
@@ -17,6 +17,17 @@ Key constraints:
 - No CDNs or external dependencies at runtime (fully offline)
 - TypeScript strict mode
 - Chrome Extension (background.ts): legacy, keep building, never add logic
+
+## Pi checkout layout (locked)
+
+Authoritative path on fleet Pis (nested under the idea tree — not a sibling of `idea`):
+
+- Agent checkout: `/home/pi/idea/agents/agent-console-dev`
+- Engine `consolePath`: `/home/pi/idea/agents/agent-console-dev/dist` (Vite `dist/`)
+
+Retired as primary (do not document or use as current deploy targets): `/home/pi/console-dist`, sibling `/home/pi/agent-console-dev`, `/home/pi/projects/engine`.
+
+Layout decision: `koenswings/idea` PR #64 (`proposals/pi-checkout-layout.md`).
 
 ## Repo layout
 
@@ -34,7 +45,8 @@ dist/                  Built output (gitignored)
 docs/                  Authoritative docs — .md, .pdf, .png, .svg ONLY
 proposals/             Proposals and historical design reasoning
 scripts/
-  deploy-fleet.sh      Build + deploy to all fleet Pis
+  dump-store.mjs       Debug helper
+  screenshot-screens.ts Playwright screenshots
 ```
 
 ## Build
@@ -52,13 +64,13 @@ pnpm test       # vitest run — all tests must pass
 pnpm typecheck  # must pass
 ```
 
-## Deploy (Ops Bot calls deploy.sh — do not deploy manually)
+## Deploy (Ops Bot — do not deploy manually)
 
-The fleet scripts handle deployment. For reference:
-```bash
-./scripts/deploy-fleet.sh             # build + deploy to all Pis
-./scripts/deploy-fleet.sh --skip-build  # deploy current dist/
-```
+Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
+
+- Fleet entrypoint: `koenswings/idea` → `tools/fleet/deploy.sh` (and related fleet helpers)
+- This Console repo has **no** `scripts/deploy-fleet.sh` (historical name only; do not invent or re-add it here)
+- On the Pi, after deploy, Engine serves Console from `consolePath: /home/pi/idea/agents/agent-console-dev/dist`
 
 ## Quality rules (every PR, no exceptions)
 
