@@ -2,11 +2,23 @@
 
 | Field | Value |
 |---|---|
-| Status | Proposed |
+| Status | Implemented |
 | Author | Pixel |
 | Date | 2026-04-04 |
 | Supersedes | — |
 | Engine design | agent-engine-dev/design/backup-disk.md (Axle, 2026-04-04) |
+
+---
+
+## Implementation notes (2026-09-25)
+
+Implemented on Engine and Console `main`; verified against the code for koenswings/idea#94. Differences from the design below:
+
+- **Commands use instance names, not IDs**: `createBackupDisk <diskName> <mode> <instanceName...>`, `backupApp <instanceName> <backupDiskName>`, `restoreApp <instanceName> <targetDiskName>`. Engine and Console agree.
+- **Different components**: implemented via `EmptyDiskPanel` (configure an Empty Disk as a Backup Disk), `InstanceRow` / `MobileAppList` (Back up button with disk picker, `lastBackup` display) and `RestorePanel`, rather than the planned `DiskManager`, `BackupDiskSetup` and `src/store/backup.ts` helpers.
+- **Restore UI was built** (`RestorePanel`), although it was listed as out of scope for V1.
+- **`scheduled` mode** can be selected and is accepted by the Engine, but the Engine has no scheduler yet; tracked in koenswings/idea#78.
+- **Known Engine bug**: `createBackupDisk` is declared with 3 fixed args, so linking 2+ instances is rejected ("Too many arguments"); tracked in koenswings/idea#101.
 
 ---
 
