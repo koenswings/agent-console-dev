@@ -11,7 +11,7 @@ import {
  * Parse an optional :port suffix from user input.
  * Returns { host, port } where port defaults to 80.
  */
-function parseHostPort(input: string): { host: string; port: number } {
+export function parseHostPort(input: string): { host: string; port: number } {
   const m = input.trim().match(/:([0-9]+)$/);
   const port = m ? parseInt(m[1], 10) : 80;
   const host = m ? input.trim().slice(0, -m[0].length) : input.trim();
