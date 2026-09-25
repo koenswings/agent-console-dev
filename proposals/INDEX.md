@@ -17,7 +17,7 @@ Build workflow, three deployment contexts (dev / extension / production web), te
 Dual-mode UI (user/operator), user data model in Store, auth flow, Engine requirements.
 
 ## backup-disk-console.md
-**Status:** Proposed · **Author:** Pixel
+**Status:** Implemented · **Author:** Pixel
 Backup Disk creation from Empty Disk, on-demand backup trigger, lastBackup display, Engine dependencies.
 
 ## engine-auto-discovery.md
