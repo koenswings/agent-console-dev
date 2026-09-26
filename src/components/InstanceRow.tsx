@@ -9,6 +9,7 @@ import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
+import { buildAppUrl, currentAppHostContext } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
@@ -361,13 +362,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     setPickerOpen(false);
   };
 
+  // Engine count only matters for attributing an IP page host to an engine.
+  const engineCount = createMemo(() => Object.keys(props.store?.()?.engineDB ?? {}).length);
+
   const openUrl = () => {
     const inst = props.instance();
     const eng = props.engine();
     if (!inst || inst.status !== 'Running' || !eng) return null;
     const port = inst.port;
     if (!port) return null;
-    return `http://${eng.hostname}.local:${port}`;
+    return buildAppUrl(eng.hostname, port, currentAppHostContext(engineCount()));
   };
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
