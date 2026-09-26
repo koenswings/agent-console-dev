@@ -2,6 +2,7 @@ import { For, Show, createMemo, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import type { Store } from '../types/store';
 import AppCard from './AppCard';
+import { resolveAppHost, currentAppHostContext } from '../store/appUrl';
 
 interface AppBrowserProps {
   store: Accessor<Store | null>;
@@ -9,15 +10,10 @@ interface AppBrowserProps {
   onLogin?: () => void;
 }
 
-/** Add .local suffix if hostname is a bare name (not an IP, not already .local) */
-function ensureLocal(hostname: string): string {
-  if (!hostname || hostname === 'localhost') return hostname;
-  if (/^[\d.]+$/.test(hostname)) return hostname; // IP address — leave as-is
-  if (hostname.endsWith('.local')) return hostname;
-  return `${hostname}.local`;
-}
-
 const AppBrowser: Component<AppBrowserProps> = (props) => {
+  // Engine count only matters for attributing an IP page host to an engine.
+  const engineCount = createMemo(() => Object.keys(props.store()?.engineDB ?? {}).length);
+
   // Resolve the engine hostname for an instance via disk → engine chain
   const hostnameForInstance = (instanceId: string): string => {
     const store = props.store();
@@ -27,7 +23,8 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
     const disk = store.diskDB[inst.storedOn];
     if (!disk?.dockedTo) return 'localhost';
     const engine = store.engineDB[disk.dockedTo];
-    return ensureLocal(engine?.hostname ?? 'localhost');
+    if (!engine) return 'localhost';
+    return resolveAppHost(engine.hostname, currentAppHostContext(engineCount()));
   };
 
   // ID list of all instances (Running and non-Running alike).

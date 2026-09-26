@@ -30,7 +30,8 @@ export function isProductionWebMode(): boolean {
   if (import.meta.env.DEV) return false;
   if (isExtensionContext()) return false;
   const h = window.location.hostname;
-  return h !== '' && h !== 'localhost' && h !== '127.0.0.1' && !h.startsWith('100.');
+  // Any non-empty host counts, including Tailscale IPs (100.x) and fleet hostnames
+  return h !== '' && h !== 'localhost' && h !== '127.0.0.1';
 }
 ```
 
@@ -204,6 +205,23 @@ timeout. Used by `App.tsx` on first load when no hostname is stored:
 - 0 results → show Onboarding form
 - 1 result → auto-connect silently
 - 2+ results → show `EnginePickerPanel` for the operator to choose
+
+### `src/store/appUrl.ts` — App link construction
+
+Single helper used by `InstanceRow.tsx` (Open link) and `AppBrowser.tsx` (host passed to
+`AppCard`) to build `http://<host>:<port>` for an App instance. `.local` names only resolve
+via mDNS on the Engine's LAN, so the host depends on where the App runs (koenswings/idea#102):
+
+| Case | Host used |
+|---|---|
+| Connected engine, production web mode | `window.location.hostname` (e.g. `idea02.local`, `idea02`, `100.x.y.z`; IPv6 bracketed) |
+| Other engine on the LAN | `ensureLocal(hostname)` → `<hostname>.local` (IPs, `localhost` and `.local` names unchanged) |
+| Dev / extension mode (`!isProductionWebMode()`) | `ensureLocal(hostname)` for every engine |
+
+The connected engine is the one named by the page host, i.e. the host `App.tsx` connects to in
+production web mode: its hostname matches the first DNS label of `window.location.hostname`
+(case-insensitive). An IP page host carries no name, so it is attributed to an engine only
+when the store holds exactly one engine; otherwise every engine keeps its `.local` link.
 
 ### `src/store/auth.ts` — client-side authentication
 
