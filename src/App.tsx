@@ -29,6 +29,7 @@ import {
   readStoredDemoMode,
   saveHostnameAndStoreUrl,
   saveDemoMode,
+  STORAGE_KEY_PORT,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
 import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
@@ -259,7 +260,7 @@ const App: Component = () => {
   };
 
   const handleDiscoverySelect = async (result: DiscoveryResult) => {
-    await saveHostnameAndStoreUrl(result.hostname, result.storeUrl);
+    await saveHostnameAndStoreUrl(result.hostname, result.storeUrl, result.port);
     setHostname(result.hostname);
     setDiscoveryResults([]);
     setShowConnectionMgmt(false);
@@ -269,6 +270,7 @@ const App: Component = () => {
   const handleConnectionFailure = async () => {
     setHostname('');
     localStorage.removeItem('engineHostname');
+    localStorage.removeItem(STORAGE_KEY_PORT);
     setDiscoveryFailed(false);
     runDiscovery();
   };

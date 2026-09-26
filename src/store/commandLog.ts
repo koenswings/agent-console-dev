@@ -17,11 +17,12 @@ export type CommandLogState = CommandLogStore | null | CommandLogError;
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createCommandLogConnection(
-  hostname: string,
+  /** Engine HTTP authority: `hostname` or `hostname:port`. */
+  host: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   repo: any
 ): Promise<Accessor<CommandLogState>> {
-  const apiUrl = `http://${hostname}/api/command-log-url`;
+  const apiUrl = `http://${host}/api/command-log-url`;
   const [commandLogStore, setCommandLogStore] = createSignal<CommandLogState>(null);
 
   try {

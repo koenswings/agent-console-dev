@@ -13,6 +13,8 @@
 export interface DiscoveryResult {
   hostname: string;
   storeUrl: string;
+  /** HTTP port when the user entered `host:port` manually. Absent = default port. */
+  port?: number;
 }
 
 // ---------------------------------------------------------------------------

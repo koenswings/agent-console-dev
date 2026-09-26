@@ -233,7 +233,8 @@ Session persistence: `operatorSession: { userId, username }` in `chrome.storage.
 `createEngineConnection()` resolves the hostname and store URL, then:
 
 1. Creates an Automerge `Repo` with a `BrowserWebSocketClientAdapter` connecting to
-   `ws://<hostname>:4321`.
+   `ws://<hostname>:<wsPort>`, where `wsPort` is advertised by `GET /api/store-url`
+   (falls back to `4321` when absent).
 2. Calls `repo.find(storeUrl)` to get a document handle.
 3. Listens to `handle.on('change')` to update the reactive `store` signal on every sync.
 4. Returns a `StoreConnection` with `sendCommand` and `changeDoc` both implemented as
@@ -243,6 +244,11 @@ Store URL discovery order:
 1. `VITE_STORE_URL` env var (dev only)
 2. `storeUrl` key in `chrome.storage.local` / `localStorage`
 3. Auto-fetch from `GET /api/store-url` on the Engine
+
+HTTP calls (`/api/store-url`, `/api/command-log-url`) go to `http://<hostname>[:<port>]`.
+The port comes from a manual `host:port` entry in Connection Management (persisted as
+`enginePort` next to `engineHostname`/`storeUrl`; absent = default port 80), or from
+`window.location.port` in production web mode. See koenswings/idea#100.
 
 ---
 
@@ -359,7 +365,7 @@ port 8080 for download from the Pi.
 
 ### 1. Automerge WebSocket sync
 
-- **URL:** `ws://<hostname>:4321`
+- **URL:** `ws://<hostname>:<wsPort>`; `wsPort` from `/api/store-url`, default `4321`
 - **Protocol:** Automerge repo sync — Engine is server, Console connects as client.
 - The Console calls `repo.find(storeUrl)` and receives live updates via `handle.on('change')`.
 
@@ -385,7 +391,8 @@ User mutations replicate to all peers via Automerge sync.
 ### 3. Store URL discovery
 
 - **Endpoint:** `GET /api/store-url` on Engine HTTP server (port configurable, default 80)
-- **Response:** `{ "url": "automerge:<hash>" }`
+- **Response:** `{ "url": "automerge:<hash>", "wsPort"?: <number> }` (`wsPort` optional;
+  Console falls back to `4321` when missing or invalid)
 - Returns 503 if the store is not yet initialised.
 - CORS header included for dev-mode cross-origin requests.
 - Implemented in Engine `httpMonitor.ts` (PR #26 / PR #28 merged).

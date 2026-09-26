@@ -14,8 +14,10 @@ import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
 import type { CommandLogError } from './commandLog';
+import { STORAGE_KEY_PORT, formatHostPort, parsePort } from './storage';
 
-const ENGINE_WS_PORT = 4321;
+/** Fallback WS port when the Engine does not advertise `wsPort` on /api/store-url. */
+export const ENGINE_WS_PORT = 4321;
 const STORAGE_KEY_HOSTNAME = 'engineHostname';
 const STORAGE_KEY_STORE_URL = 'storeUrl';
 
@@ -64,18 +66,41 @@ async function readFromStorage(key: string): Promise<string | null> {
 // Store URL discovery
 // ---------------------------------------------------------------------------
 
+export interface EngineStoreInfo {
+  /** Automerge document URL, or null if the response had none. */
+  url: string | null;
+  /** WebSocket port advertised by the Engine, or null when absent/invalid. */
+  wsPort: number | null;
+}
+
 /**
- * Tries to fetch the Automerge document URL from the Engine's HTTP API.
- * Returns null if the endpoint does not exist yet (Engine hasn't implemented it).
+ * Parse a GET /api/store-url response body: `{ url, wsPort? }`.
+ * `wsPort` is optional (older Engines return only `{ url }`).
  */
-async function fetchStoreUrlFromEngine(hostname: string): Promise<string | null> {
+export function parseStoreUrlResponse(json: unknown): EngineStoreInfo {
+  const obj = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
+  const url = typeof obj.url === 'string' && obj.url ? obj.url : null;
+  const wsPort = typeof obj.wsPort === 'number' ? parsePort(obj.wsPort) : null;
+  return { url, wsPort };
+}
+
+/** WebSocket URL for the Engine: advertised port when valid, else 4321. */
+export function buildEngineWsUrl(hostname: string, wsPort?: number | null): string {
+  return `ws://${hostname}:${parsePort(wsPort) ?? ENGINE_WS_PORT}`;
+}
+
+/**
+ * Tries to fetch the Automerge document URL (and optional WS port) from the
+ * Engine's HTTP API. `host` is `hostname` or `hostname:port`.
+ * Returns null if the endpoint is unreachable or not implemented.
+ */
+async function fetchStoreInfoFromEngine(host: string): Promise<EngineStoreInfo | null> {
   try {
-    const res = await fetch(`http://${hostname}/api/store-url`, {
+    const res = await fetch(`http://${host}/api/store-url`, {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
-    const json = await res.json();
-    return (json.url as string) ?? null;
+    return parseStoreUrlResponse(await res.json());
   } catch {
     return null;
   }
@@ -111,16 +136,21 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
   };
 
   try {
-    // --- Resolve hostname and store URL ---
+    // --- Resolve hostname, HTTP authority (host[:port]) and store URL ---
     let hostname: string;
+    let httpHost: string;
     let storeUrl: string | null;
+    let wsPort: number | null = null;
 
     if (isProductionWebMode()) {
-      // Served from the Engine — hostname is already in the URL
+      // Served from the Engine — hostname (and HTTP port, if any) is already in the URL
       hostname = window.location.hostname;
-      console.info(`[engine] Production web mode — using hostname from URL: ${hostname}`);
+      httpHost = formatHostPort(hostname, parsePort(window.location.port));
+      console.info(`[engine] Production web mode — using hostname from URL: ${httpHost}`);
       // Try to fetch store URL from the Engine API; fall back to localStorage
-      storeUrl = await fetchStoreUrlFromEngine(hostname);
+      const info = await fetchStoreInfoFromEngine(httpHost);
+      wsPort = info?.wsPort ?? null;
+      storeUrl = info?.url ?? null;
       if (storeUrl) {
         console.info(`[engine] Store URL from /api/store-url: ${storeUrl}`);
         localStorage.setItem(STORAGE_KEY_STORE_URL, storeUrl);
@@ -132,22 +162,24 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       // EXTENSION-ONLY: hostname from storage is only used in extension mode.
       // Web deployments always derive hostname from window.location via isProductionWebMode().
       hostname = (await readFromStorage(STORAGE_KEY_HOSTNAME)) ?? 'appdocker01.local';
+      // Saved connections from before idea#100 have no port → default HTTP port.
+      httpHost = formatHostPort(hostname, parsePort(await readFromStorage(STORAGE_KEY_PORT)));
       const envStoreUrl = import.meta.env.VITE_STORE_URL as string | undefined;
       storeUrl = envStoreUrl ?? (await readFromStorage(STORAGE_KEY_STORE_URL));
 
-      // Also try fetching from the Engine even in extension mode — so the operator
-      // doesn't have to paste the store URL manually once Axle ships the endpoint.
-      if (!storeUrl) {
-        storeUrl = await fetchStoreUrlFromEngine(hostname);
-        if (storeUrl) {
-          console.info(`[engine] Store URL from /api/store-url: ${storeUrl}`);
-        }
+      // Always ask the Engine: it may advertise its WS port, and it provides the
+      // store URL when none is saved (so the operator never has to paste it).
+      const info = await fetchStoreInfoFromEngine(httpHost);
+      wsPort = info?.wsPort ?? null;
+      if (!storeUrl && info?.url) {
+        storeUrl = info.url;
+        console.info(`[engine] Store URL from /api/store-url: ${storeUrl}`);
       }
     }
 
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
-      const clsErr: CommandLogError = { error: true, url: `http://${hostname}/api/command-log-url`, status: null };
+      const clsErr: CommandLogError = { error: true, url: `http://${httpHost}/api/command-log-url`, status: null };
       return { store, connected, sendCommand: noopSend, changeDoc: noopChange, commandLogStore: () => clsErr, dispose };
     }
 
@@ -163,7 +195,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       '@automerge/automerge-repo-network-websocket'
     );
 
-    const wsUrl = `ws://${hostname}:${ENGINE_WS_PORT}`;
+    const wsUrl = buildEngineWsUrl(hostname, wsPort);
     console.info(`[engine] Connecting to ${wsUrl}`);
 
     const adapter = new BrowserWebSocketClientAdapter(wsUrl);
@@ -196,7 +228,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
 
     // Connect to the command-log doc (same WS repo, separate Automerge doc).
     // This runs in parallel; don't let it block the main connection.
-    const commandLogStore = await createCommandLogConnection(hostname, repo);
+    const commandLogStore = await createCommandLogConnection(httpHost, repo);
 
     if (disposed) {
       dispose();
