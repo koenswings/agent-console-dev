@@ -234,3 +234,32 @@ describe('findEjectOutcome', () => {
     expect(findEjectOutcome(log, traceIdSnapshot(log), LIVE_ID)).toBeNull();
   });
 });
+
+// ── System disk gate ────────────────────────────────────────────────────────
+describe('NetworkTree eject — system disk (idea#152)', () => {
+  afterEach(() => cleanup());
+
+  it('shows no eject button for a disk with diskTypes [system] and a device', () => {
+    const systemDisk: Disk = {
+      ...liveDisk,
+      id: 'DISK_SYSTEM',
+      name: 'System Disk',
+      device: 'sda2',
+      diskTypes: ['system'],
+    };
+    const store: Store = { ...fixtureStore, diskDB: { [systemDisk.id]: systemDisk } as Store['diskDB'] };
+    const { container } = render(() => (
+      <NetworkTree
+        store={() => store}
+        selection={{ type: 'network', id: '' }}
+        onSelect={() => {}}
+        dragData={() => null}
+        onDrop={() => {}}
+      />
+    ));
+    const row = container.querySelector('[data-disk-id="DISK_SYSTEM"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain('System Disk');
+    expect(row!.querySelector('.tree-item__eject-btn')).toBeNull();
+  });
+});

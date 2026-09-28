@@ -15,7 +15,8 @@ import { DRAG_TYPE } from '../types/drag';
 // ---------------------------------------------------------------------------
 // Disk type badge helpers
 // ---------------------------------------------------------------------------
-const DISK_TYPE_LABEL: Record<DiskType, string> = {
+// 'system' (the Engine's own root disk) deliberately has no badge.
+const DISK_TYPE_LABEL: Partial<Record<DiskType, string>> = {
   app: 'app',
   backup: 'backup',
   empty: 'empty',
@@ -39,9 +40,15 @@ const diskTypeLabel = (disk: Disk, store: Store | null): string | null => {
   return raw;
 };
 
-/** Returns true when the eject button should be shown (never on backup disks). */
-const canEject = (disk: Disk): boolean =>
-  disk.device !== null && !(disk.diskTypes ?? []).includes('backup');
+/**
+ * Returns true when the eject button should be shown: the disk has a device,
+ * and is neither a backup disk nor the Engine's system disk (the Engine
+ * refuses system-disk eject — idea#152 / agent-engine-dev#134).
+ */
+export const canEject = (disk: Disk): boolean => {
+  const types = disk.diskTypes ?? [];
+  return disk.device !== null && !types.includes('backup') && !types.includes('system');
+};
 
 /**
  * Per-disk eject feedback (idea#152).
@@ -231,6 +238,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   return (
                     <Show when={disk()}>
                       <div
+                        data-disk-id={diskId}
                         class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''} ${isDragOver() && isDragTarget() ? 'tree-item--drag-over' : ''}`}
                         role="treeitem"
                         tabIndex={0}
