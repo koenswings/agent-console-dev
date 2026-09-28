@@ -23,7 +23,7 @@ export type AppURL = string;
 export type AppCategory = string;
 
 // Disk types — mirrors CommonTypes.ts
-export type DiskType = 'app' | 'backup' | 'empty' | 'upgrade' | 'files';
+export type DiskType = 'app' | 'backup' | 'empty' | 'upgrade' | 'files' | 'system';
 export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
 
 export interface BackupConfig {

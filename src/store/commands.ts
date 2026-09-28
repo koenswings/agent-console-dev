@@ -44,10 +44,13 @@ export const buildStopInstanceCommand = (instanceName: string, diskName: string)
 
 /**
  * Build the "ejectDisk" command string (pure, no side effects).
- * Format: "ejectDisk <diskName>"
+ * Format: "ejectDisk <diskId>"
+ *
+ * Sends the disk ID, not the display name: names are not unique (a stale
+ * undocked record can share a name with the docked disk — idea#152).
  */
-export const buildEjectDiskCommand = (diskName: string): string =>
-  `ejectDisk ${diskName}`;
+export const buildEjectDiskCommand = (diskId: string): string =>
+  `ejectDisk ${diskId}`;
 
 // ---------------------------------------------------------------------------
 // Dispatching commands
@@ -71,9 +74,9 @@ export const stopInstance = (
   _sendCommand(engineId, buildStopInstanceCommand(instanceName, diskName));
 };
 
-/** Eject a disk from the given engine. */
-export const ejectDisk = (engineId: string, diskName: string): void => {
-  _sendCommand(engineId, buildEjectDiskCommand(diskName));
+/** Eject a disk (by disk ID) from the given engine. */
+export const ejectDisk = (engineId: string, diskId: string): void => {
+  _sendCommand(engineId, buildEjectDiskCommand(diskId));
 };
 
 // ---------------------------------------------------------------------------
