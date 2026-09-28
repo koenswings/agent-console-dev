@@ -55,6 +55,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
               store={props.store}
               dragData={props.dragData}
               onDrop={props.onDrop}
+              commandLogStore={props.commandLogStore}
             />
           </div>
         </Show>

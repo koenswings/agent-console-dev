@@ -56,11 +56,11 @@ describe('buildStopInstanceCommand', () => {
 
 describe('buildEjectDiskCommand', () => {
   it('formats correctly', () => {
-    expect(buildEjectDiskCommand('kolibri-disk')).toBe('ejectDisk kolibri-disk');
+    expect(buildEjectDiskCommand('DISK_ID_001')).toBe('ejectDisk DISK_ID_001');
   });
 
   it('starts with ejectDisk', () => {
-    expect(buildEjectDiskCommand('any-disk').startsWith('ejectDisk ')).toBe(true);
+    expect(buildEjectDiskCommand('DISK_ID_ANY').startsWith('ejectDisk ')).toBe(true);
   });
 });
 
@@ -96,10 +96,10 @@ describe('ejectDisk', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
 
-    ejectDisk('ENGINE_001', 'kolibri-disk');
+    ejectDisk('ENGINE_001', 'DISK_ID_001');
 
     expect(mock).toHaveBeenCalledOnce();
-    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'ejectDisk kolibri-disk');
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'ejectDisk DISK_ID_001');
   });
 });
 

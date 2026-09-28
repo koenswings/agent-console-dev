@@ -549,6 +549,7 @@ const App: Component = () => {
                   store={store}
                   dragData={dragData}
                   onDrop={handleDrop}
+                  commandLogStore={commandLogStore}
                 />
                 <div class="main-layout__right">
                   <OperationProgress store={store} commandLogStore={commandLogStore} />

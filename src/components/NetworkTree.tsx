@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type Component } from 'solid-js';
 import { isEngineOnline } from '../store/signals';
 
 // Reactive clock — ticks every 15 s so online badges flip promptly
@@ -6,6 +6,8 @@ const [now, setNow] = createSignal(Date.now());
 const _clockInterval = setInterval(() => setNow(Date.now()), 15_000);
 import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
+import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
+import type { CommandLogState } from '../store/commandLog';
 import type { Disk, DiskType, Store } from '../types/store';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
@@ -41,6 +43,18 @@ const diskTypeLabel = (disk: Disk, store: Store | null): string | null => {
 const canEject = (disk: Disk): boolean =>
   disk.device !== null && !(disk.diskTypes ?? []).includes('backup');
 
+/**
+ * Per-disk eject feedback (idea#152).
+ *   pending — eject sent; waiting for a new ejectDisk trace after `baseline`
+ *   error   — the Engine reported a failure (message shown inline)
+ *   timeout — no trace within EJECT_TIMEOUT_MS
+ */
+type EjectState =
+  | { kind: 'idle' }
+  | { kind: 'pending'; baseline: Set<string> }
+  | { kind: 'error'; message: string }
+  | { kind: 'timeout' };
+
 // ---------------------------------------------------------------------------
 // Selection type
 // ---------------------------------------------------------------------------
@@ -58,6 +72,8 @@ interface NetworkTreeProps {
   dragData: () => DragAppData | null;
   /** Called when an app is dropped onto a disk. */
   onDrop: (data: DragAppData, targetDiskId: string) => void;
+  /** Engine command log — used to surface eject failures inline. */
+  commandLogStore?: Accessor<CommandLogState>;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +177,53 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 {(diskId) => {
                   const disk = () => props.store()?.diskDB[diskId] as Disk | undefined;
 
+                  // ── Eject feedback ──────────────────────────────────
+                  const [ejectState, setEjectState] = createSignal<EjectState>({ kind: 'idle' });
+                  let ejectTimer: ReturnType<typeof setTimeout> | null = null;
+                  const clearEjectTimer = () => {
+                    if (ejectTimer !== null) { clearTimeout(ejectTimer); ejectTimer = null; }
+                  };
+                  onCleanup(clearEjectTimer);
+
+                  // Reads the command log only while an eject is pending.
+                  const ejectOutcome = createMemo(() => {
+                    const s = ejectState();
+                    if (s.kind !== 'pending') return null;
+                    return findEjectOutcome(props.commandLogStore?.() ?? null, s.baseline, diskId);
+                  });
+                  createEffect(() => {
+                    const outcome = ejectOutcome();
+                    if (!outcome) return;
+                    clearEjectTimer();
+                    if (outcome.kind === 'error') {
+                      console.warn(`[eject] ${disk()?.name ?? diskId} (${diskId}): ${outcome.message}`);
+                      setEjectState({ kind: 'error', message: outcome.message });
+                    } else {
+                      setEjectState({ kind: 'idle' });
+                    }
+                  });
+
+                  const startEject = (engineId: string) => {
+                    clearEjectTimer();
+                    setEjectState({
+                      kind: 'pending',
+                      baseline: traceIdSnapshot(props.commandLogStore?.() ?? null),
+                    });
+                    ejectTimer = setTimeout(() => {
+                      ejectTimer = null;
+                      if (ejectState().kind === 'pending') setEjectState({ kind: 'timeout' });
+                    }, EJECT_TIMEOUT_MS);
+                    ejectDisk(engineId, diskId);
+                  };
+
+                  const ejectNotice = createMemo((): { tone: 'error' | 'info'; text: string } | null => {
+                    const s = ejectState();
+                    const name = disk()?.name ?? diskId;
+                    if (s.kind === 'error') return { tone: 'error', text: `Couldn't eject ${name}: ${s.message}` };
+                    if (s.kind === 'timeout') return { tone: 'info', text: `No response from the Engine for ejecting ${name}. Check History for details.` };
+                    return null;
+                  });
+
                   const isDragOver = () => dropTargetDiskId() === diskId;
                   const isDragTarget = () => props.dragData() !== null
                     && props.dragData()!.sourceDiskId !== diskId;
@@ -211,8 +274,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                             onClick={(e) => {
                               e.stopPropagation();
                               const eng = engine();
-                              const d = disk();
-                              if (eng && d) ejectDisk(eng.id, d.name);
+                              if (eng && disk()) startEject(eng.id);
                             }}
                           >
                             ⏏
@@ -224,6 +286,18 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           </span>
                         </Show>
                       </div>
+                      <Show when={ejectNotice()}>
+                        {(notice) => (
+                          <div
+                            class={`tree-item__eject-notice tree-item__eject-notice--${notice().tone}`}
+                            role={notice().tone === 'error' ? 'alert' : 'status'}
+                            title="Click to dismiss"
+                            onClick={() => setEjectState({ kind: 'idle' })}
+                          >
+                            {notice().text}
+                          </div>
+                        )}
+                      </Show>
                     </Show>
                   );
                 }}
