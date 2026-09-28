@@ -1,6 +1,16 @@
 # AGENTS.md — Console (agent-console-dev)
 
-You are Grok Build running on an ARM64 Raspberry Pi runner.
+You are the **Console Dev Bot (Pixel)**. This file is your build, test and deploy manual — read it at the start of every implementation task.
+
+**Workflow (live path, idea#147):**
+
+1. Implement with your own tools (clone / GitHub) from the GitHub issue and its agreed approach comment.
+2. Run `pnpm test` and `pnpm typecheck` locally, off-Pi, against the mock store (no Pi claim needed).
+3. Only when a live Engine is needed, test over SSH on a **claimed** idle non-golden pool Pi (`idea01`, `idea03`, `idea04`) — see *Using fleet Pis for testing* below. Never golden `idea02`.
+4. Run the QC gate, open a PR linked to the issue, and notify Lead.
+5. Ops (Atlas) deploys the PR to a review Pi via the fleet scripts; Koen evaluates it and squash-merges.
+
+Source of truth: `koenswings/idea` → `CONTEXT.md` and `docs/grok-bot-setup.md` (§2.2, §3, §4.6), updated in `koenswings/idea` PR #148.
 
 ## What this repo is
 
@@ -64,6 +74,44 @@ pnpm test       # vitest run — all tests must pass
 pnpm typecheck  # must pass
 ```
 
+Run these locally, off-Pi, against the mock store — no Pi claim needed.
+
+## Using fleet Pis for testing (claim protocol)
+
+Only needed when a change must be checked against a live Engine. Full protocol: `koenswings/idea` → `docs/grok-bot-setup.md` §4.6.
+
+**Pool:** `idea01`, `idea03`, `idea04` (`role: spare` or `review`). **`idea02` (golden) is never used.**
+
+**Claim** (pick an `idle` pool Pi; run from the `koenswings/idea` checkout):
+
+```bash
+BOT_NAME=Pixel tools/fleet/update-fleet-state.sh <pi> status testing
+BOT_NAME=Pixel tools/fleet/update-fleet-state.sh <pi> claim "Pixel: agent-console-dev#<issue/PR>"
+```
+
+The bot name goes in the `claim` note. Do not overwrite the Pi's existing `note` field, which holds its isolation details.
+
+**Release:** restore `main` in every tree you touched and, if anything changed, restart the Engine with pm2 **as pi**. Then:
+
+```bash
+BOT_NAME=Pixel tools/fleet/update-fleet-state.sh --null <pi> claim
+BOT_NAME=Pixel tools/fleet/update-fleet-state.sh <pi> status idle
+```
+
+`find-available-pi.sh` returns only `idle` Pis, so Ops review deploys skip claimed Pis automatically.
+
+**Rules:**
+
+- Never use golden `idea02`.
+- Leave each Pi's isolated store, `mdns: false` and local `config.yaml` untouched.
+- Never take more than one Pi down at a time.
+
+**Console-specific:**
+
+- A dev Console (`pnpm dev`) pointed at a Pi's Engine sends real commands (eject, install, later erase). It counts as using that Pi and needs a claim first.
+- Command testing never targets `idea02`.
+- Do not write into a Pi's deployed `dist/` (`/home/pi/idea/agents/agent-console-dev/dist`). Deploys are Ops' job through `tools/fleet/deploy.sh`.
+
 ## Deploy (Ops Bot — do not deploy manually)
 
 Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
@@ -87,6 +135,15 @@ Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
 ## Known gotchas
 
 - pnpm build removes dist/ with sudo rm first. Fallback is plain rm.
-- pnpm dev binds 0.0.0.0 — accessible at pi-tailscale-ip:5173 during dev.
+- pnpm dev binds 0.0.0.0 — accessible at <host-ip>:5173 during dev. Pointed at a Pi's Engine it sends real commands, so claim that Pi first (see claim protocol).
 - Use mock store in tests — avoids needing a live Engine.
 - background.ts is legacy. Do not add feature logic there.
+
+## PARKED — Grok Build + self-hosted runner coding path
+
+**PARKED (idea#147, 2026-09-28).** Kept for reference only — not used. Do not trigger Grok Build or Pi runners for new work unless Koen deliberately revives this path. See `koenswings/idea` → `docs/grok-bot-setup.md` §2.2 and §9.
+
+- Previous intro line of this file: "You are Grok Build running on an ARM64 Raspberry Pi runner."
+- Historical design: Grok Build (xAI's terminal coding agent on ARM64) ran headless on a GitHub Actions self-hosted runner on a fleet Pi, read this AGENTS.md natively, and implemented and tested the change there.
+- Grok Build may remain installed on `idea02` for health-check purposes only. Pis are test / review / golden hardware, not coding agents, while this path is parked.
+- If revived, Grok Build reads this file at the start of each run; the Build, Test, Deploy and Quality rules above apply unchanged.
