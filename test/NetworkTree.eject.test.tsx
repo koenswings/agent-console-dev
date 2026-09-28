@@ -263,3 +263,132 @@ describe('NetworkTree eject — system disk (idea#152)', () => {
     expect(row!.querySelector('.tree-item__eject-btn')).toBeNull();
   });
 });
+
+// ── Undock → re-dock of the same disk ID ───────────────────────────────────
+// Mirrors the Engine: undock sets dockedTo = null and device = null on the
+// same diskDB record (usbDeviceMonitor); re-dock (createOrUpdateDisk) sets
+// dockedTo/device again on the same disk ID. Each update is a new store
+// snapshot, as the Automerge 'change' listener delivers.
+describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () => {
+  const liveOnly: Store = { ...fixtureStore, diskDB: { [LIVE_ID]: liveDisk } as Store['diskDB'] };
+
+  const withLive = (s: Store, patch: Partial<Disk>): Store => ({
+    ...s,
+    diskDB: { ...s.diskDB, [LIVE_ID]: { ...s.diskDB[LIVE_ID], ...patch } } as Store['diskDB'],
+  });
+  const UNDOCKED: Partial<Disk> = { dockedTo: null, device: null };
+  const REDOCKED: Partial<Disk> = { dockedTo: ENGINE_ID, device: 'sdb1', lastDocked: 3 };
+
+  const setup = (initial: Store = liveOnly) => {
+    const [store, setStore] = createSignal<Store | null>(initial);
+    const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
+    const sent = vi.fn();
+    setSendCommandFn(sent);
+    const utils = render(() => (
+      <NetworkTree
+        store={store}
+        selection={{ type: 'network', id: '' }}
+        onSelect={() => {}}
+        dragData={() => null}
+        onDrop={() => {}}
+        commandLogStore={log}
+      />
+    ));
+    const rows = () => utils.container.querySelectorAll(`[data-disk-id="${LIVE_ID}"]`);
+    const liveEjectBtn = () => rows()[0]?.querySelector<HTMLButtonElement>('.tree-item__eject-btn') ?? null;
+    return { ...utils, store, setStore, setLog, sent, rows, liveEjectBtn };
+  };
+
+  const expectExactlyOneRowWithEject = (t: ReturnType<typeof setup>) => {
+    expect(t.rows()).toHaveLength(1);
+    expect(t.liveEjectBtn()).not.toBeNull();
+    expect(t.container.querySelector('.tree-item__eject-notice')).toBeNull();
+  };
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+  it('row disappears on undock and comes back exactly once on re-dock', () => {
+    const t = setup();
+    expectExactlyOneRowWithEject(t);
+    t.setStore(withLive(t.store()!, UNDOCKED));
+    expect(t.rows()).toHaveLength(0);
+    t.setStore(withLive(t.store()!, REDOCKED));
+    expectExactlyOneRowWithEject(t);
+  });
+
+  it('after a button eject that succeeds, re-dock brings the row back once with no stale notice', () => {
+    const t = setup();
+    fireEvent.click(t.liveEjectBtn()!);
+    expect(t.sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
+    // Engine undocks and closes the trace ok
+    t.setStore(withLive(t.store()!, UNDOCKED));
+    t.setLog(makeLog([ejectTrace({ status: 'ok' })]));
+    expect(t.rows()).toHaveLength(0);
+    // Re-plug within the 15 s pending window
+    vi.advanceTimersByTime(5_000);
+    t.setStore(withLive(t.store()!, REDOCKED));
+    expectExactlyOneRowWithEject(t);
+    // The old pending timer must not surface a note on the new row
+    vi.advanceTimersByTime(EJECT_TIMEOUT_MS * 2);
+    expectExactlyOneRowWithEject(t);
+  });
+
+  it('re-dock while the eject is still pending (no trace seen) shows the row once, no timeout note', () => {
+    const t = setup();
+    fireEvent.click(t.liveEjectBtn()!);
+    t.setStore(withLive(t.store()!, UNDOCKED));
+    expect(t.rows()).toHaveLength(0);
+    t.setStore(withLive(t.store()!, REDOCKED));
+    vi.advanceTimersByTime(EJECT_TIMEOUT_MS * 2);
+    expectExactlyOneRowWithEject(t);
+  });
+
+  it('re-dock after the no-response note was showing gives a fresh row once', () => {
+    const t = setup();
+    fireEvent.click(t.liveEjectBtn()!);
+    vi.advanceTimersByTime(EJECT_TIMEOUT_MS);
+    expect(t.container.querySelector('.tree-item__eject-notice')?.textContent).toContain('No response');
+    t.setStore(withLive(t.store()!, UNDOCKED));
+    expect(t.rows()).toHaveLength(0);
+    expect(t.container.querySelector('.tree-item__eject-notice')).toBeNull();
+    t.setStore(withLive(t.store()!, REDOCKED));
+    expectExactlyOneRowWithEject(t);
+  });
+
+  it('if undock clears only device (dockedTo kept), the button hides and returns on re-dock', () => {
+    const t = setup();
+    fireEvent.click(t.liveEjectBtn()!);
+    t.setStore(withLive(t.store()!, { device: null }));
+    t.setLog(makeLog([ejectTrace({ status: 'ok' })]));
+    expect(t.rows()).toHaveLength(1);
+    expect(t.liveEjectBtn()).toBeNull();
+    t.setStore(withLive(t.store()!, { device: 'sdb1' }));
+    expectExactlyOneRowWithEject(t);
+  });
+
+  it('re-dock with a stale same-name record present still shows the live row once', () => {
+    const t = setup(fixtureStore);
+    fireEvent.click(t.liveEjectBtn()!);
+    t.setStore(withLive(t.store()!, UNDOCKED));
+    t.setLog(makeLog([ejectTrace({ status: 'ok' })]));
+    t.setStore(withLive(t.store()!, REDOCKED));
+    vi.advanceTimersByTime(EJECT_TIMEOUT_MS * 2);
+    expectExactlyOneRowWithEject(t);
+    // Stale record keeps its own (button-less) row; no duplicate of either ID
+    expect(t.container.querySelectorAll(`[data-disk-id="${STALE_ID}"]`)).toHaveLength(1);
+    expect(t.container.querySelectorAll('.tree-item--disk')).toHaveLength(2);
+  });
+
+  it('repeated eject/re-dock cycles never duplicate the row', () => {
+    const t = setup();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(t.liveEjectBtn()!);
+      t.setStore(withLive(t.store()!, UNDOCKED));
+      t.setLog(makeLog([ejectTrace({ traceId: `trace-cycle-${i}`, status: 'ok' })]));
+      expect(t.rows()).toHaveLength(0);
+      t.setStore(withLive(t.store()!, REDOCKED));
+      expectExactlyOneRowWithEject(t);
+    }
+  });
+});
