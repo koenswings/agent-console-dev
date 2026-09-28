@@ -44,6 +44,17 @@ export interface Engine {
   lastRun: Timestamp;
   lastHalted: Timestamp | null;
   commands: Command[];
+  /**
+   * Feature flags, rewritten as a whole list at every Engine startup
+   * (idea#128/#129). Absent on Engines older than Files Disk step 0b.
+   */
+  capabilities?: string[];
+  /**
+   * The `lastBooted` value of the startup that wrote `capabilities` (ms).
+   * A rolled-back Engine updates `lastBooted` but not this stamp, so a
+   * mismatch means the flags are stale.
+   */
+  capabilitiesBootedAt?: Timestamp;
 }
 
 // ---------------------------------------------------------------------------

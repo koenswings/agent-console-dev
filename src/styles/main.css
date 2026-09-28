@@ -2465,9 +2465,15 @@ body {
   transition: border-color 0.15s, background 0.15s;
 }
 
-.edp-card:hover {
+.edp-card:hover:not(:disabled) {
   border-color: var(--colour-accent);
   background: var(--colour-surface-hover);
+}
+
+/* Greyed out on an Engine that can't take this disk yet (idea#129) */
+.edp-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .edp-card__icon {

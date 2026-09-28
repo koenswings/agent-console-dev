@@ -392,3 +392,81 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
     }
   });
 });
+
+// ── Engine older than #134 (idea#129 Lead decision) ─────────────────────────
+// Eject is not gated by 'diskIdArgs': it always sends the disk ID. An Engine
+// from before agent-engine-dev#134 looks the argument up by name, so it
+// refuses the ID; the refusal shows inline and nothing is ejected.
+describe('NetworkTree eject — Engine older than #134, no capabilities (idea#129)', () => {
+  const preEngine = fixtureStore.engineDB[ENGINE_ID];
+  const NOT_FOUND = `Disk '${LIVE_ID}' not found.`;
+
+  beforeEach(() => { expect(preEngine.capabilities).toBeUndefined(); });
+  afterEach(() => cleanup());
+
+  const setup = (disks: Disk[]) => {
+    const [store] = createSignal<Store | null>({
+      ...fixtureStore,
+      diskDB: Object.fromEntries(disks.map((d) => [d.id, d])) as Store['diskDB'],
+    });
+    const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
+    const sent = vi.fn();
+    setSendCommandFn(sent);
+    const utils = render(() => (
+      <NetworkTree
+        store={store}
+        selection={{ type: 'network', id: '' }}
+        onSelect={() => {}}
+        dragData={() => null}
+        onDrop={() => {}}
+        commandLogStore={log}
+      />
+    ));
+    return { ...utils, store, setLog, sent };
+  };
+
+  it.each([
+    ['unique name', [liveDisk]],
+    ['shared name (idea03 system-boot)', [staleDisk, liveDisk]],
+  ])('sends ejectDisk <diskId>, never the name, and is not greyed out (%s)', (_label, disks) => {
+    const t = setup(disks);
+    const btn = ejectButton(t.container);
+    expect(btn).not.toBeDisabled();
+    expect(btn.getAttribute('title')).toBe('Eject system-boot');
+    fireEvent.click(btn);
+    expect(t.sent).toHaveBeenCalledOnce();
+    expect(t.sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
+    expect(t.sent).not.toHaveBeenCalledWith(ENGINE_ID, 'ejectDisk system-boot');
+  });
+
+  it.each([
+    ["an 'error' trace", ejectTrace({ status: 'error', errorMessage: NOT_FOUND })],
+    ["an 'ok' trace with an error line", ejectTrace({
+      status: 'ok',
+      logs: [{ level: 'error', message: `\u001b[31m${NOT_FOUND}\u001b[39m`, timestamp: 1 }],
+    })],
+  ])('refusal as %s shows inline under the row; the disk stays docked', (_label, trace) => {
+    const t = setup([liveDisk]);
+    fireEvent.click(ejectButton(t.container));
+    expect(t.sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
+    // The old Engine refuses; it does not touch the store
+    t.setLog(makeLog([trace]));
+
+    const row = t.container.querySelector(`[data-disk-id="${LIVE_ID}"]`);
+    expect(row).not.toBeNull();
+    const n = notice(t.container);
+    expect(n).not.toBeNull();
+    expect(n!.getAttribute('role')).toBe('alert');
+    expect(n!.textContent).toContain(`Couldn't eject system-boot`);
+    expect(n!.textContent).toContain(NOT_FOUND);
+    // The notice sits directly under the disk row
+    expect(row!.nextElementSibling).toBe(n);
+
+    // Still present and docked: nothing was ejected
+    const d = t.store()!.diskDB[LIVE_ID];
+    expect(d.dockedTo).toBe(ENGINE_ID);
+    expect(d.device).toBe('sdb1');
+    expect(t.container.querySelectorAll(`[data-disk-id="${LIVE_ID}"]`)).toHaveLength(1);
+    expect(ejectButton(t.container)).not.toBeDisabled();
+  });
+});

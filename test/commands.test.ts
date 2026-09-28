@@ -113,15 +113,15 @@ describe('buildBackupAppCommand', () => {
 
 describe('buildCreateBackupDiskCommand', () => {
   it('formats correctly with one instance', () => {
-    expect(buildCreateBackupDiskCommand('backup-disk', 'on-demand', ['kolibri'])).toBe(
-      'createBackupDisk backup-disk on-demand kolibri'
+    expect(buildCreateBackupDiskCommand('DISK_BACKUP_01', 'on-demand', ['kolibri'])).toBe(
+      'createBackupDisk DISK_BACKUP_01 on-demand kolibri'
     );
   });
 
   it('formats correctly with multiple instances', () => {
     expect(
-      buildCreateBackupDiskCommand('backup-disk', 'immediate', ['kolibri', 'nextcloud'])
-    ).toBe('createBackupDisk backup-disk immediate kolibri nextcloud');
+      buildCreateBackupDiskCommand('DISK_BACKUP_01', 'immediate', ['kolibri', 'nextcloud'])
+    ).toBe('createBackupDisk DISK_BACKUP_01 immediate kolibri nextcloud');
   });
 });
 
@@ -142,12 +142,12 @@ describe('createBackupDisk', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
 
-    createBackupDisk('ENGINE_001', 'backup-disk', 'on-demand', ['kolibri']);
+    createBackupDisk('ENGINE_001', 'DISK_BACKUP_01', 'on-demand', ['kolibri']);
 
     expect(mock).toHaveBeenCalledOnce();
     expect(mock).toHaveBeenCalledWith(
       'ENGINE_001',
-      'createBackupDisk backup-disk on-demand kolibri'
+      'createBackupDisk DISK_BACKUP_01 on-demand kolibri'
     );
   });
 });
@@ -192,27 +192,27 @@ describe('buildMoveAppCommand', () => {
 // ---------------------------------------------------------------------------
 describe('buildInstallAppCommand', () => {
   it('formats with no options', () => {
-    expect(buildInstallAppCommand('kolibri-1.0', 'empty-disk')).toBe(
-      'installApp kolibri-1.0 empty-disk'
+    expect(buildInstallAppCommand('kolibri-1.0', 'DISK_TARGET_01')).toBe(
+      'installApp kolibri-1.0 DISK_TARGET_01'
     );
   });
 
   it('includes --source when provided', () => {
-    const cmd = buildInstallAppCommand('kolibri-1.0', 'empty-disk', { source: 'catalog-disk' });
-    expect(cmd).toBe('installApp kolibri-1.0 empty-disk --source catalog-disk');
+    const cmd = buildInstallAppCommand('kolibri-1.0', 'DISK_TARGET_01', { source: 'DISK_SOURCE_01' });
+    expect(cmd).toBe('installApp kolibri-1.0 DISK_TARGET_01 --source DISK_SOURCE_01');
   });
 
   it('includes --name when provided', () => {
-    const cmd = buildInstallAppCommand('kolibri-1.0', 'empty-disk', { name: 'my-kolibri' });
-    expect(cmd).toBe('installApp kolibri-1.0 empty-disk --name my-kolibri');
+    const cmd = buildInstallAppCommand('kolibri-1.0', 'DISK_TARGET_01', { name: 'my-kolibri' });
+    expect(cmd).toBe('installApp kolibri-1.0 DISK_TARGET_01 --name my-kolibri');
   });
 
   it('includes both --source and --name when both provided', () => {
-    const cmd = buildInstallAppCommand('kolibri-1.0', 'empty-disk', {
-      source: 'catalog-disk',
+    const cmd = buildInstallAppCommand('kolibri-1.0', 'DISK_TARGET_01', {
+      source: 'DISK_SOURCE_01',
       name: 'my-kolibri',
     });
-    expect(cmd).toBe('installApp kolibri-1.0 empty-disk --source catalog-disk --name my-kolibri');
+    expect(cmd).toBe('installApp kolibri-1.0 DISK_TARGET_01 --source DISK_SOURCE_01 --name my-kolibri');
   });
 });
 
@@ -254,21 +254,21 @@ describe('installApp', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
 
-    installApp('ENGINE_001', 'kolibri-1.0', 'empty-disk');
+    installApp('ENGINE_001', 'kolibri-1.0', 'DISK_TARGET_01');
 
     expect(mock).toHaveBeenCalledOnce();
-    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'installApp kolibri-1.0 empty-disk');
+    expect(mock).toHaveBeenCalledWith('ENGINE_001', 'installApp kolibri-1.0 DISK_TARGET_01');
   });
 
   it('dispatches with --source option', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
 
-    installApp('ENGINE_001', 'kolibri-1.0', 'empty-disk', { source: 'catalog-disk' });
+    installApp('ENGINE_001', 'kolibri-1.0', 'DISK_TARGET_01', { source: 'DISK_SOURCE_01' });
 
     expect(mock).toHaveBeenCalledWith(
       'ENGINE_001',
-      'installApp kolibri-1.0 empty-disk --source catalog-disk'
+      'installApp kolibri-1.0 DISK_TARGET_01 --source DISK_SOURCE_01'
     );
   });
 });
