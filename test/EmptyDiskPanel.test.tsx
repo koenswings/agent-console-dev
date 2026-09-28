@@ -31,10 +31,10 @@ describe('EmptyDiskPanel', () => {
     expect(screen.getByText('empty-disk')).toBeInTheDocument();
   });
 
-  it('shows the three option buttons', () => {
+  it('shows Backup and Install; Files is hidden without the filesDisk flag', () => {
     renderPanel();
     expect(screen.getByText('Backup Disk')).toBeInTheDocument();
-    expect(screen.getByText('Files Disk')).toBeInTheDocument();
+    expect(screen.queryByText('Files Disk')).toBeNull();
     expect(screen.getByText('Install App')).toBeInTheDocument();
   });
 
@@ -79,7 +79,8 @@ describe('EmptyDiskPanel', () => {
     expect(mock).toHaveBeenCalledOnce();
     const [engineId, cmd] = mock.mock.calls[0];
     expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
-    expect(cmd).toMatch(/^createBackupDisk empty-disk on-demand/);
+    // ENGINE_1 is a 0b Engine (fresh 'diskIdArgs') → disk ID (idea#129)
+    expect(cmd).toMatch(new RegExp(`^createBackupDisk ${MOCK_IDS.DISK_5_ID} on-demand `));
   });
 
   it('shows success state after backup submission', () => {
@@ -93,23 +94,6 @@ describe('EmptyDiskPanel', () => {
     expect(screen.getByText(/command sent/i)).toBeInTheDocument();
   });
 
-  it('navigates to files disk configuration on click', () => {
-    renderPanel();
-    fireEvent.click(screen.getByText('Files Disk'));
-    expect(screen.getByText(/shared network filesystem/i)).toBeInTheDocument();
-  });
-
-  it('dispatches createFilesDisk command', () => {
-    const mock = vi.fn();
-    setSendCommandFn(mock);
-    renderPanel();
-    fireEvent.click(screen.getByText('Files Disk'));
-    fireEvent.click(screen.getByRole('button', { name: /configure files disk/i }));
-    expect(mock).toHaveBeenCalledOnce();
-    const [engineId, cmd] = mock.mock.calls[0];
-    expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
-    expect(cmd).toBe('createFilesDisk empty-disk');
-  });
 
   it('navigates to install dialog for Install App', () => {
     renderPanel();
@@ -141,7 +125,7 @@ describe('EmptyDiskPanel', () => {
     expect(mock).toHaveBeenCalledOnce();
     const [engineId, cmd] = mock.mock.calls[0];
     expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
-    expect(cmd).toMatch(/^installApp /);
+    expect(cmd).toMatch(new RegExp(`^installApp \\S+ ${MOCK_IDS.DISK_5_ID}( |$)`));
   });
 
   it('Install button is disabled when no app is selected', () => {

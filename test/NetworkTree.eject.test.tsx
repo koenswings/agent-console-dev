@@ -53,6 +53,9 @@ const fixtureStore: Store = {
       lastRun: Date.now(),
       lastHalted: null,
       commands: [],
+      // Files Disk step 0b Engine: eject goes by disk ID (idea#129)
+      capabilities: ['diskIdArgs'],
+      capabilitiesBootedAt: 1,
     },
   } as Store['engineDB'],
   diskDB: { [STALE_ID]: staleDisk, [LIVE_ID]: liveDisk } as Store['diskDB'],
@@ -390,5 +393,82 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
       t.setStore(withLive(t.store()!, REDOCKED));
       expectExactlyOneRowWithEject(t);
     }
+  });
+});
+
+// ── Older Engines (idea#129) ────────────────────────────────────────────────
+// Without a fresh 'diskIdArgs' flag the Console sends a unique disk name, or
+// greys eject out when the name is shared on that Engine (the idea03 case).
+describe('NetworkTree eject — older Engine without diskIdArgs (idea#129)', () => {
+  const engine0b = fixtureStore.engineDB[ENGINE_ID];
+  const oldEngine = { ...engine0b, capabilities: undefined, capabilitiesBootedAt: undefined };
+  const rolledBack = { ...engine0b, lastBooted: 5, capabilitiesBootedAt: 1 };
+
+  const storeWith = (engine: typeof engine0b, disks: Disk[]): Store => ({
+    ...fixtureStore,
+    engineDB: { [ENGINE_ID]: engine } as Store['engineDB'],
+    diskDB: Object.fromEntries(disks.map((d) => [d.id, d])) as Store['diskDB'],
+  });
+
+  const renderWith = (store: Store, log: () => CommandLogState = () => makeLog([])) =>
+    render(() => (
+      <NetworkTree
+        store={() => store}
+        selection={{ type: 'network', id: '' }}
+        onSelect={() => {}}
+        dragData={() => null}
+        onDrop={() => {}}
+        commandLogStore={log}
+      />
+    ));
+
+  let sent: ReturnType<typeof vi.fn>;
+  beforeEach(() => { sent = vi.fn(); setSendCommandFn(sent); });
+  afterEach(() => cleanup());
+
+  it('greys eject out with the update tooltip when the name is shared (idea03 system-boot)', () => {
+    const { container } = renderWith(storeWith(oldEngine, [staleDisk, liveDisk]));
+    const btn = ejectButton(container);
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toBe('Update this Engine to manage this disk');
+    fireEvent.click(btn);
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('greys eject out on a rolled-back Engine (stamp ≠ lastBooted) with a shared name', () => {
+    const { container } = renderWith(storeWith(rolledBack, [staleDisk, liveDisk]));
+    const btn = ejectButton(container);
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toBe('Update this Engine to manage this disk');
+  });
+
+  it('sends ejectDisk <name> when the name is unique on that Engine', () => {
+    const { container } = renderWith(storeWith(oldEngine, [liveDisk]));
+    const btn = ejectButton(container);
+    expect(btn).not.toBeDisabled();
+    expect(btn.getAttribute('title')).toBe('Eject system-boot');
+    fireEvent.click(btn);
+    expect(sent).toHaveBeenCalledWith(ENGINE_ID, 'ejectDisk system-boot');
+  });
+
+  it('matches the eject trace by the name it sent and surfaces an error', () => {
+    const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
+    const { container } = renderWith(storeWith(rolledBack, [liveDisk]), log);
+    fireEvent.click(ejectButton(container));
+    expect(sent).toHaveBeenCalledWith(ENGINE_ID, 'ejectDisk system-boot');
+    setLog(makeLog([ejectTrace({
+      args: JSON.stringify({ diskId: 'system-boot' }),
+      status: 'error',
+      errorMessage: 'locked',
+    })]));
+    expect(notice(container)?.textContent).toContain('locked');
+  });
+
+  it('still sends the disk ID when the 0b stamp matches, even with a shared name', () => {
+    const { container } = renderWith(storeWith(engine0b, [staleDisk, liveDisk]));
+    const btn = ejectButton(container);
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
   });
 });

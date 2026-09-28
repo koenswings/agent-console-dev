@@ -5,7 +5,8 @@
  * command-log document (see ../store/commandLog.ts). The Console finds the
  * result of an eject it just sent by snapshotting the trace IDs present at
  * click time (the baseline) and then looking for a *new* `ejectDisk` trace
- * whose `diskId` arg matches the disk. If none completes within
+ * whose `diskId` arg matches the argument sent (the disk ID, or a unique
+ * name on an Engine older than Files Disk step 0b — idea#129). If none completes within
  * EJECT_TIMEOUT_MS, the caller shows a "no response" note.
  */
 import type { CommandLogState } from './commandLog';
@@ -45,7 +46,8 @@ const traceDiskId = (trace: CommandTrace): string | null => {
 
 /**
  * Looks for the result of an eject sent after `baseline` was taken.
- * Returns null while there is no new, completed `ejectDisk` trace for `diskId`.
+ * Returns null while there is no new, completed `ejectDisk` trace for
+ * `diskArg` (the argument the Console sent: disk ID or unique name).
  *
  * A trace closed as 'error' is a failure. A trace closed as 'ok' that still
  * logged an error-level line is also a failure: the Engine's eject wrapper
@@ -55,14 +57,14 @@ const traceDiskId = (trace: CommandTrace): string | null => {
 export const findEjectOutcome = (
   cls: CommandLogState,
   baseline: Set<string>,
-  diskId: string
+  diskArg: string
 ): EjectOutcome | null => {
   if (!cls || 'error' in cls) return null;
   const candidates = Object.values(cls.traces ?? {})
     .filter((t) => !baseline.has(t.traceId)
       && t.command === 'ejectDisk'
       && t.status !== 'running'
-      && traceDiskId(t) === diskId)
+      && traceDiskId(t) === diskArg)
     .sort((a, b) => b.startedAt - a.startedAt);
   const trace = candidates[0];
   if (!trace) return null;

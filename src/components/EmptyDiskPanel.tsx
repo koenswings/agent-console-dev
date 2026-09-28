@@ -5,10 +5,22 @@
  *   1. Configure as Backup Disk — pick instances + backup mode → createBackupDisk command
  *   2. Configure as Files Disk  — single confirm → createFilesDisk command
  *   3. Install App              — pick from appDB → installApp command
+ *
+ * Disk arguments go through diskArgFor (idea#129): the disk ID on an Engine
+ * with 'diskIdArgs', a unique name on an older one; otherwise Backup and
+ * Install are greyed out with UPDATE_ENGINE_TOOLTIP. The Files card is shown
+ * only when the Engine advertises 'filesDisk'.
  */
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
-import { createBackupDisk, createFilesDisk, installApp } from '../store/commands';
-import type { App, Disk, Instance, Store, BackupMode } from '../types/store';
+import {
+  createBackupDisk,
+  createFilesDisk,
+  diskArgFor,
+  engineHasCapability,
+  installApp,
+  type DiskArg,
+} from '../store/commands';
+import type { App, Disk, Engine, Instance, Store, BackupMode } from '../types/store';
 
 interface EmptyDiskPanelProps {
   disk: () => Disk | undefined;
@@ -41,6 +53,21 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
   const [panel, setPanel] = createSignal<Panel>('menu');
   const [submitted, setSubmitted] = createSignal(false);
   const [error, setError] = createSignal('');
+
+  // ── Target Engine (the disk's dockedTo) and its disk argument ─────────────
+  const targetEngine = (): Engine | undefined => {
+    const id = props.disk()?.dockedTo ?? props.engineId();
+    return id ? props.store()?.engineDB[id] : undefined;
+  };
+  const diskArg = createMemo((): DiskArg | null => {
+    const disk = props.disk();
+    return disk ? diskArgFor(targetEngine(), disk, props.store()?.diskDB) : null;
+  });
+  const diskBlocked = (): string | undefined => {
+    const a = diskArg();
+    return a && !a.ok ? a.reason : undefined;
+  };
+  const filesSupported = createMemo(() => engineHasCapability(targetEngine(), 'filesDisk'));
 
   // ── Backup Disk configuration ─────────────────────────────────────────────
   const [backupMode, setBackupMode] = createSignal<BackupMode>('on-demand');
@@ -97,9 +124,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
       return;
     }
 
+    const arg = diskArg();
+    if (!arg || !arg.ok) return;
     const s = props.store();
     const names = ids.map((id) => s?.instanceDB[id]?.name ?? id);
-    createBackupDisk(engineId, disk.name, backupMode(), names);
+    createBackupDisk(engineId, arg.arg, backupMode(), names);
     setSubmitted(true);
   };
 
@@ -107,8 +136,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     setError('');
     const engineId = props.engineId();
     const disk = props.disk();
-    if (!engineId || !disk) return;
-    createFilesDisk(engineId, disk.name);
+    if (!engineId || !disk || !filesSupported()) return;
+    createFilesDisk(engineId, disk.id);
     setSubmitted(true);
   };
 
@@ -119,12 +148,17 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const appId = selectedAppId();
     if (!engineId || !disk || !appId) return;
 
-    const app = props.store()?.appDB[appId];
-    const opts = app?.source === 'disk' && app?.sourceDiskName
-      ? { source: app.sourceDiskName }
-      : undefined;
+    const arg = diskArg();
+    if (!arg || !arg.ok) return;
 
-    installApp(engineId, appId, disk.name, opts);
+    // --source: the source disk ID on a 0b Engine, its name otherwise (as before).
+    const app = props.store()?.appDB[appId];
+    const source = app?.source === 'disk'
+      ? (arg.byId ? app.sourceDiskId ?? app.sourceDiskName : app.sourceDiskName)
+      : undefined;
+    const opts = source ? { source } : undefined;
+
+    installApp(engineId, appId, arg.arg, opts);
     setSubmitted(true);
   };
 
@@ -177,7 +211,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
           <p class="edp__prompt">What would you like to do with this disk?</p>
           <div class="edp__menu">
 
-            <button class="edp-card" onClick={() => setPanel('backup')}>
+            <button
+              class="edp-card"
+              disabled={!!diskBlocked()}
+              title={diskBlocked()}
+              onClick={() => setPanel('backup')}
+            >
               <div class="edp-card__icon edp-card__icon--backup">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
                   <path d="M4 3a1 1 0 011-1h10a1 1 0 011 1v2H4V3zM2 7a1 1 0 011-1h14a1 1 0 011 1v2H2V7zM2 11h16v6a1 1 0 01-1 1H3a1 1 0 01-1-1v-6z"/>
@@ -190,20 +229,27 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               <span class="edp-card__chevron">›</span>
             </button>
 
-            <button class="edp-card" onClick={() => setPanel('files')}>
-              <div class="edp-card__icon edp-card__icon--files">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
-                  <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                </svg>
-              </div>
-              <div class="edp-card__text">
-                <span class="edp-card__title">Files Disk</span>
-                <span class="edp-card__desc">Shared network filesystem for the Engine</span>
-              </div>
-              <span class="edp-card__chevron">›</span>
-            </button>
+            <Show when={filesSupported()}>
+              <button class="edp-card" onClick={() => setPanel('files')}>
+                <div class="edp-card__icon edp-card__icon--files">
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                  </svg>
+                </div>
+                <div class="edp-card__text">
+                  <span class="edp-card__title">Files Disk</span>
+                  <span class="edp-card__desc">Shared network filesystem for the Engine</span>
+                </div>
+                <span class="edp-card__chevron">›</span>
+              </button>
+            </Show>
 
-            <button class="edp-card" onClick={() => setPanel('install')}>
+            <button
+              class="edp-card"
+              disabled={!!diskBlocked()}
+              title={diskBlocked()}
+              onClick={() => setPanel('install')}
+            >
               <div class="edp-card__icon edp-card__icon--install">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
                   <path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 5a1 1 0 10-2 0v3H6a1 1 0 100 2h3v3a1 1 0 102 0v-3h3a1 1 0 100-2h-3V7z"/>

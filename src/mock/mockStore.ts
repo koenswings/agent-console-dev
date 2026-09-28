@@ -36,6 +36,7 @@ const ONE_HOUR_AGO = NOW - 60 * 60 * 1000;
 const ENGINE_1_ID = 'ENGINE_DISK001';
 const ENGINE_2_ID = 'ENGINE_DISK002';
 
+// Files Disk step 0b Engine (idea#128/#129): 'diskIdArgs' stamped with this boot.
 const engine1: Engine = {
   id: ENGINE_1_ID,
   hostname: 'appdocker01',
@@ -46,6 +47,8 @@ const engine1: Engine = {
   lastRun: NOW - 5 * 1000,        // 5 seconds ago — online
   lastHalted: null,
   commands: [],
+  capabilities: ['diskIdArgs'],
+  capabilitiesBootedAt: ONE_HOUR_AGO,
 };
 
 const engine2: Engine = {
@@ -59,6 +62,21 @@ const engine2: Engine = {
   lastHalted: null,
   commands: [],
 };
+
+// Engine variants for the per-Engine capability check (idea#129). engine2
+// above is an old Engine (no `capabilities`).
+export const MOCK_ENGINE_VARIANTS = {
+  /** 0b Engine: flag present, stamp equals lastBooted. */
+  current: engine1,
+  /** Pre-0b Engine: no capabilities field at all. */
+  old: engine2,
+  /** Rolled back after 0b: flag still stored, but lastBooted moved on. */
+  rolledBack: {
+    ...engine1,
+    lastBooted: TWO_MINS_AGO,
+    capabilitiesBootedAt: ONE_HOUR_AGO,
+  } as Engine,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Disks
