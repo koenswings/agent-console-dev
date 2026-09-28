@@ -76,6 +76,11 @@ pnpm typecheck  # must pass
 
 Run these locally, off-Pi, against the mock store — no Pi claim needed.
 
+## Handoff checklist
+
+- Never ask Koen to run a specific test. Any test that's needed is coded as an automated test (a unit or component test under `test/`, or an integration or on-Pi hardware test in the Engine repo) and must pass before handoff.
+- A handoff contains the PR URL, the review URL (from Ops) and the test evidence (test counts, typecheck). It never contains manual test steps.
+
 ## Using fleet Pis for testing (claim protocol)
 
 Only needed when a change must be checked against a live Engine. Full protocol: `koenswings/idea` → `docs/grok-bot-setup.md` §4.6.
