@@ -55,8 +55,8 @@ export type DiskArg =
   | { ok: false; reason: string };
 
 /**
- * Chooses the disk argument for `installApp`, `createBackupDisk` and
- * `ejectDisk` on the target Engine (idea#129):
+ * Chooses the disk argument for `installApp` and `createBackupDisk` on the
+ * target Engine (idea#129). `ejectDisk` always sends the disk ID instead.
  *   - Engine has 'diskIdArgs' for this boot → the disk ID;
  *   - otherwise the disk name, only if no other disk docked to that Engine
  *     has it (the Engine's name lookup would be ambiguous);
@@ -99,12 +99,13 @@ export const buildStopInstanceCommand = (instanceName: string, diskName: string)
  * Build the "ejectDisk" command string (pure, no side effects).
  * Format: "ejectDisk <diskId>"
  *
- * `diskArg` comes from diskArgFor: the disk ID on a 0b Engine, a unique name
- * on an older one (idea#129). Names are not unique in general (a stale
+ * Sends the disk ID, not the display name: names are not unique (a stale
  * undocked record can share a name with the docked disk — idea#152).
+ * Always the ID, on every Engine — not gated by 'diskIdArgs' (idea#129):
+ * an Engine that can't resolve it refuses, so eject fails safe.
  */
-export const buildEjectDiskCommand = (diskArg: string): string =>
-  `ejectDisk ${diskArg}`;
+export const buildEjectDiskCommand = (diskId: string): string =>
+  `ejectDisk ${diskId}`;
 
 // ---------------------------------------------------------------------------
 // Dispatching commands
@@ -128,9 +129,9 @@ export const stopInstance = (
   _sendCommand(engineId, buildStopInstanceCommand(instanceName, diskName));
 };
 
-/** Eject a disk (argument from diskArgFor) from the given engine. */
-export const ejectDisk = (engineId: string, diskArg: string): void => {
-  _sendCommand(engineId, buildEjectDiskCommand(diskArg));
+/** Eject a disk (by disk ID) from the given engine. */
+export const ejectDisk = (engineId: string, diskId: string): void => {
+  _sendCommand(engineId, buildEjectDiskCommand(diskId));
 };
 
 // ---------------------------------------------------------------------------

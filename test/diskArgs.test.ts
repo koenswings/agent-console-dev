@@ -1,6 +1,7 @@
 /**
  * idea#129 (Files Disk step 0b, Console) — per-Engine capability helper and
- * disk arguments for installApp, createBackupDisk and ejectDisk.
+ * disk arguments for installApp and createBackupDisk (ejectDisk always sends
+ * the disk ID and is not gated).
  *
  * Contract (Engine #128, PR pending): the Engine rewrites
  * `capabilities: ['diskIdArgs']` at every startup with
@@ -173,21 +174,13 @@ describe('command strings by disk argument (idea#129, §7.6)', () => {
     });
   });
 
-  describe('ejectDisk <diskId>', () => {
+  describe('ejectDisk <diskId> — not gated (Lead decision on idea#129)', () => {
     it('pins the ID string', () => {
       expect(buildEjectDiskCommand('DISK_E')).toBe('ejectDisk DISK_E');
     });
-    it('flag on → sends the disk ID', () => {
-      send(diskArgFor(fresh, LIVE, db(STALE, LIVE)), (a) => ejectDisk(ENGINE_ID, a));
+    it('sends the disk ID whatever the Engine advertises', () => {
+      ejectDisk(ENGINE_ID, LIVE.id);
       expect(sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE.id}`);
-    });
-    it('flag off → sends the unique name', () => {
-      send(diskArgFor(stale, UNIQUE, db(UNIQUE)), (a) => ejectDisk(ENGINE_ID, a));
-      expect(sent).toHaveBeenCalledWith(ENGINE_ID, 'ejectDisk school-disk');
-    });
-    it('ambiguous name on an old Engine → greyed out, nothing sent', () => {
-      expect(send(diskArgFor(fieldMissing, LIVE, db(STALE, LIVE)), (a) => ejectDisk(ENGINE_ID, a))).toBe(false);
-      expect(sent).not.toHaveBeenCalled();
     });
   });
 

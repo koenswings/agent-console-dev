@@ -4,7 +4,7 @@ import { isEngineOnline } from '../store/signals';
 // Reactive clock — ticks every 15 s so online badges flip promptly
 const [now, setNow] = createSignal(Date.now());
 const _clockInterval = setInterval(() => setNow(Date.now()), 15_000);
-import { diskArgFor, ejectDisk, rebootEngine } from '../store/commands';
+import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
 import type { CommandLogState } from '../store/commandLog';
@@ -52,14 +52,13 @@ export const canEject = (disk: Disk): boolean => {
 
 /**
  * Per-disk eject feedback (idea#152).
- *   pending — eject sent with `arg` (disk ID, or a unique name on an older
- *             Engine — idea#129); waiting for a new ejectDisk trace after `baseline`
+ *   pending — eject sent; waiting for a new ejectDisk trace after `baseline`
  *   error   — the Engine reported a failure (message shown inline)
  *   timeout — no trace within EJECT_TIMEOUT_MS
  */
 type EjectState =
   | { kind: 'idle' }
-  | { kind: 'pending'; baseline: Set<string>; arg: string }
+  | { kind: 'pending'; baseline: Set<string> }
   | { kind: 'error'; message: string }
   | { kind: 'timeout' };
 
@@ -185,14 +184,6 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 {(diskId) => {
                   const disk = () => props.store()?.diskDB[diskId] as Disk | undefined;
 
-                  // Disk argument for ejectDisk on this Engine (idea#129):
-                  // ID on a 0b Engine, unique name on an older one, else greyed out.
-                  const ejectArg = createMemo(() => {
-                    const d = disk();
-                    return d ? diskArgFor(engine(), d, props.store()?.diskDB) : null;
-                  });
-                  const ejectLocked = () => isDiskLocked(props.store(), diskId);
-
                   // ── Eject feedback ──────────────────────────────────
                   const [ejectState, setEjectState] = createSignal<EjectState>({ kind: 'idle' });
                   let ejectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -205,7 +196,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   const ejectOutcome = createMemo(() => {
                     const s = ejectState();
                     if (s.kind !== 'pending') return null;
-                    return findEjectOutcome(props.commandLogStore?.() ?? null, s.baseline, s.arg);
+                    return findEjectOutcome(props.commandLogStore?.() ?? null, s.baseline, diskId);
                   });
                   createEffect(() => {
                     const outcome = ejectOutcome();
@@ -220,19 +211,16 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   });
 
                   const startEject = (engineId: string) => {
-                    const choice = ejectArg();
-                    if (!choice || !choice.ok) return;
                     clearEjectTimer();
                     setEjectState({
                       kind: 'pending',
                       baseline: traceIdSnapshot(props.commandLogStore?.() ?? null),
-                      arg: choice.arg,
                     });
                     ejectTimer = setTimeout(() => {
                       ejectTimer = null;
                       if (ejectState().kind === 'pending') setEjectState({ kind: 'timeout' });
                     }, EJECT_TIMEOUT_MS);
-                    ejectDisk(engineId, choice.arg);
+                    ejectDisk(engineId, diskId);
                   };
 
                   const ejectNotice = createMemo((): { tone: 'error' | 'info'; text: string } | null => {
@@ -284,14 +272,12 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                         <Show when={canEject(disk()!)}>
                           <button
                             class="tree-item__eject-btn"
-                            disabled={ejectLocked() || ejectArg()?.ok === false}
-                            title={(() => {
-                              const choice = ejectArg();
-                              if (choice && !choice.ok) return choice.reason;
-                              return ejectLocked()
+                            disabled={isDiskLocked(props.store(), diskId)}
+                            title={
+                              isDiskLocked(props.store(), diskId)
                                 ? 'Operation in progress — cannot eject'
-                                : `Eject ${disk()?.name}`;
-                            })()}
+                                : `Eject ${disk()?.name}`
+                            }
                             aria-label={`Eject disk ${disk()?.name}`}
                             onClick={(e) => {
                               e.stopPropagation();
