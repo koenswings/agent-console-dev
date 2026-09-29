@@ -101,15 +101,24 @@ src/
 │   ├── NetworkTree.tsx          Operator mode — engine/disk tree with selection state
 │   ├── InstanceList.tsx         Operator mode — instances filtered by selection
 │   ├── InstanceRow.tsx          Single instance row with start/stop/backup/eject actions
+│   ├── DiskView.tsx             Right pane for a disk: role badges, one section per role, Add Files
+│   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files / Backup Disk, Install App
+│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk)
+│   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
+│   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
+│   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
-│   ├── commands.ts              Command builders and dispatcher
+│   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
+│   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
+│   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
 │   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
 │   └── auth.ts                  Client-side authentication and operator management
 ├── mock/
-│   └── mockStore.ts             In-memory mock store + StoreConnection interface
+│   ├── mockStore.ts             In-memory mock store + StoreConnection interface
+│   └── filesFixtures.ts         Files Disk fixtures: every Files state and combined disks
 ├── background/
 │   └── background.ts            Chrome Extension service worker — display mode control
 ├── types/
@@ -317,9 +326,16 @@ Disk {
   name:         string
   device:       string | null       // null = not physically inserted
   dockedTo:     EngineID | null
-  diskTypes:    DiskType[]           // 'app' | 'backup' | 'empty' | 'upgrade' | 'files'
+  diskTypes:    DiskType[]           // 'app' | 'backup' | 'empty' | 'upgrade' | 'files' | 'system'; several roles possible
   backupConfig: BackupConfig | null  // set on backup disks; null otherwise
+  filesConfig?:  { shareName; readOnly; passwordProtected; error } | null   // Files role (idea#131)
+  unmountError?: { engineId; mountPoint; fsUuid; message } | null          // busy unmount (idea#126)
+  sizeBytes?, freeBytes?: number | null                                    // docked disks (idea#131)
 }
+
+App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
+Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
+Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk'
 
 Instance {
   ...                               // standard fields
@@ -337,6 +353,19 @@ User {
 ```
 
 Engine online status: `engine.lastRun` within the last 2 minutes (matches Engine heartbeat).
+
+### Disk roles in the right pane (Files Disk, idea#132)
+
+A disk can have several roles (`['app', 'backup', 'files']`). The tree row and the disk header
+show one badge per role in the fixed order app, backup, files. `rightPanelFor`
+(`src/store/diskRoles.ts`) picks the Empty Disk panel for an empty disk without instances and
+`DiskView` for any other disk; `DiskView` shows one section per role (Apps, Backups, Files).
+Eject is hidden only on a pure Backup Disk (and the system disk). Files actions
+(**Make this a Files Disk**, **Add Files to this disk**) are greyed out with "Update this Engine
+to manage this disk" unless the target Engine has a fresh `'filesDisk'` capability
+(`engineHasCapability`). Their result comes from `createCommandResult`: the first new
+`createFilesDisk` trace with that `args.diskId`, success when it is ok and the disk shows
+`'files'`, 15 s timeout.
 
 ---
 

@@ -62,6 +62,8 @@ interface InstanceListProps {
   onDragStart?: (data: DragAppData) => void;
   /** Called when a drag ends (dropped or cancelled). */
   onDragEnd?:   () => void;
+  /** Header text override (the disk view shows this list as its "Apps" section). */
+  title?: string;
 }
 
 const InstanceList: Component<InstanceListProps> = (props) => {
@@ -74,7 +76,7 @@ const InstanceList: Component<InstanceListProps> = (props) => {
     return getInstanceIdsForSelection(s, props.selection);
   });
 
-  const label = createMemo(() => selectionLabel(props.selection, props.store()));
+  const label = createMemo(() => props.title ?? selectionLabel(props.selection, props.store()));
 
   return (
     <section class="instance-list" aria-label="Instance list">

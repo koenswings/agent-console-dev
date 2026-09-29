@@ -6,7 +6,8 @@ import AccountScreen from './components/AccountScreen';
 import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
-import RestorePanel from './components/RestorePanel';
+import DiskView from './components/DiskView';
+import { rightPanelFor } from './store/diskRoles';
 import OperationProgress from './components/OperationProgress';
 import HistoryPanel from './components/HistoryPanel';
 import AppBrowser from './components/AppBrowser';
@@ -37,25 +38,6 @@ import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 import type { CommandLogState } from './store/commandLog';
 import type { DragAppData } from './types/drag';
-
-// ---------------------------------------------------------------------------
-// Which panel to show in the right-hand main content pane.
-// ---------------------------------------------------------------------------
-type RightPanel = 'empty-disk' | 'backup-disk' | 'instances';
-
-function rightPanelFor(selection: Selection, store: Store | null): RightPanel {
-  if (selection.type !== 'disk' || !store) return 'instances';
-  const disk = store.diskDB[selection.id];
-  // backup disks always show the restore panel
-  if (disk?.diskTypes?.includes('backup')) return 'backup-disk';
-  // Only treat as empty if there are genuinely no instances stored on it.
-  // The Engine sometimes tags a disk 'empty' even after instances are installed.
-  const hasInstances = Object.values(store.instanceDB ?? {}).some(
-    (inst) => String(inst.storedOn) === selection.id
-  );
-  if (!hasInstances && disk?.diskTypes?.includes('empty')) return 'empty-disk';
-  return 'instances';
-}
 
 // ---------------------------------------------------------------------------
 // App
@@ -559,14 +541,20 @@ const App: Component = () => {
                         disk={() => store()?.diskDB[selection().id]}
                         store={store}
                         engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
+                        commandLogStore={commandLogStore}
                       />
                     </Match>
-                    <Match when={rightPanel() === 'backup-disk'}>
-                      <RestorePanel
-                        disk={() => store()?.diskDB[selection().id]}
-                        store={store}
-                        engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
-                      />
+                    {/* keyed: a fresh DiskView (and its local form state) per disk */}
+                    <Match when={rightPanel() === 'disk' ? selection().id : null} keyed>
+                      {(diskId) => (
+                        <DiskView
+                          diskId={diskId}
+                          store={store}
+                          commandLogStore={commandLogStore}
+                          onDragStart={(data) => setDragData(data)}
+                          onDragEnd={() => setDragData(null)}
+                        />
+                      )}
                     </Match>
                     <Match when={true}>
                       <InstanceList

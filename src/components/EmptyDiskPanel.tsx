@@ -2,24 +2,27 @@
  * EmptyDiskPanel — shown in the right pane when an operator selects an empty disk.
  *
  * Lets the operator choose what to do with the disk:
- *   1. Configure as Backup Disk — pick instances + backup mode → createBackupDisk command
- *   2. Configure as Files Disk  — single confirm → createFilesDisk command
+ *   1. Make this a Files Disk   — share name → createFilesDisk <diskId> <shareName> (idea#132)
+ *   2. Make this a Backup Disk  — pick instances + backup mode → createBackupDisk command
  *   3. Install App              — pick from appDB → installApp command
  *
  * Disk arguments go through diskArgFor (idea#129): the disk ID on an Engine
  * with 'diskIdArgs', a unique name on an older one; otherwise Backup and
- * Install are greyed out with UPDATE_ENGINE_TOOLTIP. The Files card is shown
- * only when the Engine advertises 'filesDisk'.
+ * Install are greyed out with UPDATE_ENGINE_TOOLTIP. Make this a Files Disk is
+ * greyed out with the same tooltip unless the Engine advertises a fresh
+ * 'filesDisk' (idea#132 addendum).
  */
-import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import {
   createBackupDisk,
-  createFilesDisk,
   diskArgFor,
   engineHasCapability,
   installApp,
   type DiskArg,
+  UPDATE_ENGINE_TOOLTIP,
 } from '../store/commands';
+import FilesRoleForm from './FilesRoleForm';
+import type { CommandLogState } from '../store/commandLog';
 import type { App, Disk, Engine, Instance, Store, BackupMode } from '../types/store';
 
 interface EmptyDiskPanelProps {
@@ -27,9 +30,15 @@ interface EmptyDiskPanelProps {
   store: () => Store | null;
   /** Engine ID that owns this disk */
   engineId: () => string | undefined;
+  /** Engine command log — used to wait for the createFilesDisk result. */
+  commandLogStore?: Accessor<CommandLogState>;
 }
 
 type Panel = 'menu' | 'backup' | 'files' | 'install';
+
+/** Files explanation on an empty disk (files-disk.md §4). */
+export const FILES_INTRO =
+  'This disk becomes a shared file store. Apps that support Files Disks (such as Nextcloud) on this Engine will show its files. Nothing on the disk is erased.';
 
 const BACKUP_MODES: { value: BackupMode; label: string; description: string }[] = [
   {
@@ -68,6 +77,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     return a && !a.ok ? a.reason : undefined;
   };
   const filesSupported = createMemo(() => engineHasCapability(targetEngine(), 'filesDisk'));
+  const filesBlocked = (): string | undefined => (filesSupported() ? undefined : UPDATE_ENGINE_TOOLTIP);
 
   // ── Backup Disk configuration ─────────────────────────────────────────────
   const [backupMode, setBackupMode] = createSignal<BackupMode>('on-demand');
@@ -129,15 +139,6 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const s = props.store();
     const names = ids.map((id) => s?.instanceDB[id]?.name ?? id);
     createBackupDisk(engineId, arg.arg, backupMode(), names);
-    setSubmitted(true);
-  };
-
-  const handleConfigureFiles = () => {
-    setError('');
-    const engineId = props.engineId();
-    const disk = props.disk();
-    if (!engineId || !disk || !filesSupported()) return;
-    createFilesDisk(engineId, disk.id);
     setSubmitted(true);
   };
 
@@ -213,6 +214,24 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              disabled={!!filesBlocked()}
+              title={filesBlocked()}
+              onClick={() => setPanel('files')}
+            >
+              <div class="edp-card__icon edp-card__icon--files">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                  <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                </svg>
+              </div>
+              <div class="edp-card__text">
+                <span class="edp-card__title">Make this a Files Disk</span>
+                <span class="edp-card__desc">A shared file store for Apps on this Engine</span>
+              </div>
+              <span class="edp-card__chevron">›</span>
+            </button>
+
+            <button
+              class="edp-card"
               disabled={!!diskBlocked()}
               title={diskBlocked()}
               onClick={() => setPanel('backup')}
@@ -223,26 +242,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                 </svg>
               </div>
               <div class="edp-card__text">
-                <span class="edp-card__title">Backup Disk</span>
+                <span class="edp-card__title">Make this a Backup Disk</span>
                 <span class="edp-card__desc">Link instances and choose a backup schedule</span>
               </div>
               <span class="edp-card__chevron">›</span>
             </button>
 
-            <Show when={filesSupported()}>
-              <button class="edp-card" onClick={() => setPanel('files')}>
-                <div class="edp-card__icon edp-card__icon--files">
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                  </svg>
-                </div>
-                <div class="edp-card__text">
-                  <span class="edp-card__title">Files Disk</span>
-                  <span class="edp-card__desc">Shared network filesystem for the Engine</span>
-                </div>
-                <span class="edp-card__chevron">›</span>
-              </button>
-            </Show>
 
             <button
               class="edp-card"
@@ -320,18 +325,16 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
           </div>
         </Show>
 
-        {/* ── Files Disk form ──────────────────────────────────────────────── */}
+        {/* ── Files Disk form (idea#132) ──────────────────────────────────── */}
         <Show when={!submitted() && panel() === 'files'}>
-          <div class="edp-form">
-            <p class="edp-form__hint">
-              The Engine will format this disk as a shared network filesystem.
-              Apps configured to use a Files Disk will have it mounted automatically.
-            </p>
-            <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
-            <div class="edp-form__actions">
-              <button class="btn btn--primary" onClick={handleConfigureFiles}>Configure Files Disk</button>
-            </div>
-          </div>
+          <FilesRoleForm
+            disk={props.disk}
+            engineId={props.engineId}
+            commandLogStore={props.commandLogStore}
+            intro={FILES_INTRO}
+            submitLabel="Make this a Files Disk"
+            blockedReason={filesBlocked}
+          />
         </Show>
 
         {/* ── Install App form ─────────────────────────────────────────────── */}
