@@ -61,27 +61,30 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     }
   });
 
-  const engines = createMemo(() => {
+  const engineIds = createMemo((): string[] => {
     const s = props.store();
     if (!s) return [];
-    return Object.values(s.engineDB);
+    return Object.keys(s.engineDB);
   });
 
-  const allInstances = createMemo((): Instance[] => {
+  /** ID-keyed + status-sorted so Automerge updates don't re-render the whole list (idea#83). */
+  const allInstanceIds = createMemo((): string[] => {
     const s = props.store();
     if (!s) return [];
     const sel = selectedEngineId();
-
-    const instances = Object.values(s.instanceDB ?? {}).filter((inst) => {
+    const ids = Object.keys(s.instanceDB ?? {}).filter((id) => {
+      const inst = s.instanceDB[id];
+      if (!inst) return false;
       if (!sel) return true;
       if (!inst.storedOn) return false;
       const disk = s.diskDB[inst.storedOn];
       return disk?.dockedTo != null && String(disk.dockedTo) === sel;
     });
-
-    return [...instances].sort(
-      (a, b) => statusSortOrder(a.status) - statusSortOrder(b.status)
-    );
+    return ids.sort((a, b) => {
+      const ia = s.instanceDB[a];
+      const ib = s.instanceDB[b];
+      return statusSortOrder(ia?.status ?? '') - statusSortOrder(ib?.status ?? '');
+    });
   });
 
   const resolveDisk = (inst: Instance): Disk | undefined => {
@@ -167,43 +170,56 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
         >
           All
         </button>
-        <For each={engines()}>
-          {(engine) => (
-            <button
-              class={`mobile-filter-chip${selectedEngineId() === engine.id ? ' mobile-filter-chip--active' : ''}`}
-              onClick={() => setSelectedEngineId(engine.id)}
-            >
-              {engine.hostname}
-            </button>
-          )}
+        <For each={engineIds()}>
+          {(id) => {
+            const engine = () => props.store()?.engineDB[id];
+            return (
+              <Show when={engine()}>
+                {(e) => (
+                  <button
+                    class={`mobile-filter-chip${selectedEngineId() === id ? ' mobile-filter-chip--active' : ''}`}
+                    onClick={() => setSelectedEngineId(id)}
+                  >
+                    {e().hostname}
+                  </button>
+                )}
+              </Show>
+            );
+          }}
         </For>
       </div>
 
       {/* App cards */}
-      <For each={allInstances()}>
-        {(inst) => {
-          const disk = () => resolveDisk(inst);
-          const engine = () => resolveEngine(inst);
-          const backupOp = () => getBackupOp(inst);
-          const isOpRunning = () => getActiveOpsForInstance(props.store(), inst.id).length > 0;
-          const hasBackupDisks = () => resolveBackupDisks(inst).length > 0;
-          const pendingAction = () => pendingActions().get(inst.id) ?? null;
+      <For each={allInstanceIds()}>
+        {(id) => {
+          const inst = () => props.store()?.instanceDB[id];
+          const disk = () => { const i = inst(); return i ? resolveDisk(i) : undefined; };
+          const engine = () => { const i = inst(); return i ? resolveEngine(i) : undefined; };
+          const backupOp = () => { const i = inst(); return i ? getBackupOp(i) : undefined; };
+          const isOpRunning = () => getActiveOpsForInstance(props.store(), id).length > 0;
+          const hasBackupDisks = () => {
+            const i = inst();
+            return i ? resolveBackupDisks(i).length > 0 : false;
+          };
+          const pendingAction = () => pendingActions().get(id) ?? null;
 
           return (
-            <div class={`mobile-app-card${inst.status === 'Error' ? ' mobile-app-card--error' : ''}`}>
+            <Show when={inst()}>
+              {(i) => (
+            <div class={`mobile-app-card${i().status === 'Error' ? ' mobile-app-card--error' : ''}`}>
               <div class="mobile-app-card__top">
-                <StatusDot status={inst.status} size={9} />
-                <span class="mobile-app-card__name">{inst.name}</span>
+                <StatusDot status={i().status} size={9} />
+                <span class="mobile-app-card__name">{i().name}</span>
                 <span class="mobile-app-card__disk">{disk()?.name ?? '—'}</span>
                 <button
                   class="mobile-app-card__more-btn"
                   title="More actions"
                   aria-label="More actions"
-                  onClick={() => setCopyMoveInstance(inst)}
+                  onClick={() => setCopyMoveInstance(i())}
                 >⋯</button>
               </div>
 
-              <div class="mobile-app-card__status">{statusText(inst)}</div>
+              <div class="mobile-app-card__status">{statusText(i())}</div>
 
               {/* Backup progress bar */}
               <Show when={backupOp()}>
@@ -230,14 +246,14 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               </Show>
 
               {/* Action buttons */}
-              <Show when={inst.status === 'Running'}>
+              <Show when={i().status === 'Running'}>
                 <div class="mobile-app-card__actions">
-                  <button class="btn btn--stop" onClick={() => handleStop(inst)}>Stop</button>
+                  <button class="btn btn--stop" onClick={() => handleStop(i())}>Stop</button>
                   <Show when={engine()}>
                     {(eng) => (
                       <a
                         class="btn btn--open"
-                        href={`http://${eng().hostname}:${inst.port}`}
+                        href={`http://${eng().hostname}:${i().port}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -248,7 +264,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                   <Show when={hasBackupDisks()}>
                     <button
                       class="btn btn--backup"
-                      onClick={() => handleBackup(inst)}
+                      onClick={() => handleBackup(i())}
                       disabled={isOpRunning()}
                     >
                       Back up
@@ -257,13 +273,13 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 </div>
               </Show>
 
-              <Show when={inst.status === 'Stopped'}>
+              <Show when={i().status === 'Stopped'}>
                 <div class="mobile-app-card__actions">
-                  <button class="btn btn--start" onClick={() => handleStart(inst)}>Start</button>
+                  <button class="btn btn--start" onClick={() => handleStart(i())}>Start</button>
                   <Show when={hasBackupDisks()}>
                     <button
                       class="btn btn--backup"
-                      onClick={() => handleBackup(inst)}
+                      onClick={() => handleBackup(i())}
                       disabled={isOpRunning()}
                     >
                       Back up
@@ -272,12 +288,14 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 </div>
               </Show>
 
-              <Show when={inst.status === 'Error'}>
+              <Show when={i().status === 'Error'}>
                 <div class="mobile-app-card__actions">
-                  <button class="btn btn--start" onClick={() => handleStart(inst)}>Restart</button>
+                  <button class="btn btn--start" onClick={() => handleStart(i())}>Restart</button>
                 </div>
               </Show>
             </div>
+              )}
+            </Show>
           );
         }}
       </For>
