@@ -107,6 +107,7 @@ src/
 │   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
+│   ├── EjectConfirm.tsx         Eject confirmation for combined disks: roles + everything affected
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
@@ -366,6 +367,13 @@ to manage this disk" unless the target Engine has a fresh `'filesDisk'` capabili
 (`engineHasCapability`). Their result comes from `createCommandResult`: the first new
 `createFilesDisk` trace with that `args.diskId`, success when it is ok and the disk shows
 `'files'`, 15 s timeout.
+
+Ejecting a combined disk (two or more roles), from the tree or the Files section, first opens
+`EjectConfirm` (idea#157). `ejectImpact` lists the instances stored on the disk (they stop),
+instances elsewhere that mount it as a Files Disk (they lose its files) and the instances it
+backs up (backups become unavailable). Single-role disks eject immediately. A disk with
+`unmountError` shows "<name> couldn't be unmounted cleanly. Restart this Pi." under the row of
+the Engine named in `unmountError.engineId`, for every disk type, docked or not.
 
 ---
 

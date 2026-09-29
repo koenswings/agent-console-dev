@@ -72,6 +72,7 @@ export interface AppInstanceLabel {
 
 export type FilesAvailability =
   | { kind: 'mounted'; instances: AppInstanceLabel[] }
+  | { kind: 'not-yet-mounted'; instances: AppInstanceLabel[] }
   | { kind: 'not-running'; apps: string[] }
   | { kind: 'none' };
 
@@ -84,8 +85,11 @@ const instancesOnEngine = (store: Store, engineId: string): Instance[] =>
 /**
  * Where this Files Disk is available (files-disk.md §8):
  *   mounted     — instances whose filesMounts contains the disk;
+ *   not-yet-mounted — an opted-in instance on this Engine is Running but
+ *                 hasn't been recreated with this disk's mount yet (idea#157;
+ *                 wording proposed there, not in the proposal);
  *   not-running — Apps with filesMount that have instances on this Engine,
- *                 none of which has the disk mounted;
+ *                 none of which is running or has the disk mounted;
  *   none        — no App on this Engine uses Files Disks.
  */
 export const filesAvailability = (disk: Disk, store: Store | null): FilesAvailability => {
@@ -100,6 +104,10 @@ export const filesAvailability = (disk: Disk, store: Store | null): FilesAvailab
   if (mounted.length > 0) return { kind: 'mounted', instances: mounted };
 
   const optedIn = onEngine.filter((i) => !!store.appDB[i.instanceOf]?.filesMount);
+  const runningWithoutMount = optedIn
+    .filter((i) => i.status === 'Running')
+    .map((i) => ({ instanceId: i.id, label: `${appTitle(i)} (${i.name})` }));
+  if (runningWithoutMount.length > 0) return { kind: 'not-yet-mounted', instances: runningWithoutMount };
   if (optedIn.length > 0) {
     return { kind: 'not-running', apps: [...new Set(optedIn.map(appTitle))] };
   }
@@ -109,6 +117,9 @@ export const filesAvailability = (disk: Disk, store: Store | null): FilesAvailab
 /** The line shown for each availability state (files-disk.md §4). */
 export const filesAvailabilityText = (a: FilesAvailability): string => {
   if (a.kind === 'mounted') return `Available in: ${a.instances.map((i) => i.label).join(', ')}`;
+  if (a.kind === 'not-yet-mounted') {
+    return `${a.instances.map((i) => i.label).join(', ')} is running but doesn't show these files yet. They appear after it restarts.`;
+  }
   if (a.kind === 'not-running') return `${a.apps.join(', ')} supports Files Disks but isn't running`;
   return 'No App on this Engine uses Files Disks yet';
 };
@@ -122,10 +133,80 @@ export const filesNotMountedReason = (disk: Disk): string | null => {
   if (cfg?.passwordProtected || cfg?.error) {
     return cfg.error || 'password-protected Files Disks are not supported yet';
   }
-  if (disk.unmountError) {
-    return `${disk.name} couldn't be unmounted cleanly. Restart this Pi.`;
-  }
+  if (disk.unmountError) return unmountWarningText(disk);
   return null;
+};
+
+// ---------------------------------------------------------------------------
+// Stuck unmount warning (all disk types, idea#157)
+// ---------------------------------------------------------------------------
+
+/** "School Files couldn't be unmounted cleanly. Restart this Pi." (files-disk.md §4 step 6) */
+export const unmountWarningText = (disk: Disk): string =>
+  `${disk.name} couldn't be unmounted cleanly. Restart this Pi.`;
+
+/**
+ * IDs of disks with a stuck unmount on this Engine, found by
+ * `unmountError.engineId` (an undocked disk has `dockedTo: null`).
+ */
+export const unmountWarningDiskIds = (store: Store | null, engineId: string): string[] =>
+  Object.values(store?.diskDB ?? {})
+    .filter((d) => d.unmountError && String(d.unmountError.engineId) === engineId)
+    .map((d) => d.id);
+
+// ---------------------------------------------------------------------------
+// Eject confirmation on combined disks (idea#157, files-disk.md §4 step 6, §8)
+// ---------------------------------------------------------------------------
+
+/** A disk with two or more roles (app, backup, files). */
+export const isCombinedDisk = (disk: Disk, store: Store | null): boolean =>
+  diskBadges(disk, store).filter((b) => (ROLE_ORDER as readonly string[]).includes(b)).length >= 2;
+
+export interface ImpactItem {
+  id: string;   // instance ID (stable key for <For>)
+  text: string;
+}
+
+export interface EjectImpact {
+  roles: DiskRole[];
+  /** Instances stored on the disk: they stop. */
+  stopping: ImpactItem[];
+  /** Instances on other disks that mount this Files Disk: they lose its files. */
+  losingFiles: ImpactItem[];
+  /** Instances backed up to this disk: their backups become unavailable. */
+  unavailableBackups: ImpactItem[];
+}
+
+const ROLE_NAME: Record<DiskRole, string> = { app: 'App Disk', backup: 'Backup Disk', files: 'Files Disk' };
+
+/** "an App Disk, a Backup Disk and a Files Disk" */
+export const rolesSentence = (roles: DiskRole[]): string => {
+  const names = roles.map((r) => `${r === 'app' ? 'an' : 'a'} ${ROLE_NAME[r]}`);
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+};
+
+/** Everything an eject of this disk affects. */
+export const ejectImpact = (disk: Disk, store: Store | null): EjectImpact => {
+  const roles = diskBadges(disk, store).filter((b): b is DiskRole => (ROLE_ORDER as readonly string[]).includes(b));
+  const instances = Object.values(store?.instanceDB ?? {});
+  const label = (i: Instance) => `${store?.appDB[i.instanceOf]?.title ?? i.instanceOf} (${i.name})`;
+  const share = disk.filesConfig?.shareName || disk.name;
+
+  const stopping = instances
+    .filter((i) => String(i.storedOn) === disk.id)
+    .map((i) => ({ id: i.id, text: label(i) }));
+  const losingFiles = (disk.diskTypes ?? []).includes('files')
+    ? instances
+        .filter((i) => String(i.storedOn) !== disk.id && (i.filesMounts ?? []).includes(disk.id))
+        .map((i) => ({ id: i.id, text: `${label(i)} loses ${share}` }))
+    : [];
+  const unavailableBackups = (disk.diskTypes ?? []).includes('backup')
+    ? (disk.backupConfig?.links ?? []).map((id) => {
+        const inst = store?.instanceDB[id];
+        return { id, text: inst ? label(inst) : id };
+      })
+    : [];
+  return { roles, stopping, losingFiles, unavailableBackups };
 };
 
 // ---------------------------------------------------------------------------
