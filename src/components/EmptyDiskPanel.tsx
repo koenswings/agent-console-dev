@@ -21,7 +21,9 @@ import {
   type DiskArg,
   UPDATE_ENGINE_TOOLTIP,
 } from '../store/commands';
+import { canEraseDisk, eraseBlockedReason } from '../store/erase';
 import FilesRoleForm from './FilesRoleForm';
+import EraseDialog, { type EraseMode } from './EraseDialog';
 import type { CommandLogState } from '../store/commandLog';
 import type { App, Disk, Engine, Instance, Store, BackupMode } from '../types/store';
 
@@ -32,6 +34,11 @@ interface EmptyDiskPanelProps {
   engineId: () => string | undefined;
   /** Engine command log — used to wait for the createFilesDisk result. */
   commandLogStore?: Accessor<CommandLogState>;
+  /** After erase republish: parent selects the empty disk (same ID). */
+  onSelectDisk?: (diskId: string) => void;
+  /** Optional error shown after a failed Files shortcut createFilesDisk. */
+  filesError?: string | null;
+  onFilesFailed?: (diskId: string, message: string) => void;
 }
 
 type Panel = 'menu' | 'backup' | 'files' | 'install';
@@ -78,6 +85,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
   };
   const filesSupported = createMemo(() => engineHasCapability(targetEngine(), 'filesDisk'));
   const filesBlocked = (): string | undefined => (filesSupported() ? undefined : UPDATE_ENGINE_TOOLTIP);
+  const eraseBlocked = createMemo(() => {
+    const d = props.disk();
+    if (!d || !canEraseDisk(d)) return 'Cannot erase this disk';
+    return eraseBlockedReason(targetEngine(), props.store(), d.id);
+  });
+  const [eraseDialog, setEraseDialog] = createSignal<{ mode: EraseMode; shareName?: string } | null>(null);
 
   // ── Backup Disk configuration ─────────────────────────────────────────────
   const [backupMode, setBackupMode] = createSignal<BackupMode>('on-demand');
@@ -325,8 +338,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
           </div>
         </Show>
 
-        {/* ── Files Disk form (idea#132) ──────────────────────────────────── */}
-        <Show when={!submitted() && panel() === 'files'}>
+        {/* ── Files Disk form (idea#132) + erase-first (idea#136) ─────────── */}
+        <Show when={!submitted() && panel() === 'files' && !eraseDialog()}>
           <FilesRoleForm
             disk={props.disk}
             engineId={props.engineId}
@@ -334,6 +347,19 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             intro={FILES_INTRO}
             submitLabel="Make this a Files Disk"
             blockedReason={filesBlocked}
+            footer={(f) => (
+              <div class="erase-first">
+                <p class="edp-form__hint">Removes everything on it, then makes it a Files Disk.</p>
+                <button
+                  class="btn btn--danger"
+                  disabled={!!eraseBlocked() || !!f.blocked || !!f.shareNameError || f.pending}
+                  title={eraseBlocked() || f.blocked}
+                  onClick={() => setEraseDialog({ mode: 'erase-then-files', shareName: f.shareName })}
+                >
+                  Erase the disk first
+                </button>
+              </div>
+            )}
           />
         </Show>
 
@@ -381,6 +407,53 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </button>
             </div>
           </div>
+        </Show>
+
+        {/* ── Erase this disk… (idea#136) ─────────────────────────────────── */}
+        <Show when={!submitted() && panel() === 'menu' && !eraseDialog() && props.disk() && canEraseDisk(props.disk()!)}>
+          <div class="disk-view__erase">
+            <button
+              class="btn-text btn-text--danger"
+              disabled={!!eraseBlocked()}
+              title={eraseBlocked()}
+              data-testid="erase-this-disk"
+              onClick={() => setEraseDialog({ mode: 'erase' })}
+            >
+              Erase this disk…
+            </button>
+          </div>
+        </Show>
+
+        <Show when={props.filesError}>
+          <p class="edp-form__error" role="alert">{props.filesError}</p>
+        </Show>
+
+        <Show when={eraseDialog()}>
+          {(d) => (
+            <EraseDialog
+              targetId={props.disk()!.id}
+              engineId={String(props.disk()!.dockedTo ?? props.engineId())}
+              fallbackLabel={props.disk()!.name}
+              mode={d().mode}
+              shareName={d().shareName}
+              store={props.store}
+              commandLogStore={props.commandLogStore}
+              onClose={() => setEraseDialog(null)}
+              onErasedEmpty={(id) => {
+                setEraseDialog(null);
+                props.onSelectDisk?.(id);
+              }}
+              onBecameFiles={(id) => {
+                setEraseDialog(null);
+                props.onSelectDisk?.(id);
+              }}
+              onFilesFailed={(id, msg) => {
+                setEraseDialog(null);
+                if (props.onFilesFailed) props.onFilesFailed(id, msg);
+                else props.onSelectDisk?.(id);
+              }}
+            />
+          )}
         </Show>
 
       </div>

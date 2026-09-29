@@ -7,6 +7,7 @@ import NetworkTree from './components/NetworkTree';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
 import DiskView from './components/DiskView';
+import UnformattedDiskView from './components/UnformattedDiskView';
 import { rightPanelFor } from './store/diskRoles';
 import OperationProgress from './components/OperationProgress';
 import HistoryPanel from './components/HistoryPanel';
@@ -61,6 +62,15 @@ const App: Component = () => {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [ready, setReady] = createSignal(false);
   const [selection, setSelection] = createSignal<Selection>({ type: 'network', id: '' });
+  /** Surfaced when erase-then-files' createFilesDisk fails (Empty Disk panel). */
+  const [filesShortcutError, setFilesShortcutError] = createSignal<string | null>(null);
+  createEffect((prev: Selection | undefined) => {
+    const cur = selection();
+    if (prev && (prev.type !== cur.type || prev.id !== cur.id || prev.engineId !== cur.engineId)) {
+      setFilesShortcutError(null);
+    }
+    return cur;
+  });
   const [showSettings, setShowSettings] = createSignal(false);
   const [showHistory, setShowHistory] = createSignal(false);
   const [showAccount, setShowAccount] = createSignal(false);
@@ -536,12 +546,32 @@ const App: Component = () => {
                 <div class="main-layout__right">
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
                   <Switch>
+                    <Match when={selection().type === 'unformatted' ? `${selection().engineId}:${selection().id}` : null} keyed>
+                      {(key) => {
+                        const [engId, candId] = key.split(':');
+                        return (
+                          <UnformattedDiskView
+                            engineId={engId}
+                            candidateId={candId}
+                            store={store}
+                            commandLogStore={commandLogStore}
+                            onSelect={setSelection}
+                          />
+                        );
+                      }}
+                    </Match>
                     <Match when={rightPanel() === 'empty-disk'}>
                       <EmptyDiskPanel
                         disk={() => store()?.diskDB[selection().id]}
                         store={store}
                         engineId={() => store()?.diskDB[selection().id]?.dockedTo ?? undefined}
                         commandLogStore={commandLogStore}
+                        onSelectDisk={(id) => setSelection({ type: 'disk', id })}
+                        filesError={filesShortcutError()}
+                        onFilesFailed={(id, msg) => {
+                          setFilesShortcutError(msg);
+                          setSelection({ type: 'disk', id });
+                        }}
                       />
                     </Match>
                     {/* keyed: a fresh DiskView (and its local form state) per disk */}
@@ -553,6 +583,13 @@ const App: Component = () => {
                           commandLogStore={commandLogStore}
                           onDragStart={(data) => setDragData(data)}
                           onDragEnd={() => setDragData(null)}
+                          onSelect={setSelection}
+                          filesError={filesShortcutError()}
+                          onClearFilesError={() => setFilesShortcutError(null)}
+                          onFilesFailed={(id, msg) => {
+                            setFilesShortcutError(msg);
+                            setSelection({ type: 'disk', id });
+                          }}
                         />
                       )}
                     </Match>

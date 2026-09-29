@@ -3556,3 +3556,110 @@ body {
   background: #fffbeb;
   border: 1px solid #fde68a;
 }
+
+/* ── Erase dialog (idea#136) ─────────────────────────────────────────────── */
+.erase-dialog {
+  padding: 1rem 1.25rem 1.25rem;
+  max-width: 36rem;
+}
+.erase-dialog__title {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+.erase-dialog__summary {
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.erase-dialog__summary ul {
+  margin: 0.25rem 0 0.5rem 1.25rem;
+  padding: 0;
+}
+.erase-dialog__label {
+  margin: 0.5rem 0 0.15rem;
+  font-weight: 600;
+}
+.erase-dialog__warning {
+  color: #b91c1c;
+  font-weight: 600;
+  margin: 0.75rem 0;
+}
+.erase-dialog__unknown {
+  font-style: italic;
+  color: #6b7280;
+}
+.erase-dialog__progress {
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+.erase-dialog__steps {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.erase-dialog__steps li {
+  padding: 0.15rem 0;
+}
+.erase-dialog__step--current {
+  color: #111827;
+  font-weight: 600;
+}
+.erase-dialog__step--done {
+  color: #16a34a;
+}
+.erase-dialog__backups-erased {
+  color: #b91c1c;
+  margin-top: 0.5rem;
+}
+.erase-dialog__confirm {
+  margin-bottom: 0.75rem;
+}
+.disk-view__erase {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+.btn-text {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  color: inherit;
+}
+.btn-text--danger {
+  color: #b91c1c;
+}
+.btn-text:disabled,
+.btn-text--danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+.erase-first {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e5e7eb;
+}
+.tree-item--unformatted .tree-item__meta {
+  color: #6b7280;
+  font-size: 0.85em;
+}
+.tree-item__badge-unformatted,
+.disk-view__badge-unformatted {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #92400e;
+  background: #fef3c7;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+}
+.unformatted-disk-view__meta {
+  margin: 0.75rem 0 1rem;
+  font-size: 0.9rem;
+}

@@ -6,12 +6,20 @@
  * The share name is pre-filled with "School Files" and validated as the
  * operator types. The result comes from createCommandResult: success is an ok
  * createFilesDisk trace for this disk ID and the disk showing 'files'.
+ * Optional `footer` adds Erase the disk first (idea#136) under the same field.
  */
 import { Show, createMemo, createSignal, type Accessor, type Component, type JSX } from 'solid-js';
 import { DEFAULT_SHARE_NAME, createFilesDisk, validateShareName } from '../store/commands';
 import { FILES_TIMEOUT_MESSAGE, createCommandResult } from '../store/commandResult';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk } from '../types/store';
+
+export interface FilesRoleFormFooterArgs {
+  shareName: string;
+  shareNameError: string | null;
+  blocked: string | undefined;
+  pending: boolean;
+}
 
 interface FilesRoleFormProps {
   disk: () => Disk | undefined;
@@ -23,6 +31,8 @@ interface FilesRoleFormProps {
   submitLabel: string;
   /** Tooltip when the target Engine can't take the command; the form is disabled. */
   blockedReason?: () => string | undefined;
+  /** Extra actions under the primary button (Erase the disk first, idea#136). */
+  footer?: (args: FilesRoleFormFooterArgs) => JSX.Element;
 }
 
 const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
@@ -88,6 +98,13 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
           {props.submitLabel}
         </button>
       </div>
+
+      {props.footer?.({
+        shareName: shareName(),
+        shareNameError: shareNameError(),
+        blocked: blocked(),
+        pending: pending(),
+      })}
     </div>
   );
 };

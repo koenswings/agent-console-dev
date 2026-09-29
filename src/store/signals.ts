@@ -57,7 +57,7 @@ export const getInstancesForEngine = (store: Store, engineId: EngineID): import(
  */
 export const getInstancesForSelection = (
   store: Store,
-  selection: { type: 'network' | 'engine' | 'disk'; id: string }
+  selection: { type: 'network' | 'engine' | 'disk' | 'unformatted'; id: string; engineId?: string }
 ): import('../types/store').Instance[] => {
   switch (selection.type) {
     case 'network':
@@ -66,6 +66,8 @@ export const getInstancesForSelection = (
       return getInstancesForEngine(store, selection.id);
     case 'disk':
       return Object.values(store.instanceDB ?? {}).filter((inst) => String(inst.storedOn) === selection.id);
+    case 'unformatted':
+      return [];
   }
 };
 
@@ -76,7 +78,7 @@ export const getInstancesForSelection = (
  */
 export const getInstanceIdsForSelection = (
   store: Store,
-  selection: { type: 'network' | 'engine' | 'disk'; id: string }
+  selection: { type: 'network' | 'engine' | 'disk' | 'unformatted'; id: string; engineId?: string }
 ): string[] => {
   return getInstancesForSelection(store, selection).map((inst) => inst.id);
 };

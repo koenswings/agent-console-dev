@@ -13,6 +13,8 @@ export interface CommandTrace {
   status: 'running' | 'ok' | 'error';
   errorMessage: string | null;
   logs: LogEntry[];
+  /** Optional JSON result (e.g. summariseDisk contentSummary). */
+  result?: string | null;
 }
 
 export interface CommandLogStore {

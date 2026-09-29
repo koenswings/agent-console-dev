@@ -8,7 +8,8 @@ import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
 import type { CommandLogState } from '../store/commandLog';
-import type { Disk, Store } from '../types/store';
+import type { Disk, Store, UnformattedDisk } from '../types/store';
+import { formatBytes } from '../store/diskRoles';
 import { canEject, isCombinedDisk, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
 import EjectConfirm from './EjectConfirm';
 import RoleBadges from './RoleBadges';
@@ -34,8 +35,10 @@ type EjectState =
 // Selection type
 // ---------------------------------------------------------------------------
 export interface Selection {
-  type: 'network' | 'engine' | 'disk';
+  type: 'network' | 'engine' | 'disk' | 'unformatted';
   id: string;
+  /** Required when type is 'unformatted' (the Engine that published the candidate). */
+  engineId?: string;
 }
 
 interface NetworkTreeProps {
@@ -166,6 +169,41 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     )}
                   </Show>
                 )}
+              </For>
+
+              {/* ── Unformatted disks (idea#136) ─────────────────── */}
+              <For each={(engine()?.unformattedDisks ?? []).map((u: UnformattedDisk) => u.candidateId)}>
+                {(candidateId) => {
+                  const cand = () => engine()?.unformattedDisks?.find((u) => u.candidateId === candidateId);
+                  return (
+                    <Show when={cand()}>
+                      {(u) => (
+                        <div
+                          data-candidate-id={candidateId}
+                          data-engine-id={engineId}
+                          class={`tree-item tree-item--disk tree-item--unformatted ${isSelected('unformatted', candidateId) && props.selection.engineId === engineId ? 'tree-item--selected' : ''}`}
+                          role="treeitem"
+                          tabIndex={0}
+                          aria-selected={isSelected('unformatted', candidateId) && props.selection.engineId === engineId}
+                          onClick={() => props.onSelect({ type: 'unformatted', id: candidateId, engineId })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              props.onSelect({ type: 'unformatted', id: candidateId, engineId });
+                            }
+                          }}
+                        >
+                          <span class="tree-item__icon" aria-hidden="true">💾</span>
+                          <span class="tree-item__label">
+                            {u().label}
+                            <span class="tree-item__meta"> — {formatBytes(u().sizeBytes)}{u().fsType ? `, ${u().fsType}` : ''}</span>
+                          </span>
+                          <span class="tree-item__badge-unformatted">unformatted</span>
+                        </div>
+                      )}
+                    </Show>
+                  );
+                }}
               </For>
 
               {/* ── Per-disk sub-rows ────────────────────────────── */}
