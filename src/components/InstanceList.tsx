@@ -20,6 +20,10 @@ const selectionLabel = (selection: Selection, store: Store | null): string => {
     const disk = store.diskDB[selection.id];
     return disk ? disk.name : selection.id;
   }
+  if (selection.type === 'unformatted' && store && selection.engineId) {
+    const u = store.engineDB[selection.engineId]?.unformattedDisks?.find((c) => c.candidateId === selection.id);
+    return u?.label ?? selection.id;
+  }
   return selection.id;
 };
 

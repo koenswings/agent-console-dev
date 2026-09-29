@@ -18,6 +18,7 @@
  *     FC_APP        ['app']                     Add Files greyed out (old Engine)
  *   Engine D (fresh 'filesDisk'): Nextcloud running, not yet recreated with the mount (idea#157)
  *     FD_FILES      ['files']                   "… is running but doesn't show these files yet …"
+ *   Engine A also publishes two unformatted exFAT sticks (idea#136), labels unique with " (2)"
  *   Undocked FA_GONE (dockedTo null) with unmountError on Engine A → warning on Engine A's row
  *   FA_ABF also holds wiki-01 (stops on eject); nextcloud-01 on FA_APP_FILES mounts it (loses
  *   its files); it backs up kolibri-01 (backup becomes unavailable)
@@ -27,7 +28,12 @@ import type { App, Disk, Engine, FilesConfig, Instance, Store } from '../types/s
 const T = 1_790_000_000_000;
 const GB = 1_000_000_000;
 
-const engine = (id: string, hostname: string, caps?: string[]): Engine => ({
+const engine = (
+  id: string,
+  hostname: string,
+  caps?: string[],
+  over: Partial<Engine> = {},
+): Engine => ({
   id,
   hostname,
   version: '1.2.0',
@@ -38,10 +44,13 @@ const engine = (id: string, hostname: string, caps?: string[]): Engine => ({
   lastHalted: null,
   commands: [],
   ...(caps ? { capabilities: caps, capabilitiesBootedAt: T } : {}),
+  ...over,
 });
 
 export const FILES_IDS = {
   ENGINE_A: 'ENGINE_FILES_A',
+  CAND_INTENSO: 'CAND_INTENSO',
+  CAND_INTENSO_2: 'CAND_INTENSO_2',
   ENGINE_B: 'ENGINE_FILES_B',
   ENGINE_C: 'ENGINE_FILES_C',
   ENGINE_D: 'ENGINE_FILES_D',
@@ -178,10 +187,29 @@ const instances: Instance[] = [
 
 export const MOCK_FILES_STORE: Store = {
   engineDB: {
-    [I.ENGINE_A]: engine(I.ENGINE_A, 'files-a', ['diskIdArgs', 'filesDisk']),
-    [I.ENGINE_B]: engine(I.ENGINE_B, 'files-b', ['diskIdArgs', 'filesDisk']),
+    [I.ENGINE_A]: engine(I.ENGINE_A, 'files-a', ['diskIdArgs', 'filesDisk', 'eraseDisk'], {
+      unformattedDisks: [
+        {
+          candidateId: 'CAND_INTENSO',
+          device: 'sdi',
+          sizeBytes: 32 * GB,
+          model: 'Intenso',
+          fsType: 'exfat',
+          label: 'Intenso 32 GB',
+        },
+        {
+          candidateId: 'CAND_INTENSO_2',
+          device: 'sdj',
+          sizeBytes: 32 * GB,
+          model: 'Intenso',
+          fsType: 'exfat',
+          label: 'Intenso 32 GB (2)',
+        },
+      ],
+    }),
+    [I.ENGINE_B]: engine(I.ENGINE_B, 'files-b', ['diskIdArgs', 'filesDisk', 'eraseDisk']),
     [I.ENGINE_C]: engine(I.ENGINE_C, 'files-c'),
-    [I.ENGINE_D]: engine(I.ENGINE_D, 'files-d', ['diskIdArgs', 'filesDisk']),
+    [I.ENGINE_D]: engine(I.ENGINE_D, 'files-d', ['diskIdArgs', 'filesDisk', 'eraseDisk']),
   },
   diskDB: Object.fromEntries(disks.map((d) => [d.id, d])),
   appDB: {

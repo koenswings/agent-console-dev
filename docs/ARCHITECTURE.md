@@ -108,6 +108,8 @@ src/
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
 │   ├── EjectConfirm.tsx         Eject confirmation for combined disks: roles + everything affected
+│   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk (and Files erase-first)
+│   ├── UnformattedDiskView.tsx  Right pane for Engine.unformattedDisks candidates
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
@@ -336,7 +338,10 @@ Disk {
 
 App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
-Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk'
+Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk'
+Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
+Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
+CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
 
 Instance {
   ...                               // standard fields
@@ -374,6 +379,18 @@ instances elsewhere that mount it as a Files Disk (they lose its files) and the 
 backs up (backups become unavailable). Single-role disks eject immediately. A disk with
 `unmountError` shows "<name> couldn't be unmounted cleanly. Restart this Pi." under the row of
 the Engine named in `unmountError.engineId`, for every disk type, docked or not.
+
+### Erase (idea#136)
+
+`Erase this disk…` is a danger-styled text button at the bottom of every non-system disk view
+(and on unformatted candidates under the Engine row). It is greyed out unless the Engine has a
+fresh `'eraseDisk'` capability, and under the same lock as eject. The dialog sends
+`summariseDisk <targetId>`, shows `CommandTrace.result` as a content summary (or "contents
+unknown"), requires typing the summary `label` exactly, then sends
+`eraseDisk <targetId> <summaryTraceId> <label>`. Progress comes from `Engine.eraseInProgress.step`
+(15 s no-response / 5 min slow warning on the Console clock). On success the disk is republished
+`['empty']` and the Empty Disk panel opens. The Files shortcut **Erase the disk first** runs the
+same dialog then `createFilesDisk` once the empty disk appears.
 
 ---
 

@@ -30,7 +30,7 @@ export function getSendCommandFn(): (engineId: string, command: string) => void 
 // ---------------------------------------------------------------------------
 
 /** Capability flags the Console knows about (written by the Engine, idea#128). */
-export type EngineCapability = 'diskIdArgs' | 'filesDisk';
+export type EngineCapability = 'diskIdArgs' | 'filesDisk' | 'eraseDisk';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -236,6 +236,39 @@ export const createFilesDisk = (
 ): void => {
   _sendCommand(engineId, buildCreateFilesDiskCommand(diskId, shareName));
 };
+
+/**
+ * Build "summariseDisk <targetId>" (idea#136). targetId is a disk ID or an
+ * unformattedDisks[].candidateId. ID only — no name form.
+ */
+export const buildSummariseDiskCommand = (targetId: string): string =>
+  `summariseDisk ${targetId}`;
+
+/**
+ * Build "eraseDisk <targetId> <summaryTraceId> <confirmName…>" (idea#136).
+ * confirmName is the exact label from the summary (rest of the line).
+ */
+export const buildEraseDiskCommand = (
+  targetId: string,
+  summaryTraceId: string,
+  confirmName: string
+): string => `eraseDisk ${targetId} ${summaryTraceId} ${confirmName}`;
+
+/** Ask the Engine for a content summary of a disk or unformatted candidate. */
+export const summariseDisk = (engineId: string, targetId: string): void => {
+  _sendCommand(engineId, buildSummariseDiskCommand(targetId));
+};
+
+/** Erase a disk (or unformatted candidate) after a fresh summary and typed label. */
+export const eraseDisk = (
+  engineId: string,
+  targetId: string,
+  summaryTraceId: string,
+  confirmName: string
+): void => {
+  _sendCommand(engineId, buildEraseDiskCommand(targetId, summaryTraceId, confirmName));
+};
+
 
 // ---------------------------------------------------------------------------
 // Copy / Move App commands

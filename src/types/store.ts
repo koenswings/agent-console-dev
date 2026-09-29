@@ -55,6 +55,17 @@ export interface Engine {
    * mismatch means the flags are stale.
    */
   capabilitiesBootedAt?: Timestamp;
+
+  /**
+   * Whole non-system disks without an ext4 filesystem on this Engine
+   * (files-disk.md §7.5, idea#136). Present once the Engine has eraseDisk.
+   */
+  unformattedDisks?: UnformattedDisk[];
+  /**
+   * At most one erase in progress on this Engine (idea#136). Cleared when
+   * eraseDisk finishes; used for progress while the Disk record is gone.
+   */
+  eraseInProgress?: EraseInProgress | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +96,53 @@ export interface FilesConfig {
   passwordProtected: boolean;
   /** Only set for a password-protected disk (not mounted). */
   error: string | null;
+}
+
+
+/** Unformatted (non-ext4) whole disk published by the Engine (idea#136). */
+export interface UnformattedDisk {
+  candidateId: string;
+  device: string;
+  sizeBytes: number;
+  model: string | null;
+  fsType: string | null;
+  label: string;
+}
+
+/** Progress of eraseDisk on an Engine (files-disk.md §7.5, idea#136). */
+export type EraseStep =
+  | 'checking'
+  | 'stopping and unmounting'
+  | 'partitioning'
+  | 'creating filesystem'
+  | 'mounting';
+
+export interface EraseInProgress {
+  targetId: string;
+  label: string;
+  step: EraseStep;
+}
+
+/**
+ * Content summary from summariseDisk (CommandTrace.result JSON, idea#136).
+ * partial counts are shown as "at least" in the Console.
+ */
+export interface ContentSummary {
+  targetId: string;
+  label: string;
+  model: string | null;
+  sizeBytes: number;
+  usedBytes: number | null;
+  fsType: string | null;
+  apps: { name: string; version: string }[];
+  instances: { id: string; name: string; running: boolean; dataBytes: number | null }[];
+  backups: { instanceId: string; instanceName: string; lastBackup: number | null; snapshots: number | null }[];
+  files: { fileCount: number; totalBytes: number; partial: boolean } | null;
+  other: { entryCount: number; totalBytes: number; partial: boolean } | null;
+  otherPartitions: { device: string; fsType: string | null }[];
+  readable: boolean;
+  serial: string | null;
+  computedAt: number;
 }
 
 /** Busy unmount — mirrors agent-engine-dev UnmountError (idea#126). */
