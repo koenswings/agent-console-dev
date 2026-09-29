@@ -28,7 +28,7 @@ import {
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import type { CommandLogState } from '../store/commandLog';
-import type { App, Disk, Engine, Instance, Store, BackupMode } from '../types/store';
+import type { App, Disk, Engine, Store, BackupMode } from '../types/store';
 
 /** installApp can take minutes (image load); keep waiting longer than Files/Backup. */
 export const INSTALL_RESULT_TIMEOUT_MS = 5 * 60_000;
@@ -119,31 +119,37 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
   const [backupMode, setBackupMode] = createSignal<BackupMode>('on-demand');
   const [selectedInstanceIds, setSelectedInstanceIds] = createSignal<string[]>([]);
 
-  const allInstances = (): Instance[] => {
+  /** ID-keyed list so Automerge updates don't re-render every row (idea#83). */
+  const allInstanceIds = createMemo((): string[] => {
     const s = props.store();
     if (!s) return [];
-    return Object.values(s.instanceDB);
-  };
+    return Object.keys(s.instanceDB);
+  });
 
   // ── Install App configuration ──────────────────────────────────────────────
   const [appFilter, setAppFilter] = createSignal('');
   const [selectedAppId, setSelectedAppId] = createSignal<string | null>(null);
 
-  const allApps = createMemo((): App[] => {
+  const allAppIds = createMemo((): string[] => {
     const s = props.store();
     if (!s) return [];
-    return Object.values(s.appDB);
+    return Object.keys(s.appDB);
   });
 
-  const filteredApps = createMemo((): App[] => {
+  const filteredAppIds = createMemo((): string[] => {
+    const s = props.store();
+    if (!s) return [];
     const q = appFilter().toLowerCase();
-    if (!q) return allApps();
-    return allApps().filter(
-      (a) =>
+    return allAppIds().filter((id) => {
+      const a = s.appDB[id];
+      if (!a) return false;
+      if (!q) return true;
+      return (
         a.title.toLowerCase().includes(q) ||
         a.name.toLowerCase().includes(q) ||
         (a.category ?? '').toLowerCase().includes(q)
-    );
+      );
+    });
   });
 
   const appSourceLabel = (app: App): string => {
@@ -344,22 +350,29 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <p class="edp-form__label">Link to instances</p>
             <Show
-              when={allInstances().length > 0}
+              when={allInstanceIds().length > 0}
               fallback={<p class="edp-form__hint">No instances found on the network.</p>}
             >
               <div class="edp-checks">
-                <For each={allInstances()}>
-                  {(inst) => (
-                    <label class={`edp-check ${selectedInstanceIds().includes(inst.id) ? 'edp-check--on' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={selectedInstanceIds().includes(inst.id)}
-                        onChange={() => toggleInstance(inst.id)}
-                      />
-                      <span class="edp-check__name">{inst.name}</span>
-                      <span class="edp-check__status">{inst.status}</span>
-                    </label>
-                  )}
+                <For each={allInstanceIds()}>
+                  {(id) => {
+                    const inst = () => props.store()?.instanceDB[id];
+                    return (
+                      <Show when={inst()}>
+                        {(i) => (
+                          <label class={`edp-check ${selectedInstanceIds().includes(id) ? 'edp-check--on' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={selectedInstanceIds().includes(id)}
+                              onChange={() => toggleInstance(id)}
+                            />
+                            <span class="edp-check__name">{i().name}</span>
+                            <span class="edp-check__status">{i().status}</span>
+                          </label>
+                        )}
+                      </Show>
+                    );
+                  }}
                 </For>
               </div>
             </Show>
@@ -426,26 +439,33 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               onInput={(e) => setAppFilter((e.target as HTMLInputElement).value)}
             />
             <Show
-              when={filteredApps().length > 0}
+              when={filteredAppIds().length > 0}
               fallback={<p class="edp-form__hint">No apps found.</p>}
             >
               <div class="edp-applist">
-                <For each={filteredApps()}>
-                  {(app) => (
-                    <label class={`edp-appitem ${selectedAppId() === app.id ? 'edp-appitem--on' : ''}`}>
-                      <input
-                        type="radio"
-                        name="installApp"
-                        value={app.id}
-                        checked={selectedAppId() === app.id}
-                        onChange={() => setSelectedAppId(app.id)}
-                      />
-                      <div class="edp-appitem__info">
-                        <span class="edp-appitem__title">{app.title}</span>
-                        <span class="edp-appitem__meta">v{app.version} · {appSourceLabel(app)}</span>
-                      </div>
-                    </label>
-                  )}
+                <For each={filteredAppIds()}>
+                  {(id) => {
+                    const app = () => props.store()?.appDB[id];
+                    return (
+                      <Show when={app()}>
+                        {(a) => (
+                          <label class={`edp-appitem ${selectedAppId() === id ? 'edp-appitem--on' : ''}`}>
+                            <input
+                              type="radio"
+                              name="installApp"
+                              value={id}
+                              checked={selectedAppId() === id}
+                              onChange={() => setSelectedAppId(id)}
+                            />
+                            <div class="edp-appitem__info">
+                              <span class="edp-appitem__title">{a().title}</span>
+                              <span class="edp-appitem__meta">v{a().version} · {appSourceLabel(a())}</span>
+                            </div>
+                          </label>
+                        )}
+                      </Show>
+                    );
+                  }}
                 </For>
               </div>
             </Show>
