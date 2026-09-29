@@ -22,10 +22,19 @@ import {
   UPDATE_ENGINE_TOOLTIP,
 } from '../store/commands';
 import { canEraseDisk, eraseBlockedReason } from '../store/erase';
+import {
+  createCommandResult,
+} from '../store/commandResult';
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import type { CommandLogState } from '../store/commandLog';
 import type { App, Disk, Engine, Instance, Store, BackupMode } from '../types/store';
+
+/** installApp can take minutes (image load); keep waiting longer than Files/Backup. */
+export const INSTALL_RESULT_TIMEOUT_MS = 5 * 60_000;
+
+export const BACKUP_TIMEOUT_MESSAGE = "The Engine didn't respond. Check History for createBackupDisk.";
+export const INSTALL_TIMEOUT_MESSAGE = "The Engine didn't finish installing in time. Check History for installApp.";
 
 interface EmptyDiskPanelProps {
   disk: () => Disk | undefined;
@@ -67,8 +76,22 @@ const BACKUP_MODES: { value: BackupMode; label: string; description: string }[] 
 
 const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
   const [panel, setPanel] = createSignal<Panel>('menu');
-  const [submitted, setSubmitted] = createSignal(false);
   const [error, setError] = createSignal('');
+
+  // Wait for Engine traces instead of claiming success on send (idea#122).
+  const backupResult = createCommandResult({
+    commandLog: () => props.commandLogStore?.() ?? null,
+    command: 'createBackupDisk',
+    argKey: 'diskId',
+    isSuccess: () => (props.disk()?.diskTypes ?? []).includes('backup'),
+  });
+  const installResult = createCommandResult({
+    commandLog: () => props.commandLogStore?.() ?? null,
+    command: 'installApp',
+    argKey: 'diskId', // unused in 'includes' mode; value is matched in args JSON
+    matchMode: 'includes',
+    timeoutMs: INSTALL_RESULT_TIMEOUT_MS,
+  });
 
   // ── Target Engine (the disk's dockedTo) and its disk argument ─────────────
   const targetEngine = (): Engine | undefined => {
@@ -151,8 +174,9 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     if (!arg || !arg.ok) return;
     const s = props.store();
     const names = ids.map((id) => s?.instanceDB[id]?.name ?? id);
-    createBackupDisk(engineId, arg.arg, backupMode(), names);
-    setSubmitted(true);
+    // Match on disk.id (named args.diskId on 0b Engines); name-only Engines still
+    // get a trace the operator can read in History if matching fails.
+    backupResult.start(arg.arg, () => createBackupDisk(engineId, arg.arg, backupMode(), names));
   };
 
   const handleInstallApp = () => {
@@ -172,19 +196,25 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
       : undefined;
     const opts = source ? { source } : undefined;
 
-    installApp(engineId, appId, arg.arg, opts);
-    setSubmitted(true);
+    // Match the disk argument inside installApp's positional args blob (idea#122).
+    installResult.start(arg.arg, () => installApp(engineId, appId, arg.arg, opts));
   };
 
   const reset = () => {
     setPanel('menu');
-    setSubmitted(false);
     setError('');
+    backupResult.reset();
+    installResult.reset();
     setSelectedInstanceIds([]);
     setBackupMode('on-demand');
     setAppFilter('');
     setSelectedAppId(null);
   };
+
+  const backupPending = () => backupResult.state().kind === 'pending';
+  const installPending = () => installResult.state().kind === 'pending';
+  const actionDone = () =>
+    backupResult.state().kind === 'success' || installResult.state().kind === 'success';
 
   const goMenu = () => { setError(''); setPanel('menu'); };
 
@@ -204,24 +234,28 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
           <div class="edp__title">{props.disk()?.name ?? 'Empty disk'}</div>
           <div class="edp__subtitle">Empty — ready to configure</div>
         </div>
-        <Show when={panel() !== 'menu' && !submitted()}>
+        <Show when={panel() !== 'menu' && !actionDone() && !backupPending() && !installPending()}>
           <button class="edp__back" onClick={goMenu}>← Back</button>
         </Show>
       </header>
 
       <div class="edp__body">
 
-        {/* ── Success ──────────────────────────────────────────────────────── */}
-        <Show when={submitted()}>
+        {/* ── Success (after Engine confirms) ─────────────────────────────── */}
+        <Show when={actionDone()}>
           <div class="edp__success">
             <div class="edp__success-icon">✓</div>
-            <p class="edp__success-msg">Command sent. The Engine is configuring the disk.</p>
+            <p class="edp__success-msg">
+              {backupResult.state().kind === 'success'
+                ? 'Done. This disk is now a Backup Disk.'
+                : 'Done. The app is installed on this disk.'}
+            </p>
             <button class="btn" onClick={reset}>← Back</button>
           </div>
         </Show>
 
         {/* ── Menu ─────────────────────────────────────────────────────────── */}
-        <Show when={!submitted() && panel() === 'menu'}>
+        <Show when={!actionDone() && panel() === 'menu'}>
           <p class="edp__prompt">What would you like to do with this disk?</p>
           <div class="edp__menu">
 
@@ -284,7 +318,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         </Show>
 
         {/* ── Backup Disk form ─────────────────────────────────────────────── */}
-        <Show when={!submitted() && panel() === 'backup'}>
+        <Show when={!actionDone() && panel() === 'backup'}>
           <div class="edp-form">
 
             <p class="edp-form__label">Backup mode</p>
@@ -331,15 +365,30 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             </Show>
 
             <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <Show when={backupPending()}>
+              <p class="edp-form__hint" data-testid="backup-pending">Waiting for the Engine…</p>
+            </Show>
+            <Show when={(() => { const s = backupResult.state(); return s.kind === 'error' ? s.message : null; })()}>
+              {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
+            </Show>
+            <Show when={backupResult.state().kind === 'timeout'}>
+              <p class="edp-form__error" role="status" data-testid="backup-timeout">{BACKUP_TIMEOUT_MESSAGE}</p>
+            </Show>
             <div class="edp-form__actions">
-              <button class="btn btn--primary" onClick={handleConfigureBackup}>Configure Backup Disk</button>
+              <button
+                class="btn btn--primary"
+                disabled={backupPending()}
+                onClick={handleConfigureBackup}
+              >
+                Configure Backup Disk
+              </button>
             </div>
 
           </div>
         </Show>
 
         {/* ── Files Disk form (idea#132) + erase-first (idea#136) ─────────── */}
-        <Show when={!submitted() && panel() === 'files' && !eraseDialog()}>
+        <Show when={!actionDone() && panel() === 'files' && !eraseDialog()}>
           <FilesRoleForm
             disk={props.disk}
             engineId={props.engineId}
@@ -364,7 +413,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         </Show>
 
         {/* ── Install App form ─────────────────────────────────────────────── */}
-        <Show when={!submitted() && panel() === 'install'}>
+        <Show when={!actionDone() && panel() === 'install'}>
           <div class="edp-form">
             <p class="edp-form__hint">
               Choose an app to install onto <strong>{props.disk()?.name}</strong>.
@@ -401,8 +450,21 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
             </Show>
             <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <Show when={installPending()}>
+              <p class="edp-form__hint" data-testid="install-pending">Waiting for the Engine…</p>
+            </Show>
+            <Show when={(() => { const s = installResult.state(); return s.kind === 'error' ? s.message : null; })()}>
+              {(msg) => <p class="edp-form__error" role="alert" data-testid="install-error">{msg()}</p>}
+            </Show>
+            <Show when={installResult.state().kind === 'timeout'}>
+              <p class="edp-form__error" role="status" data-testid="install-timeout">{INSTALL_TIMEOUT_MESSAGE}</p>
+            </Show>
             <div class="edp-form__actions">
-              <button class="btn btn--primary" disabled={!selectedAppId()} onClick={handleInstallApp}>
+              <button
+                class="btn btn--primary"
+                disabled={!selectedAppId() || installPending()}
+                onClick={handleInstallApp}
+              >
                 Install App
               </button>
             </div>
@@ -410,7 +472,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         </Show>
 
         {/* ── Erase this disk… (idea#136) ─────────────────────────────────── */}
-        <Show when={!submitted() && panel() === 'menu' && !eraseDialog() && props.disk() && canEraseDisk(props.disk()!)}>
+        <Show when={!actionDone() && panel() === 'menu' && !eraseDialog() && props.disk() && canEraseDisk(props.disk()!)}>
           <div class="disk-view__erase">
             <button
               class="btn-text btn-text--danger"

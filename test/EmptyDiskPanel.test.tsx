@@ -85,7 +85,7 @@ describe('EmptyDiskPanel', () => {
     expect(cmd).toMatch(new RegExp(`^createBackupDisk ${MOCK_IDS.DISK_5_ID} on-demand `));
   });
 
-  it('shows success state after backup submission', () => {
+  it('shows waiting state after backup submission until the Engine answers (idea#122)', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
     renderPanel();
@@ -93,7 +93,9 @@ describe('EmptyDiskPanel', () => {
     const checkboxes = screen.getAllByRole('checkbox');
     fireEvent.click(checkboxes[0]);
     fireEvent.click(screen.getByRole('button', { name: /configure backup disk/i }));
-    expect(screen.getByText(/command sent/i)).toBeInTheDocument();
+    // No longer claims success on send — waits for the createBackupDisk trace.
+    expect(screen.queryByText(/command sent/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('backup-pending')).toHaveTextContent(/waiting for the engine/i);
   });
 
 

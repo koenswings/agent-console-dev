@@ -8,6 +8,7 @@ import {
   COMMAND_RESULT_TIMEOUT_MS,
   createCommandResult,
   findCommandOutcome,
+  traceMatchesArg,
 } from '../src/store/commandResult';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
@@ -127,5 +128,43 @@ describe('createCommandResult', () => {
     t.r.reset();
     expect(t.r.state().kind).toBe('idle');
     t.dispose();
+  });
+});
+
+describe("findCommandOutcome includes mode (idea#122 installApp)", () => {
+  it('matches when the disk arg appears inside a positional args blob', () => {
+    const t = {
+      traceId: 'inst-1',
+      command: 'installApp',
+      args: JSON.stringify(['kolibri-1.0 DISK005 --source SRC']),
+      startedAt: 1,
+      completedAt: 2,
+      status: 'ok' as const,
+      errorMessage: null,
+      logs: [],
+    };
+    const cls = { traces: { 'inst-1': t }, recentTraceIds: ['inst-1'] };
+    expect(traceMatchesArg(t, 'diskId', 'DISK005', 'includes')).toBe(true);
+    expect(traceMatchesArg(t, 'diskId', 'OTHER', 'includes')).toBe(false);
+    expect(findCommandOutcome(cls, new Set(), 'installApp', 'diskId', 'DISK005', 'includes'))
+      .toEqual({ kind: 'ok' });
+    expect(findCommandOutcome(cls, new Set(), 'installApp', 'diskId', 'DISK005', 'includes'))
+      .toEqual({ kind: 'ok' });
+  });
+
+  it('surfaces installApp error traces via includes match', () => {
+    const t = {
+      traceId: 'inst-err',
+      command: 'installApp',
+      args: JSON.stringify(['kolibri-1.0 DISK005']),
+      startedAt: 1,
+      completedAt: 2,
+      status: 'error' as const,
+      errorMessage: 'App not found',
+      logs: [],
+    };
+    const cls = { traces: { 'inst-err': t }, recentTraceIds: ['inst-err'] };
+    expect(findCommandOutcome(cls, new Set(), 'installApp', 'diskId', 'DISK005', 'includes'))
+      .toEqual({ kind: 'error', message: 'App not found' });
   });
 });
