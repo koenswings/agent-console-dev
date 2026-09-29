@@ -16,6 +16,11 @@
  *   Engine C (no capabilities): no opted-in App
  *     FC_FILES      ['files']                   "No App on this Engine uses Files Disks yet"
  *     FC_APP        ['app']                     Add Files greyed out (old Engine)
+ *   Engine D (fresh 'filesDisk'): Nextcloud running, not yet recreated with the mount (idea#157)
+ *     FD_FILES      ['files']                   "… is running but doesn't show these files yet …"
+ *   Undocked FA_GONE (dockedTo null) with unmountError on Engine A → warning on Engine A's row
+ *   FA_ABF also holds wiki-01 (stops on eject); nextcloud-01 on FA_APP_FILES mounts it (loses
+ *   its files); it backs up kolibri-01 (backup becomes unavailable)
  */
 import type { App, Disk, Engine, FilesConfig, Instance, Store } from '../types/store';
 
@@ -39,6 +44,12 @@ export const FILES_IDS = {
   ENGINE_A: 'ENGINE_FILES_A',
   ENGINE_B: 'ENGINE_FILES_B',
   ENGINE_C: 'ENGINE_FILES_C',
+  ENGINE_D: 'ENGINE_FILES_D',
+  FD_APP: 'DISK_FD_APP',
+  FD_FILES: 'DISK_FD_FILES',
+  FA_GONE: 'DISK_FA_GONE',
+  INST_NC_D: 'INST_NC_D',
+  INST_WIKI_A: 'INST_WIKI_A',
   FA_FILES: 'DISK_FA_FILES',
   FA_APP_FILES: 'DISK_FA_APP_FILES',
   FA_ABF: 'DISK_FA_ABF',
@@ -146,6 +157,14 @@ const disks: Disk[] = [
   disk(I.FB_FILES, 'Files B', I.ENGINE_B, 'sdc1', { diskTypes: ['files'], filesConfig: filesConfig() }),
   disk(I.FC_FILES, 'Files C', I.ENGINE_C, 'sdb1', { diskTypes: ['files'], filesConfig: filesConfig() }),
   disk(I.FC_APP, 'Old Engine Apps', I.ENGINE_C, 'sdc1', { diskTypes: ['app'] }),
+  disk(I.FD_APP, 'Nextcloud Disk D', I.ENGINE_D, 'sdb1', { diskTypes: ['app'] }),
+  disk(I.FD_FILES, 'Files D', I.ENGINE_D, 'sdc1', { diskTypes: ['files'], filesConfig: filesConfig() }),
+  {
+    ...disk(I.FA_GONE, 'Old Stick', I.ENGINE_A, 'sdz1', { diskTypes: [], sizeBytes: null, freeBytes: null }),
+    dockedTo: null,
+    device: null,
+    unmountError: { engineId: I.ENGINE_A, mountPoint: '/disks/sdz1', fsUuid: 'uuid-sdz1', message: 'target is busy' },
+  },
 ];
 
 const instances: Instance[] = [
@@ -153,6 +172,8 @@ const instances: Instance[] = [
   instance(I.INST_KOLIBRI_A, I.APP_KOLIBRI, 'kolibri-01', I.FA_APP, 'Running'),
   instance(I.INST_NC_B, I.APP_NEXTCLOUD, 'nextcloud-02', I.FB_APP, 'Stopped'),
   instance(I.INST_KOLIBRI_C, I.APP_KOLIBRI, 'kolibri-02', I.FC_APP, 'Running'),
+  instance(I.INST_NC_D, I.APP_NEXTCLOUD, 'nextcloud-04', I.FD_APP, 'Running', []),
+  instance(I.INST_WIKI_A, I.APP_KOLIBRI, 'wiki-01', I.FA_ABF, 'Running'),
 ];
 
 export const MOCK_FILES_STORE: Store = {
@@ -160,6 +181,7 @@ export const MOCK_FILES_STORE: Store = {
     [I.ENGINE_A]: engine(I.ENGINE_A, 'files-a', ['diskIdArgs', 'filesDisk']),
     [I.ENGINE_B]: engine(I.ENGINE_B, 'files-b', ['diskIdArgs', 'filesDisk']),
     [I.ENGINE_C]: engine(I.ENGINE_C, 'files-c'),
+    [I.ENGINE_D]: engine(I.ENGINE_D, 'files-d', ['diskIdArgs', 'filesDisk']),
   },
   diskDB: Object.fromEntries(disks.map((d) => [d.id, d])),
   appDB: {

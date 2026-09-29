@@ -3515,3 +3515,44 @@ body {
 .files-section__actions {
   margin-top: 8px;
 }
+
+/* ── Eject confirmation on combined disks, stuck-unmount warning (idea#157) */
+.eject-confirm {
+  margin: 4px 8px 8px 28px;
+  padding: 10px 12px;
+  border: 1px solid var(--colour-border);
+  border-radius: 6px;
+  background: var(--colour-surface, #fff);
+  font-size: var(--font-size-sm);
+}
+
+.eject-confirm__title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.eject-confirm__label {
+  margin: 6px 0 2px;
+}
+
+.eject-confirm__list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.eject-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tree-item__unmount-warning {
+  margin: 2px 8px 4px 28px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}

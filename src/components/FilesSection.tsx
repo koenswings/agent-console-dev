@@ -4,12 +4,14 @@
  * in" lines, Not mounted (password case or a stuck unmount), the low-space
  * warning and Eject. Derived signals only.
  */
-import { For, Show, createMemo, type Accessor, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
+import EjectConfirm from './EjectConfirm';
 import { ejectDisk } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import { isDiskLocked } from '../store/operations';
 import {
   canEject,
+  isCombinedDisk,
   filesAvailability,
   filesAvailabilityText,
   filesNotMountedReason,
@@ -61,7 +63,15 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
   });
   const ejectShown = () => { const d = props.disk(); return !!d && canEject(d); };
   const ejectLocked = () => { const d = props.disk(); return !!d && isDiskLocked(props.store(), d.id); };
+  const [confirming, setConfirming] = createSignal(false);
+  const onEjectClick = () => {
+    const d = props.disk();
+    if (!d) return;
+    if (isCombinedDisk(d, props.store())) setConfirming(true);
+    else doEject();
+  };
   const doEject = () => {
+    setConfirming(false);
     const d = props.disk();
     if (!d?.dockedTo || ejectLocked()) return;
     const engineId = String(d.dockedTo);
@@ -108,10 +118,13 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
             class="btn files-section__eject"
             disabled={ejectLocked() || eject.state().kind === 'pending'}
             title={ejectLocked() ? 'Operation in progress — cannot eject' : `Eject ${props.disk()?.name}`}
-            onClick={doEject}
+            onClick={onEjectClick}
           >
             Eject
           </button>
+          <Show when={confirming()}>
+            <EjectConfirm disk={props.disk} store={props.store} onConfirm={doEject} onCancel={() => setConfirming(false)} />
+          </Show>
           <Show when={(() => { const s = eject.state(); return s.kind === 'error' ? s.message : null; })()}>
             {(msg) => <p class="edp-form__error" role="alert">Couldn't eject {props.disk()?.name}: {msg()}</p>}
           </Show>
