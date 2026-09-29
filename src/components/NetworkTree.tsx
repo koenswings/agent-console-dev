@@ -9,7 +9,8 @@ import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk, Store } from '../types/store';
-import { canEject } from '../store/diskRoles';
+import { canEject, isCombinedDisk, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
+import EjectConfirm from './EjectConfirm';
 import RoleBadges from './RoleBadges';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
@@ -102,6 +103,14 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
             )
           );
 
+          // Stuck unmounts on this Engine, by unmountError.engineId: an undocked
+          // disk has dockedTo null and would otherwise appear nowhere (idea#157).
+          const unmountIds = createMemo(
+            () => unmountWarningDiskIds(props.store(), engineId),
+            [],
+            { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) }
+          );
+
           return (
             <Show when={engine()}>
               <div
@@ -146,6 +155,19 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 />
               </div>
 
+              {/* ── Stuck-unmount warnings (all disk types, idea#157) ── */}
+              <For each={unmountIds()}>
+                {(diskId) => (
+                  <Show when={props.store()?.diskDB[diskId]}>
+                    {(d) => (
+                      <div class="tree-item__unmount-warning" role="alert" data-engine-id={engineId} data-unmount-disk-id={diskId}>
+                        {unmountWarningText(d())}
+                      </div>
+                    )}
+                  </Show>
+                )}
+              </For>
+
               {/* ── Per-disk sub-rows ────────────────────────────── */}
               <For each={diskIds()}>
                 {(diskId) => {
@@ -153,6 +175,8 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
 
                   // ── Eject feedback ──────────────────────────────────
                   const [ejectState, setEjectState] = createSignal<EjectState>({ kind: 'idle' });
+                  // Combined disks confirm first, listing everything affected (idea#157)
+                  const [confirmingEject, setConfirmingEject] = createSignal(false);
                   let ejectTimer: ReturnType<typeof setTimeout> | null = null;
                   const clearEjectTimer = () => {
                     if (ejectTimer !== null) { clearTimeout(ejectTimer); ejectTimer = null; }
@@ -249,7 +273,10 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                             onClick={(e) => {
                               e.stopPropagation();
                               const eng = engine();
-                              if (eng && disk()) startEject(eng.id);
+                              const d = disk();
+                              if (!eng || !d) return;
+                              if (isCombinedDisk(d, props.store())) setConfirmingEject(true);
+                              else startEject(eng.id);
                             }}
                           >
                             ⏏
@@ -259,6 +286,18 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           <RoleBadges disk={disk} store={props.store} />
                         </span>
                       </div>
+                      <Show when={confirmingEject()}>
+                        <EjectConfirm
+                          disk={disk}
+                          store={props.store}
+                          onCancel={() => setConfirmingEject(false)}
+                          onConfirm={() => {
+                            setConfirmingEject(false);
+                            const eng = engine();
+                            if (eng && !isDiskLocked(props.store(), diskId)) startEject(eng.id);
+                          }}
+                        />
+                      </Show>
                       <Show when={ejectNotice()}>
                         {(notice) => (
                           <div
