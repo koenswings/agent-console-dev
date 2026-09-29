@@ -69,6 +69,30 @@ export interface Disk {
   dockedTo: EngineID | null;
   diskTypes: DiskType[];              // types detected for this disk; empty array = unknown
   backupConfig: BackupConfig | null;  // set when disk is a Backup Disk; null otherwise
+  /** Files role settings from FILES.yaml (idea#131); null or absent otherwise. */
+  filesConfig?: FilesConfig | null;
+  /** Busy unmount on the last undock (idea#126), any disk type; kept after undock. */
+  unmountError?: UnmountError | null;
+  /** Filesystem size and free space in bytes (docked disks, idea#131); null or absent otherwise. */
+  sizeBytes?: number | null;
+  freeBytes?: number | null;
+}
+
+/** Files Disk settings — mirrors Disk.filesConfig (files-disk.md §7.5). */
+export interface FilesConfig {
+  shareName: string;
+  readOnly: boolean;
+  passwordProtected: boolean;
+  /** Only set for a password-protected disk (not mounted). */
+  error: string | null;
+}
+
+/** Busy unmount — mirrors agent-engine-dev UnmountError (idea#126). */
+export interface UnmountError {
+  engineId: EngineID;
+  mountPoint: string;       // e.g. /disks/sdb1
+  fsUuid: string | null;
+  message: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +112,8 @@ export interface App {
   source?: 'disk' | 'github';
   sourceDiskId?: DiskID;
   sourceDiskName?: DiskName;
+  /** Files Disk opt-in from x-app.filesMount (files-disk.md §7.5); null or absent = not opted in. */
+  filesMount?: { path: string; services: string[] } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +178,8 @@ export interface Instance {
   stepLabel: string | null;
   /** Live Docker container metrics. Null when instance is not Running. */
   metrics: DockerMetrics | null;
+  /** Files Disks mounted into this instance, written after a successful compose up (idea#133). */
+  filesMounts?: DiskID[];
 }
 
 // ---------------------------------------------------------------------------

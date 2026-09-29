@@ -31,23 +31,25 @@ describe('EmptyDiskPanel', () => {
     expect(screen.getByText('empty-disk')).toBeInTheDocument();
   });
 
-  it('shows Backup and Install; Files is hidden without the filesDisk flag', () => {
+  it('shows the three options; Files is greyed out without the filesDisk flag', () => {
     renderPanel();
-    expect(screen.getByText('Backup Disk')).toBeInTheDocument();
-    expect(screen.queryByText('Files Disk')).toBeNull();
+    expect(screen.getByText('Make this a Backup Disk')).toBeInTheDocument();
+    const files = screen.getByText('Make this a Files Disk').closest('button')!;
+    expect(files).toBeDisabled();
+    expect(files.getAttribute('title')).toBe('Update this Engine to manage this disk');
     expect(screen.getByText('Install App')).toBeInTheDocument();
   });
 
   it('navigates to backup configuration on click', () => {
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     expect(screen.getByText('Backup mode')).toBeInTheDocument();
     expect(screen.getByText('Link to instances')).toBeInTheDocument();
   });
 
   it('shows backup mode options', () => {
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     expect(screen.getByText('On demand')).toBeInTheDocument();
     expect(screen.getByText('Immediate')).toBeInTheDocument();
     expect(screen.getByText('Scheduled')).toBeInTheDocument();
@@ -55,14 +57,14 @@ describe('EmptyDiskPanel', () => {
 
   it('shows instances from the store', () => {
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     // Mock store has several instances; at least kolibri should appear
     expect(screen.getByText('kolibri')).toBeInTheDocument();
   });
 
   it('shows error when submitting backup with no instances selected', () => {
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     fireEvent.click(screen.getByRole('button', { name: /configure backup disk/i }));
     expect(screen.getByText(/at least one/i)).toBeInTheDocument();
   });
@@ -71,7 +73,7 @@ describe('EmptyDiskPanel', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     // Select the kolibri instance checkbox
     const checkboxes = screen.getAllByRole('checkbox');
     fireEvent.click(checkboxes[0]);
@@ -87,7 +89,7 @@ describe('EmptyDiskPanel', () => {
     const mock = vi.fn();
     setSendCommandFn(mock);
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     const checkboxes = screen.getAllByRole('checkbox');
     fireEvent.click(checkboxes[0]);
     fireEvent.click(screen.getByRole('button', { name: /configure backup disk/i }));
@@ -138,7 +140,7 @@ describe('EmptyDiskPanel', () => {
 
   it('Back button in backup form returns to menu', () => {
     renderPanel();
-    fireEvent.click(screen.getByText('Backup Disk'));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
     fireEvent.click(screen.getByRole('button', { name: /← Back/i }));
     // Back at menu
     expect(screen.getByText('What would you like to do with this disk?')).toBeInTheDocument();

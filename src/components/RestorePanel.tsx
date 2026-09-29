@@ -8,6 +8,8 @@ interface RestorePanelProps {
   store: () => Store | null;
   /** Engine ID that owns this disk */
   engineId: () => string | undefined;
+  /** Header text override (the disk view shows this panel as its "Backups" section). */
+  title?: string;
 }
 
 const BACKUP_MODE_LABELS: Record<string, string> = {
@@ -85,7 +87,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
       <header class="restore-panel__header">
         <span class="restore-panel__disk-icon">🗄</span>
         <div>
-          <div class="restore-panel__title">{props.disk()?.name ?? 'Backup disk'}</div>
+          <div class="restore-panel__title">{props.title ?? props.disk()?.name ?? 'Backup disk'}</div>
           <div class="restore-panel__subtitle">
             <span class="restore-panel__badge">Backup Disk</span>
             <Show when={backupConfig()}>

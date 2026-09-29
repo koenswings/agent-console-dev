@@ -3451,3 +3451,67 @@ body {
   border-radius: 10px;
 }
 .mobile-sheet__cancel:hover { background: var(--colour-surface-hover); }
+
+/* ── Disk view: header, role badges, sections (Files Disk, idea#132) ───── */
+.tree-item__badges {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.disk-view {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.disk-view__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--colour-border);
+}
+
+.disk-view__title {
+  font-weight: 600;
+}
+
+.disk-view__badges {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.disk-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--colour-border);
+}
+
+.disk-section__title {
+  margin: 0 0 8px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--colour-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.files-section__share,
+.files-section__size,
+.files-section__availability {
+  margin: 4px 0;
+}
+
+.files-section__low-space {
+  margin: 4px 0;
+  color: var(--colour-warning, #b45309);
+}
+
+.files-section__not-mounted {
+  margin: 4px 0;
+  color: #dc2626;
+}
+
+.files-section__actions {
+  margin-top: 8px;
+}

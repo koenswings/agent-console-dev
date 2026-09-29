@@ -68,7 +68,7 @@ const installFirstApp = () => {
 };
 
 const configureBackup = () => {
-  fireEvent.click(card('Backup Disk'));
+  fireEvent.click(card('Make this a Backup Disk'));
   fireEvent.click(screen.getAllByRole('checkbox')[0]);
   fireEvent.click(screen.getByRole('button', { name: /configure backup disk/i }));
 };
@@ -109,7 +109,7 @@ describe('EmptyDiskPanel — disk arguments per Engine (idea#129)', () => {
     ['rolled-back', rolledBack],
   ])('%s Engine, shared name: Backup and Install are greyed out with the tooltip', (_label, engine) => {
     renderPanel(storeWith(engine, [target, twin]));
-    for (const title of ['Backup Disk', 'Install App']) {
+    for (const title of ['Make this a Backup Disk', 'Install App']) {
       const btn = card(title);
       expect(btn).toBeDisabled();
       expect(btn.getAttribute('title')).toBe(TOOLTIP);
@@ -122,7 +122,7 @@ describe('EmptyDiskPanel — disk arguments per Engine (idea#129)', () => {
 
   it('0b Engine: Backup and Install are enabled with no tooltip', () => {
     renderPanel(storeWith(current, [target, twin]));
-    for (const title of ['Backup Disk', 'Install App']) {
+    for (const title of ['Make this a Backup Disk', 'Install App']) {
       const btn = card(title);
       expect(btn).not.toBeDisabled();
       expect(btn.hasAttribute('title')).toBe(false);
@@ -130,32 +130,43 @@ describe('EmptyDiskPanel — disk arguments per Engine (idea#129)', () => {
   });
 });
 
-describe('EmptyDiskPanel — Files card behind the filesDisk flag (idea#129)', () => {
+describe('EmptyDiskPanel — Make this a Files Disk behind the filesDisk flag (idea#129, idea#132)', () => {
   let sent: ReturnType<typeof vi.fn>;
   beforeEach(() => { sent = vi.fn(); setSendCommandFn(sent); });
   afterEach(() => cleanup());
 
-  it('hidden when the capabilities field is missing', () => {
+  const expectGreyedOut = () => {
+    const btn = card('Make this a Files Disk');
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toBe(TOOLTIP);
+    fireEvent.click(btn);
+    expect(screen.getByText('What would you like to do with this disk?')).toBeInTheDocument();
+  };
+
+  it('greyed out when the capabilities field is missing', () => {
     renderPanel(storeWith(old, [target]));
-    expect(screen.queryByText('Files Disk')).toBeNull();
+    expectGreyedOut();
   });
 
-  it('hidden on a 0b Engine without filesDisk', () => {
+  it('greyed out on a 0b Engine without filesDisk', () => {
     renderPanel(storeWith(current, [target]));
-    expect(screen.queryByText('Files Disk')).toBeNull();
+    expectGreyedOut();
   });
 
-  it('hidden when filesDisk is present but the stamp does not match lastBooted', () => {
+  it('greyed out when filesDisk is present but the stamp does not match lastBooted', () => {
     renderPanel(storeWith(asEngine(MOCK_ENGINE_VARIANTS.rolledBack, { capabilities: ['diskIdArgs', 'filesDisk'] }), [target]));
-    expect(screen.queryByText('Files Disk')).toBeNull();
+    expectGreyedOut();
   });
 
-  it('shown with a fresh filesDisk flag and sends createFilesDisk <diskId>', () => {
+  it('enabled with a fresh filesDisk flag and sends createFilesDisk <diskId> School Files', () => {
     renderPanel(storeWith(asEngine(MOCK_ENGINE_VARIANTS.current, { capabilities: ['diskIdArgs', 'filesDisk'] }), [target]));
-    fireEvent.click(card('Files Disk'));
-    expect(screen.getByText(/shared network filesystem/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /configure files disk/i }));
+    const btn = card('Make this a Files Disk');
+    expect(btn).not.toBeDisabled();
+    expect(btn.hasAttribute('title')).toBe(false);
+    fireEvent.click(btn);
+    expect(screen.getByText(/Nothing on the disk is erased/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Make this a Files Disk' }));
     expect(sent).toHaveBeenCalledOnce();
-    expect(sent).toHaveBeenCalledWith(ENGINE_ID, 'createFilesDisk DISK_TARGET');
+    expect(sent).toHaveBeenCalledWith(ENGINE_ID, 'createFilesDisk DISK_TARGET School Files');
   });
 });

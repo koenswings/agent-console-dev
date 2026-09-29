@@ -192,11 +192,31 @@ export const backupApp = (
 
 /**
  * Build the "createFilesDisk" command string (pure, no side effects).
- * Format: "createFilesDisk <diskId>" — ID only; only offered when the Engine
- * advertises 'filesDisk' (idea#129).
+ * Format: "createFilesDisk <diskId> [<shareName…>]" — ID only; only offered
+ * when the Engine advertises 'filesDisk' (idea#129, idea#132). The share name
+ * is free text and goes last (it takes the rest of the line on the Engine).
  */
-export const buildCreateFilesDiskCommand = (diskId: string): string =>
-  `createFilesDisk ${diskId}`;
+export const buildCreateFilesDiskCommand = (diskId: string, shareName?: string): string =>
+  shareName ? `createFilesDisk ${diskId} ${shareName}` : `createFilesDisk ${diskId}`;
+
+/** Default share name for a new Files Disk (files-disk.md §7.1, E6). */
+export const DEFAULT_SHARE_NAME = 'School Files';
+
+/**
+ * Validate a Files Disk share name as the operator types (same rule as the
+ * Engine, files-disk.md §7.1): 1–16 characters (ASCII, so bytes = characters),
+ * only A–Z a–z 0–9, space, hyphen, underscore and parentheses, no leading or
+ * trailing space. Returns an error message, or null when valid.
+ */
+export const validateShareName = (name: string): string | null => {
+  if (name.length === 0) return 'Enter a share name.';
+  if (!/^[A-Za-z0-9 _()-]*$/.test(name)) {
+    return 'Use only letters, digits, spaces, hyphens, underscores and parentheses.';
+  }
+  if (name.length > 16) return 'At most 16 characters.';
+  if (name !== name.trim()) return 'No space at the start or end.';
+  return null;
+};
 
 /** Configure an empty disk as a Backup Disk on the given engine. */
 export const createBackupDisk = (
@@ -208,12 +228,13 @@ export const createBackupDisk = (
   _sendCommand(engineId, buildCreateBackupDiskCommand(diskArg, mode, instanceNames));
 };
 
-/** Configure an empty disk as a Files Disk on the given engine. */
+/** Add the Files role to a disk (empty, App or Backup Disk) on the given engine. */
 export const createFilesDisk = (
   engineId: string,
-  diskId: string
+  diskId: string,
+  shareName?: string
 ): void => {
-  _sendCommand(engineId, buildCreateFilesDiskCommand(diskId));
+  _sendCommand(engineId, buildCreateFilesDiskCommand(diskId, shareName));
 };
 
 // ---------------------------------------------------------------------------

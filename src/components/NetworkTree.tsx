@@ -8,47 +8,14 @@ import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
 import type { CommandLogState } from '../store/commandLog';
-import type { Disk, DiskType, Store } from '../types/store';
+import type { Disk, Store } from '../types/store';
+import { canEject } from '../store/diskRoles';
+import RoleBadges from './RoleBadges';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 
-// ---------------------------------------------------------------------------
-// Disk type badge helpers
-// ---------------------------------------------------------------------------
-// 'system' (the Engine's own root disk) deliberately has no badge.
-const DISK_TYPE_LABEL: Partial<Record<DiskType, string>> = {
-  app: 'app',
-  backup: 'backup',
-  empty: 'empty',
-  upgrade: 'upgrade',
-  files: 'files',
-};
-
-/**
- * Returns the primary display label for a disk.
- * Disks tagged 'empty' that actually have instances are shown as 'app' instead.
- */
-const diskTypeLabel = (disk: Disk, store: Store | null): string | null => {
-  if (!disk.diskTypes || disk.diskTypes.length === 0) return null;
-  const raw = DISK_TYPE_LABEL[disk.diskTypes[0]] ?? null;
-  if (raw === 'empty' && store) {
-    const hasInstances = Object.values(store.instanceDB ?? {}).some(
-      (inst) => String(inst.storedOn) === disk.id
-    );
-    if (hasInstances) return 'app';
-  }
-  return raw;
-};
-
-/**
- * Returns true when the eject button should be shown: the disk has a device,
- * and is neither a backup disk nor the Engine's system disk (the Engine
- * refuses system-disk eject — idea#152 / agent-engine-dev#134).
- */
-export const canEject = (disk: Disk): boolean => {
-  const types = disk.diskTypes ?? [];
-  return disk.device !== null && !types.includes('backup') && !types.includes('system');
-};
+// Eject rule and role badges live in ../store/diskRoles (idea#132).
+export { canEject };
 
 /**
  * Per-disk eject feedback (idea#152).
@@ -288,11 +255,9 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                             ⏏
                           </button>
                         </Show>
-                        <Show when={diskTypeLabel(disk()!, props.store())}>
-                          <span class={`tree-item__type-badge tree-item__type-badge--${diskTypeLabel(disk()!, props.store())}`}>
-                            {diskTypeLabel(disk()!, props.store())}
-                          </span>
-                        </Show>
+                        <span class="tree-item__badges">
+                          <RoleBadges disk={disk} store={props.store} />
+                        </span>
                       </div>
                       <Show when={ejectNotice()}>
                         {(notice) => (
