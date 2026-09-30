@@ -66,16 +66,36 @@ const orderedTraces = (cls: CommandLogStore): CommandTrace[] => {
  * The outcome of the first new `command` trace whose `argKey` equals
  * `argValue`, or null while there is none or it is still running.
  */
+/** How to match the target argument on a new trace (idea#122). */
+export type ArgMatchMode = 'key' | 'includes';
+
+/**
+ * True when this trace is the one we sent: exact named arg, or (includes)
+ * the value appears anywhere in the serialized args — needed for installApp,
+ * which records a single positional string rather than named diskId.
+ */
+export const traceMatchesArg = (
+  trace: CommandTrace,
+  argKey: TraceArgKey,
+  argValue: string,
+  mode: ArgMatchMode = 'key'
+): boolean => {
+  if (mode === 'key') return traceArg(trace, argKey) === argValue;
+  const raw = typeof trace.args === 'string' ? trace.args : JSON.stringify(trace.args ?? '');
+  return raw.includes(argValue);
+};
+
 export const findCommandOutcome = (
   cls: CommandLogState,
   baseline: Set<string>,
   command: string,
   argKey: TraceArgKey,
-  argValue: string
+  argValue: string,
+  matchMode: ArgMatchMode = 'key'
 ): TraceOutcome | null => {
   if (!cls || 'error' in cls) return null;
   const trace = orderedTraces(cls).find((t) =>
-    !baseline.has(t.traceId) && t.command === command && traceArg(t, argKey) === argValue
+    !baseline.has(t.traceId) && t.command === command && traceMatchesArg(t, argKey, argValue, matchMode)
   );
   if (!trace || trace.status === 'running') return null;
   const errorLogs = (trace.logs ?? []).filter((l) => l.level === 'error');
@@ -98,6 +118,8 @@ export interface CommandResultOptions {
   commandLog: Accessor<CommandLogState>;
   command: string;
   argKey: TraceArgKey;
+  /** 'key' (default): args[argKey] === value. 'includes': value appears in args JSON. */
+  matchMode?: ArgMatchMode;
   /** Extra success condition, checked once the trace is ok (e.g. the disk has 'files'). */
   isSuccess?: () => boolean;
   timeoutMs?: number;
@@ -123,7 +145,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
   const outcome = createMemo(() => {
     const p = pending();
     if (!p) return null;
-    return findCommandOutcome(opts.commandLog(), p.baseline, opts.command, opts.argKey, p.argValue);
+    return findCommandOutcome(opts.commandLog(), p.baseline, opts.command, opts.argKey, p.argValue, opts.matchMode ?? 'key');
   });
 
   createEffect(() => {
