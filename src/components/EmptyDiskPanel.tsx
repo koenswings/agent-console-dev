@@ -225,7 +225,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
   const goMenu = () => { setError(''); setPanel('menu'); };
 
   return (
-    <section class="edp" aria-label="Empty disk configuration">
+    <section class="edp" data-testid="empty-disk-panel" aria-label="Empty disk configuration">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header class="edp__header">

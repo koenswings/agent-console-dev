@@ -38,6 +38,7 @@ const EjectConfirm: Component<EjectConfirmProps> = (props) => {
     <div
       class="eject-confirm"
       role="dialog"
+      data-testid="eject-confirm"
       aria-label={`Eject ${props.disk()?.name ?? ''}`}
       onClick={(e) => e.stopPropagation()}
     >

@@ -476,3 +476,13 @@ in `config.yaml` (default `/home/pi/idea/agents/agent-console-dev/dist`). Falls 
 `index.html` for all unmatched routes (SPA client-side routing). When `consolePath` is empty or
 the folder does not exist at Engine startup, the Engine logs it and continues, and only the
 `/api/*` endpoints are served.
+
+
+### Duration-walk selectors (idea#166)
+
+Console surfaces used by the duration-tests walker expose id-keyed `data-testid`s
+(`engine-<id>`, `disk-<id>`, `instance-<id>`, `candidate-<id>`, `disk-view-<id>`,
+`console-overview`, `op-entry`, `op-overview`, `eject-confirm`, `erase-dialog`).
+Playwright Intent adapters live under `e2e/intents/`, registry keyed by Axle YAML
+action names (`open_console_as_teacher`, …). Engine-owned `infra_*` Intents are
+not registered here.

@@ -253,7 +253,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   };
 
   return (
-    <div class="erase-dialog" role="dialog" aria-label={`Erase ${titleLabel()}`}>
+    <div class="erase-dialog" role="dialog" data-testid="erase-dialog" aria-label={`Erase ${titleLabel()}`}>
       <h2 class="erase-dialog__title">Erase {titleLabel()}?</h2>
 
       <Show when={phase().kind === 'summarising'}>
@@ -293,6 +293,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                 </label>
                 <input
                   id="erase-confirm-name"
+                  data-testid="erase-confirm-name"
                   class="edp-form__search erase-dialog__confirm"
                   type="text"
                   value={confirmName()}

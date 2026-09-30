@@ -416,7 +416,7 @@ const App: Component = () => {
 
           {/* 👤 Account — always visible */}
           <button
-            class="status-bar__account-btn"
+            class="status-bar__account-btn" data-testid="account-btn"
             title="Account"
             onClick={() => {
               setShowAccount((v) => !v);
@@ -534,7 +534,7 @@ const App: Component = () => {
           <Show
             when={isMobile()}
             fallback={
-              <div class="main-layout">
+              <div class="main-layout" data-testid="op-overview">
                 <NetworkTree
                   selection={selection()}
                   onSelect={setSelection}

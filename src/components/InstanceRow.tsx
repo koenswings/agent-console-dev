@@ -392,6 +392,8 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     <div
       class="instance-row"
       role="listitem"
+      data-testid={`instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
+      data-instance-id={props.instanceId ?? props.instance()?.id}
       draggable={true}
       onDragStart={(e) => {
         const data = dragData();

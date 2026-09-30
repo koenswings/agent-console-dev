@@ -79,7 +79,7 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
   };
 
   return (
-    <section class="disk-section disk-section--files" aria-label="Files">
+    <section class="disk-section disk-section--files" aria-label="Files" data-testid="disk-section-files">
       <h3 class="disk-section__title">Files</h3>
       <Show when={props.disk()?.filesConfig?.shareName}>
         <p class="files-section__share">Share name: <strong>{props.disk()?.filesConfig?.shareName}</strong></p>

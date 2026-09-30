@@ -117,7 +117,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
   };
 
   return (
-    <div class="account-screen">
+    <div class="account-screen" data-testid="op-entry">
 
       {/* ── Operator Management sub-view ───────────────────────────────────── */}
       <Show when={subView() === 'operator-mgmt' && isOperator() && props.store && props.connection}>

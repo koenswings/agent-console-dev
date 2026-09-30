@@ -70,7 +70,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
   const [dropTargetDiskId, setDropTargetDiskId] = createSignal<string | null>(null);
 
   return (
-    <nav class="network-tree" aria-label="Network tree">
+    <nav class="network-tree" aria-label="Network tree" data-testid="network-tree">
       <div class="network-tree__header">Network</div>
 
       {/* ── "All apps" row ──────────────────────────────────────── */}
@@ -117,6 +117,8 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           return (
             <Show when={engine()}>
               <div
+                data-testid={`engine-${engineId}`}
+                data-engine-id={engineId}
                 class={`tree-item tree-item--engine ${isSelected('engine', engineId) ? 'tree-item--selected' : ''}`}
                 role="treeitem"
                 tabIndex={0}
@@ -179,6 +181,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     <Show when={cand()}>
                       {(u) => (
                         <div
+                          data-testid={`candidate-${candidateId}`}
                           data-candidate-id={candidateId}
                           data-engine-id={engineId}
                           class={`tree-item tree-item--disk tree-item--unformatted ${isSelected('unformatted', candidateId) && props.selection.engineId === engineId ? 'tree-item--selected' : ''}`}
@@ -267,6 +270,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   return (
                     <Show when={disk()}>
                       <div
+                        data-testid={`disk-${diskId}`}
                         data-disk-id={diskId}
                         class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''} ${isDragOver() && isDragTarget() ? 'tree-item--drag-over' : ''}`}
                         role="treeitem"
@@ -301,6 +305,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                         <Show when={canEject(disk()!)}>
                           <button
                             class="tree-item__eject-btn"
+                            data-testid={`eject-${diskId}`}
                             disabled={isDiskLocked(props.store(), diskId)}
                             title={
                               isDiskLocked(props.store(), diskId)

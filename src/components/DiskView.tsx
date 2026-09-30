@@ -82,7 +82,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
   };
 
   return (
-    <section class="disk-view" aria-label="Disk">
+    <section class="disk-view" aria-label="Disk" data-testid={`disk-view-${props.diskId}`} data-disk-id={props.diskId}>
       <header class="disk-view__header">
         <span class="disk-view__icon" aria-hidden="true">💾</span>
         <span class="disk-view__title">{disk()?.name ?? props.diskId}</span>
