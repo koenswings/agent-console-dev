@@ -333,3 +333,16 @@ Move Confirm → kolibri Exited 143 / docker-missing while store Running.
 | Overview | ALL APPS |
 | Running | `ensureInstanceRunningForOpen` + `waitForSidecarStable` for `pair.instanceId` |
 | Loud-fail | idea#168 citing r22 docker-missing — **no** soft-pass / no demo remap |
+
+## backup_instance ensure Running (r23 FAIL@83)
+
+Product: `isBackupDisabled` → Backup **only** when status === `Running` (Stopped disables).
+Do **not** change product. r23: `stop` then `backup` left Backup disabled.
+
+| Step | Contract |
+|---|---|
+| Id | `resolveStartInstanceId` / `DURATION_START_INSTANCE_ID` |
+| Missing btn | Loud-fail — need linked Backup Disk (`hasBackupDisks`) |
+| Not Running / disabled | `runStartInstance` then wait Backup enabled (`DURATION_BACKUP_SETTLE_MS` ≥90s) |
+| Still disabled | Loud-fail distinguishing Stopped vs locked vs missing Backup Disk |
+| Prefer A | backup-before-stop in walk; Intent also starts if Stopped — **no** soft-pass |

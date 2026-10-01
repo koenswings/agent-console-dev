@@ -13,7 +13,12 @@ import {
   ensureInstanceRunningForOpen,
   waitForSidecarStable,
 } from './openApp';
-import { start_instance, resolveStartInstanceId } from './operatorActions';
+import {
+  start_instance,
+  resolveStartInstanceId,
+  runStartInstance,
+  isInstanceAlreadyRunning,
+} from './operatorActions';
 import { appKindForInstance, sidecarReadyTimeoutMs } from './sidecarUrls';
 import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
@@ -138,16 +143,51 @@ export const open_app: IntentFn = async ({ page, instanceId }) => {
   await openAppInstance(page, id);
 };
 
+/** Budget to get Backup enabled after ensuring Running (DURATION_BACKUP_SETTLE_MS). */
+export function backupSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_BACKUP_SETTLE_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return Math.max(sidecarReadyTimeoutMs(env), 90_000);
+}
+
 /**
- * Backup instance — InstanceRow Back up (requires linked Backup Disk in UI).
+ * Backup instance — requires linked Backup Disk; product enables Backup only when Running.
+ * Prefer A r23: stop→backup left Backup disabled — start if Stopped, wait enable, loud-fail.
+ * Do NOT change product isBackupDisabled (Stopped stays disabled).
  */
 export const backup_instance: IntentFn = async ({ page, instanceId }) => {
   await ensureOpLayout(page);
-  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click().catch(() => {});
+  }
+
+  const preferred = resolveStartInstanceId(instanceId);
+  let id = preferred;
+  try {
+    id = await runStartInstance(page, preferred);
+  } catch (err) {
+    // Start controls may be missing briefly — fall through to Backup checks with preferred id
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/start-instance-.* not found/i.test(msg)) {
+      throw new Error(
+        `idea#168 backup_instance: failed to ensure Running for ${preferred} — ${msg} ` +
+          `r23: Backup requires Running (isBackupDisabled). No soft-pass.`,
+      );
+    }
+  }
+
   const row = page.locator(sel.instance(id));
-  await row.waitFor({ state: 'visible', timeout: 15_000 });
-  // Expand/focus row so actions are visible
-  await row.click();
+  if (!(await row.isVisible().catch(() => false))) {
+    await row.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+  }
+  if (!(await row.isVisible().catch(() => false))) {
+    throw new Error(
+      `idea#168 backup_instance: instance row ${id} not visible on overview/ALL APPS. No soft-pass.`,
+    );
+  }
+  await row.click().catch(() => {});
+
   const btn = page.locator(sel.backupInstance(id));
   if (!(await btn.count())) {
     throw new Error(
@@ -157,11 +197,53 @@ export const backup_instance: IntentFn = async ({ page, instanceId }) => {
     );
   }
   await btn.waitFor({ state: 'visible', timeout: 10_000 });
-  if (await btn.isDisabled()) {
+
+  const budget = backupSettleTimeoutMs();
+  const deadline = Date.now() + budget;
+
+  // Product: Backup enabled only when Running — start if Stopped / disabled
+  if (
+    (await btn.isDisabled().catch(() => true)) ||
+    !(await isInstanceAlreadyRunning(page, id))
+  ) {
+    try {
+      id = await runStartInstance(page, id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `idea#168 backup_instance: could not start ${id} before Backup — ${msg} ` +
+          `r23: stop-before-backup leaves Backup disabled (needs Running). No soft-pass.`,
+      );
+    }
+  }
+
+  while (Date.now() < deadline) {
+    const disabled = await btn.isDisabled().catch(() => true);
+    if (!disabled) break;
+    const title = ((await btn.getAttribute('title')) ?? '').trim();
+    const running = await isInstanceAlreadyRunning(page, id);
+    // Locked / Starting — wait; if Stopped again, re-start once
+    if (!running && Date.now() < deadline - 5_000) {
+      await runStartInstance(page, id).catch(() => {});
+    }
+    await page.waitForTimeout(500);
+    void title;
+  }
+
+  if (await btn.isDisabled().catch(() => true)) {
+    const title = ((await btn.getAttribute('title')) ?? '').trim();
+    const running = await isInstanceAlreadyRunning(page, id);
+    const reason = !running
+      ? 'instance not Running (product disables Backup unless Running — do not Backup after stop)'
+      : title.includes('Operation in progress') || /progress|lock/i.test(title)
+        ? `locked/op in progress (title="${title}")`
+        : `still disabled (title="${title || 'none'}" — locked or Backup Disk link issue)`;
     throw new Error(
-      `idea#168 backup_instance: backup-instance-${id} disabled (status/locked).`,
+      `idea#168 backup_instance: backup-instance-${id} ${reason} after ${budget}ms. ` +
+        `r23: walk must backup-before-stop, or Intent starts then waits for Backup enable. No soft-pass.`,
     );
   }
+
   await btn.click();
 };
 
