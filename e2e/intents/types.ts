@@ -77,7 +77,7 @@ export const CONSOLE_INTENT_NAMES = [
   'change_password',
   'add_operator',
   'remove_operator',
-  // Modal completion only (drag-drop init still needs multi-disk preload)
+  // Multi-disk HTML5 drag + Copy/Move modal (≥2 docked duration disks)
   'copy_app',
   'move_app',
   // Part B — remaining operator edges (ACTIONS.md Pixel-missing operator)

@@ -103,7 +103,7 @@ Registered (fail loud when gated / UI missing):
 `back_to_overview`, `log_out`, `notice_usb_dock`, `retry_login_first_time_setup`,
 `change_password`, `add_operator`, `remove_operator`, `copy_app`, `move_app`.
 
-`copy_app` / `move_app` = Copy/Move modal completion only (loud throw if modal not open).
+`copy_app` / `move_app` = **real** HTML5 drag instance→target disk + Copy/Move modal (loud-fail if <2 docked disks / no copyable instance). See § Multi-disk copy_app preload.
 
 Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 `done_redistribute`, `stay_on_source_disk`, `open_copied_instance`, `switch_engine`
@@ -157,3 +157,21 @@ await page.goto('http://idea01:8080/');
 
 Ops verify: status bar must **not** show `DEMO`; NetworkTree disks are Kid fixtures, not DISK001.
 
+## Multi-disk `copy_app` / `move_app` preload (Axle / Engine)
+
+Hardpass needs **real** NetworkTree drag (not demo DISK001). Prefer A:
+
+| Requirement | Detail |
+|---|---|
+| Console | Engine `:8080`, `demoMode=false` (production web clears stale demo) |
+| Disks | **Both** `duration-kolibri-grade5a-001` **and** `duration-nextcloud-grade5a-001` docked & visible in NetworkTree |
+| Source instance | Card `instance-kolibri-grade5a-001` (default) with `data-copyable="true"` (storedOn set after Path A restore) |
+| Target | Other duration disk row accepts drop |
+| Defaults | Source=kolibri disk+instance → target=nextcloud disk. Flip when `diskId` is nextcloud. |
+| Env overrides | `DURATION_COPY_SOURCE_DISK`, `DURATION_COPY_TARGET_DISK`, `DURATION_COPY_INSTANCE_ID` |
+
+Sequence: select source disk → drag `instance-*` onto target `disk-*` → modal `copy-move-modal` → **Copy** / **Move**.
+
+Loud-fail messages name the missing preload — never silent ok / demo remap.
+
+After copy, walker may use `stay_on_source_disk` / `done_redistribute` / `open_copied_instance`.
