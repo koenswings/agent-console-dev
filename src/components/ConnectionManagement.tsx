@@ -202,7 +202,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
         </div>
 
         {/* Status label */}
-        <p class="onboarding__scan-label">
+        <p class="onboarding__scan-label" data-testid="connection-scan-label">
           <Show when={scanState() === "scanning"}>Scanning for engines…</Show>
           <Show when={scanState() !== "scanning" && results().length === 0}>No engine found</Show>
           <Show when={results().length > 0}>{results().length} engine{results().length > 1 ? "s" : ""} found</Show>
@@ -234,6 +234,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
           fallback={
             <button
               class="onboarding__manual-link"
+              data-testid="connection-manual-link"
               onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
             >
               Enter hostname manually ›
@@ -244,6 +245,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
             <input
               class="form-field__input"
               type="text"
+              data-testid="connection-manual-host"
               placeholder="idea01, 192.168.1.10, or host:8080"
               value={manualInput()}
               onInput={(e) => setManualInput(e.currentTarget.value)}

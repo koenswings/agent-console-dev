@@ -1034,9 +1034,183 @@ export const open_copied_instance: IntentFn = async ({ page, instanceId }) => {
 };
 
 /**
- * Switch Engine — Prefer A: Settings → Change Engine… → ConnectionManagement → Connect.
- * Opens real picker (not status-only). Host: DURATION_SWITCH_ENGINE_HOST or first
- * discovered connect-engine-* (reconnect same Engine is ok Prefer A settle).
+ * Prefer A r39: wait while ConnectionManagement "Scanning for engines…"
+ * (discovery probes ~5s+; r39 FAIL@98 aborted in 424ms).
+ */
+export function switchEngineScanTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_SWITCH_ENGINE_SCAN_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 45_000;
+}
+
+const normalizeSwitchHost = (h: string): string =>
+  h.trim().replace(/^https?:\/\//i, '').replace(/:\d+$/, '').replace(/\.local$/i, '');
+
+const discoveredConnectBtns = (page: import('@playwright/test').Page) =>
+  page.locator(
+    '[data-testid^="connect-engine-"]:not([data-testid="connect-engine-manual"])',
+  );
+
+async function describeSwitchEngineUi(
+  page: import('@playwright/test').Page,
+): Promise<string> {
+  const label = (
+    (await page.locator(sel.connectionScanLabel).textContent().catch(() => null)) ??
+    (await page.locator('.onboarding__scan-label').textContent().catch(() => null)) ??
+    ''
+  ).trim();
+  const n = await discoveredConnectBtns(page).count();
+  const manualOpen = await page.locator(sel.connectionManualHost).isVisible().catch(() => false);
+  return `scanLabel="${label}" connectButtons=${n} manualOpen=${manualOpen}`;
+}
+
+/** Host from env, else status-bar hostname/IP (current Engine — Prefer A reconnect). */
+export async function resolveSwitchEngineHost(
+  page: import('@playwright/test').Page,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  const fromEnv =
+    env.DURATION_SWITCH_ENGINE_HOST?.trim() ||
+    env.DURATION_ENGINE_HOST?.trim() ||
+    '';
+  if (fromEnv) return normalizeSwitchHost(fromEnv);
+
+  const statusText = (
+    (await page.locator(sel.statusBarHostname).textContent().catch(() => null)) ??
+    (await page.locator(`${sel.statusBarIndicator} span`).last().textContent().catch(() => null)) ??
+    ''
+  ).trim();
+  if (statusText && !/connecting|searching|demo|offline|disconnected/i.test(statusText)) {
+    const m = statusText.match(
+      /\b(idea\d+|appdocker\d+|engine\d+|\d{1,3}(?:\.\d{1,3}){3})\b/i,
+    );
+    if (m) return normalizeSwitchHost(m[1]!);
+    if (/^[\w.-]+$/.test(statusText)) return normalizeSwitchHost(statusText);
+  }
+  return '';
+}
+
+async function waitForEngineDiscoverySettle(
+  page: import('@playwright/test').Page,
+  budgetMs: number,
+): Promise<'found' | 'empty' | 'timeout'> {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (await discoveredConnectBtns(page).count()) return 'found';
+    const label = (
+      (await page.locator(sel.connectionScanLabel).textContent().catch(() => null)) ??
+      (await page.locator('.onboarding__scan-label').textContent().catch(() => null)) ??
+      ''
+    ).trim();
+    if (/no engine found/i.test(label)) return 'empty';
+    // Still "Scanning…" or refreshing — keep waiting (r39 Prefer A)
+    await page.waitForTimeout(400);
+  }
+  if (await discoveredConnectBtns(page).count()) return 'found';
+  const label = (
+    (await page.locator(sel.connectionScanLabel).textContent().catch(() => null)) ?? ''
+  ).trim();
+  if (/no engine found/i.test(label)) return 'empty';
+  return 'timeout';
+}
+
+async function clickDiscoveredEngine(
+  page: import('@playwright/test').Page,
+  target: string,
+): Promise<boolean> {
+  if (target) {
+    const btn = page.locator(sel.connectEngine(target));
+    if (await btn.count()) {
+      await btn.click();
+      return true;
+    }
+    // IP vs idea01: match row text
+    const row = page
+      .locator('.engine-picker__item')
+      .filter({ hasText: new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+    if (await row.count()) {
+      await row.locator('button').filter({ hasText: /connect/i }).first().click();
+      return true;
+    }
+    // Prefer idea01-ish when target is IP and list has idea01
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(target)) {
+      const idea = page.locator(sel.connectEngine('idea01'));
+      if (await idea.count()) {
+        await idea.click();
+        return true;
+      }
+    }
+    return false;
+  }
+  // No target: prefer idea01 / idea0x then first Connect
+  for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+    const btn = page.locator(sel.connectEngine(name));
+    if (await btn.count()) {
+      await btn.click();
+      return true;
+    }
+  }
+  const first = discoveredConnectBtns(page).first();
+  if (await first.count()) {
+    await first.click();
+    return true;
+  }
+  return false;
+}
+
+async function connectEngineManually(
+  page: import('@playwright/test').Page,
+  host: string,
+): Promise<void> {
+  if (!(await page.locator(sel.connectionManualHost).isVisible().catch(() => false))) {
+    const link = page.locator(sel.connectionManualLink);
+    if (!(await link.count())) {
+      throw new Error(
+        'idea#168 switch_engine: manual hostname link missing (connection-manual-link). Prefer A.',
+      );
+    }
+    await link.click();
+  }
+  const input = page.locator(sel.connectionManualHost);
+  await input.waitFor({ state: 'visible', timeout: 5_000 });
+  await input.fill(host);
+  const manualBtn = page.locator(sel.connectEngineManual);
+  await manualBtn.waitFor({ state: 'visible', timeout: 5_000 });
+  if (await manualBtn.isDisabled().catch(() => false)) {
+    throw new Error(
+      `idea#168 switch_engine: connect-engine-manual disabled after filling "${host}". Prefer A.`,
+    );
+  }
+  await manualBtn.click();
+  // Probe may take up to ~5s; wait for CM to close or error
+  const err = page.locator('.onboarding__manual-error');
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (await err.isVisible().catch(() => false)) {
+      const msg = ((await err.textContent()) ?? '').trim();
+      throw new Error(
+        `idea#168 switch_engine: manual Connect to "${host}" failed — "${msg}". ` +
+          `Set DURATION_SWITCH_ENGINE_HOST=idea01 (or Tailscale IP). Prefer A.`,
+      );
+    }
+    if (!(await page.locator(sel.connectionManagement).isVisible().catch(() => false))) {
+      return;
+    }
+    // Still connecting…
+    await page.waitForTimeout(400);
+  }
+  // CM still open — may have populated discovery siblings; try click if present
+  if (await clickDiscoveredEngine(page, normalizeSwitchHost(host))) return;
+  throw new Error(
+    `idea#168 switch_engine: manual Connect to "${host}" did not settle in 30s. ` +
+      `${await describeSwitchEngineUi(page)}. Prefer A.`,
+  );
+}
+
+/**
+ * Switch Engine — Prefer A r39: Settings → Change Engine… → wait discovery settle
+ * → connect-engine-* or manual hostname (DURATION_SWITCH_ENGINE_HOST / status-bar).
+ * Never abort while "Scanning for engines…" (~424ms r39 FAIL).
  */
 export const switch_engine: IntentFn = async ({ page }) => {
   if (!(await page.locator(sel.settingsPanel).isVisible().catch(() => false))) {
@@ -1046,6 +1220,9 @@ export const switch_engine: IntentFn = async ({ page }) => {
   const tab = page.locator(sel.settingsTabEngine);
   if (await tab.count()) await tab.click();
   await page.locator(sel.settingsEngineStatus).waitFor({ state: 'visible', timeout: 5_000 });
+
+  // Capture current host before leaving Settings (status bar survives)
+  const target = await resolveSwitchEngineHost(page);
 
   const changeBtn = page.locator(sel.switchEngineConnect);
   if (!(await changeBtn.count())) {
@@ -1063,43 +1240,44 @@ export const switch_engine: IntentFn = async ({ page }) => {
     );
   }
 
-  const target = process.env.DURATION_SWITCH_ENGINE_HOST?.trim()?.replace(/\.local$/i, '') || '';
-  if (target) {
-    const btn = page.locator(sel.connectEngine(target));
-    if (await btn.count()) {
-      await btn.click();
+  const scanBudget = switchEngineScanTimeoutMs();
+  const settle = await waitForEngineDiscoverySettle(page, scanBudget);
+  const ui = await describeSwitchEngineUi(page);
+
+  if (settle === 'found' || (await discoveredConnectBtns(page).count()) > 0) {
+    if (await clickDiscoveredEngine(page, target)) {
+      // Best-effort: picker closes after Connect
+      await page
+        .locator(sel.connectionManagement)
+        .waitFor({ state: 'hidden', timeout: 30_000 })
+        .catch(() => {});
       return;
     }
-    const row = page.locator('.engine-picker__item').filter({ hasText: new RegExp(target, 'i') });
-    if (await row.count()) {
-      await row.locator('button').filter({ hasText: /connect/i }).click();
+    if (target) {
+      // Discovered list present but no match — Prefer A manual with target
+      await connectEngineManually(page, target);
       return;
     }
     throw new Error(
-      `idea#168 switch_engine: DURATION_SWITCH_ENGINE_HOST=${target} not in discovery list ` +
-        '(no matching connect-engine-* / engine-picker row).',
+      `idea#168 switch_engine: Connect buttons visible but none matched. ${ui}. ` +
+        `Set DURATION_SWITCH_ENGINE_HOST=idea01 (or Tailscale IP). Prefer A — no soft-pass.`,
     );
   }
 
-  const discovered = page.locator('[data-testid^="connect-engine-"]:not([data-testid="connect-engine-manual"])');
-  if (await discovered.count()) {
-    await discovered.first().click();
-    return;
+  // Discovery empty / still scanning after budget — Prefer A manual path
+  const host =
+    target ||
+    (await resolveSwitchEngineHost(page)) ||
+    '';
+  if (!host) {
+    throw new Error(
+      `idea#168 switch_engine: discovery ${settle} after ${scanBudget}ms with no Connect buttons ` +
+        `and no host for manual Connect. ${ui}. ` +
+        `Prefer A: set DURATION_SWITCH_ENGINE_HOST=idea01 (or Tailscale IP e.g. 100.x). ` +
+        `Do not abort while Scanning — use DURATION_SWITCH_ENGINE_SCAN_MS (default 45s).`,
+    );
   }
-  // Manual host fallback (env or typed)
-  const manualHost = process.env.DURATION_ENGINE_HOST?.trim();
-  if (manualHost && (await page.locator(sel.connectEngineManual).count())) {
-    const input = page.locator('.engine-picker input, input[placeholder*="host" i], input[name="hostname"]').first();
-    if (await input.count()) {
-      await input.fill(manualHost);
-      await page.locator(sel.connectEngineManual).click();
-      return;
-    }
-  }
-  throw new Error(
-    'idea#168 switch_engine: ConnectionManagement open but no Connect buttons / discovery empty. ' +
-      'Set DURATION_SWITCH_ENGINE_HOST or ensure Engine discovery finds ≥1 host. Prefer A — no soft-pass.',
-  );
+  await connectEngineManually(page, host);
 };
 
 /**

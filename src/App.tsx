@@ -398,7 +398,7 @@ const App: Component = () => {
         <span class="status-bar__title">IDEA Console <span class="status-bar__version">v{pkg.version}</span></span>
         <div class="status-bar__indicator" data-testid="status-bar-indicator">
           <span class={`status-bar__dot ${dotClass()}`} />
-          <span>{statusLabel()}</span>
+          <span data-testid="status-bar-hostname">{statusLabel()}</span>
         </div>
 
         <Show when={demo()}>
