@@ -274,3 +274,18 @@ soft-ok while **"checking…"**; kolibri gone → `eject_disk` default failed.
 | `erase_disk` | `ensureEmptyDiskPanel` first — **never** Grade5A. Loud-fail if no empty (`DURATION_EMPTY_DISK_ID` / `duration-empty-001`). Then `erase-this-disk`. |
 | `confirm_erase` | Wait for confirm field → type label → OK → wait for `erase-complete` / Done (≤180s). **No soft-pass** on checking… |
 | `eject_disk` | If preferred disk missing (erased), discover surviving ejectable row; loud-fail with visible disk ids. |
+
+## start_instance already Running (r17 FAIL@77)
+
+Path A `kolibri-grade5a-001` may already be **Running** (green + Open ↗) so Start is
+correctly disabled. Intent must **no-op PASS**, not hard-click Start.
+
+| Detail | Contract |
+|---|---|
+| Default id | `kolibri-grade5a-001` — override `DURATION_START_INSTANCE_ID` |
+| Already Running | Detect Open ↗ / StatusDot Running / Start disabled+Stop enabled → **PASS no-op** |
+| Force restart | `DURATION_START_FORCE_RESTART=1` → Stop then Start |
+| Loud-fail | Not running **and** Start disabled (locked) |
+| Discovery | Prefer Path A `*grade5a*` testids — not zombie `kolibri-1.0-duration*` rows |
+| `stop_instance` | Symmetric no-op when already Stopped |
+| `start_after_install` | Reuses `start_instance` (same contract) |

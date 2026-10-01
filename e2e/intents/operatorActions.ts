@@ -270,22 +270,213 @@ export const confirm_erase: IntentFn = async ({ page }) => {
   );
 };
 
+/**
+ * Prefer A Path A instance id (not zombie kolibri-1.0-duration*).
+ * Env: DURATION_START_INSTANCE_ID overrides ctx / kolibri-grade5a-001.
+ */
+export function resolveStartInstanceId(
+  instanceId?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return (
+    env.DURATION_START_INSTANCE_ID?.trim() ||
+    instanceId ||
+    DURATION_FIXTURES.kolibri.instanceId
+  );
+}
+
+const forceRestart = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  /^(1|true|yes)$/i.test(env.DURATION_START_FORCE_RESTART?.trim() ?? '');
+
+/** Closest InstanceRow ancestor for a control on that row. */
+const instanceRowFor = (page: Page, controlSel: string) =>
+  page.locator(controlSel).locator('xpath=ancestor::*[contains(@class,"instance-row")][1]');
+
+/**
+ * True when Path A instance looks Running (Open ↗, green StatusDot, or
+ * Start disabled + Stop enabled with title Start app).
+ */
+export async function isInstanceAlreadyRunning(
+  page: Page,
+  id: string,
+): Promise<boolean> {
+  if (await page.locator(sel.openInstance(id)).isVisible().catch(() => false)) {
+    return true;
+  }
+  const row = instanceRowFor(page, sel.startInstance(id));
+  if (await row.locator('.status-dot--running, [aria-label="Status: Running"]').count()) {
+    return true;
+  }
+  if (await row.locator('[aria-label="Status: Starting"], .status-dot--starting').count()) {
+    return true;
+  }
+  const start = page.locator(sel.startInstance(id));
+  const stop = page.locator(sel.stopInstance(id));
+  if (!(await start.count())) return false;
+  const startDis = await start.isDisabled().catch(() => false);
+  const stopDis = await stop.isDisabled().catch(() => true);
+  const title = ((await start.getAttribute('title')) ?? '').trim();
+  // Running/Starting disable Start with title "Start app" (not "Operation in progress")
+  if (startDis && !stopDis && (title === 'Start app' || title === '')) return true;
+  return false;
+}
+
+export async function isInstanceAlreadyStopped(
+  page: Page,
+  id: string,
+): Promise<boolean> {
+  const row = instanceRowFor(page, sel.stopInstance(id));
+  if (await row.locator('.status-dot--stopped, [aria-label="Status: Stopped"]').count()) {
+    return true;
+  }
+  if (await row.locator('.status-dot--undocked, [aria-label="Status: Undocked"]').count()) {
+    return true;
+  }
+  const start = page.locator(sel.startInstance(id));
+  const stop = page.locator(sel.stopInstance(id));
+  if (!(await stop.count())) return false;
+  const stopDis = await stop.isDisabled().catch(() => false);
+  const startDis = await start.isDisabled().catch(() => true);
+  // Stopped: Stop disabled, Start enabled
+  if (stopDis && !startDis) return true;
+  if (await page.locator(sel.openInstance(id)).isVisible().catch(() => false)) {
+    return false;
+  }
+  return stopDis;
+}
+
+/**
+ * Prefer Path A id on tree; if missing, discover start-instance-* with grade5a
+ * (never pick arbitrary zombie kolibri-1.0-duration rows as the primary target).
+ */
+async function resolveVisibleStartInstanceId(
+  page: Page,
+  preferred: string,
+): Promise<string> {
+  if (await page.locator(sel.startInstance(preferred)).count()) {
+    return preferred;
+  }
+  const grade5a = page.locator('[data-testid^="start-instance-"][data-testid*="grade5a"]');
+  if (await grade5a.count()) {
+    const tid = await grade5a.first().getAttribute('data-testid');
+    const id = tid?.replace(/^start-instance-/, '') ?? '';
+    if (id) return id;
+  }
+  // List visible start buttons for loud-fail
+  const all = page.locator('[data-testid^="start-instance-"]');
+  const n = await all.count();
+  const ids: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const tid = await all.nth(i).getAttribute('data-testid');
+    if (tid) ids.push(tid.replace(/^start-instance-/, ''));
+  }
+  throw new Error(
+    `idea#168 start_instance: [data-testid="start-instance-${preferred}"] not found. ` +
+      `Prefer Path A (kolibri-grade5a-001); visible start-instance ids=[${ids.join(', ')}]. ` +
+      `Set DURATION_START_INSTANCE_ID. Do not target zombie kolibri-1.0-duration* rows. No soft-pass.`,
+  );
+}
+
+/**
+ * Start instance — Prefer A: no-op PASS if already Running (Start correctly disabled).
+ * Loud-fail only when not running and Start disabled. Optional force restart via
+ * DURATION_START_FORCE_RESTART=1.
+ */
 export const start_instance: IntentFn = async ({ page, instanceId }) => {
   await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first()
     .waitFor({ state: 'visible', timeout: 15_000 });
-  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+
+  const preferred = resolveStartInstanceId(instanceId);
+  const id = await resolveVisibleStartInstanceId(page, preferred);
   const btn = page.locator(sel.startInstance(id));
   await btn.waitFor({ state: 'visible', timeout: 15_000 });
+
+  const running = await isInstanceAlreadyRunning(page, id);
+  if (running && !forceRestart()) {
+    // Already Running — Start disabled is correct; Path A PASS / no-op
+    return;
+  }
+
+  if (running && forceRestart()) {
+    const stopBtn = page.locator(sel.stopInstance(id));
+    if (await stopBtn.isDisabled().catch(() => true)) {
+      throw new Error(
+        `idea#168 start_instance: DURATION_START_FORCE_RESTART set but stop-instance-${id} disabled.`,
+      );
+    }
+    await stopBtn.click();
+    // Wait until Start enabled / Stop disabled
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      if (await isInstanceAlreadyStopped(page, id)) break;
+      if (!(await btn.isDisabled().catch(() => true))) break;
+      await page.waitForTimeout(400);
+    }
+  }
+
+  if (await btn.isDisabled().catch(() => false)) {
+    const title = ((await btn.getAttribute('title')) ?? '').trim();
+    const stillRunning = await isInstanceAlreadyRunning(page, id);
+    if (stillRunning && !forceRestart()) return;
+    throw new Error(
+      `idea#168 start_instance: start-instance-${id} disabled (title="${title}") ` +
+        `while instance is not Running — cannot start. ` +
+        `If already Running this is a no-op (unset DURATION_START_FORCE_RESTART). No soft-pass.`,
+    );
+  }
+
   await btn.click();
+
+  // Brief wait for Starting → Running (Open ↗) when possible
+  const open = page.locator(sel.openInstance(id));
+  try {
+    await open.waitFor({ state: 'visible', timeout: 60_000 });
+  } catch {
+    // Some installs Start without Open immediately — accept Start becoming disabled + Running
+    if (await isInstanceAlreadyRunning(page, id)) return;
+    if (await btn.isDisabled().catch(() => false)) return;
+    throw new Error(
+      `idea#168 start_instance: clicked Start on ${id} but instance did not become Running ` +
+        `(no open-instance-${id}, Start still enabled). No soft-pass.`,
+    );
+  }
 };
 
+/**
+ * Stop instance — Prefer A: no-op PASS if already Stopped (Stop correctly disabled).
+ * Loud-fail if Running/Starting but Stop disabled (locked).
+ */
 export const stop_instance: IntentFn = async ({ page, instanceId }) => {
   await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first()
     .waitFor({ state: 'visible', timeout: 15_000 });
-  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+
+  const preferred = resolveStartInstanceId(instanceId);
+  const id = await resolveVisibleStartInstanceId(page, preferred);
   const btn = page.locator(sel.stopInstance(id));
   await btn.waitFor({ state: 'visible', timeout: 15_000 });
+
+  if (await isInstanceAlreadyStopped(page, id)) {
+    return;
+  }
+
+  if (await btn.isDisabled().catch(() => false)) {
+    const title = ((await btn.getAttribute('title')) ?? '').trim();
+    throw new Error(
+      `idea#168 stop_instance: stop-instance-${id} disabled (title="${title}") ` +
+        `while instance is not Stopped — cannot stop (locked?). No soft-pass.`,
+    );
+  }
+
   await btn.click();
+
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    if (await isInstanceAlreadyStopped(page, id)) return;
+    await page.waitForTimeout(400);
+  }
+  throw new Error(
+    `idea#168 stop_instance: clicked Stop on ${id} but instance still looks Running after 60s.`,
+  );
 };
 
 export const open_account: IntentFn = async ({ page }) => {
