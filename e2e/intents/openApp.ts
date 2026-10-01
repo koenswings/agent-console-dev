@@ -118,6 +118,50 @@ export async function waitForSidecarHttpReady(
 }
 
 /**
+ * Prefer A r22: require consecutive successful sidecar polls so delayed SIGTERM
+ * after restore/move does not race a single lucky 2xx.
+ */
+export async function waitForSidecarStable(
+  consolePage: Page,
+  app: SidecarApp,
+  opts: { consecutive?: number; intervalMs?: number; budgetMs?: number } = {},
+): Promise<string> {
+  const need = opts.consecutive ?? 3;
+  const intervalMs = opts.intervalMs ?? 1_500;
+  const budget = opts.budgetMs ?? sidecarReadyTimeoutMs();
+  const base = resolveSidecarUrl(app, consolePage.url());
+  const deadline = Date.now() + Math.max(budget, need * intervalMs);
+  let streak = 0;
+  let last = 'no-attempt';
+  while (Date.now() < deadline) {
+    try {
+      const resp = await consolePage.request.get(base, {
+        timeout: 5_000,
+        maxRedirects: 0,
+        failOnStatusCode: false,
+      });
+      const status = resp.status();
+      if (isSidecarHttpReadyStatus(status)) {
+        streak += 1;
+        last = `HTTP ${status} streak=${streak}/${need}`;
+        if (streak >= need) return base;
+      } else {
+        streak = 0;
+        last = `HTTP ${status}`;
+      }
+    } catch (err) {
+      streak = 0;
+      last = err instanceof Error ? err.message : String(err);
+    }
+    await consolePage.waitForTimeout(intervalMs);
+  }
+  throw new Error(
+    `idea#168 sidecar not stable: ${base} need ${need} consecutive ready polls ` +
+      `within ${budget}ms (last=${last}). Delayed SIGTERM after restore/move (r22). No soft-pass.`,
+  );
+}
+
+/**
  * Path B: wait sidecar HTTP ready → goto base URL.
  * Opens a new page in the Console context so Console UI stays available.
  */

@@ -308,15 +308,28 @@ r19: Automerge **Running ≠ sidecar up** (ghost Running after move_app docker-m
 | Engine | failAfter=1 on docker-missing welcome belt (no Console change) |
 | Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` share `openAppInstance` |
 
-## restore_from_backup settle (r21 FAIL@68)
+## restore_from_backup settle (r21/r22)
 
 After Confirm, restore may **SIGTERM** kolibri (exit 143) while Automerge stays Running
-→ Engine docker-missing before `move_app`.
+→ Engine docker-missing before `move_app`. r22: unlock ~3.4s raced delayed SIGTERM.
 
 | Step | Contract |
 |---|---|
 | Confirm | Wait `restore-confirm-*` hidden |
-| Unlock | Wait Restore btn leave "Operation in progress" (`DURATION_RESTORE_SETTLE_MS`, default ≥120s) |
-| Overview | ALL APPS / opOverview so instance cards visible |
-| Running | `ensureInstanceRunningForOpen` — ghost Running → force-restart + sidecar HTTP ready |
+| Unlock | Wait Restore leave "Operation in progress" (`DURATION_RESTORE_SETTLE_MS` ≥120s) |
+| Min dwell | `DURATION_RESTORE_MIN_DWELL_MS` default **10s** after Confirm (not unlock-alone) |
+| Overview | ALL APPS / opOverview |
+| Running | `ensureInstanceRunningForOpen` + `waitForSidecarStable` (3 consecutive polls) |
 | Loud-fail | Settle/sidecar timeout — **no** soft-pass / no demo remap |
+
+## copy_app / move_app settle (r22 FAIL@71)
+
+Move Confirm → kolibri Exited 143 / docker-missing while store Running.
+
+| Step | Contract |
+|---|---|
+| Confirm | Modal hidden |
+| Quiet + min dwell | ≥8s after Confirm; `DURATION_COPY_MOVE_SETTLE_MS` ≥120s budget |
+| Overview | ALL APPS |
+| Running | `ensureInstanceRunningForOpen` + `waitForSidecarStable` for `pair.instanceId` |
+| Loud-fail | idea#168 citing r22 docker-missing — **no** soft-pass / no demo remap |

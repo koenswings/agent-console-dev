@@ -11,6 +11,7 @@ import { DURATION_FIXTURES } from './fixtures';
 import {
   openAppInstance,
   ensureInstanceRunningForOpen,
+  waitForSidecarStable,
 } from './openApp';
 import { start_instance, resolveStartInstanceId } from './operatorActions';
 import { appKindForInstance, sidecarReadyTimeoutMs } from './sidecarUrls';
@@ -269,14 +270,22 @@ export function restoreSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): nu
   return Math.max(sidecarReadyTimeoutMs(env), 120_000);
 }
 
+/** Min wall-clock after Confirm before settle may return (r22: unlock ~3.4s raced SIGTERM). */
+export function restoreMinDwellMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_RESTORE_MIN_DWELL_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(0, Number(raw));
+  return 10_000;
+}
+
 /**
- * After Confirm Restore: wait unlock, return to overview, ensure real Running + sidecar.
- * Prefer A r21: restore SIGTERM leaves Automerge ghost Running → docker-missing on move_app.
+ * After Confirm Restore: wait unlock + min dwell, overview, Running+stable sidecar.
+ * Prefer A r21/r22: async SIGTERM after unlock — do not return in ~3s.
  */
 export async function settleAfterRestoreConfirm(
   page: Page,
   linkedId: string,
 ): Promise<void> {
+  const confirmedAt = Date.now();
   const confirm = page.locator(sel.restoreConfirm(linkedId));
   try {
     await confirm.waitFor({ state: 'hidden', timeout: 15_000 });
@@ -299,10 +308,8 @@ export async function settleAfterRestoreConfirm(
         await page.waitForTimeout(500);
         continue;
       }
-      // Unlocked — restore command finished (or never locked briefly)
       break;
     }
-    // Confirm cleared; btn may briefly be absent while confirmingId flips
     await page.waitForTimeout(400);
   }
   if (sawProgress && Date.now() >= deadline) {
@@ -311,8 +318,13 @@ export async function settleAfterRestoreConfirm(
         `(instance=${linkedId}). Docker/store did not settle. No soft-pass.`,
     );
   }
-  // Brief quiet even if lock was too fast to observe
-  await page.waitForTimeout(800);
+
+  // Min dwell — unlock alone is not enough (r22 ~3.4s before delayed SIGTERM)
+  const minDwell = restoreMinDwellMs();
+  const elapsed = Date.now() - confirmedAt;
+  if (elapsed < minDwell) {
+    await page.waitForTimeout(minDwell - elapsed);
+  }
 
   // Back to Operator overview / ALL APPS so instance cards are visible
   if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
@@ -327,17 +339,40 @@ export async function settleAfterRestoreConfirm(
     await allApps.click().catch(() => {});
   }
 
-  // Ghost Running after restore SIGTERM — force-restart + sidecar HTTP (same as open_app r19)
   const kind = appKindForInstance(linkedId);
+  const remaining = () => Math.max(5_000, deadline - Date.now());
   try {
     await ensureInstanceRunningForOpen(page, linkedId, kind);
+    await waitForSidecarStable(page, kind, {
+      consecutive: 3,
+      intervalMs: 1_500,
+      budgetMs: remaining(),
+    });
+    // If docker dies mid-stability window, one more force cycle within budget
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `idea#168 restore_from_backup: post-Confirm settle failed for ${linkedId} — ${msg} ` +
-        `r21: restore may SIGTERM while Automerge stays Running; must force-restart + sidecar ready ` +
-        `before move_app. No soft-pass / no demo remap.`,
-    );
+    if (Date.now() >= deadline) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `idea#168 restore_from_backup: post-Confirm settle failed for ${linkedId} — ${msg} ` +
+          `r22: async SIGTERM after unlock; need min dwell + stable sidecar before move_app. ` +
+          `No soft-pass / no demo remap.`,
+      );
+    }
+    try {
+      await ensureInstanceRunningForOpen(page, linkedId, kind);
+      await waitForSidecarStable(page, kind, {
+        consecutive: 3,
+        intervalMs: 1_500,
+        budgetMs: remaining(),
+      });
+    } catch (err2) {
+      const msg = err2 instanceof Error ? err2.message : String(err2);
+      throw new Error(
+        `idea#168 restore_from_backup: post-Confirm settle failed for ${linkedId} — ${msg} ` +
+          `r22: async SIGTERM after unlock; need min dwell + stable sidecar before move_app. ` +
+          `No soft-pass / no demo remap.`,
+      );
+    }
   }
 }
 

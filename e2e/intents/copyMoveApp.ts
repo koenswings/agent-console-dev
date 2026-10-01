@@ -12,6 +12,11 @@ import type { Page } from '@playwright/test';
 import type { IntentContext, IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
+import {
+  ensureInstanceRunningForOpen,
+  waitForSidecarStable,
+} from './openApp';
+import { appKindForInstance, sidecarReadyTimeoutMs } from './sidecarUrls';
 
 export interface CopyMovePair {
   sourceDiskId: string;
@@ -111,6 +116,84 @@ export async function dragInstanceOntoDisk(
   }
 }
 
+/** Settle budget after copy/move Confirm (DURATION_COPY_MOVE_SETTLE_MS). */
+export function copyMoveSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_COPY_MOVE_SETTLE_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return Math.max(sidecarReadyTimeoutMs(env), 120_000);
+}
+
+/**
+ * After Copy/Move Confirm: quiet → overview → Running + stable sidecar.
+ * Prefer A r22: move SIGTERM / docker-missing while store stays Running.
+ */
+export async function settleAfterCopyMoveConfirm(
+  page: Page,
+  pair: CopyMovePair,
+): Promise<void> {
+  const intent = pair.op === 'copy' ? 'copy_app' : 'move_app';
+  const budget = copyMoveSettleTimeoutMs();
+  const deadline = Date.now() + budget;
+  const confirmedAt = Date.now();
+
+  // Brief quiet / any in-progress chrome
+  await page.waitForTimeout(1_000);
+  const progress = page.getByText(/operation in progress|moving|copying/i).first();
+  while (Date.now() < deadline) {
+    if (!(await progress.isVisible().catch(() => false))) break;
+    await page.waitForTimeout(500);
+  }
+
+  // Min dwell so delayed docker death is visible before we declare settle
+  const minDwell = 8_000;
+  const elapsed = Date.now() - confirmedAt;
+  if (elapsed < minDwell) {
+    await page.waitForTimeout(minDwell - elapsed);
+  }
+
+  // Overview / ALL APPS — instance cards (after move: same instanceId on target)
+  await ensureOp(page);
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click().catch(() => {});
+  }
+
+  const kind = appKindForInstance(pair.instanceId);
+  const remaining = () => Math.max(5_000, deadline - Date.now());
+
+  const settleOnce = async () => {
+    await ensureInstanceRunningForOpen(page, pair.instanceId, kind);
+    await waitForSidecarStable(page, kind, {
+      consecutive: 3,
+      intervalMs: 1_500,
+      budgetMs: remaining(),
+    });
+  };
+
+  try {
+    await settleOnce();
+  } catch (err) {
+    if (Date.now() >= deadline) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `idea#168 ${intent}: post-Confirm settle failed for ${pair.instanceId} — ${msg} ` +
+          `r22: Move/Copy Confirm may SIGTERM (exit 143) while Automerge stays Running → ` +
+          `docker-missing; force-restart + stable sidecar required. No soft-pass / no demo remap.`,
+      );
+    }
+    try {
+      await settleOnce();
+    } catch (err2) {
+      const msg = err2 instanceof Error ? err2.message : String(err2);
+      throw new Error(
+        `idea#168 ${intent}: post-Confirm settle failed for ${pair.instanceId} — ${msg} ` +
+          `r22: Move/Copy Confirm may SIGTERM (exit 143) while Automerge stays Running → ` +
+          `docker-missing; force-restart + stable sidecar required. No soft-pass / no demo remap.`,
+      );
+    }
+  }
+}
+
 const runCopyOrMove = async (ctx: IntentContext, op: 'copy' | 'move'): Promise<void> => {
   const intent = op === 'copy' ? 'copy_app' : 'move_app';
   const { page } = ctx;
@@ -191,7 +274,14 @@ const runCopyOrMove = async (ctx: IntentContext, op: 'copy' | 'move'): Promise<v
   const confirmBtn =
     op === 'copy' ? page.locator(sel.copyMoveCopy) : page.locator(sel.copyMoveMove);
   await confirmBtn.click();
-  await modal.waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => {});
+  try {
+    await modal.waitFor({ state: 'hidden', timeout: 20_000 });
+  } catch {
+    throw new Error(
+      `idea#168 ${intent}: copy-move-modal still visible after Confirm. No soft-pass.`,
+    );
+  }
+  await settleAfterCopyMoveConfirm(page, pair);
 };
 
 export const copy_app: IntentFn = async (ctx) => runCopyOrMove(ctx, 'copy');
