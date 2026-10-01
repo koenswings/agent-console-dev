@@ -83,7 +83,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
   };
 
   return (
-    <section class="restore-panel" aria-label="Backup disk restore">
+    <section class="restore-panel" aria-label="Backup disk restore" data-testid="restore-panel">
       <header class="restore-panel__header">
         <span class="restore-panel__disk-icon">🗄</span>
         <div>
@@ -126,7 +126,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                 };
 
                 return (
-                  <div class="restore-panel__instance-row">
+                  <div class="restore-panel__instance-row" data-testid={`restore-instance-${inst.id}`}>
                     <div class="restore-panel__instance-info">
                       <span class="restore-panel__instance-name">{inst.name}</span>
                       <span class="restore-panel__instance-backup">
@@ -140,6 +140,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                     }>
                       <select
                         class="restore-panel__target-select"
+                        data-testid={`restore-target-${inst.id}`}
                         value={selectedDiskId()}
                         disabled={locked() || isConfirming()}
                         onChange={(e) => setTarget(inst.id, e.currentTarget.value)}
@@ -157,6 +158,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                     <Show when={!isConfirming()}>
                       <button
                         class="btn"
+                        data-testid={`restore-btn-${inst.id}`}
                         disabled={locked() || !selectedDiskId()}
                         onClick={() => handleRestoreClick(inst.id)}
                       >
@@ -171,8 +173,8 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                           Are you sure? This will overwrite <strong>{inst.name}</strong> on <strong>{selectedDiskName()}</strong>.
                         </p>
                         <div class="restore-panel__confirm-actions">
-                          <button class="btn" onClick={handleCancel}>Cancel</button>
-                          <button class="btn btn--danger" onClick={() => handleConfirm(inst)}>
+                          <button class="btn" data-testid={`restore-cancel-${inst.id}`} onClick={handleCancel}>Cancel</button>
+                          <button class="btn btn--danger" data-testid={`restore-confirm-${inst.id}`} onClick={() => handleConfirm(inst)}>
                             Confirm Restore
                           </button>
                         </div>

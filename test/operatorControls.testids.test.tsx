@@ -23,7 +23,7 @@ describe('Operator control data-testid (idea#166 Phase 4)', () => {
     expect(container.querySelector('[data-testid="eject-confirm-ok"]')).not.toBeNull();
   });
 
-  it('EmptyDiskPanel exposes make-files-disk', () => {
+  it('EmptyDiskPanel exposes make-files-disk + make-backup-disk + install-app', () => {
     const empty: Disk = {
       ...(MOCK_FILES_STORE.diskDB[I.FA_GONE] as Disk),
       diskTypes: ['empty'],
@@ -38,6 +38,8 @@ describe('Operator control data-testid (idea#166 Phase 4)', () => {
       />
     ));
     expect(container.querySelector('[data-testid="make-files-disk"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="make-backup-disk"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="install-app"]')).not.toBeNull();
     expect(screen.getByText('Make this a Files Disk')).toBeInTheDocument();
   });
 
@@ -76,4 +78,25 @@ describe('Operator control data-testid (idea#166 Phase 4)', () => {
     expect(container.querySelector(`[data-testid="start-instance-${instanceId}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-testid="stop-instance-${instanceId}"]`)).not.toBeNull();
   });
+
+  it('InstanceRow backup is id-keyed when backupDisks provided', () => {
+    const instanceId = I.INST_NC_A;
+    const instance = () => MOCK_FILES_STORE.instanceDB[instanceId] as Instance;
+    const app = () => MOCK_FILES_STORE.appDB[instance()!.instanceOf] as App;
+    const engine = () => MOCK_FILES_STORE.engineDB[I.ENGINE_A] as Engine;
+    const backupDisks = () =>
+      Object.values(MOCK_FILES_STORE.diskDB).filter((d) => d.diskTypes.includes('backup')) as Disk[];
+    const { container } = render(() => (
+      <InstanceRow
+        instanceId={instanceId}
+        instance={instance}
+        app={app}
+        engine={engine}
+        store={() => MOCK_FILES_STORE}
+        backupDisks={backupDisks}
+      />
+    ));
+    expect(container.querySelector(`[data-testid="backup-instance-${instanceId}"]`)).not.toBeNull();
+  });
+
 });

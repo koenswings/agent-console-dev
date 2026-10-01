@@ -61,6 +61,25 @@ export const CONSOLE_INTENT_NAMES = [
   'sign_in',
   'make_files_disk',
   'add_files_role',
+  // Operator deep (proposal grow — Console UI that exists)
+  'install_app',
+  'start_after_install',
+  'stay_on_disk',
+  'make_backup_disk',
+  'restore_from_backup',
+  'open_app',
+  'backup_instance',
+  'back_to_disk',
+  'back_to_overview',
+  'log_out',
+  'notice_usb_dock',
+  'retry_login_first_time_setup',
+  'change_password',
+  'add_operator',
+  'remove_operator',
+  // Modal completion only (drag-drop init still needs multi-disk preload)
+  'copy_app',
+  'move_app',
 ] as const;
 
 export type ConsoleIntentName = (typeof CONSOLE_INTENT_NAMES)[number];

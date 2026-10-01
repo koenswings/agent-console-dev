@@ -47,7 +47,7 @@ export async function runDurationIntent(
       registered: false,
       message:
         `Console Intent '${action}' not registered (Engine-owned infra_*, deferred ` +
-        `keep_watching/next_resource/exit_lesson/open_wikipedia_*, or unknown)`,
+        `keep_watching/next_resource/exit_lesson/finish_exercise/next_video/open_wikipedia_*, or unknown)`,
     };
   }
   const ctx: IntentContext = { page, diskId, engineId, instanceId };

@@ -286,6 +286,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              data-testid="make-backup-disk"
               disabled={!!diskBlocked()}
               title={diskBlocked()}
               onClick={() => setPanel('backup')}
@@ -305,6 +306,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              data-testid="install-app"
               disabled={!!diskBlocked()}
               title={diskBlocked()}
               onClick={() => setPanel('install')}
@@ -391,6 +393,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <div class="edp-form__actions">
               <button
                 class="btn btn--primary"
+                data-testid="configure-backup-disk"
                 disabled={backupPending()}
                 onClick={handleConfigureBackup}
               >
@@ -450,7 +453,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                     return (
                       <Show when={app()}>
                         {(a) => (
-                          <label class={`edp-appitem ${selectedAppId() === id ? 'edp-appitem--on' : ''}`}>
+                          <label class={`edp-appitem ${selectedAppId() === id ? 'edp-appitem--on' : ''}`} data-testid={`install-app-item-${id}`}>
                             <input
                               type="radio"
                               name="installApp"
@@ -483,6 +486,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <div class="edp-form__actions">
               <button
                 class="btn btn--primary"
+                data-testid="install-app-submit"
                 disabled={!selectedAppId() || installPending()}
                 onClick={handleInstallApp}
               >

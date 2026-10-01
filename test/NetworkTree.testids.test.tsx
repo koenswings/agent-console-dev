@@ -23,6 +23,7 @@ describe('NetworkTree data-testid (idea#166)', () => {
   it('marks the tree, engines and disks by id', () => {
     const { container } = renderTree();
     expect(container.querySelector('[data-testid="network-tree"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="network-all-apps"]')).not.toBeNull();
     expect(container.querySelector(`[data-testid="engine-${I.ENGINE_A}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-testid="disk-${I.FA_APP}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-testid="disk-${I.FA_FILES}"]`)).not.toBeNull();

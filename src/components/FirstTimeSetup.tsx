@@ -52,14 +52,14 @@ const FirstTimeSetup: Component<FirstTimeSetupProps> = (props) => {
   };
 
   return (
-    <div class="first-time-setup">
+    <div class="first-time-setup" data-testid="first-time-setup">
       <div class="first-time-setup__card">
         <h1 class="first-time-setup__title">Welcome to IDEA Console</h1>
         <p class="first-time-setup__subtitle">
           Create the first operator account to get started.
         </p>
 
-        <form class="modal__form" onSubmit={handleSubmit}>
+        <form class="modal__form" data-testid="first-time-setup-form" onSubmit={handleSubmit}>
           <label class="form-field">
             <span class="form-field__label">Username</span>
             <input

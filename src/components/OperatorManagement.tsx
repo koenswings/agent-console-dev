@@ -104,7 +104,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
   };
 
   return (
-    <div class="operator-mgmt">
+    <div class="operator-mgmt" data-testid="operator-management">
       {/* Operator list */}
       <section class="operator-mgmt__section">
         <h2 class="operator-mgmt__heading">Operators</h2>
@@ -124,6 +124,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
                   </span>
                   <button
                     class="btn btn--danger btn--small"
+                    data-testid={`remove-operator-${op.id}`}
                     onClick={() => handleRemove(op.id, op.username)}
                     disabled={op.id === currentUser()?.id}
                   >
@@ -139,7 +140,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
       {/* Add operator */}
       <section class="operator-mgmt__section">
         <h2 class="operator-mgmt__heading">Add Operator</h2>
-        <form class="modal__form" onSubmit={handleAddOperator}>
+        <form class="modal__form" data-testid="add-operator-form" onSubmit={handleAddOperator}>
           <label class="form-field">
             <span class="form-field__label">Username</span>
             <input
@@ -163,7 +164,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
           </label>
           {addError() && <p class="form-error">{addError()}</p>}
           {addSuccess() && <p class="form-success">{addSuccess()}</p>}
-          <button class="btn btn--primary" type="submit" disabled={addLoading()}>
+          <button class="btn btn--primary" type="submit" data-testid="add-operator" disabled={addLoading()}>
             {addLoading() ? 'Creating…' : 'Add operator'}
           </button>
         </form>

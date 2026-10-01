@@ -1,7 +1,7 @@
 /**
  * idea#166 — Intent registry keys match Axle ACTIONS.md / school-day.yaml.
  * Engine-owned infra_* / enter_infra_fleet_walk must not appear here.
- * Phase 3–5 Intents bind to Kid stable fixture IDs (agent-app-dev#10).
+ * Phase 3–5 + operator deep Intents bind to Kid stable fixture IDs (agent-app-dev#10).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -45,6 +45,24 @@ const LOCKED = [
   'sign_in',
   'make_files_disk',
   'add_files_role',
+  // Operator deep batch
+  'install_app',
+  'start_after_install',
+  'stay_on_disk',
+  'make_backup_disk',
+  'restore_from_backup',
+  'open_app',
+  'backup_instance',
+  'back_to_disk',
+  'back_to_overview',
+  'log_out',
+  'notice_usb_dock',
+  'retry_login_first_time_setup',
+  'change_password',
+  'add_operator',
+  'remove_operator',
+  'copy_app',
+  'move_app',
 ] as const;
 
 const ENGINE_OWNED = [
@@ -61,10 +79,12 @@ const DEFERRED = [
   'keep_watching',
   'next_resource',
   'exit_lesson',
+  'finish_exercise',
+  'next_video',
 ] as const;
 
 describe('Intent registry (idea#166 Phase 5 / #168)', () => {
-  it('registers Hub + dwell + Phase 3–5 Intents', () => {
+  it('registers Hub + dwell + Phase 3–5 + operator deep Intents', () => {
     expect([...CONSOLE_INTENT_NAMES].sort()).toEqual([...LOCKED].sort());
     expect(Object.keys(intentRegistry).sort()).toEqual([...CONSOLE_INTENT_NAMES].sort());
   });
@@ -87,11 +107,18 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('eject_disk')).toBe(true);
     expect(hasDurationIntent('open_video')).toBe(true);
     expect(hasDurationIntent('add_files_role')).toBe(true);
+    expect(hasDurationIntent('install_app')).toBe(true);
+    expect(hasDurationIntent('make_backup_disk')).toBe(true);
+    expect(hasDurationIntent('open_app')).toBe(true);
+    expect(hasDurationIntent('log_out')).toBe(true);
+    expect(hasDurationIntent('copy_app')).toBe(true);
     expect(hasDurationIntent('infra_dock_fixture')).toBe(false);
     expect(hasDurationIntent('keep_watching')).toBe(false);
+    expect(hasDurationIntent('finish_exercise')).toBe(false);
+    expect(hasDurationIntent('next_video')).toBe(false);
   });
 
-  it('does not register deferred usage / Kiwix Intents', () => {
+  it('does not register deferred usage / Kiwix / lesson-chrome Intents', () => {
     for (const name of DEFERRED) {
       expect(getIntent(name)).toBeUndefined();
     }
@@ -127,15 +154,23 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     );
   });
 
-  it('selectors encode Kid instance and disk ids + Phase 4 controls', () => {
+  it('selectors encode Kid instance and disk ids + Phase 4/deep controls', () => {
     expect(sel.instance('kolibri-grade5a-001')).toBe('[data-testid="instance-kolibri-grade5a-001"]');
     expect(sel.openInstance('nextcloud-grade5a-001')).toBe('[data-testid="open-instance-nextcloud-grade5a-001"]');
     expect(sel.disk('duration-kolibri-grade5a-001')).toBe('[data-testid="disk-duration-kolibri-grade5a-001"]');
     expect(sel.eject('duration-kolibri-grade5a-001')).toBe('[data-testid="eject-duration-kolibri-grade5a-001"]');
     expect(sel.startInstance('kolibri-grade5a-001')).toBe('[data-testid="start-instance-kolibri-grade5a-001"]');
     expect(sel.stopInstance('kolibri-grade5a-001')).toBe('[data-testid="stop-instance-kolibri-grade5a-001"]');
+    expect(sel.backupInstance('kolibri-grade5a-001')).toBe('[data-testid="backup-instance-kolibri-grade5a-001"]');
     expect(sel.settingsBtn).toBe('[data-testid="settings-btn"]');
     expect(sel.makeFilesDisk).toBe('[data-testid="make-files-disk"]');
+    expect(sel.makeBackupDisk).toBe('[data-testid="make-backup-disk"]');
+    expect(sel.installApp).toBe('[data-testid="install-app"]');
+    expect(sel.installAppSubmit).toBe('[data-testid="install-app-submit"]');
+    expect(sel.logOut).toBe('[data-testid="log-out"]');
+    expect(sel.networkAllApps).toBe('[data-testid="network-all-apps"]');
+    expect(sel.restorePanel).toBe('[data-testid="restore-panel"]');
+    expect(sel.copyMoveModal).toBe('[data-testid="copy-move-modal"]');
     expect(sel.addFiles).toBe('[data-testid="add-files"]');
     expect(DURATION_FIXTURES.kolibri.video.contentId).toMatch(/^[0-9a-f-]{36}$/);
     expect(DURATION_FIXTURES.kolibri.exercise.contentId).toMatch(/^[0-9a-f-]{36}$/);

@@ -6,8 +6,21 @@
  * Live auth: CONTENT.live.json @2313112 (idea01 import PASS) — facility/class/
  * lesson/learner Morango IDs **CHANGE on re-provision**.
  *
+ * ## App-open Running path (Kid interim)
+ * After `infra_dock_fixture`, Engine strips `instances/` — Console Open needs
+ * **sidecar Running**, NOT startInstances on the dock tree:
+ *   cd /home/pi/idea/agents/agent-app-dev
+ *   bash tests/duration-tests/scripts/post-dock-restore-running.sh
+ *   # default --mode sidecar → /home/pi/idea166-kolibri-live :18080
+ * diskId duration-kolibri-grade5a-001 / instanceId kolibri-grade5a-001.
+ * Nextcloud sidecar landing on App#10 soon.
+ *
  * No ACTIONS.md keys for Kolibri `open_lesson` / in-App learner sign-in —
  * use `open_kolibri_as_learner` (Console) then App-tab login with live IDs below.
+ *
+ * Lesson chrome (keep_watching / next_resource / exit_lesson / finish_exercise /
+ * next_video): NOT hardpassable against stock Kolibri player + CONTENT pins alone
+ * — need App-side testids (Kid). Stay **unregistered** (Engine clear miss).
  */
 
 /** Dashed UUID and Morango 32-hex (no dashes) — Kolibri API uses undashed. */

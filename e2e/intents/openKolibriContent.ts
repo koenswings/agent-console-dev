@@ -6,7 +6,8 @@
  * forms (Kolibri API uses 32-hex without dashes). Tries lesson-scoped Learn
  * URLs using fixtures.live.lesson when available.
  *
- * Deferred (pure in-App lesson chrome): keep_watching, next_resource, exit_lesson.
+ * Deferred (unregistered — need Kid App testids): keep_watching, next_resource,
+ * exit_lesson, finish_exercise, next_video. Not hardpassable vs stock player + CONTENT pins.
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';

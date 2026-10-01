@@ -194,7 +194,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
 
           <div class="account-screen__section">
             <h2 class="account-screen__heading">Change Password</h2>
-            <form class="modal__form" onSubmit={handleChangePassword}>
+            <form class="modal__form" data-testid="change-password-form" onSubmit={handleChangePassword}>
               <label class="form-field">
                 <span class="form-field__label">Current password</span>
                 <input
@@ -228,7 +228,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
               </label>
               {pwError() && <p class="form-error">{pwError()}</p>}
               {pwSuccess() && <p class="form-success">{pwSuccess()}</p>}
-              <button class="btn btn--primary" type="submit" disabled={pwLoading()}>
+              <button class="btn btn--primary" type="submit" data-testid="change-password" disabled={pwLoading()}>
                 {pwLoading() ? 'Saving…' : 'Change password'}
               </button>
             </form>
@@ -237,6 +237,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
           <div class="account-screen__section">
             <button
               class="btn btn--secondary"
+              data-testid="manage-operators"
               onClick={() => setSubView('operator-mgmt')}
             >
               Manage Operators
@@ -244,7 +245,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
           </div>
 
           <div class="account-screen__section account-screen__section--danger">
-            <button class="btn btn--danger" onClick={handleLogout}>
+            <button class="btn btn--danger" data-testid="log-out" onClick={handleLogout}>
               Log out
             </button>
           </div>

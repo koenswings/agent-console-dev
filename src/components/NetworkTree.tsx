@@ -78,6 +78,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
         class={`tree-item tree-item--network ${isSelected('network', '') ? 'tree-item--selected' : ''}`}
         role="treeitem"
         tabIndex={0}
+        data-testid="network-all-apps"
         aria-selected={isSelected('network', '')}
         onClick={() => props.onSelect({ type: 'network', id: '' })}
         onKeyDown={(e) => {

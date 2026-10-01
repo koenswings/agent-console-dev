@@ -483,6 +483,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           <div class="backup-picker" ref={pickerRef}>
             <button
               class="btn btn--backup"
+              data-testid={`backup-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
               disabled={isBackupDisabled(props.instance()?.status ?? 'Stopped') || locked()}
               onClick={handleBackup}
               title={
@@ -502,6 +503,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
                   {(disk) => (
                     <button
                       class="backup-picker__option"
+                      data-testid={`backup-to-disk-${disk.id}`}
                       onClick={() => handleBackupTo(disk)}
                     >
                       {disk.name}
