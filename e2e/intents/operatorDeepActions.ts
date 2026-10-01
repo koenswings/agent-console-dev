@@ -415,3 +415,192 @@ export const move_app: IntentFn = async ({ page }) => {
   await page.locator(sel.copyMoveMove).click();
   await modal.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 };
+
+// ── Part B: remaining operator edges from ACTIONS.md / unified.yaml ─────────
+
+/**
+ * Files role added — assert Files section / badge after add_files_role.
+ * Stays on / returns to op_disk.
+ */
+export const files_role_added: IntentFn = async ({ page, diskId }) => {
+  await ensureOpLayout(page);
+  const id = diskId ?? DURATION_FIXTURES.kolibri.diskId;
+  const files = page.locator(sel.diskSectionFiles);
+  const view = page.locator(sel.diskView(id));
+  if (!(await view.isVisible().catch(() => false))) {
+    const row = page.locator(sel.disk(id));
+    await row.waitFor({ state: 'visible', timeout: 15_000 });
+    await row.click();
+  }
+  await view.or(page.locator(sel.emptyDiskPanel)).first()
+    .waitFor({ state: 'visible', timeout: 10_000 });
+  if (!(await files.isVisible().catch(() => false))) {
+    // Badge text "Files" on disk view header is also acceptable
+    const badge = page.locator('.disk-view__badges, .tree-item__badges').filter({ hasText: /files/i });
+    if (!(await badge.count())) {
+      throw new Error(
+        `idea#168 files_role_added: disk-section-files / Files badge not visible on disk ${id}. ` +
+          `Run add_files_role first, or disk lacks files role.`,
+      );
+    }
+  }
+  await page.waitForTimeout(300);
+};
+
+/**
+ * Backup configured / restored — assert Backup Disk view or RestorePanel settled.
+ */
+export const backup_configured_restored: IntentFn = async ({ page, diskId }) => {
+  await ensureOpLayout(page);
+  const restore = page.locator(sel.restorePanel);
+  const emptyDone = page.locator(sel.emptyDiskPanel).getByText(/Backup Disk|backup/i);
+  if (await restore.isVisible().catch(() => false)) {
+    await page.waitForTimeout(300);
+    return;
+  }
+  if (await emptyDone.count()) {
+    await page.waitForTimeout(300);
+    return;
+  }
+  const id = diskId ?? DURATION_FIXTURES.kolibri.diskId;
+  const view = page.locator(sel.diskView(id));
+  if (await view.isVisible().catch(() => false)) {
+    const badge = view.locator('.disk-view__badges').filter({ hasText: /backup/i });
+    if (await badge.count()) {
+      await page.waitForTimeout(300);
+      return;
+    }
+  }
+  throw new Error(
+    'idea#168 backup_configured_restored: neither restore-panel, Backup success on EmptyDiskPanel, ' +
+      'nor Backup badge on DiskView — run make_backup_disk / restore_from_backup first.',
+  );
+};
+
+/** Done redistribute — clear focus to NetworkTree overview after copy/move. */
+export const done_redistribute: IntentFn = back_to_overview;
+
+/** Stay on source disk — dwell on DiskView after copy/move (same as stay_on_disk). */
+export const stay_on_source_disk: IntentFn = stay_on_disk;
+
+/** Open copied instance — focus instance controls (ctx.instanceId of the new copy). */
+export const open_copied_instance: IntentFn = async ({ page, instanceId }) => {
+  await ensureOpLayout(page);
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const row = page.locator(sel.instance(id));
+  await row.waitFor({ state: 'visible', timeout: 15_000 });
+  await row.click();
+  await page
+    .locator(sel.startInstance(id))
+    .or(page.locator(sel.stopInstance(id)))
+    .or(page.locator(sel.openInstance(id)))
+    .first()
+    .waitFor({ state: 'visible', timeout: 10_000 });
+};
+
+/**
+ * Switch Engine — open Settings → Engine Connection.
+ * Current Console Settings shows status/demo only (Connect picker is onboarding
+ * ConnectionManagement). Fail loud if no connect control; succeed when tab visible
+ * so the walk can settle in op_settings.
+ */
+export const switch_engine: IntentFn = async ({ page }) => {
+  if (!(await page.locator(sel.settingsPanel).isVisible().catch(() => false))) {
+    await page.locator(sel.settingsBtn).click();
+  }
+  await page.locator(sel.settingsPanel).waitFor({ state: 'visible', timeout: 10_000 });
+  const tab = page.locator(sel.settingsTabEngine);
+  if (await tab.count()) await tab.click();
+  // Prefer a Connect control if present (future Settings reconnect UI)
+  const connect = page.locator(
+    '[data-testid="switch-engine-connect"], .engine-picker__connect-btn, button:has-text("Connect")',
+  );
+  if (await connect.count()) {
+    // Click first Connect that is not the current-only status — walker may pass engine via env
+    const target = process.env.DURATION_SWITCH_ENGINE_HOST?.trim();
+    if (target) {
+      const row = page.locator('.engine-picker__item').filter({ hasText: new RegExp(target, 'i') });
+      if (await row.count()) {
+        await row.locator('button').filter({ hasText: /connect/i }).click();
+        return;
+      }
+      throw new Error(
+        `idea#168 switch_engine: DURATION_SWITCH_ENGINE_HOST=${target} not in discovery list.`,
+      );
+    }
+    await connect.first().click();
+    return;
+  }
+  throw new Error(
+    'idea#168 switch_engine: Settings → Engine Connection has no Connect picker in current Console UI ' +
+      '(ConnectionManagement is onboarding-only). Open Settings tab for settle only is insufficient — ' +
+      'need Settings reconnect UI or set DURATION_SWITCH_ENGINE_HOST once Connect buttons exist.',
+  );
+};
+
+/**
+ * Reboot Engine — NetworkTree reboot button on engine row (confirm dialog).
+ * Defaults to first visible reboot-engine-* unless engineId in ctx.
+ */
+export const reboot_engine: IntentFn = async ({ page, engineId }) => {
+  await ensureOpLayout(page);
+  const btn = engineId
+    ? page.locator(sel.rebootEngine(engineId))
+    : page.locator('[data-testid^="reboot-engine-"]').first();
+  if (!(await btn.count())) {
+    throw new Error(
+      'idea#168 reboot_engine: no reboot-engine-* button in NetworkTree (operator layout required).',
+    );
+  }
+  page.once('dialog', (d) => d.accept());
+  await btn.click();
+  await page.waitForTimeout(500);
+};
+
+/**
+ * Back to Console / Leave Kolibri / Leave Nextcloud —
+ * Close App tab if present; assert Console overview (teacher/learner) or op_overview.
+ */
+const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise<void> => {
+  const pages = page.context().pages();
+  for (const p of pages) {
+    try {
+      const url = p.url();
+      if (/kolibri|nextcloud|18080|18081|18280|\/learn|\/apps\/files/i.test(url) && p !== page) {
+        await p.close().catch(() => {});
+      }
+    } catch {
+      /* closed */
+    }
+  }
+  // Prefer user-mode overview; else operator overview
+  const overview = page.locator(sel.consoleOverview);
+  const op = page.locator(sel.opOverview);
+  if (await overview.isVisible().catch(() => false)) {
+    await overview.waitFor({ state: 'visible', timeout: 5_000 });
+    return;
+  }
+  if (await op.isVisible().catch(() => false)) {
+    await op.waitFor({ state: 'visible', timeout: 5_000 });
+    return;
+  }
+  // Bring Console page to front and wait
+  await page.bringToFront().catch(() => {});
+  await overview.or(op).first().waitFor({ state: 'visible', timeout: 15_000 });
+};
+
+export const back_to_console: IntentFn = async ({ page }) => {
+  await leaveAppToConsole(page);
+};
+
+export const leave_kolibri: IntentFn = async ({ page }) => {
+  await leaveAppToConsole(page);
+};
+
+export const leave_nextcloud_as_teacher: IntentFn = async ({ page }) => {
+  await leaveAppToConsole(page);
+};
+
+export const leave_nextcloud_as_learner: IntentFn = async ({ page }) => {
+  await leaveAppToConsole(page);
+};

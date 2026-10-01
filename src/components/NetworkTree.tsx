@@ -142,6 +142,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 <span class="tree-item__label">{engine()?.hostname}</span>
                 <button
                   class="tree-item__reboot-btn"
+                  data-testid={`reboot-engine-${engineId}`}
                   title={`Reboot ${engine()?.hostname}`}
                   aria-label={`Reboot engine ${engine()?.hostname}`}
                   onClick={(e) => {

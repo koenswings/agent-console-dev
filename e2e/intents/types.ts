@@ -80,6 +80,19 @@ export const CONSOLE_INTENT_NAMES = [
   // Modal completion only (drag-drop init still needs multi-disk preload)
   'copy_app',
   'move_app',
+  // Part B — remaining operator edges (ACTIONS.md Pixel-missing operator)
+  'files_role_added',
+  'backup_configured_restored',
+  'done_redistribute',
+  'stay_on_source_disk',
+  'open_copied_instance',
+  'switch_engine',
+  'reboot_engine',
+  // Usage leave / back (Console-side; App tab close or overview assert)
+  'back_to_console',
+  'leave_kolibri',
+  'leave_nextcloud_as_teacher',
+  'leave_nextcloud_as_learner',
 ] as const;
 
 export type ConsoleIntentName = (typeof CONSOLE_INTENT_NAMES)[number];

@@ -104,3 +104,8 @@ Registered (fail loud when gated / UI missing):
 `change_password`, `add_operator`, `remove_operator`, `copy_app`, `move_app`.
 
 `copy_app` / `move_app` = Copy/Move modal completion only (loud throw if modal not open).
+
+Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
+`done_redistribute`, `stay_on_source_disk`, `open_copied_instance`, `switch_engine`
+(loud if no Connect picker), `reboot_engine`. Usage leave: `back_to_console`,
+`leave_kolibri`, `leave_nextcloud_as_*`.

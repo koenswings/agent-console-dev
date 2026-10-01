@@ -81,6 +81,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
           {(tab) => (
             <button
               class={`settings-panel__tab${activeTab() === tab.id ? ' settings-panel__tab--active' : ''}`}
+              data-testid={`settings-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}

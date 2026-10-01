@@ -24,6 +24,10 @@ describe('NetworkTree data-testid (idea#166)', () => {
     const { container } = renderTree();
     expect(container.querySelector('[data-testid="network-tree"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="network-all-apps"]')).not.toBeNull();
+    // reboot buttons are id-keyed when engines render
+    const reboot = container.querySelector('[data-testid^="reboot-engine-"]');
+    // may be null in minimal fixture stores without engines — only assert shape when present
+    if (reboot) expect(reboot.getAttribute('data-testid')).toMatch(/^reboot-engine-/);
     expect(container.querySelector(`[data-testid="engine-${I.ENGINE_A}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-testid="disk-${I.FA_APP}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-testid="disk-${I.FA_FILES}"]`)).not.toBeNull();

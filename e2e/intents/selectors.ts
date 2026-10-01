@@ -65,4 +65,8 @@ export const sel = {
   restoreConfirm: (id: string) => `[data-testid="restore-confirm-${id}"]`,
   restoreCancel: (id: string) => `[data-testid="restore-cancel-${id}"]`,
   removeOperator: (id: string) => `[data-testid="remove-operator-${id}"]`,
+  rebootEngine: (id: string) => `[data-testid="reboot-engine-${id}"]`,
+  settingsTabEngine: '[data-testid="settings-tab-engine"]',
+  settingsTabAccount: '[data-testid="settings-tab-account"]',
+  settingsTabAbout: '[data-testid="settings-tab-about"]',
 } as const;

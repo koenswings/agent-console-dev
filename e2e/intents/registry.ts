@@ -59,6 +59,17 @@ import {
   retry_login_first_time_setup,
   start_after_install,
   stay_on_disk,
+  files_role_added,
+  backup_configured_restored,
+  done_redistribute,
+  stay_on_source_disk,
+  open_copied_instance,
+  switch_engine,
+  reboot_engine,
+  back_to_console,
+  leave_kolibri,
+  leave_nextcloud_as_teacher,
+  leave_nextcloud_as_learner,
 } from './operatorDeepActions';
 
 export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
@@ -109,6 +120,17 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   remove_operator,
   copy_app,
   move_app,
+  files_role_added,
+  backup_configured_restored,
+  done_redistribute,
+  stay_on_source_disk,
+  open_copied_instance,
+  switch_engine,
+  reboot_engine,
+  back_to_console,
+  leave_kolibri,
+  leave_nextcloud_as_teacher,
+  leave_nextcloud_as_learner,
 };
 
 export function getIntent(name: string): IntentFn | undefined {

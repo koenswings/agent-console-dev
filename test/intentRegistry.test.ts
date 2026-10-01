@@ -64,6 +64,17 @@ const LOCKED = [
   'remove_operator',
   'copy_app',
   'move_app',
+  'files_role_added',
+  'backup_configured_restored',
+  'done_redistribute',
+  'stay_on_source_disk',
+  'open_copied_instance',
+  'switch_engine',
+  'reboot_engine',
+  'back_to_console',
+  'leave_kolibri',
+  'leave_nextcloud_as_teacher',
+  'leave_nextcloud_as_learner',
 ] as const;
 
 const ENGINE_OWNED = [
@@ -113,6 +124,9 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('open_app')).toBe(true);
     expect(hasDurationIntent('log_out')).toBe(true);
     expect(hasDurationIntent('copy_app')).toBe(true);
+    expect(hasDurationIntent('reboot_engine')).toBe(true);
+    expect(hasDurationIntent('files_role_added')).toBe(true);
+    expect(hasDurationIntent('leave_kolibri')).toBe(true);
     expect(hasDurationIntent('infra_dock_fixture')).toBe(false);
     expect(hasDurationIntent('keep_watching')).toBe(false);
     expect(hasDurationIntent('finish_exercise')).toBe(false);
@@ -179,6 +193,8 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(sel.networkAllApps).toBe('[data-testid="network-all-apps"]');
     expect(sel.restorePanel).toBe('[data-testid="restore-panel"]');
     expect(sel.copyMoveModal).toBe('[data-testid="copy-move-modal"]');
+    expect(sel.rebootEngine('eng-1')).toBe('[data-testid="reboot-engine-eng-1"]');
+    expect(sel.settingsTabEngine).toBe('[data-testid="settings-tab-engine"]');
     expect(sel.addFiles).toBe('[data-testid="add-files"]');
     expect(DURATION_FIXTURES.kolibri.video.contentId).toMatch(/^[0-9a-f-]{36}$/);
     expect(DURATION_FIXTURES.kolibri.exercise.contentId).toMatch(/^[0-9a-f-]{36}$/);
