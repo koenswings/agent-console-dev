@@ -1,17 +1,16 @@
 /**
  * Phase 5 Kolibri content Intents (idea#166): open_video / open_exercise.
  *
- * Kid @0bca699 CONTENT.seeded.json pins contentId/nodeId. Console opens the
- * Running instance (window.open tab); adapters then target id-keyed selectors
- * or hrefs containing the UUID on the App page. Live channel import is still
- * pending — adapters throw a clear blocker if the resource is not in the DOM.
+ * Content/node IDs from Kid CONTENT.seeded.json; live API verified in
+ * CONTENT.live.json @2313112 (idea01). Matchers accept dashed + undashed
+ * forms (Kolibri API uses 32-hex without dashes).
  *
- * Deferred (pure in-App lesson chrome; school-day samples but unreachable
- * without a Running imported player): keep_watching, next_resource, exit_lesson.
+ * Deferred (pure in-App lesson chrome): keep_watching, next_resource, exit_lesson.
+ * No ACTIONS.md `open_lesson` / Kolibri learner sign-in — see fixtures.live.
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
-import { DURATION_FIXTURES } from './fixtures';
+import { DURATION_FIXTURES, uuidForms } from './fixtures';
 import { openInstanceFromOverview } from './openApp';
 
 const APP_URL_RE = /kolibri|18080|\/learn|\/coach|\/facility/i;
@@ -43,26 +42,56 @@ const ensureKolibriAppPage = async (
   return app;
 };
 
+/** All id spellings to try in selectors / URLs (dashed + Morango raw). */
+const idSpellings = (...ids: string[]): string[] => {
+  const out = new Set<string>();
+  for (const id of ids) {
+    if (!id) continue;
+    const { dashed, raw } = uuidForms(id);
+    out.add(id);
+    out.add(dashed);
+    out.add(raw);
+  }
+  return [...out];
+};
+
 /**
- * Click a Kolibri resource by pinned contentId / nodeId.
- * Tries data-content-id, data-node-id, data-testid, and href containing UUID;
- * then hash-navigates to /learn/#/topics/c/<nodeId> when already on App origin.
+ * Click a Kolibri resource by pinned contentId / nodeId (dashed or undashed).
+ * Tries data-content-id, data-node-id, data-testid, href; then learn hash nav.
  */
 const openContentByIds = async (
   app: Page,
-  opts: { contentId: string; nodeId: string; action: string; logicalId: string },
+  opts: {
+    contentId: string;
+    contentIdRaw: string;
+    nodeId: string;
+    nodeIdRaw: string;
+    action: string;
+    logicalId: string;
+  },
 ): Promise<void> => {
-  const { contentId, nodeId, action, logicalId } = opts;
-  const candidates = [
-    `[data-content-id="${contentId}"]`,
-    `[data-node-id="${nodeId}"]`,
-    `[data-testid="content-${contentId}"]`,
-    `[data-testid="node-${nodeId}"]`,
-    `a[href*="${contentId}"]`,
-    `a[href*="${nodeId}"]`,
-    `[href*="${contentId}"]`,
-    `[href*="${nodeId}"]`,
-  ];
+  const { contentId, contentIdRaw, nodeId, nodeIdRaw, action, logicalId } = opts;
+  const contentIds = idSpellings(contentId, contentIdRaw);
+  const nodeIds = idSpellings(nodeId, nodeIdRaw);
+  const all = [...contentIds, ...nodeIds];
+
+  const candidates: string[] = [];
+  for (const id of contentIds) {
+    candidates.push(
+      `[data-content-id="${id}"]`,
+      `[data-testid="content-${id}"]`,
+      `a[href*="${id}"]`,
+      `[href*="${id}"]`,
+    );
+  }
+  for (const id of nodeIds) {
+    candidates.push(
+      `[data-node-id="${id}"]`,
+      `[data-testid="node-${id}"]`,
+      `a[href*="${id}"]`,
+      `[href*="${id}"]`,
+    );
+  }
 
   for (const selector of candidates) {
     const loc = app.locator(selector).first();
@@ -72,7 +101,6 @@ const openContentByIds = async (
     }
   }
 
-  // Thin hash nav when we already landed on a Kolibri origin (Running + imported).
   let origin: string | null = null;
   try {
     const url = app.url();
@@ -84,47 +112,62 @@ const openContentByIds = async (
   }
 
   if (origin) {
-    const target = `${origin}/learn/#/topics/c/${nodeId}`;
-    await app.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
-    // Confirm something content-scoped appeared, or URL retained the node id
-    const still = app.url();
-    if (still.includes(nodeId) || still.includes(contentId)) return;
-    const after = app.locator(
-      `[data-content-id="${contentId}"], [data-node-id="${nodeId}"], a[href*="${nodeId}"]`,
-    ).first();
-    if ((await after.count()) > 0) return;
+    // Prefer undashed node id (live API style), then dashed
+    for (const nid of [nodeIdRaw, nodeId, ...nodeIds]) {
+      const target = `${origin}/learn/#/topics/c/${nid}`;
+      await app.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+      const still = app.url();
+      if (all.some((id) => still.includes(id))) return;
+      const after = app.locator(
+        contentIds.map((id) => `[data-content-id="${id}"]`).concat(
+          nodeIds.map((id) => `[data-node-id="${id}"]`),
+          all.map((id) => `a[href*="${id}"]`),
+        ).join(', '),
+      ).first();
+      if ((await after.count()) > 0) return;
+    }
   }
 
   throw new Error(
-    `idea#166 ${action}: resource ${logicalId} (contentId=${contentId}, nodeId=${nodeId}) ` +
-      `not found via data-content-id / data-node-id / href / learn hash nav. ` +
-      `Blocker: Kid live channel import still pending (CONTENT.seeded.json ` +
-      `liveImportStatus=pending). Needs Running kolibri-grade5a-001 with Grade 5A channel.`,
+    `idea#166 ${action}: resource ${logicalId} (contentId=${contentId}/${contentIdRaw}, ` +
+      `nodeId=${nodeId}/${nodeIdRaw}) not found via data-content-id / data-node-id / href / ` +
+      `learn hash nav (dashed+undashed). Live import on idea01 (@2313112) — confirm ` +
+      `kolibri-grade5a-001 is Running and App tab reached the Learn UI.`,
   );
+};
+
+type ContentResource = {
+  logicalId: string;
+  contentId: string;
+  contentIdRaw: string;
+  nodeId: string;
+  nodeIdRaw: string;
 };
 
 const runOpenContent = async (
   page: Page,
   instanceId: string | undefined,
-  resource: { logicalId: string; contentId: string; nodeId: string },
+  resource: ContentResource,
   action: 'open_video' | 'open_exercise',
 ): Promise<void> => {
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const app = await ensureKolibriAppPage(page, id);
   await openContentByIds(app, {
     contentId: resource.contentId,
+    contentIdRaw: resource.contentIdRaw,
     nodeId: resource.nodeId,
+    nodeIdRaw: resource.nodeIdRaw,
     action,
     logicalId: resource.logicalId,
   });
 };
 
-/** Open pinned Grade 5A video (Kid CONTENT.seeded.json → open_video). */
+/** Open pinned Grade 5A video (Kid CONTENT.seeded + live @2313112 → open_video). */
 export const open_video: IntentFn = async ({ page, instanceId }) => {
   await runOpenContent(page, instanceId, DURATION_FIXTURES.kolibri.video, 'open_video');
 };
 
-/** Open pinned Grade 5A exercise (Kid CONTENT.seeded.json → open_exercise). */
+/** Open pinned Grade 5A exercise (Kid CONTENT.seeded + live @2313112 → open_exercise). */
 export const open_exercise: IntentFn = async ({ page, instanceId }) => {
   await runOpenContent(page, instanceId, DURATION_FIXTURES.kolibri.exercise, 'open_exercise');
 };

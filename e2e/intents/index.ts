@@ -5,6 +5,7 @@ export {
   CONSOLE_INTENT_NAMES,
   sel,
   DURATION_FIXTURES,
+  uuidForms,
   type ConsoleIntentName,
   type IntentFn,
   type IntentContext,

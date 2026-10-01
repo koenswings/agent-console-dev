@@ -9,6 +9,7 @@ import {
   intentRegistry,
   getIntent,
   DURATION_FIXTURES,
+  uuidForms,
   sel,
 } from '../e2e/intents';
 
@@ -86,23 +87,34 @@ describe('Intent registry (idea#166 Phase 5)', () => {
     }
   });
 
-  it('Kid fixture IDs match agent-app-dev#10 / CONTENT.seeded.json @0bca699', () => {
+  it('Kid fixture IDs match CONTENT.seeded + CONTENT.live.json @2313112', () => {
     expect(DURATION_FIXTURES.kolibri.diskId).toBe('duration-kolibri-grade5a-001');
     expect(DURATION_FIXTURES.kolibri.instanceId).toBe('kolibri-grade5a-001');
-    expect(DURATION_FIXTURES.kolibri.video).toEqual({
-      logicalId: 'video-grade5a-01',
-      contentId: 'e60662de-b15c-52f9-b003-359f7d91f8fd',
-      nodeId: '4a1a1b92-3f6d-59eb-a94c-3f91f0011dd5',
-    });
-    expect(DURATION_FIXTURES.kolibri.exercise).toEqual({
-      logicalId: 'exercise-grade5a-01',
-      contentId: '7eb9de46-96eb-53d0-bcc1-2fb270b96f03',
-      nodeId: '94a47ec7-f30d-5cd1-93f8-ad08c42b6c2a',
-    });
+    expect(DURATION_FIXTURES.kolibri.video.contentId).toBe('e60662de-b15c-52f9-b003-359f7d91f8fd');
+    expect(DURATION_FIXTURES.kolibri.video.contentIdRaw).toBe('e60662deb15c52f9b003359f7d91f8fd');
+    expect(DURATION_FIXTURES.kolibri.video.nodeId).toBe('4a1a1b92-3f6d-59eb-a94c-3f91f0011dd5');
+    expect(DURATION_FIXTURES.kolibri.video.nodeIdRaw).toBe('4a1a1b923f6d59eba94c3f91f0011dd5');
+    expect(DURATION_FIXTURES.kolibri.exercise.contentId).toBe('7eb9de46-96eb-53d0-bcc1-2fb270b96f03');
+    expect(DURATION_FIXTURES.kolibri.exercise.contentIdRaw).toBe('7eb9de4696eb53d0bcc12fb270b96f03');
+    expect(DURATION_FIXTURES.kolibri.live.facility.id).toBe('f0e1353e8c40d985faab5ead5c91d03f');
+    expect(DURATION_FIXTURES.kolibri.live.class.id).toBe('a12df5408d20cbe5fd00c0cb036f48f6');
+    expect(DURATION_FIXTURES.kolibri.live.lesson.id).toBe('2a955770551f7d583c31104f39653fdf');
+    expect(DURATION_FIXTURES.kolibri.live.facility.idDashed).toBe('f0e1353e-8c40-d985-faab-5ead5c91d03f');
     expect(DURATION_FIXTURES.nextcloud).toEqual({
       diskId: 'duration-nextcloud-grade5a-001',
       instanceId: 'nextcloud-grade5a-001',
     });
+  });
+
+  it('uuidForms accepts dashed and undashed Morango IDs', () => {
+    expect(uuidForms('e60662de-b15c-52f9-b003-359f7d91f8fd')).toEqual({
+      dashed: 'e60662de-b15c-52f9-b003-359f7d91f8fd',
+      raw: 'e60662deb15c52f9b003359f7d91f8fd',
+    });
+    expect(uuidForms('e60662deb15c52f9b003359f7d91f8fd').raw).toBe('e60662deb15c52f9b003359f7d91f8fd');
+    expect(uuidForms(DURATION_FIXTURES.kolibri.live.lesson.id).dashed).toBe(
+      DURATION_FIXTURES.kolibri.live.lesson.idDashed,
+    );
   });
 
   it('selectors encode Kid instance and disk ids + Phase 4 controls', () => {
