@@ -12,6 +12,11 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
+import {
+  resolveStartInstanceId,
+  start_instance,
+  isInstanceAlreadyRunning,
+} from './operatorActions';
 import { attemptAppLogin } from './appLogin';
 import {
   APP_TAB_URL_RE,
@@ -108,8 +113,99 @@ export const openInstancePathB = async (
 };
 
 /**
- * Open App for instance: Path A (Console Open) → else Path B (sidecar URL).
- * Fail loud if both fail.
+ * Prefer A: ensure Path A instance is Running before Open / Path B.
+ * Reuses start_instance (already-Running no-op). Returns resolved instance id.
+ * Loud-fail if cannot reach Running / Open after start — never soft-pass refused sidecar.
+ */
+export async function ensureInstanceRunningForOpen(
+  page: Page,
+  instanceId?: string,
+): Promise<string> {
+  const preferred = resolveStartInstanceId(instanceId);
+  await page
+    .locator(sel.opOverview)
+    .or(page.locator(sel.networkTree))
+    .or(page.locator(sel.consoleOverview))
+    .first()
+    .waitFor({ state: 'visible', timeout: 15_000 })
+    .catch(() => {});
+
+  // start_instance: no-op if Running; starts if Stopped; prefers Path A *grade5a*
+  await start_instance({ page, instanceId: preferred });
+
+  const candidates = [preferred];
+  const grade5a = page.locator('[data-testid^="open-instance-"][data-testid*="grade5a"]');
+  if (await grade5a.count()) {
+    const tid = await grade5a.first().getAttribute('data-testid');
+    const gid = tid?.replace(/^open-instance-/, '') ?? '';
+    if (gid && !candidates.includes(gid)) candidates.push(gid);
+  }
+  // Also match start-instance grade5a if Open not yet painted
+  const startG5 = page.locator('[data-testid^="start-instance-"][data-testid*="grade5a"]');
+  if (await startG5.count()) {
+    const tid = await startG5.first().getAttribute('data-testid');
+    const gid = tid?.replace(/^start-instance-/, '') ?? '';
+    if (gid && !candidates.includes(gid)) candidates.push(gid);
+  }
+
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    for (const id of candidates) {
+      const openBtn = page.locator(sel.openInstance(id));
+      if (await openBtn.isVisible().catch(() => false)) return id;
+      if (await isInstanceAlreadyRunning(page, id)) {
+        // Running — Open ↗ should appear shortly
+        try {
+          await openBtn.waitFor({ state: 'visible', timeout: 5_000 });
+          return id;
+        } catch {
+          /* keep waiting */
+        }
+      }
+    }
+    await page.waitForTimeout(400);
+  }
+
+  const visibleOpen: string[] = [];
+  const opens = page.locator('[data-testid^="open-instance-"]');
+  const n = await opens.count();
+  for (let i = 0; i < n; i++) {
+    const tid = await opens.nth(i).getAttribute('data-testid');
+    if (tid) visibleOpen.push(tid.replace(/^open-instance-/, ''));
+  }
+  throw new Error(
+    `idea#168 open_app: instance not Running / Open unavailable after start ` +
+      `(preferred=${preferred}, candidates=[${candidates.join(', ')}], ` +
+      `visible open-instance=[${visibleOpen.join(', ')}]). ` +
+      `Walk must start→open (not stop→open). ` +
+      `Do NOT Path B against refused :18080 while Stopped. No soft-pass.`,
+  );
+}
+
+const hasConsoleStartControl = async (
+  page: Page,
+  preferred: string,
+): Promise<boolean> => {
+  if (await page.locator(sel.startInstance(preferred)).isVisible().catch(() => false)) {
+    return true;
+  }
+  if (
+    await page
+      .locator('[data-testid^="start-instance-"][data-testid*="grade5a"]')
+      .first()
+      .isVisible()
+      .catch(() => false)
+  ) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Open App for instance: Path A / Path B.
+ * Prefer A (r18): when Console shows Start/Stop for the instance, ensure Running
+ * before Open / Path B — never soft-pass refused :18080 after stop.
+ * When no Console instance controls (classroom Path B-only), Path B unchanged.
  */
 export const openAppInstance = async (
   page: Page,
@@ -117,21 +213,41 @@ export const openAppInstance = async (
   app?: SidecarApp,
 ): Promise<Page> => {
   const kind = app ?? appKindForInstance(instanceId);
+  const preferred = resolveStartInstanceId(instanceId);
 
   // Already on an App tab?
   const existing = resolveAppPage(page);
   if (APP_TAB_URL_RE.test(existing.url())) return existing;
 
-  // Path A — only attempt when overview (or op layout with Open) might show the control
-  const pathA = await tryOpenInstancePathA(page, instanceId);
+  // Fast Path A if Open already visible (already Running)
+  const earlyA = await tryOpenInstancePathA(page, preferred);
+  if (earlyA) {
+    const landed = resolveAppPage(page);
+    if (earlyA !== page && APP_TAB_URL_RE.test(earlyA.url())) return earlyA;
+    if (APP_TAB_URL_RE.test(landed.url())) return landed;
+  }
+
+  let id = preferred;
+  if (await hasConsoleStartControl(page, preferred)) {
+    // Operator / ALL APPS: must be Running before Open or Path B
+    id = await ensureInstanceRunningForOpen(page, preferred);
+    const pathA = await tryOpenInstancePathA(page, id);
+    if (pathA) {
+      const landed = resolveAppPage(page);
+      if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
+      if (APP_TAB_URL_RE.test(landed.url())) return landed;
+    }
+    // Running confirmed — Path B sidecar should accept
+    return openInstancePathB(page, kind);
+  }
+
+  // No Console Start control (e.g. pre-operator classroom) — Path B legacy
+  const pathA = await tryOpenInstancePathA(page, preferred);
   if (pathA) {
-    // Confirm we actually landed on an App URL; otherwise fall through to Path B
     const landed = resolveAppPage(page);
     if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
     if (APP_TAB_URL_RE.test(landed.url())) return landed;
   }
-
-  // Path B — sidecar HTTP
   return openInstancePathB(page, kind);
 };
 
@@ -143,15 +259,8 @@ export const openInstanceFromOverview = async (
   page: Page,
   instanceId: string,
 ): Promise<Page | null> => {
-  // Soft-wait for overview if present; don't hard-fail (Path B may still work)
-  await page.locator(sel.consoleOverview).or(page.locator(sel.opOverview)).first()
-    .waitFor({ state: 'visible', timeout: 8_000 })
-    .catch(() => {});
-  const pathA = await tryOpenInstancePathA(page, instanceId);
-  if (pathA) return pathA;
-  // Fall through to Path B so open_video / open_exercise keep working
-  const kind = appKindForInstance(instanceId);
-  return openInstancePathB(page, kind);
+  // Prefer A: ensure Running then Path A/B (same as openAppInstance)
+  return openAppInstance(page, instanceId);
 };
 
 const openAndLogin = async (

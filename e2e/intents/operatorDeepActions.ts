@@ -9,7 +9,7 @@ import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
 import { openAppInstance } from './openApp';
-import { start_instance } from './operatorActions';
+import { start_instance, resolveStartInstanceId } from './operatorActions';
 import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
 import {
@@ -125,11 +125,11 @@ export const make_backup_disk: IntentFn = async ({ page, diskId, instanceId }) =
 };
 
 /**
- * Open app — Path A Console Open ↗, else Path B sidecar URL (defaults Kolibri).
- * Distinct from open_kolibri_as_* (no App login).
+ * Open app — ensure Running → Path A Open ↗ / Path B sidecar (defaults Kolibri).
+ * Prefer A: never open against Stopped (r18 FAIL@79). Distinct from open_kolibri_as_* (no login).
  */
 export const open_app: IntentFn = async ({ page, instanceId }) => {
-  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const id = resolveStartInstanceId(instanceId);
   await openAppInstance(page, id);
 };
 

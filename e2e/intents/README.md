@@ -289,3 +289,17 @@ correctly disabled. Intent must **no-op PASS**, not hard-click Start.
 | Discovery | Prefer Path A `*grade5a*` testids — not zombie `kolibri-1.0-duration*` rows |
 | `stop_instance` | Symmetric no-op when already Stopped |
 | `start_after_install` | Reuses `start_instance` (same contract) |
+
+## open_app ensure Running (r18 FAIL@79)
+
+Walk `start→stop→open` left Kolibri **Stopped** → Open gone → Path B `:18080` refused.
+Engine reorders to start→open→stop; Console also hardens:
+
+| Detail | Contract |
+|---|---|
+| When Console shows Start/Stop | `ensureInstanceRunningForOpen` → `start_instance` (no-op if Running) → wait Open ↗ |
+| Then | Path A Open, else Path B (only after Running) |
+| Loud-fail | Cannot reach Running / Open — **no** soft-pass refused sidecar while Stopped |
+| Id | `DURATION_START_INSTANCE_ID` / `kolibri-grade5a-001` (same as start_instance) |
+| Classroom Path B | If no Console Start control visible, Path B unchanged (Kid sidecar) |
+| Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` / `openInstanceFromOverview` share `openAppInstance` |
