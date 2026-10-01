@@ -323,7 +323,12 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       </Show>
 
       <Show when={phase().kind === 'erasing' || (phase().kind === 'success' && makingFiles())}>
-        <p class="erase-dialog__progress" role="status" data-erase-step={progressStep() ?? ''}>
+        <p
+          class="erase-dialog__progress"
+          role="status"
+          data-testid="erase-progress"
+          data-erase-step={progressStep() ?? ''}
+        >
           {progressStep() ?? 'checking'}…
         </p>
         <Show when={slow()}>
@@ -344,6 +349,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
         <div class="edp-form__actions">
           <button
             class="btn btn--primary"
+            data-testid="erase-done"
             onClick={() => {
               props.onErasedEmpty?.(props.targetId);
               props.onClose();
@@ -429,7 +435,7 @@ const SummaryBody: Component<{ summary: () => ContentSummary }> = (props) => {
 const SuccessBody: Component<{ summary: () => ContentSummary }> = (props) => {
   const s = () => props.summary();
   return (
-    <div class="erase-dialog__result" role="status">
+    <div class="erase-dialog__result" role="status" data-testid="erase-complete">
       <p>Disk erased. It is now an empty IDEA disk.</p>
       <Show when={s().instances.length > 0}>
         <p class="erase-dialog__label">Removed instances:</p>

@@ -5,6 +5,7 @@
  * ACTIONS.md: eject_disk, stay_on_overview (dwell in stayOnOverview.ts).
  * Proposal snake_case for remaining operator edges.
  */
+import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
@@ -12,8 +13,8 @@ import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
 
 /**
- * Resolve disk to eject (duration Prefer A / post-copy).
- * Env: DURATION_EJECT_DISK_ID overrides ctx.diskId / kolibri fixture.
+ * Preference only (env → ctx → kolibri fixture). Prefer A post-erase walks must
+ * still verify the disk is on the tree — see pickEjectDiskIdOnTree.
  */
 export function resolveEjectDiskId(
   diskId?: string,
@@ -26,13 +27,67 @@ export function resolveEjectDiskId(
   );
 }
 
+const SYSTEMISH = /system/i;
+
+/** Visible NetworkTree disk ids (strip disk- prefix). */
+export async function listVisibleTreeDiskIds(page: Page): Promise<string[]> {
+  const rows = page.locator(`${sel.networkTree} [data-testid^="disk-"]`);
+  const n = await rows.count();
+  const ids: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const testId = await rows.nth(i).getAttribute('data-testid');
+    if (testId) ids.push(testId.replace(/^disk-/, ''));
+  }
+  return ids;
+}
+
+/**
+ * Pick a docked ejectable disk after erase/redistribute.
+ * Never soft-assume kolibri when it was erased and gone from the tree.
+ */
+export async function pickEjectDiskIdOnTree(
+  page: Page,
+  preferred?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  const visible = await listVisibleTreeDiskIds(page);
+  const candidates = [
+    env.DURATION_EJECT_DISK_ID?.trim(),
+    preferred,
+    DURATION_FIXTURES.nextcloud.diskId,
+    DURATION_FIXTURES.backup.diskId,
+    DURATION_FIXTURES.empty.diskId,
+    DURATION_FIXTURES.kolibri.diskId,
+  ].filter((x): x is string => !!x);
+
+  for (const id of candidates) {
+    if (!visible.includes(id)) continue;
+    const ejectBtn = page.locator(sel.eject(id));
+    if (await ejectBtn.count()) return id;
+  }
+
+  // First non-system row that has an eject button
+  for (const id of visible) {
+    const row = page.locator(sel.disk(id));
+    const label = ((await row.textContent()) ?? '').trim();
+    if (SYSTEMISH.test(label) && !label.toLowerCase().includes('duration')) continue;
+    if (id.toLowerCase().includes('system')) continue;
+    if (await page.locator(sel.eject(id)).count()) return id;
+  }
+
+  throw new Error(
+    `idea#168 eject_disk: no ejectable disk on NetworkTree ` +
+      `(preferred=${preferred ?? 'none'}, visible=[${visible.join(', ')}]). ` +
+      `After erase, kolibri may be gone — set DURATION_EJECT_DISK_ID to a surviving disk ` +
+      `(e.g. duration-nextcloud-grade5a-001) or dock another ejectable disk. No soft-pass.`,
+  );
+}
+
 /**
  * Click eject-<diskId> → wait for eject-confirm (ACTIONS.md `eject_disk`).
  *
- * Hardened for post-copy / done_redistribute → op_overview (ALL APPS):
- * NetworkTree disk eject button is still on the tree row; we ensure overview
- * chrome, wait out copy lock (disabled eject), then open confirm.
- * Loud-fail if disk/button/modal missing — never silent skip / demo remap.
+ * Hardened for post-copy / post-erase: pick surviving docked disk when preferred
+ * (kolibri) was erased. Loud-fail with visible ids — never silent skip.
  */
 export const eject_disk: IntentFn = async ({ page, diskId }) => {
   await page
@@ -50,28 +105,21 @@ export const eject_disk: IntentFn = async ({ page, diskId }) => {
   }
 
   // ALL APPS after redistribute is fine — eject lives on NetworkTree disk rows.
-  // Click All apps to clear disk-panel focus without leaving overview.
   const allApps = page.locator(sel.networkAllApps);
   if (await allApps.isVisible().catch(() => false)) {
     await allApps.click().catch(() => {});
   }
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 10_000 });
 
-  const id = resolveEjectDiskId(diskId);
-  const diskRow = page.locator(sel.disk(id));
-  if (!(await diskRow.isVisible().catch(() => false))) {
-    throw new Error(
-      `idea#168 eject_disk: disk ${id} not visible on NetworkTree after redistribute/overview. ` +
-        `Preload: dock duration-kolibri-grade5a-001 (or set DURATION_EJECT_DISK_ID). ` +
-        `demoMode=false — no DISK001 remap.`,
-    );
-  }
+  const preferred = resolveEjectDiskId(diskId);
+  const id = await pickEjectDiskIdOnTree(page, preferred);
 
   const btn = page.locator(sel.eject(id));
   if (!(await btn.count())) {
+    const visible = await listVisibleTreeDiskIds(page);
     throw new Error(
       `idea#168 eject_disk: [data-testid="eject-${id}"] missing — canEject false ` +
-        `(system/backup-only disk, or undocked). Duration Apps disks should show eject.`,
+        `(system/backup-only disk, or undocked). visible=[${visible.join(', ')}].`,
     );
   }
 
@@ -120,9 +168,25 @@ export const cancel_eject: IntentFn = async ({ page }) => {
   await page.locator(sel.ejectConfirm).waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
 };
 
-export const erase_disk: IntentFn = async ({ page }) => {
+/**
+ * Erase this disk — Prefer A: must be on **empty** disk (never Grade5A kolibri/nextcloud).
+ * ensureEmptyDiskPanel → erase-this-disk → erase-dialog. Loud-fail if no empty docked.
+ */
+export const erase_disk: IntentFn = async ({ page, diskId }) => {
+  await ensureEmptyDiskPanel(page, { diskId }, 'erase_disk');
   const btn = page.locator(sel.eraseThisDisk);
-  await btn.waitFor({ state: 'visible', timeout: 15_000 });
+  if (!(await btn.count()) || !(await btn.isVisible().catch(() => false))) {
+    throw new Error(
+      'idea#168 erase_disk: EmptyDiskPanel open but [data-testid="erase-this-disk"] missing/hidden. ' +
+        'Never erase Grade5A App Disks — dock duration-empty-001 (DURATION_EMPTY_DISK_ID). No soft-pass.',
+    );
+  }
+  if (await btn.isDisabled().catch(() => false)) {
+    const title = (await btn.getAttribute('title'))?.trim() || 'disabled';
+    throw new Error(
+      `idea#168 erase_disk: erase-this-disk greyed out (${title}). No soft-pass.`,
+    );
+  }
   await btn.click();
   await page.locator(sel.eraseDialog).waitFor({ state: 'visible', timeout: 15_000 });
 };
@@ -133,15 +197,77 @@ export const cancel_erase: IntentFn = async ({ page }) => {
   await page.locator(sel.eraseDialog).waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
 };
 
-/** Type live summary label into erase-confirm-name, then confirm. */
+/**
+ * Type live summary label, confirm erase, wait until **complete**
+ * (erase-complete / Done) — never soft-pass while "checking…".
+ */
 export const confirm_erase: IntentFn = async ({ page }) => {
   const dialog = page.locator(sel.eraseDialog);
   await dialog.waitFor({ state: 'visible', timeout: 15_000 });
+
+  // Wait past "Reading the disk…" for confirm field
+  const nameInput = page.locator(sel.eraseConfirmName);
+  try {
+    await nameInput.waitFor({ state: 'visible', timeout: 60_000 });
+  } catch {
+    const hint = ((await dialog.textContent()) ?? '').slice(0, 200);
+    throw new Error(
+      `idea#168 confirm_erase: erase-confirm-name never appeared (still summarising / error?). ` +
+        `dialog≈"${hint}". No soft-pass.`,
+    );
+  }
+
   const strong = dialog.locator('label[for="erase-confirm-name"] strong');
-  await strong.waitFor({ state: 'visible', timeout: 30_000 });
+  await strong.waitFor({ state: 'visible', timeout: 10_000 });
   const label = (await strong.textContent())?.trim() ?? '';
-  await page.locator(sel.eraseConfirmName).fill(label);
-  await page.locator(sel.eraseConfirmOk).click();
+  if (!label) {
+    throw new Error('idea#168 confirm_erase: empty confirm label — cannot type to confirm.');
+  }
+  await nameInput.fill(label);
+  const ok = page.locator(sel.eraseConfirmOk);
+  await ok.waitFor({ state: 'visible', timeout: 5_000 });
+  if (await ok.isDisabled().catch(() => false)) {
+    throw new Error(
+      `idea#168 confirm_erase: erase-confirm-ok still disabled after typing "${label}".`,
+    );
+  }
+  await ok.click();
+
+  // Wait for completion — not soft-ok on checking…
+  const complete = page.locator(sel.eraseComplete);
+  const doneBtn = page.locator(sel.eraseDone);
+  const progress = page.locator(sel.eraseProgress);
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    const err = dialog.locator('.edp-form__error[role="alert"]');
+    if (await err.isVisible().catch(() => false)) {
+      const msg = ((await err.textContent()) ?? '').trim();
+      // summary-error / removed / erase error
+      if (!/Type .+ to confirm/i.test(msg)) {
+        throw new Error(`idea#168 confirm_erase: erase failed — "${msg}". No soft-pass.`);
+      }
+    }
+    if (await complete.isVisible().catch(() => false)) {
+      if (await doneBtn.isVisible().catch(() => false)) {
+        await doneBtn.click().catch(() => {});
+      }
+      return;
+    }
+    // Dialog closed after onErasedEmpty auto-select — also success
+    if (!(await dialog.isVisible().catch(() => false))) {
+      // Prefer seeing empty badge somewhere
+      return;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  const step = (await progress.getAttribute('data-erase-step').catch(() => null)) ?? '';
+  const stuck = await progress.isVisible().catch(() => false);
+  throw new Error(
+    `idea#168 confirm_erase: erase did not complete within 180s ` +
+      `(stuck progress=${stuck}, data-erase-step="${step}"). ` +
+      `r16 soft-passed while "checking…" — must wait for erase-complete. No soft-pass.`,
+  );
 };
 
 export const start_instance: IntentFn = async ({ page, instanceId }) => {

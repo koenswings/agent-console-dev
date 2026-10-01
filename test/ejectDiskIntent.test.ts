@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { resolveEjectDiskId } from '../e2e/intents/operatorActions';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
 
-describe('resolveEjectDiskId (idea#168 post-redistribute eject)', () => {
-  it('defaults to duration-kolibri disk', () => {
+describe('resolveEjectDiskId (preference only — tree pick is separate)', () => {
+  it('defaults to duration-kolibri disk preference', () => {
     expect(resolveEjectDiskId(undefined, {})).toBe(DURATION_FIXTURES.kolibri.diskId);
   });
 

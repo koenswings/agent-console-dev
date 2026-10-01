@@ -35,7 +35,7 @@ const preloadFail = (intent: string, detail: string): Error =>
       `suggested id \`${SUGGESTED_EMPTY_DISK_ID}\` (diskTypes=['empty'], no instances). ` +
       `Set DURATION_EMPTY_DISK_ID when the id differs. ` +
       `Do NOT use duration-kolibri-grade5a-001 / duration-nextcloud-grade5a-001 (App Disks). ` +
-      `Axle may interim-skip install_app / make_files_disk / make_backup_disk until empty docks.`,
+      `Axle may interim-skip install_app / make_files_disk / make_backup_disk / erase_disk until empty docks.`,
   );
 
 /** Ensure op overview / NetworkTree visible. */

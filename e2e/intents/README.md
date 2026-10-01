@@ -185,7 +185,7 @@ Eject still lives on NetworkTree disk rows (`eject-<diskId>`).
 |---|---|
 | Confirm | **Always** opens `eject-confirm` (including pure Apps duration disks) |
 | Intent | Ensures overview/tree, waits for eject enabled (copy lock cleared), clicks eject, waits confirm |
-| Default disk | `duration-kolibri-grade5a-001` — override `DURATION_EJECT_DISK_ID` / ctx `diskId` |
+| Default disk | Prefer `DURATION_EJECT_DISK_ID` / ctx; if missing on tree (post-erase), pick surviving ejectable disk (nextcloud / backup / empty remnant) — **never** soft-assume erased kolibri |
 | Next step | Walker `confirm_eject` clicks `eject-confirm-ok` |
 
 Loud-fail if disk/button/modal missing — no demo remap.
@@ -263,3 +263,14 @@ r15 FAIL@66: Intent clicked Configure with **zero** instances checked → red
 
 `backup_configured_restored` must **not** match EmptyDiskPanel leftovers
 ("Make this a Backup Disk" / Configure form). Only success / backup badge / RestorePanel.
+
+## erase_disk / confirm_erase (Prefer A empty only)
+
+r16 FAIL@72: `erase_disk` erased **Kolibri Grade5A** (current selection); `confirm_erase`
+soft-ok while **"checking…"**; kolibri gone → `eject_disk` default failed.
+
+| Intent | Contract |
+|---|---|
+| `erase_disk` | `ensureEmptyDiskPanel` first — **never** Grade5A. Loud-fail if no empty (`DURATION_EMPTY_DISK_ID` / `duration-empty-001`). Then `erase-this-disk`. |
+| `confirm_erase` | Wait for confirm field → type label → OK → wait for `erase-complete` / Done (≤180s). **No soft-pass** on checking… |
+| `eject_disk` | If preferred disk missing (erased), discover surviving ejectable row; loud-fail with visible disk ids. |
