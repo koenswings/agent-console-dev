@@ -139,7 +139,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
         <Show when={!isOperator()}>
           <div class="account-screen__section">
             <h2 class="account-screen__heading">Operator Login</h2>
-            <form class="modal__form" onSubmit={handleLogin}>
+            <form class="modal__form" data-testid="login-form" onSubmit={handleLogin}>
               <label class="form-field">
                 <span class="form-field__label">Username</span>
                 <input
@@ -177,7 +177,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
               <Show when={!props.store}>
                 <p class="form-field__hint" style="color:var(--colour-text-muted)">Waiting for engine to sync…</p>
               </Show>
-              <button class="btn btn--primary" type="submit" disabled={loginLoading() || !props.store}>
+              <button class="btn btn--primary" type="submit" data-testid="sign-in" disabled={loginLoading() || !props.store}>
                 {loginLoading() ? 'Verifying…' : !props.store ? 'Connecting…' : 'Log in'}
               </button>
             </form>

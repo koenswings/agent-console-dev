@@ -19,9 +19,10 @@ export interface IntentContext {
 export type IntentFn = (ctx: IntentContext) => Promise<void>;
 
 /**
- * Console Intent names registered in e2e/intents (idea#166 Phase 1–3).
+ * Console Intent names registered in e2e/intents (idea#166 Phase 1–4).
  * Engine-owned infra_* and enter_infra_fleet_walk are NOT registered here.
- * Keys match Axle ACTIONS.md / school-day.yaml.
+ * Keys match Axle ACTIONS.md / school-day.yaml; proposal snake_case for
+ * Console-owned operator edges not yet listed in ACTIONS.md.
  */
 export const CONSOLE_INTENT_NAMES = [
   // Hub
@@ -29,9 +30,10 @@ export const CONSOLE_INTENT_NAMES = [
   'open_console_as_learner',
   'open_console_as_operator',
   'return_to_start',
-  // Minimal usage dwell
+  // Minimal usage / operator dwell
   'stay_on_teacher_overview',
   'stay_on_learner_overview',
+  'stay_on_overview',
   // Phase 3 — open App from overview (Kid fixture IDs)
   'open_kolibri_as_teacher',
   'open_kolibri_as_learner',
@@ -40,6 +42,22 @@ export const CONSOLE_INTENT_NAMES = [
   // Phase 3 — thin operator deeper path
   'open_disk_inventory',
   'open_instance_controls',
+  // Phase 4 — ACTIONS.md eject_disk + proposal operator edges
+  'eject_disk',
+  'confirm_eject',
+  'cancel_eject',
+  'erase_disk',
+  'confirm_erase',
+  'cancel_erase',
+  'start_instance',
+  'stop_instance',
+  'open_account',
+  'close_account',
+  'open_settings',
+  'close_settings',
+  'sign_in',
+  'make_files_disk',
+  'add_files',
 ] as const;
 
 export type ConsoleIntentName = (typeof CONSOLE_INTENT_NAMES)[number];

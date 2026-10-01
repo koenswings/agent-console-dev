@@ -442,7 +442,7 @@ const App: Component = () => {
           </button>
 
           <button
-            class="status-bar__settings-btn"
+            class="status-bar__settings-btn" data-testid="settings-btn"
             title="Settings"
             onClick={() => {
               setShowSettings((v) => !v);

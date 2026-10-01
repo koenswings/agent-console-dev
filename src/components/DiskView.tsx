@@ -121,7 +121,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
               when={addFilesOpen()}
               fallback={
                 <button
-                  class="btn disk-view__add-files"
+                  class="btn disk-view__add-files" data-testid="add-files"
                   disabled={!!filesBlocked()}
                   title={filesBlocked()}
                   onClick={() => setAddFilesOpen(true)}

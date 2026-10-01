@@ -302,10 +302,11 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                 />
               </Show>
               <div class="edp-form__actions">
-                <button class="btn" onClick={() => props.onClose()}>Cancel</button>
+                <button class="btn" onClick={() => props.onClose()} data-testid="erase-cancel">Cancel</button>
                 <Show when={!stale()}>
                   <button
                     class="btn btn--danger"
+                    data-testid="erase-confirm-ok"
                     disabled={!labelMatches()}
                     onClick={startErase}
                   >

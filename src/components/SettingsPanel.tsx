@@ -74,7 +74,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
   };
 
   return (
-    <div class="settings-panel">
+    <div class="settings-panel" data-testid="settings-panel">
       {/* Left sidebar */}
       <nav class="settings-panel__sidebar">
         <For each={tabs()}>

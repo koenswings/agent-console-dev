@@ -64,8 +64,8 @@ const EjectConfirm: Component<EjectConfirmProps> = (props) => {
         </ul>
       </Show>
       <div class="eject-confirm__actions">
-        <button class="btn" onClick={() => props.onCancel()}>Cancel</button>
-        <button class="btn btn--danger" onClick={() => props.onConfirm()}>Eject</button>
+        <button class="btn" data-testid="eject-confirm-cancel" onClick={() => props.onCancel()}>Cancel</button>
+        <button class="btn btn--danger" data-testid="eject-confirm-ok" onClick={() => props.onConfirm()}>Eject</button>
       </div>
     </div>
   );

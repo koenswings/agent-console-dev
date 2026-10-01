@@ -267,6 +267,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              data-testid="make-files-disk"
               disabled={!!filesBlocked()}
               title={filesBlocked()}
               onClick={() => setPanel('files')}

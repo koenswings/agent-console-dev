@@ -460,7 +460,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
       <div class="instance-row__actions">
         <button
-          class="btn btn--start"
+          class="btn btn--start" data-testid={`start-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
           disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'starting'}
           onClick={handleStart}
           title={locked() ? 'Operation in progress' : pendingAction() === 'starting' ? 'Starting...' : 'Start app'}
@@ -470,7 +470,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </button>
 
         <button
-          class="btn btn--stop"
+          class="btn btn--stop" data-testid={`stop-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
           disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'stopping'}
           onClick={handleStop}
           title={locked() ? 'Operation in progress' : pendingAction() === 'stopping' ? 'Stopping...' : 'Stop app'}
