@@ -307,52 +307,146 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId }) => {
 };
 
 /**
- * Change password — Account change-password form (min 8).
- * Uses demo admin current password; new password stays admin911! (idempotent for walks).
+ * Change password — works on AccountScreen OR OperatorManagement (same testids).
+ * Prefer A walk often lands on operator-mgmt after add/remove; that form must
+ * carry data-testid="change-password-form" (was missing → false "not logged in").
+ * Idempotent: current=new=admin911! (or DURATION_OPERATOR_PASSWORD).
  */
 export const change_password: IntentFn = async ({ page }) => {
-  if (!(await page.locator(sel.opEntry).isVisible().catch(() => false))) {
+  const pw =
+    process.env.DURATION_OPERATOR_PASSWORD?.trim() || 'admin911!';
+
+  // Ensure Account chrome (operator-mgmt is inside Account)
+  if (
+    !(await page.locator(sel.opEntry).isVisible().catch(() => false)) &&
+    !(await page.locator(sel.operatorManagement).isVisible().catch(() => false))
+  ) {
     await page.locator(sel.accountBtn).click();
+    await page.locator(sel.opEntry).waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
   }
-  const form = page.locator(sel.changePasswordForm);
-  if (!(await form.count())) {
+
+  let form = page.locator(sel.changePasswordForm);
+  if (!(await form.isVisible().catch(() => false))) {
+    // On Account main without form → not operator; on operator-mgmt form must exist
+    const onMgmt = await page.locator(sel.operatorManagement).isVisible().catch(() => false);
+    const onAccount = await page.locator(sel.opEntry).isVisible().catch(() => false);
+    if (onMgmt) {
+      throw new Error(
+        'idea#168 change_password: Operator Management is open but ' +
+          '[data-testid="change-password-form"] is missing on Change My Password. ' +
+          'UI bug — not an auth failure.',
+      );
+    }
+    if (onAccount) {
+      // Main account view should have the form when isOperator
+      throw new Error(
+        'idea#168 change_password: Account is open but change-password-form not visible. ' +
+          'If login form is showing, sign_in as operator first. ' +
+          'If Manage Operators is needed, form also exists there after testid fix.',
+      );
+    }
     throw new Error(
-      'idea#168 change_password: change-password-form not found — must be logged in as operator.',
+      'idea#168 change_password: change-password-form not found — open Account ' +
+        '(op-entry) or Operator Management first.',
     );
   }
-  const inputs = form.locator('input[type="password"]');
-  await inputs.nth(0).fill('admin911!');
-  await inputs.nth(1).fill('admin911!');
-  await inputs.nth(2).fill('admin911!');
-  await page.locator(sel.changePassword).click();
+
+  const current = form.locator(sel.changePasswordCurrent).or(form.locator('input[type="password"]').nth(0));
+  const next = form.locator(sel.changePasswordNew).or(form.locator('input[type="password"]').nth(1));
+  const confirm = form.locator(sel.changePasswordConfirm).or(form.locator('input[type="password"]').nth(2));
+  await current.first().fill(pw);
+  await next.first().fill(pw);
+  await confirm.first().fill(pw);
+  await form.locator(sel.changePassword).click();
+  // Success toast optional (wrong current pw → error); accept either success or stay filled
+  const success = page.locator(sel.changePasswordSuccess);
+  const err = form.locator('.form-error');
+  await Promise.race([
+    success.waitFor({ state: 'visible', timeout: 10_000 }),
+    err.waitFor({ state: 'visible', timeout: 10_000 }),
+  ]).catch(() => {});
+  if (await err.isVisible().catch(() => false)) {
+    const msg = (await err.textContent())?.trim() || 'unknown';
+    throw new Error(
+      `idea#168 change_password: form rejected submit (${msg}). ` +
+        `Check DURATION_OPERATOR_PASSWORD / admin911! matches live admin password.`,
+    );
+  }
 };
 
 /**
  * Add operator — Manage Operators → Add operator form.
  * Username derived from timestamp so repeats don't collide.
+ * Hardens: wait until the new row appears (toast alone ≠ list sync).
  */
 export const add_operator: IntentFn = async ({ page }) => {
-  if (!(await page.locator(sel.opEntry).isVisible().catch(() => false))) {
-    await page.locator(sel.accountBtn).click();
+  if (
+    !(await page.locator(sel.operatorManagement).isVisible().catch(() => false))
+  ) {
+    if (!(await page.locator(sel.opEntry).isVisible().catch(() => false))) {
+      await page.locator(sel.accountBtn).click();
+    }
+    const manage = page.locator(sel.manageOperators);
+    if (!(await manage.count())) {
+      throw new Error(
+        'idea#168 add_operator: manage-operators not found — must be logged in as operator ' +
+          '(Account → Manage Operators).',
+      );
+    }
+    await manage.click();
+    await page.locator(sel.operatorManagement).waitFor({ state: 'visible', timeout: 10_000 });
   }
-  const manage = page.locator(sel.manageOperators);
-  if (!(await manage.count())) {
+  const form = page.locator(sel.addOperatorForm);
+  const uname =
+    process.env.DURATION_ADD_OPERATOR_USERNAME?.trim() ||
+    `opwalk${Date.now().toString(36).slice(-6)}`;
+  const opPw =
+    process.env.DURATION_ADD_OPERATOR_PASSWORD?.trim() || 'operator911!';
+  await form.locator('input[type="text"]').fill(uname);
+  await form.locator('input[type="password"]').fill(opPw);
+  await page.locator(sel.addOperator).click();
+
+  // Toast
+  const toast = page.locator(sel.addOperatorSuccess);
+  try {
+    await toast.waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    const err = form.locator('.form-error');
+    const msg = (await err.textContent().catch(() => ''))?.trim();
     throw new Error(
-      'idea#168 add_operator: manage-operators not found — must be logged in as operator.',
+      `idea#168 add_operator: add-operator-success not shown` +
+        (msg ? ` (form error: ${msg})` : '') +
+        `.`,
     );
   }
-  await manage.click();
-  await page.locator(sel.operatorManagement).waitFor({ state: 'visible', timeout: 10_000 });
-  const form = page.locator(sel.addOperatorForm);
-  const uname = `opwalk${Date.now().toString(36).slice(-6)}`;
-  await form.locator('input[type="text"]').fill(uname);
-  await form.locator('input[type="password"]').fill('operator911!');
-  await page.locator(sel.addOperator).click();
+
+  // Row must appear — soft-pass if only toast
+  const row = page.locator(
+    `[data-testid^="operator-row-"][data-username="${uname}"], .operator-mgmt__item`,
+  ).filter({ hasText: uname });
+  try {
+    await row.first().waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      `idea#168 add_operator: toast says created "${uname}" but operator row never appeared in list. ` +
+        `userDB sync lag or createOperator write failed — not hardpass.`,
+    );
+  }
+
+  // Removable button must exist for remove_operator
+  const removable = page.locator('[data-testid^="remove-operator-"]:not([disabled])');
+  if (!(await removable.count())) {
+    throw new Error(
+      `idea#168 add_operator: "${uname}" listed but no enabled Remove button ` +
+        `(cannot proceed to remove_operator).`,
+    );
+  }
 };
 
 /**
- * Remove operator — clicks first removable remove-operator-* (not self).
- * Loud throw if only self remains.
+ * Remove operator — click enabled Remove on a non-self row; wait until gone.
+ * Toast from add_operator alone is NOT success. Loud-fail if only admin /
+ * Remove disabled / no enabled remove-operator-*.
  */
 export const remove_operator: IntentFn = async ({ page }) => {
   if (!(await page.locator(sel.operatorManagement).isVisible().catch(() => false))) {
@@ -361,28 +455,69 @@ export const remove_operator: IntentFn = async ({ page }) => {
     }
     const manage = page.locator(sel.manageOperators);
     if (!(await manage.count())) {
-      throw new Error('idea#168 remove_operator: manage-operators not found — logged-in operator required.');
+      throw new Error(
+        'idea#168 remove_operator: manage-operators not found — open Account as operator first.',
+      );
     }
     await manage.click();
     await page.locator(sel.operatorManagement).waitFor({ state: 'visible', timeout: 10_000 });
   }
-  const buttons = page.locator('[data-testid^="remove-operator-"]');
-  const n = await buttons.count();
-  let clicked = false;
-  for (let i = 0; i < n; i++) {
-    const btn = buttons.nth(i);
-    if (!(await btn.isDisabled())) {
-      // Accept native confirm() dialog
-      page.once('dialog', (d) => d.accept());
-      await btn.click();
-      clicked = true;
-      break;
-    }
-  }
-  if (!clicked) {
+
+  const targetUname = process.env.DURATION_REMOVE_OPERATOR_USERNAME?.trim();
+  let btn = targetUname
+    ? page
+        .locator(`[data-testid^="operator-row-"][data-username="${targetUname}"]`)
+        .locator('[data-testid^="remove-operator-"]')
+    : page.locator('[data-testid^="remove-operator-"]:not([disabled])').first();
+
+  try {
+    await btn.waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    const toast = await page.locator(sel.addOperatorSuccess).textContent().catch(() => null);
     throw new Error(
-      'idea#168 remove_operator: no removable operator (cannot remove self; need ≥2 operators).',
+      'idea#168 remove_operator: no enabled Remove on a non-self operator row. ' +
+        'Cannot remove admin (you). Run add_operator first and wait for the row. ' +
+        (toast
+          ? `Stale toast still visible (${toast.trim()}) is NOT proof the operator is listed.`
+          : 'No add-operator-success toast either.') +
+        (targetUname ? ` DURATION_REMOVE_OPERATOR_USERNAME=${targetUname}` : ''),
     );
+  }
+
+  if (await btn.isDisabled()) {
+    throw new Error(
+      'idea#168 remove_operator: target Remove is disabled (self / admin only). Need a removable operator.',
+    );
+  }
+
+  const testId = await btn.getAttribute('data-testid');
+  if (!testId) {
+    throw new Error('idea#168 remove_operator: remove button missing data-testid');
+  }
+
+  page.once('dialog', (d) => d.accept());
+  await btn.click();
+
+  // Wait until that remove control is gone (row deleted from userDB)
+  try {
+    await page.locator(`[data-testid="${testId}"]`).waitFor({ state: 'detached', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      `idea#168 remove_operator: clicked ${testId} but row still present after 15s — ` +
+        `removeOperator/changeDoc may have failed. Not soft-pass.`,
+    );
+  }
+
+  // Still must not leave an enabled remove if we targeted specific user; OK if others remain
+  if (targetUname) {
+    const still = page.locator(
+      `[data-testid^="operator-row-"][data-username="${targetUname}"]`,
+    );
+    if (await still.count()) {
+      throw new Error(
+        `idea#168 remove_operator: operator "${targetUname}" still listed after remove.`,
+      );
+    }
   }
 };
 

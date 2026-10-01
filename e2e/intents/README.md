@@ -190,3 +190,15 @@ Eject still lives on NetworkTree disk rows (`eject-<diskId>`).
 
 Loud-fail if disk/button/modal missing — no demo remap.
 
+## change_password / remove_operator (Prefer A account walk)
+
+After `add_operator` the UI is on **Operator Management** (not Account main).
+
+| Intent | Contract |
+|---|---|
+| `change_password` | Form must have `data-testid="change-password-form"` on **both** AccountScreen and OperatorManagement. Idempotent fill with `admin911!` / `DURATION_OPERATOR_PASSWORD`. |
+| `add_operator` | Wait for `add-operator-success` **and** `operator-row-*` with that username + enabled Remove — toast alone ≠ hardpass. |
+| `remove_operator` | Click enabled `remove-operator-*` (not self); wait until detached. Loud-fail if only admin / Remove disabled. Stale create toast is not success. |
+
+Env: `DURATION_ADD_OPERATOR_USERNAME`, `DURATION_REMOVE_OPERATOR_USERNAME`, `DURATION_OPERATOR_PASSWORD`.
+

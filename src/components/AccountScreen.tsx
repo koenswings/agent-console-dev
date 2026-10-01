@@ -200,6 +200,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="change-password-current"
                   value={currentPw()}
                   onInput={(e) => setCurrentPw(e.currentTarget.value)}
                   required
@@ -210,6 +211,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="change-password-new"
                   value={newPw()}
                   onInput={(e) => setNewPw(e.currentTarget.value)}
                   required
@@ -221,13 +223,14 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="change-password-confirm"
                   value={confirmPw()}
                   onInput={(e) => setConfirmPw(e.currentTarget.value)}
                   required
                 />
               </label>
               {pwError() && <p class="form-error">{pwError()}</p>}
-              {pwSuccess() && <p class="form-success">{pwSuccess()}</p>}
+              {pwSuccess() && <p class="form-success" data-testid="change-password-success">{pwSuccess()}</p>}
               <button class="btn btn--primary" type="submit" data-testid="change-password" disabled={pwLoading()}>
                 {pwLoading() ? 'Saving…' : 'Change password'}
               </button>
