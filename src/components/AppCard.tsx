@@ -37,7 +37,11 @@ const AppCard: Component<AppCardProps> = (props) => {
       )}
       <div class="app-card__footer">
         {isRunning() ? (
-          <button class="app-card__open-btn" onClick={handleOpen}>
+          <button
+            class="app-card__open-btn"
+            data-testid={`open-instance-${props.instance()?.id ?? ''}`}
+            onClick={handleOpen}
+          >
             Open
           </button>
         ) : (

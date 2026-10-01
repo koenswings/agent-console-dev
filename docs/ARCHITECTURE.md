@@ -483,6 +483,8 @@ the folder does not exist at Engine startup, the Engine logs it and continues, a
 Console surfaces used by the duration-tests walker expose id-keyed `data-testid`s
 (`engine-<id>`, `disk-<id>`, `instance-<id>`, `candidate-<id>`, `disk-view-<id>`,
 `console-overview`, `op-entry`, `op-overview`, `eject-confirm`, `erase-dialog`).
-Playwright Intent adapters live under `e2e/intents/`, registry keyed by Axle YAML
-action names (`open_console_as_teacher`, …). Engine-owned `infra_*` Intents are
-not registered here.
+Playwright Intent adapters live under `e2e/intents/`, registry keyed by Axle
+ACTIONS.md / school-day.yaml (`open_console_as_teacher`, `open_kolibri_as_teacher`,
+`open_nextcloud_as_learner`, `open_disk_inventory`, …). Defaults bind to Kid
+fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
+`duration-kolibri-grade5a-001`). Engine-owned `infra_*` Intents are not registered here.

@@ -16,5 +16,7 @@ describe('AppBrowser data-testid (idea#166)', () => {
     const { container } = render(() => <AppBrowser store={store} connected={() => true} />);
     expect(container.querySelector('[data-testid="console-overview"]')).not.toBeNull();
     expect(container.querySelector(`[data-testid="instance-${I.INST_NC_A}"]`)).not.toBeNull();
+    // Running instances expose open-instance-<id> (Phase 3 open_kolibri/nextcloud)
+    expect(container.querySelector(`[data-testid="open-instance-${I.INST_NC_A}"]`)).not.toBeNull();
   });
 });

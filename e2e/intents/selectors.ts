@@ -20,4 +20,5 @@ export const sel = {
   candidate: (id: string) => `[data-testid="candidate-${id}"]`,
   diskView: (id: string) => `[data-testid="disk-view-${id}"]`,
   eject: (diskId: string) => `[data-testid="eject-${diskId}"]`,
+  openInstance: (id: string) => `[data-testid="open-instance-${id}"]`,
 } as const;

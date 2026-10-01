@@ -515,7 +515,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         <Show when={openUrl() !== null}>
           <a
-            class="btn--open"
+            class="btn--open" data-testid={`open-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
             href={openUrl()!}
             target="_blank"
             rel="noopener noreferrer"
