@@ -4,6 +4,7 @@
  */
 export const sel = {
   consoleOverview: '[data-testid="console-overview"]',
+  statusBarIndicator: '[data-testid="status-bar-indicator"]',
   opEntry: '[data-testid="op-entry"]',
   opOverview: '[data-testid="op-overview"]',
   networkTree: '[data-testid="network-tree"]',

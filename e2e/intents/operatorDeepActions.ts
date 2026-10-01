@@ -10,6 +10,7 @@ import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
 import { openAppInstance } from './openApp';
 import { start_instance } from './operatorActions';
+import { performOperatorSignIn } from './signInReady';
 
 const ensureOpLayout = async (page: Page): Promise<void> => {
   await page
@@ -214,50 +215,42 @@ export const notice_usb_dock: IntentFn = async ({ page }) => {
 };
 
 /**
- * Retry login / first-time setup — only when login form or first-time setup is visible.
+ * Retry login / first-time setup — wait out Connecting… after dock/undock,
+ * then complete first-time setup or operator login. Already-logged-in = hardpass.
+ * Loud-fail with status-bar / sign-in diagnostics if store never syncs.
  */
 export const retry_login_first_time_setup: IntentFn = async ({ page }) => {
-  const setup = page.locator(sel.firstTimeSetup);
-  const form = page.locator(sel.loginForm);
+  const intent = 'retry_login_first_time_setup';
+  const state = await performOperatorSignIn(page, { intent });
 
-  if (await setup.isVisible().catch(() => false)) {
+  if (state === 'first_time_setup') {
     const setupForm = page.locator(sel.firstTimeSetupForm);
     await setupForm.waitFor({ state: 'visible', timeout: 10_000 });
-    await setupForm.locator('input[autocomplete="username"]').fill('admin');
-    await setupForm.locator('input[autocomplete="new-password"]').first().fill('admin911!');
-    // Confirm field is typically the second password input
+    const uname = process.env.DURATION_OPERATOR_USERNAME?.trim() || 'admin';
+    const pw = process.env.DURATION_OPERATOR_PASSWORD?.trim() || 'admin911!';
+    await setupForm.locator('input[autocomplete="username"]').fill(uname);
+    await setupForm.locator('input[autocomplete="new-password"]').first().fill(pw);
     const pwInputs = setupForm.locator('input[type="password"]');
-    const n = await pwInputs.count();
-    if (n >= 2) await pwInputs.nth(1).fill('admin911!');
+    if ((await pwInputs.count()) >= 2) await pwInputs.nth(1).fill(pw);
     await setupForm.locator('button[type="submit"]').click();
+    await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 30_000 });
+    return;
+  }
+
+  if (state === 'already_logged_in') {
+    // Session restore after open_console — close Account → overview
+    if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
+      await page.locator(sel.accountBtn).click().catch(() => {});
+    }
     await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 20_000 });
     return;
   }
 
-  if (!(await form.isVisible().catch(() => false))) {
-    // Try opening Account so login form appears
-    if (await page.locator(sel.accountBtn).count()) {
-      await page.locator(sel.accountBtn).click();
-    }
-  }
-
-  if (!(await form.isVisible().catch(() => false))) {
-    throw new Error(
-      'idea#168 retry_login_first_time_setup: neither login-form nor first-time-setup visible. ' +
-        'Only valid from op_entry / first-time setup surfaces.',
-    );
-  }
-
-  await form.locator('input[autocomplete="username"]').fill('admin');
-  await form.locator('input[autocomplete="current-password"]').fill('admin911!');
-  const submit = page.locator(sel.signIn);
-  if (await submit.count()) await submit.click();
-  else await form.locator('button[type="submit"]').click();
-  // Close Account overlay if still open
+  // Just signed in — dismiss Account overlay
   if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
     await page.locator(sel.accountBtn).click().catch(() => {});
   }
-  await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 20_000 });
 };
 
 /**

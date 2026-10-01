@@ -8,6 +8,7 @@
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
+import { performOperatorSignIn } from './signInReady';
 
 /**
  * Resolve disk to eject (duration Prefer A / post-copy).
@@ -181,28 +182,23 @@ export const close_settings: IntentFn = async ({ page }) => {
 };
 
 /**
- * Sign in (proposal) — fill demo admin, submit, land on op_overview + NetworkTree.
+ * Sign in — wait for Engine store (leave Connecting…), then admin login → op_overview.
  */
 export const sign_in: IntentFn = async ({ page }) => {
-  // Ensure Account panel open
-  if (!(await page.locator(sel.loginForm).isVisible().catch(() => false))) {
-    await page.locator(sel.accountBtn).click();
+  const state = await performOperatorSignIn(page, { intent: 'sign_in' });
+  if (state === 'first_time_setup') {
+    throw new Error(
+      'idea#168 sign_in: first-time-setup visible — use retry_login_first_time_setup instead.',
+    );
   }
-  const form = page.locator(sel.loginForm);
-  await form.waitFor({ state: 'visible', timeout: 15_000 });
-  await form.locator('input[autocomplete="username"]').fill('admin');
-  await form.locator('input[autocomplete="current-password"]').fill('admin911!');
-  const submit = page.locator(sel.signIn);
-  if (await submit.count()) await submit.click();
-  else await form.locator('button[type="submit"]').click();
-
   // Close Account overlay if still open so operator layout is usable
   const entry = page.locator(sel.opEntry);
   if (await entry.isVisible().catch(() => false)) {
+    // Already logged in: closing account reveals overview
     await page.locator(sel.accountBtn).click().catch(() => {});
   }
-  await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 20_000 });
+  await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
 };
 
 /**

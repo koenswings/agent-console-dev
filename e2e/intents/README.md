@@ -202,3 +202,15 @@ After `add_operator` the UI is on **Operator Management** (not Account main).
 
 Env: `DURATION_ADD_OPERATOR_USERNAME`, `DURATION_REMOVE_OPERATOR_USERNAME`, `DURATION_OPERATOR_PASSWORD`.
 
+## sign-in Connecting… after dock/undock (Prefer A)
+
+`[data-testid=sign-in]` stays **disabled** with label **Connecting…** while `store` is null
+(Engine WS / Automerge not synced yet).
+
+| Intent | Behavior |
+|---|---|
+| `open_console_as_operator` | Live `:8080` skips bootDemo reload; waits until Log in enabled / already logged in / first-time setup |
+| `sign_in` / `retry_login_first_time_setup` | Shared `waitForSignInReady` (default **60s**, `DURATION_SIGNIN_READY_MS`); loud-fail with status-bar + sign-in text + demoMode/hostname |
+
+Axle: after `infra_dock_fixture`, prefer a short settle before `open_console_as_operator`, or rely on the 60s wait. Do **not** soft-pass while Connecting….
+
