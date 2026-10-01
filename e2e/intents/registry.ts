@@ -47,11 +47,9 @@ import {
   back_to_overview,
   backup_instance,
   change_password,
-  copy_app,
   install_app,
   log_out,
   make_backup_disk,
-  move_app,
   notice_usb_dock,
   open_app,
   remove_operator,
@@ -71,6 +69,7 @@ import {
   leave_nextcloud_as_teacher,
   leave_nextcloud_as_learner,
 } from './operatorDeepActions';
+import { copy_app, move_app } from './copyMoveApp';
 import {
   create_class,
   enroll_learners,

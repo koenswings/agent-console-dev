@@ -386,35 +386,6 @@ export const remove_operator: IntentFn = async ({ page }) => {
   }
 };
 
-/**
- * Copy app / Move app — complete Copy/Move modal if already open after a drop.
- * Drag-drop initiation needs multi-disk fixtures; fail loud when modal absent.
- */
-export const copy_app: IntentFn = async ({ page }) => {
-  const modal = page.locator(sel.copyMoveModal);
-  if (!(await modal.isVisible().catch(() => false))) {
-    throw new Error(
-      'idea#168 copy_app: copy-move-modal not open. Console copy requires drag InstanceRow onto a ' +
-        'target App Disk (or mobile sheet). Walker/preload must drop first; then this Intent clicks Copy. ' +
-        'Not silently skipped — multi-disk drag setup still needed for full hardpass.',
-    );
-  }
-  await page.locator(sel.copyMoveCopy).click();
-  await modal.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-};
-
-export const move_app: IntentFn = async ({ page }) => {
-  const modal = page.locator(sel.copyMoveModal);
-  if (!(await modal.isVisible().catch(() => false))) {
-    throw new Error(
-      'idea#168 move_app: copy-move-modal not open. Console move requires drag InstanceRow onto a ' +
-        'target App Disk (or mobile sheet). Walker/preload must drop first; then this Intent clicks Move. ' +
-        'Not silently skipped — multi-disk drag setup still needed for full hardpass.',
-    );
-  }
-  await page.locator(sel.copyMoveMove).click();
-  await modal.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-};
 
 // ── Part B: remaining operator edges from ACTIONS.md / unified.yaml ─────────
 

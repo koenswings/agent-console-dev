@@ -394,7 +394,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       role="listitem"
       data-testid={`instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
       data-instance-id={props.instanceId ?? props.instance()?.id}
-      draggable={true}
+      data-copyable={dragData() ? 'true' : 'false'}
+      data-source-disk-id={dragData()?.sourceDiskId ?? ''}
+      draggable={Boolean(dragData())}
       onDragStart={(e) => {
         const data = dragData();
         if (!data) return;
