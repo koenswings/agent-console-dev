@@ -28,6 +28,28 @@ if (!result.ok) { /* fail step / log result.message */ }
 Replace Engine `uiStub` when `stubUi: false` by calling `runDurationIntent`.
 Package export: `idea-console/duration-intents` → `e2e/intents/index.ts`.
 
+
+## --record-walk screenshots (Axle soft-detect)
+
+Locked Pixel exports for Engine `PlaywrightUiDriver`:
+
+```ts
+import { runDurationIntent, captureAfterIntent } from 'idea-console/duration-intents';
+
+// Prefer: pass screenshotPath so Pixel settles once and writes the PNG
+await runDurationIntent({ action, page, screenshotPath: '/tmp/walk/step-0001-open_app.png' });
+
+// Or call directly (same settle + viewport capture)
+await captureAfterIntent(page, { path, intent: action, settleMs: 300 });
+```
+
+| Detail | Contract |
+|---|---|
+| Settle | `domcontentloaded` → best-effort `networkidle` → `settleMs` (default **300**) |
+| Screenshot | `fullPage: **false**` (viewport; stitch-friendly). Engine fallback may use `fullPage: true`. |
+| Soft-detect order | (1) `runDurationIntent` + `screenshotPath` writes PNG → (2) `captureAfterIntent` → (3) Engine `page.screenshot({ fullPage: true })` |
+| No double settle | When Pixel writes the file, Engine `captureFrame` returns on `existsSync` — no second wait. |
+
 ## App-open Path A vs Path B (Kid App#10 @9ba7876)
 
 **Gap:** sidecar HTTP can be Running while Console overview cards still lack

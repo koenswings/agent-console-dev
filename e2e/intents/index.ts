@@ -13,8 +13,11 @@ export {
 export {
   runDurationIntent,
   hasDurationIntent,
+  captureAfterIntent,
+  CAPTURE_AFTER_INTENT_DEFAULT_SETTLE_MS,
   type DurationIntentResult,
   type RunDurationIntentOptions,
+  type CaptureAfterIntentOptions,
 } from './durationBridge';
 export {
   resolveSidecarUrl,
