@@ -126,8 +126,8 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 
 | Intent | Contract |
 |---|---|
-| `stay_on_teacher_overview` / `stay_on_learner_overview` | `console-overview` **and** ≥1 `instance-*` card (no soft-catch empty). |
-| `stay_on_overview` | NetworkTree + ≥1 `disk-*` within 15s (operator dwell). |
+| `stay_on_teacher_overview` / `stay_on_learner_overview` / `open_console_as_teacher`/`_learner` | Prefer A r40: wait leave **Connecting…** + ≥1 `instance-*` (`DURATION_OVERVIEW_CATALOG_MS`, default **60s**; cold sync ~15s). Loud-fail with status + card count + elapsed. |
+| `stay_on_overview` | Prefer A r40: leave Connecting… + ≥1 `disk-*` (`DURATION_OVERVIEW_CATALOG_MS`). |
 | `return_to_start` | Dismiss erase/eject/settings/account/Connect; assert overview/tree. Loud if dialog stuck. |
 | `open_disk_inventory` | Resolve visible `disk-*` (`DURATION_DISK_ID`); DiskView / EmptyDiskPanel must open. |
 | `open_instance_controls` | Resolve visible instance (`DURATION_INSTANCE_ID`); start/stop/open controls. |

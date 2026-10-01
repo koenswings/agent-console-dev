@@ -11,6 +11,7 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { waitForSignInReady } from './signInReady';
+import { waitForUserOverviewCatalog } from './stayOnOverview';
 
 const bootDemo = async (page: Page): Promise<void> => {
   await page.addInitScript(() => {
@@ -69,6 +70,10 @@ export async function ensureConsoleSurface(page: Page): Promise<'live' | 'demo'>
   return 'demo';
 }
 
+/**
+ * Prefer A r40: overview shell + leave Connecting… + ≥1 instance card
+ * (Path B open_* must not mask empty catalog for later stay_on_*).
+ */
 export const open_console_as_teacher: IntentFn = async ({ page }) => {
   await ensureConsoleSurface(page);
   await page.locator(sel.consoleOverview).waitFor({ state: 'visible', timeout: 15_000 });
@@ -79,6 +84,7 @@ export const open_console_as_teacher: IntentFn = async ({ page }) => {
       'idea#168 open_console_as_teacher: console-overview visible but account-btn missing. Prefer A.',
     );
   }
+  await waitForUserOverviewCatalog(page, 'open_console_as_teacher');
 };
 
 export const open_console_as_learner: IntentFn = async ({ page }) => {
@@ -91,6 +97,7 @@ export const open_console_as_learner: IntentFn = async ({ page }) => {
       'idea#168 open_console_as_learner: console-overview visible but account-btn missing. Prefer A.',
     );
   }
+  await waitForUserOverviewCatalog(page, 'open_console_as_learner');
 };
 
 export const open_console_as_operator: IntentFn = async ({ page }) => {

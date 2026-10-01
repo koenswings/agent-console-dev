@@ -1,47 +1,92 @@
 /**
  * Dwell Intents: teacher / learner / operator overview (idea#166/#168).
- * Prefer A: assert real catalog / NetworkTree content — no soft-catch empty dwell.
+ * Prefer A r40: wait leave Connecting… + catalog sync before assert
+ * (cold WS ~15s; open_console Path B can mask empty catalog).
  */
+import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
+import { collectConnectionDiagnostics } from './signInReady';
 
-async function assertUserOverviewWithCatalog(
-  page: import('@playwright/test').Page,
+/**
+ * Prefer A catalog settle budget (DURATION_OVERVIEW_CATALOG_MS).
+ * Default 60s — r40 cold connect showed cards by ~15s; leave headroom.
+ */
+export function overviewCatalogTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_OVERVIEW_CATALOG_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 60_000;
+}
+
+export async function readStatusBarLabel(page: Page): Promise<string> {
+  const host = await page.locator(sel.statusBarHostname).innerText().catch(() => '');
+  if (host.trim()) return host.replace(/\s+/g, ' ').trim();
+  const ind = await page.locator(sel.statusBarIndicator).innerText().catch(() => '');
+  return ind.replace(/\s+/g, ' ').trim();
+}
+
+export function isConnectingStatusLabel(label: string): boolean {
+  return /connecting|searching/i.test(label);
+}
+
+/**
+ * Wait until status bar leaves Connecting…/Searching… AND ≥1 instance-* card
+ * on console-overview. Shared by open_console_as_teacher/learner + stay_on_*.
+ */
+export async function waitForUserOverviewCatalog(
+  page: Page,
   intent: string,
 ): Promise<void> {
-  await page.locator(sel.consoleOverview).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.locator(sel.consoleOverview).waitFor({ state: 'visible', timeout: 15_000 });
+  const budget = overviewCatalogTimeoutMs();
+  const started = Date.now();
   const cards = page.locator(`${sel.consoleOverview} [data-testid^="instance-"]`);
-  try {
-    await cards.first().waitFor({ state: 'attached', timeout: 10_000 });
-  } catch {
-    const n = await cards.count();
-    throw new Error(
-      `idea#168 ${intent}: console-overview visible but no [data-testid^="instance-"] cards. ` +
-        `Prefer A docks Grade5A fixtures — count=${n}. Engine preload / Path A startInstances may be missing.`,
-    );
+  let lastStatus = '';
+  let n = 0;
+
+  while (Date.now() - started < budget) {
+    lastStatus = await readStatusBarLabel(page);
+    n = await cards.count();
+    const connecting = isConnectingStatusLabel(lastStatus);
+    // Prefer A: need catalog cards; hostname alone (IP shown) is not enough if count=0
+    if (!connecting && n >= 1) {
+      await page.waitForTimeout(200);
+      return;
+    }
+    await page.waitForTimeout(400);
   }
-  // Brief dwell after catalog assert (screenshot settle)
-  await page.waitForTimeout(200);
+
+  lastStatus = await readStatusBarLabel(page);
+  n = await cards.count();
+  const connecting = isConnectingStatusLabel(lastStatus);
+  const elapsed = Date.now() - started;
+  const diag = await collectConnectionDiagnostics(page).catch(() => '');
+  throw new Error(
+    `idea#168 ${intent}: overview catalog not ready after ${budget}ms. ` +
+      `status=${JSON.stringify(lastStatus)} instanceCards=${n} connecting=${connecting} ` +
+      `elapsed=${elapsed}ms. r40: cold WS/store sync (~15s observed) — ` +
+      `set DURATION_OVERVIEW_CATALOG_MS. Prefer A — no soft-pass. ${diag}`,
+  );
 }
 
 export const stay_on_teacher_overview: IntentFn = async ({ page }) => {
-  await assertUserOverviewWithCatalog(page, 'stay_on_teacher_overview');
+  await waitForUserOverviewCatalog(page, 'stay_on_teacher_overview');
 };
 
 export const stay_on_learner_overview: IntentFn = async ({ page }) => {
-  await assertUserOverviewWithCatalog(page, 'stay_on_learner_overview');
+  await waitForUserOverviewCatalog(page, 'stay_on_learner_overview');
 };
 
 /**
- * Operator NetworkTree dwell (ACTIONS.md / school-day.yaml `stay_on_overview`).
- * Prefer A: expand engines and require ≥1 disk-* (same contract as notice_usb_dock).
+ * Operator NetworkTree dwell — Prefer A r40: leave Connecting… then ≥1 disk-*.
+ * Budget DURATION_OVERVIEW_CATALOG_MS (same cold-sync headroom).
  */
 export const stay_on_overview: IntentFn = async ({ page }) => {
   await page
     .locator(sel.opOverview)
     .or(page.locator(sel.networkTree))
     .first()
-    .waitFor({ state: 'visible', timeout: 10_000 });
+    .waitFor({ state: 'visible', timeout: 15_000 });
   if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
     await page.locator(sel.settingsBtn).click().catch(() => {});
   }
@@ -49,25 +94,34 @@ export const stay_on_overview: IntentFn = async ({ page }) => {
     await page.locator(sel.accountBtn).click().catch(() => {});
   }
   const tree = page.locator(sel.networkTree);
-  await tree.waitFor({ state: 'visible', timeout: 10_000 });
+  await tree.waitFor({ state: 'visible', timeout: 15_000 });
   const engines = tree.locator('[data-testid^="engine-"]');
-  const n = await engines.count();
-  for (let i = 0; i < n; i++) {
+  const engN = await engines.count();
+  for (let i = 0; i < engN; i++) {
     await engines.nth(i).click({ timeout: 3_000 }).catch(() => {});
   }
+
+  const budget = overviewCatalogTimeoutMs();
+  const started = Date.now();
   const disks = tree.locator('[data-testid^="disk-"]');
-  const deadline = Date.now() + 15_000;
   let count = 0;
-  while (Date.now() < deadline) {
+  let lastStatus = '';
+  while (Date.now() - started < budget) {
+    lastStatus = await readStatusBarLabel(page);
     count = await disks.count();
-    if (count > 0) break;
+    const connecting = isConnectingStatusLabel(lastStatus);
+    if (!connecting && count > 0) {
+      await page.waitForTimeout(200);
+      return;
+    }
     await page.waitForTimeout(400);
   }
-  if (count === 0) {
-    throw new Error(
-      'idea#168 stay_on_overview: NetworkTree visible but no [data-testid^="disk-"] rows after 15s. ' +
-        'Prefer A — dock fixture disks before operator dwell (no soft empty dwell).',
-    );
-  }
-  await page.waitForTimeout(200);
+  lastStatus = await readStatusBarLabel(page);
+  count = await disks.count();
+  throw new Error(
+    `idea#168 stay_on_overview: NetworkTree catalog not ready after ${budget}ms. ` +
+      `status=${JSON.stringify(lastStatus)} diskRows=${count} ` +
+      `connecting=${isConnectingStatusLabel(lastStatus)} elapsed=${Date.now() - started}ms. ` +
+      `Prefer A — set DURATION_OVERVIEW_CATALOG_MS. No soft empty dwell.`,
+  );
 };
