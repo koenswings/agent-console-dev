@@ -70,3 +70,15 @@ export const appKindForInstance = (instanceId: string): SidecarApp => {
   if (instanceId.includes('nextcloud')) return 'nextcloud';
   return 'kolibri';
 };
+
+/** Poll budget before Path B / Open-ready (Prefer A r19 ghost Running). Default 90s. */
+export function sidecarReadyTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_SIDECAR_READY_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(1_000, Number(raw));
+  return 90_000;
+}
+
+/** True for HTTP 2xx/3xx (Kolibri often 302). */
+export function isSidecarHttpReadyStatus(status: number): boolean {
+  return status >= 200 && status < 400;
+}

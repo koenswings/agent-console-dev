@@ -290,16 +290,20 @@ correctly disabled. Intent must **no-op PASS**, not hard-click Start.
 | `stop_instance` | Symmetric no-op when already Stopped |
 | `start_after_install` | Reuses `start_instance` (same contract) |
 
-## open_app ensure Running (r18 FAIL@79)
+## open_app ensure Running + sidecar HTTP (r18/r19)
 
-Walk `start→stop→open` left Kolibri **Stopped** → Open gone → Path B `:18080` refused.
-Engine reorders to start→open→stop; Console also hardens:
+r18: `start→stop→open` → Stopped → Open gone → Path B refused.
+r19: Automerge **Running ≠ sidecar up** (ghost Running after move_app docker-missing);
+`start_instance` no-op ~3.7s; Path B `:18080` ERR_CONNECTION_REFUSED.
 
 | Detail | Contract |
 |---|---|
-| When Console shows Start/Stop | `ensureInstanceRunningForOpen` → `start_instance` (no-op if Running) → wait Open ↗ |
-| Then | Path A Open, else Path B (only after Running) |
-| Loud-fail | Cannot reach Running / Open — **no** soft-pass refused sidecar while Stopped |
-| Id | `DURATION_START_INSTANCE_ID` / `kolibri-grade5a-001` (same as start_instance) |
-| Classroom Path B | If no Console Start control visible, Path B unchanged (Kid sidecar) |
-| Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` / `openInstanceFromOverview` share `openAppInstance` |
+| Console Start/Stop | `ensureInstanceRunningForOpen` → start (no-op if Running) |
+| Ghost Running | Open missing while UI Running → **force-restart** (stop→start) |
+| Sidecar poll | Before Path B: HTTP 2xx/3xx (`DURATION_SIDECAR_READY_MS` default **90s**) |
+| Path A | Only when Open ↗ visible |
+| Loud-fail | Sidecar timeout / cannot Open — **no** soft-pass connection refused |
+| Id | `DURATION_START_INSTANCE_ID` / `kolibri-grade5a-001` |
+| Classroom | No Start control → Path B still waits sidecar ready |
+| Engine | failAfter=1 on docker-missing welcome belt (no Console change) |
+| Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` share `openAppInstance` |

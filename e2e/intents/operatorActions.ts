@@ -378,11 +378,15 @@ async function resolveVisibleStartInstanceId(
 }
 
 /**
- * Start instance — Prefer A: no-op PASS if already Running (Start correctly disabled).
- * Loud-fail only when not running and Start disabled. Optional force restart via
- * DURATION_START_FORCE_RESTART=1.
+ * Start (or force-restart) an instance. Returns resolved Path A instance id.
+ * forceRestart: stop→start even when UI already shows Running (ghost Running / no Open).
+ * Env DURATION_START_FORCE_RESTART=1 also forces restart.
  */
-export const start_instance: IntentFn = async ({ page, instanceId }) => {
+export async function runStartInstance(
+  page: Page,
+  instanceId?: string,
+  opts: { forceRestart?: boolean } = {},
+): Promise<string> {
   await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first()
     .waitFor({ state: 'visible', timeout: 15_000 });
 
@@ -391,21 +395,20 @@ export const start_instance: IntentFn = async ({ page, instanceId }) => {
   const btn = page.locator(sel.startInstance(id));
   await btn.waitFor({ state: 'visible', timeout: 15_000 });
 
+  const doForce = !!opts.forceRestart || forceRestart();
   const running = await isInstanceAlreadyRunning(page, id);
-  if (running && !forceRestart()) {
-    // Already Running — Start disabled is correct; Path A PASS / no-op
-    return;
+  if (running && !doForce) {
+    return id;
   }
 
-  if (running && forceRestart()) {
+  if (running && doForce) {
     const stopBtn = page.locator(sel.stopInstance(id));
     if (await stopBtn.isDisabled().catch(() => true)) {
       throw new Error(
-        `idea#168 start_instance: DURATION_START_FORCE_RESTART set but stop-instance-${id} disabled.`,
+        `idea#168 start_instance: force-restart requested but stop-instance-${id} disabled.`,
       );
     }
     await stopBtn.click();
-    // Wait until Start enabled / Stop disabled
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       if (await isInstanceAlreadyStopped(page, id)) break;
@@ -417,7 +420,7 @@ export const start_instance: IntentFn = async ({ page, instanceId }) => {
   if (await btn.isDisabled().catch(() => false)) {
     const title = ((await btn.getAttribute('title')) ?? '').trim();
     const stillRunning = await isInstanceAlreadyRunning(page, id);
-    if (stillRunning && !forceRestart()) return;
+    if (stillRunning && !doForce) return id;
     throw new Error(
       `idea#168 start_instance: start-instance-${id} disabled (title="${title}") ` +
         `while instance is not Running — cannot start. ` +
@@ -427,19 +430,27 @@ export const start_instance: IntentFn = async ({ page, instanceId }) => {
 
   await btn.click();
 
-  // Brief wait for Starting → Running (Open ↗) when possible
   const open = page.locator(sel.openInstance(id));
   try {
     await open.waitFor({ state: 'visible', timeout: 60_000 });
   } catch {
-    // Some installs Start without Open immediately — accept Start becoming disabled + Running
-    if (await isInstanceAlreadyRunning(page, id)) return;
-    if (await btn.isDisabled().catch(() => false)) return;
+    if (await isInstanceAlreadyRunning(page, id)) return id;
+    if (await btn.isDisabled().catch(() => false)) return id;
     throw new Error(
       `idea#168 start_instance: clicked Start on ${id} but instance did not become Running ` +
         `(no open-instance-${id}, Start still enabled). No soft-pass.`,
     );
   }
+  return id;
+}
+
+/**
+ * Start instance — Prefer A: no-op PASS if already Running (Start correctly disabled).
+ * Loud-fail only when not running and Start disabled. Optional force restart via
+ * DURATION_START_FORCE_RESTART=1.
+ */
+export const start_instance: IntentFn = async ({ page, instanceId }) => {
+  await runStartInstance(page, instanceId);
 };
 
 /**

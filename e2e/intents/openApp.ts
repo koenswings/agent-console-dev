@@ -14,7 +14,7 @@ import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
 import {
   resolveStartInstanceId,
-  start_instance,
+  runStartInstance,
   isInstanceAlreadyRunning,
 } from './operatorActions';
 import { attemptAppLogin } from './appLogin';
@@ -22,10 +22,19 @@ import {
   APP_TAB_URL_RE,
   appKindForInstance,
   resolveSidecarUrl,
+  sidecarReadyTimeoutMs,
+  isSidecarHttpReadyStatus,
   type SidecarApp,
 } from './sidecarUrls';
 
-export { resolveSidecarUrl, sidecarPort, SIDECAR_DEFAULT_PORTS, APP_TAB_URL_RE } from './sidecarUrls';
+export {
+  resolveSidecarUrl,
+  sidecarPort,
+  SIDECAR_DEFAULT_PORTS,
+  APP_TAB_URL_RE,
+  sidecarReadyTimeoutMs,
+  isSidecarHttpReadyStatus,
+} from './sidecarUrls';
 
 /**
  * Prefer an already-open App tab matching Kolibri/Nextcloud sidecar URLs.
@@ -74,15 +83,49 @@ export const tryOpenInstancePathA = async (
 };
 
 /**
- * Path B: goto sidecar base URL (same host as Console, port from defaults/env).
+ * Poll sidecar until HTTP 2xx/3xx (Prefer A r19: Automerge Running ≠ sidecar up).
+ * Loud-fail on timeout — never soft-pass ERR_CONNECTION_REFUSED.
+ */
+export async function waitForSidecarHttpReady(
+  consolePage: Page,
+  app: SidecarApp,
+): Promise<string> {
+  const base = resolveSidecarUrl(app, consolePage.url());
+  const budget = sidecarReadyTimeoutMs();
+  const deadline = Date.now() + budget;
+  let last = 'no-attempt';
+  while (Date.now() < deadline) {
+    try {
+      const resp = await consolePage.request.get(base, {
+        timeout: 5_000,
+        maxRedirects: 0,
+        failOnStatusCode: false,
+      });
+      const status = resp.status();
+      if (isSidecarHttpReadyStatus(status)) return base;
+      last = `HTTP ${status}`;
+    } catch (err) {
+      last = err instanceof Error ? err.message : String(err);
+    }
+    await consolePage.waitForTimeout(1_000);
+  }
+  throw new Error(
+    `idea#168 sidecar not ready: ${base} within ${budget}ms (last=${last}). ` +
+      `Automerge Running ≠ docker/sidecar up (r19). ` +
+      `Set DURATION_SIDECAR_READY_MS / DURATION_${app.toUpperCase()}_URL|PORT. ` +
+      `No soft-pass connection refused.`,
+  );
+}
+
+/**
+ * Path B: wait sidecar HTTP ready → goto base URL.
  * Opens a new page in the Console context so Console UI stays available.
- * Throws loud if HTTP is unreachable.
  */
 export const openInstancePathB = async (
   consolePage: Page,
   app: SidecarApp,
 ): Promise<Page> => {
-  const base = resolveSidecarUrl(app, consolePage.url());
+  const base = await waitForSidecarHttpReady(consolePage, app);
   const appPage = await consolePage.context().newPage();
   try {
     const resp = await appPage.goto(base, {
@@ -100,7 +143,7 @@ export const openInstancePathB = async (
   } catch (err) {
     await appPage.close().catch(() => {});
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('idea#168 Path B:')) throw err;
+    if (msg.includes('idea#168 Path B:') || msg.includes('idea#168 sidecar not ready')) throw err;
     throw new Error(
       `idea#168 Path B: sidecar ${base} unreachable (${msg}). ` +
         `Neither Console open-instance card (Path A) nor sidecar HTTP (Path B) available. ` +
@@ -112,16 +155,30 @@ export const openInstancePathB = async (
   return appPage;
 };
 
+const collectCandidateIds = async (page: Page, preferred: string): Promise<string[]> => {
+  const candidates = [preferred];
+  for (const prefix of ['open-instance-', 'start-instance-'] as const) {
+    const loc = page.locator(`[data-testid^="${prefix}"][data-testid*="grade5a"]`);
+    if (!(await loc.count())) continue;
+    const tid = await loc.first().getAttribute('data-testid');
+    const gid = tid?.replace(new RegExp(`^${prefix}`), '') ?? '';
+    if (gid && !candidates.includes(gid)) candidates.push(gid);
+  }
+  return candidates;
+};
+
 /**
- * Prefer A: ensure Path A instance is Running before Open / Path B.
- * Reuses start_instance (already-Running no-op). Returns resolved instance id.
- * Loud-fail if cannot reach Running / Open after start — never soft-pass refused sidecar.
+ * Prefer A r19: UI Running ≠ sidecar up.
+ * start (no-op if Running) → if Open missing while Running, force-restart →
+ * wait Open and/or sidecar HTTP. Returns resolved instance id.
  */
 export async function ensureInstanceRunningForOpen(
   page: Page,
   instanceId?: string,
+  app?: SidecarApp,
 ): Promise<string> {
   const preferred = resolveStartInstanceId(instanceId);
+  const kind = app ?? appKindForInstance(preferred);
   await page
     .locator(sel.opOverview)
     .or(page.locator(sel.networkTree))
@@ -130,40 +187,67 @@ export async function ensureInstanceRunningForOpen(
     .waitFor({ state: 'visible', timeout: 15_000 })
     .catch(() => {});
 
-  // start_instance: no-op if Running; starts if Stopped; prefers Path A *grade5a*
-  await start_instance({ page, instanceId: preferred });
+  let id = await runStartInstance(page, preferred);
+  let candidates = await collectCandidateIds(page, id);
 
-  const candidates = [preferred];
-  const grade5a = page.locator('[data-testid^="open-instance-"][data-testid*="grade5a"]');
-  if (await grade5a.count()) {
-    const tid = await grade5a.first().getAttribute('data-testid');
-    const gid = tid?.replace(/^open-instance-/, '') ?? '';
-    if (gid && !candidates.includes(gid)) candidates.push(gid);
-  }
-  // Also match start-instance grade5a if Open not yet painted
-  const startG5 = page.locator('[data-testid^="start-instance-"][data-testid*="grade5a"]');
-  if (await startG5.count()) {
-    const tid = await startG5.first().getAttribute('data-testid');
-    const gid = tid?.replace(/^start-instance-/, '') ?? '';
-    if (gid && !candidates.includes(gid)) candidates.push(gid);
-  }
+  const openVisible = async (cid: string) =>
+    page.locator(sel.openInstance(cid)).isVisible().catch(() => false);
 
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
-    for (const id of candidates) {
-      const openBtn = page.locator(sel.openInstance(id));
-      if (await openBtn.isVisible().catch(() => false)) return id;
-      if (await isInstanceAlreadyRunning(page, id)) {
-        // Running — Open ↗ should appear shortly
-        try {
-          await openBtn.waitFor({ state: 'visible', timeout: 5_000 });
-          return id;
-        } catch {
-          /* keep waiting */
-        }
-      }
+  // Short wait for Open after start/no-op
+  const earlyDeadline = Date.now() + 8_000;
+  while (Date.now() < earlyDeadline) {
+    for (const cid of candidates) {
+      if (await openVisible(cid)) return cid;
     }
     await page.waitForTimeout(400);
+  }
+
+  // Ghost Running: UI Running / Start disabled but Open gone → force restart
+  const anyRunningNoOpen = async (): Promise<string | null> => {
+    for (const cid of candidates) {
+      if (await openVisible(cid)) return null;
+      if (await isInstanceAlreadyRunning(page, cid)) return cid;
+    }
+    return null;
+  };
+
+  const ghost = await anyRunningNoOpen();
+  if (ghost) {
+    id = await runStartInstance(page, ghost, { forceRestart: true });
+    candidates = await collectCandidateIds(page, id);
+  } else if (!(await openVisible(id))) {
+    // Stopped / no Open — start already attempted; try start again if Start enabled
+    id = await runStartInstance(page, preferred);
+    candidates = await collectCandidateIds(page, id);
+  }
+
+  const budget = sidecarReadyTimeoutMs();
+  const deadline = Date.now() + budget;
+  let sidecarOk = false;
+  while (Date.now() < deadline) {
+    for (const cid of candidates) {
+      if (await openVisible(cid)) return cid;
+    }
+    // Sidecar up → Path B-safe even if Open still painting
+    try {
+      const base = resolveSidecarUrl(kind, page.url());
+      const resp = await page.request.get(base, {
+        timeout: 3_000,
+        maxRedirects: 0,
+        failOnStatusCode: false,
+      });
+      if (isSidecarHttpReadyStatus(resp.status())) {
+        sidecarOk = true;
+        // Prefer returning id that looks Running
+        for (const cid of candidates) {
+          if (await isInstanceAlreadyRunning(page, cid)) return cid;
+        }
+        return id;
+      }
+    } catch {
+      /* keep polling */
+    }
+    await page.waitForTimeout(1_000);
   }
 
   const visibleOpen: string[] = [];
@@ -174,11 +258,10 @@ export async function ensureInstanceRunningForOpen(
     if (tid) visibleOpen.push(tid.replace(/^open-instance-/, ''));
   }
   throw new Error(
-    `idea#168 open_app: instance not Running / Open unavailable after start ` +
-      `(preferred=${preferred}, candidates=[${candidates.join(', ')}], ` +
+    `idea#168 open_app: Open unavailable and sidecar not ready within ${budget}ms ` +
+      `(preferred=${preferred}, id=${id}, sidecarOk=${sidecarOk}, ` +
       `visible open-instance=[${visibleOpen.join(', ')}]). ` +
-      `Walk must start→open (not stop→open). ` +
-      `Do NOT Path B against refused :18080 while Stopped. No soft-pass.`,
+      `r19: Automerge Running ≠ sidecar — force-restart + DURATION_SIDECAR_READY_MS. No soft-pass.`,
   );
 }
 
@@ -203,23 +286,23 @@ const hasConsoleStartControl = async (
 
 /**
  * Open App for instance: Path A / Path B.
- * Prefer A (r18): when Console shows Start/Stop for the instance, ensure Running
- * before Open / Path B — never soft-pass refused :18080 after stop.
- * When no Console instance controls (classroom Path B-only), Path B unchanged.
+ * Prefer A r19: Automerge Running ≠ sidecar — force-restart if Open missing;
+ * poll sidecar HTTP before Path B (DURATION_SIDECAR_READY_MS).
+ * Path A only when Open visible. Classroom Path B still waits sidecar ready.
  */
 export const openAppInstance = async (
   page: Page,
   instanceId: string,
   app?: SidecarApp,
 ): Promise<Page> => {
-  const kind = app ?? appKindForInstance(instanceId);
   const preferred = resolveStartInstanceId(instanceId);
+  const kind = app ?? appKindForInstance(preferred);
 
   // Already on an App tab?
   const existing = resolveAppPage(page);
   if (APP_TAB_URL_RE.test(existing.url())) return existing;
 
-  // Fast Path A if Open already visible (already Running)
+  // Path A only when Open visible
   const earlyA = await tryOpenInstancePathA(page, preferred);
   if (earlyA) {
     const landed = resolveAppPage(page);
@@ -227,21 +310,19 @@ export const openAppInstance = async (
     if (APP_TAB_URL_RE.test(landed.url())) return landed;
   }
 
-  let id = preferred;
   if (await hasConsoleStartControl(page, preferred)) {
-    // Operator / ALL APPS: must be Running before Open or Path B
-    id = await ensureInstanceRunningForOpen(page, preferred);
+    const id = await ensureInstanceRunningForOpen(page, preferred, kind);
     const pathA = await tryOpenInstancePathA(page, id);
     if (pathA) {
       const landed = resolveAppPage(page);
       if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
       if (APP_TAB_URL_RE.test(landed.url())) return landed;
     }
-    // Running confirmed — Path B sidecar should accept
+    // Open still missing — Path B only after sidecar HTTP ready
     return openInstancePathB(page, kind);
   }
 
-  // No Console Start control (e.g. pre-operator classroom) — Path B legacy
+  // Classroom / no Start control — Path B waits sidecar ready
   const pathA = await tryOpenInstancePathA(page, preferred);
   if (pathA) {
     const landed = resolveAppPage(page);
