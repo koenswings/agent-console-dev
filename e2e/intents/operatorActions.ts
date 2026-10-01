@@ -293,10 +293,9 @@ const instanceRowFor = (page: Page, controlSel: string) =>
   page.locator(controlSel).locator('xpath=ancestor::*[contains(@class,"instance-row")][1]');
 
 /**
- * True when Path A instance looks Running (Open ↗, green StatusDot, or
- * Start disabled + Stop enabled with title Start app).
+ * True when instance is fully Running (Open ↗ or Running StatusDot) — not Starting.
  */
-export async function isInstanceAlreadyRunning(
+export async function isInstanceTrulyRunning(
   page: Page,
   id: string,
 ): Promise<boolean> {
@@ -307,9 +306,48 @@ export async function isInstanceAlreadyRunning(
   if (await row.locator('.status-dot--running, [aria-label="Status: Running"]').count()) {
     return true;
   }
+  return false;
+}
+
+/**
+ * True when UI shows Starting / in-progress (auto-start after install, locked op).
+ */
+export async function isInstanceStartingOrInProgress(
+  page: Page,
+  id: string,
+): Promise<boolean> {
+  const row = instanceRowFor(page, sel.startInstance(id));
   if (await row.locator('[aria-label="Status: Starting"], .status-dot--starting').count()) {
     return true;
   }
+  if (
+    await row
+      .locator('.instance-row__progress-label')
+      .filter({ hasText: /Starting|containers|operation in progress/i })
+      .count()
+  ) {
+    return true;
+  }
+  if (await row.getByText(/Starting containers|Starting\.\.\./i).count()) {
+    return true;
+  }
+  const start = page.locator(sel.startInstance(id));
+  const title = ((await start.getAttribute('title')) ?? '').trim();
+  if (/operation in progress|starting/i.test(title)) return true;
+  return false;
+}
+
+/**
+ * True when Path A instance looks Running or Starting (Open ↗, StatusDot, or
+ * Start disabled + Stop enabled with title Start app).
+ * For start settle prefer isInstanceTrulyRunning / isInstanceStartingOrInProgress.
+ */
+export async function isInstanceAlreadyRunning(
+  page: Page,
+  id: string,
+): Promise<boolean> {
+  if (await isInstanceTrulyRunning(page, id)) return true;
+  if (await isInstanceStartingOrInProgress(page, id)) return true;
   const start = page.locator(sel.startInstance(id));
   const stop = page.locator(sel.stopInstance(id));
   if (!(await start.count())) return false;
@@ -319,6 +357,13 @@ export async function isInstanceAlreadyRunning(
   // Running/Starting disable Start with title "Start app" (not "Operation in progress")
   if (startDis && !stopDis && (title === 'Start app' || title === '')) return true;
   return false;
+}
+
+/** Budget while Start disabled during Starting / in-progress (DURATION_START_SETTLE_MS). */
+export function startSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_START_SETTLE_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 120_000;
 }
 
 export async function isInstanceAlreadyStopped(
@@ -396,12 +441,12 @@ export async function runStartInstance(
   await btn.waitFor({ state: 'visible', timeout: 15_000 });
 
   const doForce = !!opts.forceRestart || forceRestart();
-  const running = await isInstanceAlreadyRunning(page, id);
-  if (running && !doForce) {
+  // Prefer A r32: only no-op when truly Running (Open / Running status) — not Starting
+  if ((await isInstanceTrulyRunning(page, id)) && !doForce) {
     return id;
   }
 
-  if (running && doForce) {
+  if ((await isInstanceAlreadyRunning(page, id)) && doForce) {
     const stopBtn = page.locator(sel.stopInstance(id));
     if (await stopBtn.isDisabled().catch(() => true)) {
       throw new Error(
@@ -409,36 +454,72 @@ export async function runStartInstance(
       );
     }
     await stopBtn.click();
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
+    const stopDeadline = Date.now() + 60_000;
+    while (Date.now() < stopDeadline) {
       if (await isInstanceAlreadyStopped(page, id)) break;
       if (!(await btn.isDisabled().catch(() => true))) break;
       await page.waitForTimeout(400);
     }
   }
 
+  // Start disabled while Starting / in-progress (installApp auto-start) — wait, don't 468ms fail
   if (await btn.isDisabled().catch(() => false)) {
-    const title = ((await btn.getAttribute('title')) ?? '').trim();
-    const stillRunning = await isInstanceAlreadyRunning(page, id);
-    if (stillRunning && !doForce) return id;
-    throw new Error(
-      `idea#168 start_instance: start-instance-${id} disabled (title="${title}") ` +
-        `while instance is not Running — cannot start. ` +
-        `If already Running this is a no-op (unset DURATION_START_FORCE_RESTART). No soft-pass.`,
-    );
+    const title0 = ((await btn.getAttribute('title')) ?? '').trim();
+    if (await isInstanceTrulyRunning(page, id) && !doForce) return id;
+
+    const starting =
+      (await isInstanceStartingOrInProgress(page, id)) ||
+      /operation in progress|starting/i.test(title0) ||
+      title0 === 'Start app' ||
+      title0 === '';
+
+    if (!starting) {
+      throw new Error(
+        `idea#168 start_instance: start-instance-${id} disabled (title="${title0}") ` +
+          `while instance is not Running/Starting — cannot start. No soft-pass.`,
+      );
+    }
+
+    const budget = startSettleTimeoutMs();
+    const deadline = Date.now() + budget;
+    while (Date.now() < deadline) {
+      if (await isInstanceTrulyRunning(page, id)) return id;
+      if (!(await btn.isDisabled().catch(() => true))) break; // enabled → click below
+      await page.waitForTimeout(500);
+    }
+
+    if (await isInstanceTrulyRunning(page, id)) return id;
+    if (await btn.isDisabled().catch(() => false)) {
+      const title = ((await btn.getAttribute('title')) ?? '').trim();
+      throw new Error(
+        `idea#168 start_instance: start-instance-${id} still disabled after ${budget}ms ` +
+          `(title="${title}") — waited Starting/in-progress but never Running. ` +
+          `r32: installApp auto-start / Starting-containers must settle (DURATION_START_SETTLE_MS). ` +
+          `No soft-pass.`,
+      );
+    }
   }
 
   await btn.click();
 
   const open = page.locator(sel.openInstance(id));
+  const afterClickBudget = startSettleTimeoutMs();
   try {
-    await open.waitFor({ state: 'visible', timeout: 60_000 });
+    await open.waitFor({ state: 'visible', timeout: Math.min(60_000, afterClickBudget) });
   } catch {
-    if (await isInstanceAlreadyRunning(page, id)) return id;
-    if (await btn.isDisabled().catch(() => false)) return id;
+    if (await isInstanceTrulyRunning(page, id)) return id;
+    if (await isInstanceAlreadyRunning(page, id) && (await btn.isDisabled().catch(() => false))) {
+      // Still Starting after click — wait remaining settle
+      const deadline = Date.now() + afterClickBudget;
+      while (Date.now() < deadline) {
+        if (await isInstanceTrulyRunning(page, id)) return id;
+        await page.waitForTimeout(500);
+      }
+    }
+    if (await isInstanceTrulyRunning(page, id)) return id;
     throw new Error(
       `idea#168 start_instance: clicked Start on ${id} but instance did not become Running ` +
-        `(no open-instance-${id}, Start still enabled). No soft-pass.`,
+        `(no open-instance-${id}). No soft-pass.`,
     );
   }
   return id;

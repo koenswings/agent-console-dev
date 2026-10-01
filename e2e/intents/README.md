@@ -363,3 +363,16 @@ Do **not** change product. r23: `stop` then `backup` left Backup disabled.
 | Not Running / disabled | `runStartInstance` then wait Backup enabled (`DURATION_BACKUP_SETTLE_MS` ≥90s) |
 | Still disabled | Loud-fail distinguishing Stopped vs locked vs missing Backup Disk |
 | Prefer A | backup-before-stop in walk; Intent also starts if Stopped — **no** soft-pass |
+
+## runStartInstance wait while Starting (r32 FAIL@86)
+
+Late `installApp` may auto-start the new instance (Starting / Operation in progress).
+`start_after_install` must **not** fail ~468ms on disabled Start.
+
+| Detail | Contract |
+|---|---|
+| Truly Running | Open ↗ / Running status → no-op PASS |
+| Starting / in-progress | Poll until Running or Start enables (`DURATION_START_SETTLE_MS` default **120s**) |
+| Then | Click Start if still needed |
+| Loud-fail | Timeout still disabled / never Running — **no** soft-pass |
+| Callers | `start_instance`, `start_after_install`, `backup_instance`, open settle |

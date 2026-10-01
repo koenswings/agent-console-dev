@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { resolveStartInstanceId } from '../e2e/intents/operatorActions';
+import {
+  resolveStartInstanceId,
+  startSettleTimeoutMs,
+} from '../e2e/intents/operatorActions';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
 
 describe('resolveStartInstanceId (Prefer A Path A)', () => {
@@ -19,5 +22,15 @@ describe('resolveStartInstanceId (Prefer A Path A)', () => {
         DURATION_START_INSTANCE_ID: 'fleet-kolibri',
       }),
     ).toBe('fleet-kolibri');
+  });
+});
+
+describe('startSettleTimeoutMs (Prefer A r32)', () => {
+  it('defaults to 120s while Starting / in-progress', () => {
+    expect(startSettleTimeoutMs({})).toBe(120_000);
+  });
+
+  it('DURATION_START_SETTLE_MS override', () => {
+    expect(startSettleTimeoutMs({ DURATION_START_SETTLE_MS: '90000' })).toBe(90_000);
   });
 });
