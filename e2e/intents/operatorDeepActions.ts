@@ -12,7 +12,11 @@ import { openAppInstance } from './openApp';
 import { start_instance } from './operatorActions';
 import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
-import { ensureBackupDiskPanel } from './backupDisk';
+import {
+  ensureBackupDiskPanel,
+  completeMakeBackupDiskForm,
+  assertBackupConfigured,
+} from './backupDisk';
 
 const ensureOpLayout = async (page: Page): Promise<void> => {
   await page
@@ -107,19 +111,17 @@ export const stay_on_disk: IntentFn = async ({ page, diskId }) => {
 };
 
 /**
- * Make Backup Disk — EmptyDiskPanel Backup card → Configure (on-demand default).
- * Fails loud when card is gated (no diskIdArgs / capability).
+ * Make Backup Disk — EmptyDiskPanel → on-demand → check ≥1 instance → Configure.
+ * Wait until backup role / success. Prefer A: no soft-pass on validation banner.
  */
-export const make_backup_disk: IntentFn = async ({ page, diskId }) => {
-  await ensureEmptyDiskPanel(page, { diskId }, 'make_backup_disk');
+export const make_backup_disk: IntentFn = async ({ page, diskId, instanceId }) => {
+  const emptyId = await ensureEmptyDiskPanel(page, { diskId }, 'make_backup_disk');
   await clickCardOrFail(page, 'make-backup-disk', 'make_backup_disk');
-  const configure = page.locator(sel.configureBackupDisk);
-  await configure.waitFor({ state: 'visible', timeout: 10_000 });
-  await configure.click();
-  const pending = page.locator(sel.backupPending);
-  if (await pending.isVisible().catch(() => false)) {
-    await pending.waitFor({ state: 'hidden', timeout: 60_000 }).catch(() => {});
-  }
+  await completeMakeBackupDiskForm(page, {
+    diskId: emptyId,
+    instanceId,
+    intent: 'make_backup_disk',
+  });
 };
 
 /**
@@ -544,41 +546,13 @@ export const files_role_added: IntentFn = async ({ page, diskId }) => {
 };
 
 /**
- * Backup configured / restored — assert Backup Disk view or RestorePanel settled.
+ * Backup configured / restored — real backup role / RestorePanel / success only.
+ * Never EmptyDiskPanel leftovers ("Backup Disk" menu/form text). Prefer A.
  */
 export const backup_configured_restored: IntentFn = async ({ page, diskId }) => {
   await ensureOpLayout(page);
-  const restore = page.locator(sel.restorePanel);
-  const emptyDone = page.locator(sel.emptyDiskPanel).getByText(/Backup Disk|backup/i);
-  if (await restore.isVisible().catch(() => false)) {
-    await page.waitForTimeout(300);
-    return;
-  }
-  if (await emptyDone.count()) {
-    await page.waitForTimeout(300);
-    return;
-  }
-  // Prefer selecting Backup Disk (often duration-empty-001 post make_backup_disk)
-  try {
-    await ensureBackupDiskPanel(page, { diskId }, 'backup_configured_restored');
-    await page.waitForTimeout(300);
-    return;
-  } catch {
-    /* fall through to DiskView badge check */
-  }
-  const id = diskId ?? DURATION_FIXTURES.backup.diskId;
-  const view = page.locator(sel.diskView(id));
-  if (await view.isVisible().catch(() => false)) {
-    const badge = view.locator('.disk-view__badges').filter({ hasText: /backup/i });
-    if (await badge.count()) {
-      await page.waitForTimeout(300);
-      return;
-    }
-  }
-  throw new Error(
-    'idea#168 backup_configured_restored: neither restore-panel, Backup success on EmptyDiskPanel, ' +
-      'nor Backup badge on DiskView — run make_backup_disk / restore_from_backup first.',
-  );
+  await assertBackupConfigured(page, { diskId }, 'backup_configured_restored');
+  await page.waitForTimeout(300);
 };
 
 /** Done redistribute — clear focus to NetworkTree overview after copy/move. */

@@ -251,7 +251,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         <Show when={actionDone()}>
           <div class="edp__success">
             <div class="edp__success-icon">✓</div>
-            <p class="edp__success-msg">
+            <p
+              class="edp__success-msg"
+              data-testid={backupResult.state().kind === 'success' ? 'backup-configured-success' : 'install-configured-success'}
+            >
               {backupResult.state().kind === 'success'
                 ? 'Done. This disk is now a Backup Disk.'
                 : 'Done. The app is installed on this disk.'}
@@ -334,7 +337,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <div class="edp-radios">
               <For each={BACKUP_MODES}>
                 {(m) => (
-                  <label class={`edp-radio ${backupMode() === m.value ? 'edp-radio--on' : ''}`}>
+                  <label
+                    class={`edp-radio ${backupMode() === m.value ? 'edp-radio--on' : ''}`}
+                    data-testid={`backup-mode-${m.value}`}
+                  >
                     <input
                       type="radio"
                       name="backupMode"
@@ -363,7 +369,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                     return (
                       <Show when={inst()}>
                         {(i) => (
-                          <label class={`edp-check ${selectedInstanceIds().includes(id) ? 'edp-check--on' : ''}`}>
+                          <label
+                            class={`edp-check ${selectedInstanceIds().includes(id) ? 'edp-check--on' : ''}`}
+                            data-testid={`backup-link-instance-${id}`}
+                          >
                             <input
                               type="checkbox"
                               checked={selectedInstanceIds().includes(id)}
@@ -380,7 +389,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
             </Show>
 
-            <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <Show when={error()}><p class="edp-form__error" data-testid="backup-form-error" role="alert">{error()}</p></Show>
             <Show when={backupPending()}>
               <p class="edp-form__hint" data-testid="backup-pending">Waiting for the Engine…</p>
             </Show>

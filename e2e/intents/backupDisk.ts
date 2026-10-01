@@ -133,3 +133,188 @@ export async function ensureBackupDiskPanel(
       `Run make_backup_disk on duration-empty-001 first, then select that disk.`,
   );
 }
+
+/** Prefer env → ctx instanceId → Kolibri Grade5A fixture. */
+export function resolveBackupSourceInstanceId(
+  ctx: Pick<IntentContext, 'instanceId'> = {},
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return (
+    env.DURATION_BACKUP_SOURCE_INSTANCE?.trim() ||
+    ctx.instanceId ||
+    DURATION_FIXTURES.kolibri.instanceId
+  );
+}
+
+/**
+ * EmptyDiskPanel backup form: on-demand mode + ≥1 linked instance + Configure,
+ * then wait until backup role / success / restore-panel. Loud-fail on
+ * "Select at least one app" or disk still empty. Prefer A — no soft-pass.
+ */
+export async function completeMakeBackupDiskForm(
+  page: Page,
+  opts: {
+    diskId: string;
+    instanceId?: string;
+    intent?: string;
+  },
+): Promise<void> {
+  const intent = opts.intent ?? 'make_backup_disk';
+  const form = page.locator(sel.emptyDiskPanel);
+  await form.locator(sel.configureBackupDisk).waitFor({ state: 'visible', timeout: 10_000 });
+
+  // Manual / on-demand (default) — click if present
+  const mode = page.locator(sel.backupMode('on-demand'));
+  if (await mode.isVisible().catch(() => false)) {
+    await mode.click();
+  }
+
+  const preferred = resolveBackupSourceInstanceId({ instanceId: opts.instanceId });
+  let linked = page.locator(sel.backupLinkInstance(preferred));
+  if (!(await linked.count()) || !(await linked.isVisible().catch(() => false))) {
+    // Prefer a Running checkbox when preferred id missing from form
+    const running = page
+      .locator(`${sel.emptyDiskPanel} [data-testid^="backup-link-instance-"]`)
+      .filter({ hasText: /Running/i })
+      .first();
+    if (await running.count()) {
+      linked = running;
+    } else {
+      linked = page
+        .locator(`${sel.emptyDiskPanel} [data-testid^="backup-link-instance-"]`)
+        .first();
+    }
+  }
+  if (!(await linked.count())) {
+    throw new Error(
+      `idea#168 ${intent}: no backup-link-instance-* checkboxes — ` +
+        `EmptyDiskPanel shows "No instances found" or Engine instanceDB empty. ` +
+        `Dock duration apps first; set DURATION_BACKUP_SOURCE_INSTANCE when needed. No soft-pass.`,
+    );
+  }
+  const box = linked.locator('input[type="checkbox"]');
+  if (!(await box.isChecked().catch(() => false))) {
+    await linked.click();
+  }
+  if (!(await box.isChecked().catch(() => false))) {
+    // label click may miss — force check
+    await box.check({ force: true }).catch(() => {});
+  }
+  if (!(await box.isChecked().catch(() => false))) {
+    throw new Error(
+      `idea#168 ${intent}: failed to check a linked instance checkbox ` +
+        `(preferred=${preferred}). No soft-pass.`,
+    );
+  }
+
+  await form.locator(sel.configureBackupDisk).click();
+
+  // Validation banner must not stick
+  const formErr = page.locator(sel.backupFormError);
+  try {
+    await formErr.waitFor({ state: 'visible', timeout: 800 });
+  } catch {
+    /* ok — no client validation error */
+  }
+  if (await formErr.isVisible().catch(() => false)) {
+    const msg = ((await formErr.textContent()) ?? '').trim();
+    throw new Error(
+      `idea#168 ${intent}: Configure Backup Disk rejected — "${msg}". ` +
+        `Must check ≥1 linked instance before Configure. No soft-pass.`,
+    );
+  }
+
+  const pending = page.locator(sel.backupPending);
+  if (await pending.isVisible().catch(() => false)) {
+    await pending.waitFor({ state: 'hidden', timeout: 90_000 }).catch(() => {});
+  }
+
+  const engineErr = page.locator('[data-testid="backup-error"]');
+  if (await engineErr.isVisible().catch(() => false)) {
+    const msg = ((await engineErr.textContent()) ?? '').trim();
+    throw new Error(`idea#168 ${intent}: Engine createBackupDisk error — ${msg}`);
+  }
+
+  // Success local OR NetworkTree backup badge OR restore-panel
+  const success = page.locator(sel.backupConfiguredSuccess);
+  const backupBadge = page.locator(
+    `${sel.networkTree} ${sel.disk(opts.diskId)} [data-role="backup"]`,
+  );
+  const anyBackupBadge = page.locator(
+    `${sel.networkTree} [data-testid^="disk-"]:has([data-role="backup"])`,
+  );
+  const restore = page.locator(sel.restorePanel);
+
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    if (await success.isVisible().catch(() => false)) return;
+    if (await restore.isVisible().catch(() => false)) return;
+    if (await backupBadge.isVisible().catch(() => false)) return;
+    if ((await anyBackupBadge.count()) > 0) {
+      // Disk republished with backup role (id may stay duration-empty-001)
+      return;
+    }
+    // Still showing empty badge on preferred disk → keep waiting briefly
+    await page.waitForTimeout(400);
+  }
+
+  const stillEmpty = page.locator(
+    `${sel.networkTree} ${sel.disk(opts.diskId)} [data-role="empty"]`,
+  );
+  const emptyLeft =
+    (await stillEmpty.isVisible().catch(() => false)) ||
+    (await form.locator(sel.configureBackupDisk).isVisible().catch(() => false));
+  throw new Error(
+    `idea#168 ${intent}: createBackupDisk did not finish — disk still empty / ` +
+      `no data-role="backup" / no restore-panel / no backup-configured-success ` +
+      `(diskId=${opts.diskId}, emptyFormLeft=${emptyLeft}). ` +
+      `r15 soft-pass fixed: must link ≥1 instance and wait for Engine. No soft-pass.`,
+  );
+}
+
+/**
+ * Assert backup is really configured — never EmptyDiskPanel leftovers
+ * ("Make this a Backup Disk" / Configure / "Select at least one app").
+ */
+export async function assertBackupConfigured(
+  page: Page,
+  ctx: Pick<IntentContext, 'diskId'> = {},
+  intent = 'backup_configured_restored',
+): Promise<void> {
+  await ensureTree(page);
+
+  const success = page.locator(sel.backupConfiguredSuccess);
+  if (await success.isVisible().catch(() => false)) return;
+
+  if (await page.locator(sel.restorePanel).isVisible().catch(() => false)) return;
+
+  const preferred = resolveBackupDiskIdPreference(ctx);
+  const badgeOnPreferred = page.locator(
+    `${sel.networkTree} ${sel.disk(preferred)} [data-role="backup"]`,
+  );
+  if (await badgeOnPreferred.isVisible().catch(() => false)) return;
+
+  // Try select preferred / discover backup rows
+  try {
+    await ensureBackupDiskPanel(page, ctx, intent);
+    return;
+  } catch (e) {
+    /* fall through with richer message */
+  }
+
+  const leftoverErr = page.locator(sel.backupFormError);
+  const leftoverCfg = page.locator(
+    `${sel.emptyDiskPanel} ${sel.configureBackupDisk}`,
+  );
+  const leftoverHint =
+    (await leftoverErr.isVisible().catch(() => false)) ||
+    (await leftoverCfg.isVisible().catch(() => false));
+
+  throw new Error(
+    `idea#168 ${intent}: Backup Disk not configured ` +
+      `(no restore-panel, no data-role="backup", no backup-configured-success` +
+      `${leftoverHint ? '; EmptyDiskPanel Configure / validation leftovers visible' : ''}). ` +
+      `make_backup_disk must check ≥1 instance and complete Configure. ` +
+      `Do NOT treat EmptyDiskPanel "Backup Disk" menu/form text as success. No soft-pass.`,
+  );
+}

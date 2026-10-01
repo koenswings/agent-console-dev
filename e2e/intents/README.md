@@ -245,3 +245,21 @@ Steve: **no soft-skip**, **no remap onto Grade5A App Disks** as the backup sourc
 | Loud-fail | Preload text if no Backup Disk — Engine must dock/select backup; Axle may interim-skip |
 
 Registered-intents walk: run `make_backup_disk` on empty, then `open_disk_inventory` on that disk (or rely on Intent ensure) before `restore_from_backup`.
+
+## make_backup_disk complete configure (r15 soft-pass fix)
+
+r15 FAIL@66: Intent clicked Configure with **zero** instances checked → red
+"Select at least one app to back up." → disk stayed `empty`. Soft-pass in ~2.5s.
+
+| Step | Detail |
+|---|---|
+| 1 | `ensureEmptyDiskPanel` |
+| 2 | Open Backup card (`make-backup-disk`) |
+| 3 | Select **On demand** (`backup-mode-on-demand`) |
+| 4 | Check ≥1 `backup-link-instance-*` (prefer `DURATION_BACKUP_SOURCE_INSTANCE` / ctx / `kolibri-grade5a-001`, else Running, else first) |
+| 5 | Click `configure-backup-disk` |
+| 6 | Wait for `backup-configured-success` **or** NetworkTree `data-role="backup"` **or** `restore-panel` |
+| Fail | Loud if `backup-form-error` / still empty role — **no soft-pass** |
+
+`backup_configured_restored` must **not** match EmptyDiskPanel leftovers
+("Make this a Backup Disk" / Configure form). Only success / backup badge / RestorePanel.
