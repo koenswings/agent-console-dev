@@ -1,7 +1,7 @@
 /**
  * idea#166 — Intent registry keys match Axle ACTIONS.md / school-day.yaml.
  * Engine-owned infra_* / enter_infra_fleet_walk must not appear here.
- * Phase 3–4 Intents bind to Kid stable fixture IDs (agent-app-dev#10).
+ * Phase 3–5 Intents bind to Kid stable fixture IDs (agent-app-dev#10).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -24,6 +24,8 @@ const LOCKED = [
   'open_kolibri_as_learner',
   'open_nextcloud_as_teacher',
   'open_nextcloud_as_learner',
+  'open_video',
+  'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
   'eject_disk',
@@ -59,8 +61,8 @@ const DEFERRED = [
   'exit_lesson',
 ] as const;
 
-describe('Intent registry (idea#166 Phase 4)', () => {
-  it('registers Hub + dwell + Phase 3–4 operator Intents', () => {
+describe('Intent registry (idea#166 Phase 5)', () => {
+  it('registers Hub + dwell + Phase 3–5 Intents', () => {
     expect([...CONSOLE_INTENT_NAMES].sort()).toEqual([...LOCKED].sort());
     expect(Object.keys(intentRegistry).sort()).toEqual([...CONSOLE_INTENT_NAMES].sort());
   });
@@ -84,10 +86,18 @@ describe('Intent registry (idea#166 Phase 4)', () => {
     }
   });
 
-  it('Kid fixture IDs match agent-app-dev#10 / walker-ref.yaml', () => {
-    expect(DURATION_FIXTURES.kolibri).toEqual({
-      diskId: 'duration-kolibri-grade5a-001',
-      instanceId: 'kolibri-grade5a-001',
+  it('Kid fixture IDs match agent-app-dev#10 / CONTENT.seeded.json @0bca699', () => {
+    expect(DURATION_FIXTURES.kolibri.diskId).toBe('duration-kolibri-grade5a-001');
+    expect(DURATION_FIXTURES.kolibri.instanceId).toBe('kolibri-grade5a-001');
+    expect(DURATION_FIXTURES.kolibri.video).toEqual({
+      logicalId: 'video-grade5a-01',
+      contentId: 'e60662de-b15c-52f9-b003-359f7d91f8fd',
+      nodeId: '4a1a1b92-3f6d-59eb-a94c-3f91f0011dd5',
+    });
+    expect(DURATION_FIXTURES.kolibri.exercise).toEqual({
+      logicalId: 'exercise-grade5a-01',
+      contentId: '7eb9de46-96eb-53d0-bcc1-2fb270b96f03',
+      nodeId: '94a47ec7-f30d-5cd1-93f8-ad08c42b6c2a',
     });
     expect(DURATION_FIXTURES.nextcloud).toEqual({
       diskId: 'duration-nextcloud-grade5a-001',
@@ -105,5 +115,7 @@ describe('Intent registry (idea#166 Phase 4)', () => {
     expect(sel.settingsBtn).toBe('[data-testid="settings-btn"]');
     expect(sel.makeFilesDisk).toBe('[data-testid="make-files-disk"]');
     expect(sel.addFiles).toBe('[data-testid="add-files"]');
+    expect(DURATION_FIXTURES.kolibri.video.contentId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(DURATION_FIXTURES.kolibri.exercise.contentId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

@@ -21,6 +21,7 @@ import {
   open_nextcloud_as_teacher,
 } from './openApp';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
+import { open_exercise, open_video } from './openKolibriContent';
 import {
   add_files,
   cancel_eject,
@@ -51,6 +52,8 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_kolibri_as_learner,
   open_nextcloud_as_teacher,
   open_nextcloud_as_learner,
+  open_video,
+  open_exercise,
   open_disk_inventory,
   open_instance_controls,
   eject_disk,

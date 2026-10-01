@@ -19,7 +19,7 @@ export interface IntentContext {
 export type IntentFn = (ctx: IntentContext) => Promise<void>;
 
 /**
- * Console Intent names registered in e2e/intents (idea#166 Phase 1–4).
+ * Console Intent names registered in e2e/intents (idea#166 Phase 1–5).
  * Engine-owned infra_* and enter_infra_fleet_walk are NOT registered here.
  * Keys match Axle ACTIONS.md / school-day.yaml; proposal snake_case for
  * Console-owned operator edges not yet listed in ACTIONS.md.
@@ -39,6 +39,9 @@ export const CONSOLE_INTENT_NAMES = [
   'open_kolibri_as_learner',
   'open_nextcloud_as_teacher',
   'open_nextcloud_as_learner',
+  // Phase 5 — Kolibri content (Kid @0bca699 CONTENT.seeded.json)
+  'open_video',
+  'open_exercise',
   // Phase 3 — thin operator deeper path
   'open_disk_inventory',
   'open_instance_controls',
