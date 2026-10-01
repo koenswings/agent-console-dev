@@ -75,6 +75,13 @@ const LOCKED = [
   'leave_kolibri',
   'leave_nextcloud_as_teacher',
   'leave_nextcloud_as_learner',
+  'create_class',
+  'enroll_learners',
+  'build_lesson',
+  'create_quiz',
+  'read_reports',
+  'preview_as_learner',
+  'browse_classes',
 ] as const;
 
 const ENGINE_OWNED = [
@@ -127,6 +134,13 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('reboot_engine')).toBe(true);
     expect(hasDurationIntent('files_role_added')).toBe(true);
     expect(hasDurationIntent('leave_kolibri')).toBe(true);
+    expect(hasDurationIntent('create_class')).toBe(true);
+    expect(hasDurationIntent('enroll_learners')).toBe(true);
+    expect(hasDurationIntent('build_lesson')).toBe(true);
+    expect(hasDurationIntent('create_quiz')).toBe(true);
+    expect(hasDurationIntent('read_reports')).toBe(true);
+    expect(hasDurationIntent('preview_as_learner')).toBe(true);
+    expect(hasDurationIntent('browse_classes')).toBe(true);
     expect(hasDurationIntent('infra_dock_fixture')).toBe(false);
     expect(hasDurationIntent('keep_watching')).toBe(false);
     expect(hasDurationIntent('finish_exercise')).toBe(false);

@@ -109,3 +109,25 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 `done_redistribute`, `stay_on_source_disk`, `open_copied_instance`, `switch_engine`
 (loud if no Connect picker), `reboot_engine`. Usage leave: `back_to_console`,
 `leave_kolibri`, `leave_nextcloud_as_*`.
+
+## Kolibri coaching (kolibri_manage)
+
+After `open_kolibri_as_teacher` (Path A/B + two-step Kolibri login). Real Facility/Coach/Learn
+hash navigation — **fail loud** if UI missing (never silent ok).
+
+| Key | Where | Behavior |
+|---|---|---|
+| `create_class` | `/en/facility/#/classes` | Create-or-assert **Grade 5A** (NEW CLASS if absent) |
+| `enroll_learners` | `/en/facility/#/classes/{classId}` | Open ENROLL LEARNERS or assert learner01 listed |
+| `build_lesson` | Coach Plan → Lessons | Open **Grade 5A Duration Lesson** (or NEW LESSON+Cancel) |
+| `create_quiz` | Coach Plan → Quizzes | Open NEW QUIZ wizard; Cancel when possible (no quiz preload) |
+| `read_reports` | Coach Reports → Lessons | Open lesson report; assert learner/progress table |
+| `preview_as_learner` | Learn tab | Navigate `/en/learn/` |
+| `browse_classes` | Learn home | Scan library/classes without starting a resource |
+| `back_to_console` | Console | Close Kolibri tabs; assert `console-overview` / `op-overview` |
+
+Class/lesson Morango ids: `fixtures.ts` → `DURATION_FIXTURES.kolibri.live` (CONTENT.live.json).
+Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G5A→**18081**.
+
+**Not registered:** lesson-chrome player Intents (`keep_watching`, …) — see LESSON_CHROME.md.
+

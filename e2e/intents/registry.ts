@@ -71,6 +71,15 @@ import {
   leave_nextcloud_as_teacher,
   leave_nextcloud_as_learner,
 } from './operatorDeepActions';
+import {
+  create_class,
+  enroll_learners,
+  build_lesson,
+  create_quiz,
+  read_reports,
+  preview_as_learner,
+  browse_classes,
+} from './kolibriCoaching';
 
 export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_console_as_teacher,
@@ -131,6 +140,13 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   leave_kolibri,
   leave_nextcloud_as_teacher,
   leave_nextcloud_as_learner,
+  create_class,
+  enroll_learners,
+  build_lesson,
+  create_quiz,
+  read_reports,
+  preview_as_learner,
+  browse_classes,
 };
 
 export function getIntent(name: string): IntentFn | undefined {

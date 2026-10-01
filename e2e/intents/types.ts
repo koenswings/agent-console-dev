@@ -93,6 +93,14 @@ export const CONSOLE_INTENT_NAMES = [
   'leave_kolibri',
   'leave_nextcloud_as_teacher',
   'leave_nextcloud_as_learner',
+  // Kolibri coaching (kolibri_manage — after open_kolibri_as_teacher)
+  'create_class',
+  'enroll_learners',
+  'build_lesson',
+  'create_quiz',
+  'read_reports',
+  'preview_as_learner',
+  'browse_classes',
 ] as const;
 
 export type ConsoleIntentName = (typeof CONSOLE_INTENT_NAMES)[number];

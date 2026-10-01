@@ -566,14 +566,26 @@ const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise
   for (const p of pages) {
     try {
       const url = p.url();
-      if (/kolibri|nextcloud|18080|18081|18280|\/learn|\/apps\/files/i.test(url) && p !== page) {
+      if (
+        p !== page &&
+        /kolibri|nextcloud|18080|18081|18280|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files/i.test(
+          url,
+        )
+      ) {
         await p.close().catch(() => {});
       }
     } catch {
       /* closed */
     }
   }
-  // Prefer user-mode overview; else operator overview
+  await page.bringToFront().catch(() => {});
+  // Close account/settings overlays that hide overview
+  if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
+    await page.locator(sel.accountBtn).click().catch(() => {});
+  }
+  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
+    await page.locator(sel.settingsBtn).click().catch(() => {});
+  }
   const overview = page.locator(sel.consoleOverview);
   const op = page.locator(sel.opOverview);
   if (await overview.isVisible().catch(() => false)) {
@@ -584,8 +596,6 @@ const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise
     await op.waitFor({ state: 'visible', timeout: 5_000 });
     return;
   }
-  // Bring Console page to front and wait
-  await page.bringToFront().catch(() => {});
   await overview.or(op).first().waitFor({ state: 'visible', timeout: 15_000 });
 };
 

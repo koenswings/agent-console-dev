@@ -165,12 +165,26 @@ const openAndLogin = async (
 };
 
 export const open_kolibri_as_teacher: IntentFn = async ({ page, instanceId }) => {
-  await openAndLogin(
-    page,
-    instanceId ?? DURATION_FIXTURES.kolibri.instanceId,
-    'kolibri',
-    DURATION_FIXTURES.kolibri.auth.teacher,
-  );
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  await openAndLogin(page, id, 'kolibri', DURATION_FIXTURES.kolibri.auth.teacher);
+  // Land on Coach classes (kolibri_manage entry) when App tab is Kolibri
+  const app = resolveAppPage(page);
+  try {
+    const url = app.url();
+    if (APP_TAB_URL_RE.test(url) && !/nextcloud|18280/i.test(url)) {
+      const origin = new URL(url).origin;
+      await app
+        .goto(`${origin}/en/coach/#/classes`, { waitUntil: 'domcontentloaded', timeout: 15_000 })
+        .catch(async () => {
+          await app.goto(`${origin}/coach/#/classes`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 15_000,
+          });
+        });
+    }
+  } catch {
+    /* coaching Intents will re-nav / fail loud */
+  }
 };
 
 export const open_kolibri_as_learner: IntentFn = async ({ page, instanceId }) => {

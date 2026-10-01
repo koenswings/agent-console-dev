@@ -1,6 +1,8 @@
 /**
  * In-App login helpers for Kolibri / Nextcloud tabs opened from Console (idea#168).
  * Uses Kid fixture usernames; passwords default to username (duration pack convention).
+ *
+ * Kolibri 0.15 auth is two-step: Username → NEXT → Password → SIGN IN.
  */
 import type { Page } from '@playwright/test';
 
@@ -19,11 +21,19 @@ export const attemptAppLogin = async (
   opts?: { timeoutMs?: number },
 ): Promise<'logged_in' | 'already_in' | 'no_form'> => {
   const timeout = opts?.timeoutMs ?? 12_000;
+
+  // Already in coach/learn/facility?
+  try {
+    const url = app.url();
+    if (/\/(coach|learn|facility|device|profile)\//i.test(url) && !/signin|auth/i.test(url)) {
+      return 'already_in';
+    }
+  } catch {
+    /* ignore */
+  }
+
   const user = app.locator(
-    'input[name="username"], input[autocomplete="username"], input#id_username, input[type="text"]',
-  ).first();
-  const pass = app.locator(
-    'input[name="password"], input[autocomplete="current-password"], input#id_password, input[type="password"]',
+    'input[autocomplete="username"], input[name="username"], input#id_username, input[type="text"]',
   ).first();
 
   try {
@@ -32,15 +42,30 @@ export const attemptAppLogin = async (
     return 'no_form';
   }
 
-  if (!(await user.count()) || !(await pass.count())) return 'no_form';
+  if (!(await user.count())) return 'no_form';
 
-  // Heuristic: if password field absent of empty login chrome, treat as already in
-  const value = await user.inputValue().catch(() => '');
-  if (!value) await user.fill(creds.username);
+  await user.fill(creds.username);
+
+  // Kolibri two-step: NEXT then password
+  const next = app.getByRole('button', { name: /^next$/i });
+  if (await next.count()) {
+    await next.first().click();
+  }
+
+  const pass = app.locator(
+    'input[type="password"], input[name="password"], input[autocomplete="current-password"], input#id_password',
+  ).first();
+  try {
+    await pass.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    // Single-step forms (Nextcloud): password may already have been visible
+    if (!(await pass.count())) return 'no_form';
+  }
+
   await pass.fill(creds.password);
 
   const submit = app.locator(
-    'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")',
+    'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("SIGN IN"), button:has-text("Log in"), button:has-text("Login")',
   ).first();
   if (await submit.count()) {
     await submit.click();
@@ -48,7 +73,6 @@ export const attemptAppLogin = async (
     await pass.press('Enter');
   }
 
-  // Wait briefly for navigation / chrome change
-  await app.waitForTimeout(800);
+  await app.waitForTimeout(1200);
   return 'logged_in';
 };
