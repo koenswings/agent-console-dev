@@ -72,13 +72,25 @@ export async function ensureConsoleSurface(page: Page): Promise<'live' | 'demo'>
 export const open_console_as_teacher: IntentFn = async ({ page }) => {
   await ensureConsoleSurface(page);
   await page.locator(sel.consoleOverview).waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator(sel.accountBtn).waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+  try {
+    await page.locator(sel.accountBtn).waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 open_console_as_teacher: console-overview visible but account-btn missing. Prefer A.',
+    );
+  }
 };
 
 export const open_console_as_learner: IntentFn = async ({ page }) => {
   await ensureConsoleSurface(page);
   await page.locator(sel.consoleOverview).waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator(sel.accountBtn).waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+  try {
+    await page.locator(sel.accountBtn).waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 open_console_as_learner: console-overview visible but account-btn missing. Prefer A.',
+    );
+  }
 };
 
 export const open_console_as_operator: IntentFn = async ({ page }) => {

@@ -273,20 +273,46 @@ export const start_after_install: IntentFn = async ({ page, instanceId }) => {
   await runStartInstance(page, id);
 };
 
-/** Stay on disk — assert DiskView / EmptyDiskPanel for diskId and dwell briefly. */
+/**
+ * Stay on disk — Prefer A: DiskView / EmptyDiskPanel for diskId (env DURATION_DISK_ID).
+ * Loud-fail if preferred disk missing from tree (list visibles).
+ */
 export const stay_on_disk: IntentFn = async ({ page, diskId }) => {
   await ensureOpLayout(page);
-  const id = diskId ?? DURATION_FIXTURES.kolibri.diskId;
+  const preferred =
+    process.env.DURATION_DISK_ID?.trim() ||
+    diskId ||
+    DURATION_FIXTURES.kolibri.diskId;
+  let id = preferred;
+  if (!(await page.locator(sel.disk(id)).count())) {
+    const visible = await listVisibleTreeDiskIds(page);
+    if (visible.length === 1) id = visible[0]!;
+    else {
+      const grade = visible.find((d) => /grade5a|duration-/i.test(d));
+      if (grade) id = grade;
+      else {
+        throw new Error(
+          `idea#168 stay_on_disk: disk-${preferred} not on NetworkTree. ` +
+            `visible=[${visible.join(', ')}]. Set DURATION_DISK_ID. Prefer A.`,
+        );
+      }
+    }
+  }
   const view = page.locator(sel.diskView(id));
   const empty = page.locator(sel.emptyDiskPanel);
-  const visible = view.or(empty).first();
-  // If not already on the disk panel, click the disk row
-  if (!(await visible.isVisible().catch(() => false))) {
+  const visiblePanel = view.or(empty).first();
+  if (!(await visiblePanel.isVisible().catch(() => false))) {
     const row = page.locator(sel.disk(id));
     await row.waitFor({ state: 'visible', timeout: 15_000 });
     await row.click();
   }
-  await visible.waitFor({ state: 'visible', timeout: 10_000 });
+  try {
+    await visiblePanel.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      `idea#168 stay_on_disk: disk-${id} clicked but DiskView / EmptyDiskPanel not visible. Prefer A.`,
+    );
+  }
   await page.waitForTimeout(400);
 };
 

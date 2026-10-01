@@ -122,6 +122,23 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `confirm_eject` / `cancel_eject` | Dialog must hide after OK/Cancel (no soft `.catch`). |
 | `leave_*` / `back_to_console` | Close app tabs + overlays; assert `console-overview` / `op-overview`. Dismisses ConnectionManagement via `connection-mgmt-btn` if open. |
 
+### Dwell / return / inventory / files role (Prefer A)
+
+| Intent | Contract |
+|---|---|
+| `stay_on_teacher_overview` / `stay_on_learner_overview` | `console-overview` **and** ≥1 `instance-*` card (no soft-catch empty). |
+| `stay_on_overview` | NetworkTree + ≥1 `disk-*` within 15s (operator dwell). |
+| `return_to_start` | Dismiss erase/eject/settings/account/Connect; assert overview/tree. Loud if dialog stuck. |
+| `open_disk_inventory` | Resolve visible `disk-*` (`DURATION_DISK_ID`); DiskView / EmptyDiskPanel must open. |
+| `open_instance_controls` | Resolve visible instance (`DURATION_INSTANCE_ID`); start/stop/open controls. |
+| `open_console_as_teacher` / `_learner` | Overview + `account-btn` required (no soft-catch). |
+| `close_account` | `op-entry` must **hide** after toggle. |
+| `cancel_erase` | `erase-dialog` must hide after Cancel. |
+| `stop_instance` | Settle until Stopped (`DURATION_STOP_SETTLE_MS`, default 90s). |
+| `add_files_role` | Requires visible `add-files` on DiskView; settle to files section/badge. Env `DURATION_FILES_DISK_ID`. |
+| `make_files_disk` | After submit, wait Files role / DiskView settle (still needs Engine empty dock). |
+| `stay_on_disk` / `stay_on_source_disk` | Resolve disk on tree; DiskView / EmptyDiskPanel visible. |
+
 **Still deferred / blocked (not this tip):** lesson chrome (`keep_watching`, …) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
 
 ## Kolibri coaching (kolibri_manage)

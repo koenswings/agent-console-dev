@@ -207,7 +207,13 @@ export const erase_disk: IntentFn = async ({ page, diskId }) => {
 export const cancel_erase: IntentFn = async ({ page }) => {
   await page.locator(sel.eraseDialog).waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(sel.eraseCancel).click();
-  await page.locator(sel.eraseDialog).waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+  try {
+    await page.locator(sel.eraseDialog).waitFor({ state: 'hidden', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 cancel_erase: clicked erase-cancel but erase-dialog still visible. Prefer A loud-fail.',
+    );
+  }
 };
 
 /**
@@ -574,24 +580,44 @@ export const stop_instance: IntentFn = async ({ page, instanceId }) => {
 
   await btn.click();
 
-  const deadline = Date.now() + 60_000;
+  const stopBudget = (() => {
+    const raw = process.env.DURATION_STOP_SETTLE_MS?.trim();
+    if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+    return 90_000;
+  })();
+  const deadline = Date.now() + stopBudget;
   while (Date.now() < deadline) {
     if (await isInstanceAlreadyStopped(page, id)) return;
     await page.waitForTimeout(400);
   }
   throw new Error(
-    `idea#168 stop_instance: clicked Stop on ${id} but instance still looks Running after 60s.`,
+    `idea#168 stop_instance: clicked Stop on ${id} but instance still looks Running after ${stopBudget}ms. ` +
+      `Set DURATION_STOP_SETTLE_MS. Prefer A — no soft-pass.`,
   );
 };
 
 export const open_account: IntentFn = async ({ page }) => {
   await page.locator(sel.accountBtn).click();
-  await page.locator(sel.opEntry).waitFor({ state: 'visible', timeout: 10_000 });
+  try {
+    await page.locator(sel.opEntry).waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 open_account: clicked account-btn but [data-testid="op-entry"] did not open. Prefer A.',
+    );
+  }
 };
 
+/** Close Account — Prefer A: op-entry must hide (not soft-ok while still open). */
 export const close_account: IntentFn = async ({ page }) => {
   await page.locator(sel.opEntry).waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(sel.accountBtn).click();
+  try {
+    await page.locator(sel.opEntry).waitFor({ state: 'hidden', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 close_account: clicked account-btn but [data-testid="op-entry"] still visible.',
+    );
+  }
 };
 
 /**
@@ -667,21 +693,96 @@ export const make_files_disk: IntentFn = async ({ page, diskId }) => {
   const v = await share.inputValue();
   if (!v.trim()) await share.fill('School Files');
   await page.locator(sel.filesShareSubmit).click();
+  // Prefer A Console settle: leave EmptyDiskPanel make-files form / show files role
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    if (await page.locator(sel.diskSectionFiles).isVisible().catch(() => false)) return;
+    const badge = page.locator('.disk-view__badges, .tree-item__badges, [data-role="files"]').filter({
+      hasText: /files/i,
+    });
+    if (await badge.count()) return;
+    // Form closed and DiskView for non-empty
+    if (
+      !(await page.locator(sel.filesShareName).isVisible().catch(() => false)) &&
+      (await page.locator('[data-testid^="disk-view-"]').isVisible().catch(() => false))
+    ) {
+      return;
+    }
+    await page.waitForTimeout(400);
+  }
+  throw new Error(
+    'idea#168 make_files_disk: submitted share but Files role / DiskView never settled (60s). ' +
+      'Empty dock may be Engine-blocked — Prefer A loud-fail (no soft-pass).',
+  );
 };
 
 /**
- * Add Files role (proposal snake_case) — DiskView Add Files → share name → submit.
+ * Add Files role — Prefer A: DiskView `add-files` → share → submit → files section/badge.
+ * Loud-fail if Add Files unavailable (wrong disk / already has files / no DiskView).
+ * Does NOT remap onto empty-only make_files_disk path when Add Files is missing.
  */
-export const add_files_role: IntentFn = async ({ page }) => {
-  const addBtn = page.locator(sel.addFiles);
-  if (await addBtn.count()) {
-    await addBtn.click();
+export const add_files_role: IntentFn = async ({ page, diskId }) => {
+  await page
+    .locator(sel.opOverview)
+    .or(page.locator(sel.networkTree))
+    .first()
+    .waitFor({ state: 'visible', timeout: 15_000 });
+
+  const preferred =
+    process.env.DURATION_FILES_DISK_ID?.trim() ||
+    diskId ||
+    '';
+  if (preferred) {
+    const row = page.locator(sel.disk(preferred));
+    if (await row.count()) {
+      await row.click();
+      await page
+        .locator(sel.diskView(preferred))
+        .or(page.locator(sel.emptyDiskPanel))
+        .first()
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .catch(() => {});
+    }
   }
+
+  const addBtn = page.locator(sel.addFiles);
+  if (!(await addBtn.count()) || !(await addBtn.isVisible().catch(() => false))) {
+    throw new Error(
+      'idea#168 add_files_role: [data-testid="add-files"] not visible. ' +
+        'Open a DiskView that offers Add Files (Apps disk without files role), or use make_files_disk on empty. ' +
+        'Set DURATION_FILES_DISK_ID. Prefer A — no soft-pass / no Grade5A remap when gated.',
+    );
+  }
+  if (await addBtn.isDisabled().catch(() => false)) {
+    const title = ((await addBtn.getAttribute('title')) ?? '').trim();
+    throw new Error(
+      `idea#168 add_files_role: add-files disabled (title="${title}"). Prefer A loud-fail.`,
+    );
+  }
+  await addBtn.click();
   const share = page.locator(sel.filesShareName);
-  await share.waitFor({ state: 'visible', timeout: 15_000 });
+  try {
+    await share.waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      'idea#168 add_files_role: clicked add-files but files-share-name form did not open.',
+    );
+  }
   const v = await share.inputValue();
   if (!v.trim()) await share.fill('School Files');
   await page.locator(sel.filesShareSubmit).click();
+
+  // Settle: files section or badge
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (await page.locator(sel.diskSectionFiles).isVisible().catch(() => false)) return;
+    const badge = page.locator('.disk-view__badges, .tree-item__badges').filter({ hasText: /files/i });
+    if (await badge.count()) return;
+    await page.waitForTimeout(400);
+  }
+  throw new Error(
+    'idea#168 add_files_role: submitted share but disk-section-files / Files badge never appeared (30s). Prefer A.',
+  );
 };
 
 /** @deprecated Alias — prefer add_files_role (proposal title). */
