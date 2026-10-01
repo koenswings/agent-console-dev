@@ -229,3 +229,19 @@ DiskView — **not** EmptyDiskPanel. Steve: **no soft-skip**, **no remap onto Gr
 
 Registered-intents walk (not “hardpass”): Axle interim-skip until empty docks is OK.
 
+## RestorePanel preload (`restore_from_backup`)
+
+After `make_backup_disk`, Prefer A walk may leave focus elsewhere. `restore_from_backup`
+must **select the Backup Disk** so `[data-testid="restore-panel"]` is active.
+Steve: **no soft-skip**, **no remap onto Grade5A App Disks** as the backup source.
+
+| Requirement | Detail |
+|---|---|
+| Fixture | Disk with `diskTypes` including `backup` (often former empty after `make_backup_disk`) |
+| Suggested id | **`duration-empty-001`** — Kid has no separate `duration-backup-*` pin; same pack as empty |
+| Env | `DURATION_BACKUP_DISK_ID` overrides |
+| Intents | `ensureBackupDiskPanel`: prefer env/ctx/fixture → NetworkTree `data-role="backup"` → loud-fail |
+| Sibling | `backup_configured_restored` also tries ensure-backup when restore-panel not yet visible |
+| Loud-fail | Preload text if no Backup Disk — Engine must dock/select backup; Axle may interim-skip |
+
+Registered-intents walk: run `make_backup_disk` on empty, then `open_disk_inventory` on that disk (or rely on Intent ensure) before `restore_from_backup`.

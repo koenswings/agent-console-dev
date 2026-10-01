@@ -23,7 +23,8 @@
  *
  * Pins: diskIds duration-kolibri-grade5a-001 / duration-nextcloud-grade5a-001;
  * instanceIds kolibri-grade5a-001 / nextcloud-grade5a-001.
- * EmptyDiskPanel: duration-empty-001 (suggested; DURATION_EMPTY_DISK_ID).
+ * EmptyDiskPanel: duration-empty-001 (DURATION_EMPTY_DISK_ID).
+ * RestorePanel Backup Disk: duration-empty-001 after make_backup_disk (DURATION_BACKUP_DISK_ID).
  *
  * Lesson chrome still deferred (unregistered). Kid preferred App testids live in
  * App `tests/duration-tests/LESSON_CHROME.md` (not in image yet).
@@ -49,6 +50,14 @@ export const DURATION_FIXTURES = {
    * dock this (or set DURATION_EMPTY_DISK_ID). Never remap to Grade5A app disks.
    */
   empty: {
+    diskId: 'duration-empty-001',
+  },
+  /**
+   * Backup Disk for RestorePanel (`restore_from_backup`). Prefer A: usually the
+   * same pack as empty after make_backup_disk (`duration-empty-001`). Override
+   * with DURATION_BACKUP_DISK_ID if Engine docks a dedicated backup fixture.
+   */
+  backup: {
     diskId: 'duration-empty-001',
   },
   kolibri: {

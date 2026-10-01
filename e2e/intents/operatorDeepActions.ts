@@ -12,6 +12,7 @@ import { openAppInstance } from './openApp';
 import { start_instance } from './operatorActions';
 import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
+import { ensureBackupDiskPanel } from './backupDisk';
 
 const ensureOpLayout = async (page: Page): Promise<void> => {
   await page
@@ -255,17 +256,12 @@ export const retry_login_first_time_setup: IntentFn = async ({ page }) => {
 };
 
 /**
- * Restore from Backup — RestorePanel: pick target disk → Restore → Confirm.
- * Requires a Backup Disk already selected (open_disk_inventory on backup disk).
+ * Restore from Backup — ensure Backup Disk selected (RestorePanel), then
+ * pick target disk → Restore → Confirm. Prefer A: no soft-skip / no Grade5A remap.
  */
-export const restore_from_backup: IntentFn = async ({ page, instanceId }) => {
+export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }) => {
+  await ensureBackupDiskPanel(page, { diskId }, 'restore_from_backup');
   const panel = page.locator(sel.restorePanel);
-  if (!(await panel.count()) || !(await panel.isVisible().catch(() => false))) {
-    throw new Error(
-      'idea#168 restore_from_backup: [data-testid="restore-panel"] not visible — ' +
-        'select a Backup Disk via open_disk_inventory first.',
-    );
-  }
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const row = page.locator(sel.restoreInstance(id));
   // Fall back to first restore-instance-* if fixture id not on this backup disk
@@ -562,7 +558,15 @@ export const backup_configured_restored: IntentFn = async ({ page, diskId }) => 
     await page.waitForTimeout(300);
     return;
   }
-  const id = diskId ?? DURATION_FIXTURES.kolibri.diskId;
+  // Prefer selecting Backup Disk (often duration-empty-001 post make_backup_disk)
+  try {
+    await ensureBackupDiskPanel(page, { diskId }, 'backup_configured_restored');
+    await page.waitForTimeout(300);
+    return;
+  } catch {
+    /* fall through to DiskView badge check */
+  }
+  const id = diskId ?? DURATION_FIXTURES.backup.diskId;
   const view = page.locator(sel.diskView(id));
   if (await view.isVisible().catch(() => false)) {
     const badge = view.locator('.disk-view__badges').filter({ hasText: /backup/i });
