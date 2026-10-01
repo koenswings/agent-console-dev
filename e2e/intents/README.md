@@ -131,3 +131,29 @@ Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G
 
 **Not registered:** lesson-chrome player Intents (`keep_watching`, …) — see LESSON_CHROME.md.
 
+## Live duration — no bootDemo (`--live --ui`)
+
+Duration walks against Kid fixture disks (`disk-duration-kolibri-grade5a-001`, …)
+must use the **Engine-hosted Console** (production web), never bootDemo mock disks
+(`DISK001` / `kolibri-disk`).
+
+| Requirement | Detail |
+|---|---|
+| URL | Engine host **`:8080`** (e.g. `http://idea01:8080/`) — not Vite/dev, not extension popup |
+| Demo | `isProductionWebMode()` forces demo **off** and clears localStorage `demoMode` even if stale `'true'` |
+| URL knobs | `?demo=0` / `?demo=false` clear demo (dev/extension). `?demo=1` **ignored** on production web |
+| Intents | Do **not** remap to demo disk IDs — fail loud if fixture disks missing |
+
+Playwright (before `page.goto` Console):
+
+```ts
+await page.addInitScript(() => {
+  localStorage.setItem('demoMode', 'false');
+  localStorage.removeItem('demoMode'); // or set false — initConnection also clears in prod web
+});
+await page.goto('http://idea01:8080/');
+// Assert no DEMO badge in status bar
+```
+
+Ops verify: status bar must **not** show `DEMO`; NetworkTree disks are Kid fixtures, not DISK001.
+

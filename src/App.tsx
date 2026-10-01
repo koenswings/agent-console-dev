@@ -34,6 +34,7 @@ import {
   STORAGE_KEY_PORT,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
+import { resolveDemoMode } from './store/demoMode';
 import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
@@ -211,8 +212,19 @@ const App: Component = () => {
 
     const myId = ++currentInitId;
 
-    const isDemo = await readStoredDemoMode();
+    // Production web (Engine :8080): NEVER honor stale localStorage demoMode —
+    // bootDemo disks (DISK001) break duration Intents (duration-kolibri-grade5a-001).
+    const storedDemo = await readStoredDemoMode();
     if (myId !== currentInitId) return; // superseded
+    const resolved = resolveDemoMode({
+      productionWeb: isProductionWebMode(),
+      storedDemo,
+      searchParams: typeof window !== 'undefined' ? window.location.search : '',
+    });
+    if (resolved.persistFalse) await saveDemoMode(false);
+    else if (resolved.persistTrue) await saveDemoMode(true);
+    if (myId !== currentInitId) return; // superseded during persist
+    const isDemo = resolved.isDemo;
     setDemo(isDemo);
 
     const conn = isDemo
@@ -487,12 +499,24 @@ const App: Component = () => {
               await initConnection();
             }}
             onDemoMode={async () => {
+              // Production web: refuse demo (duration --live must stay on Engine store)
+              if (isProductionWebMode()) {
+                await saveDemoMode(false);
+                setDemo(false);
+                return;
+              }
               await saveDemoMode(true);
               await logout();
               setHostname(await readStoredHostname());
               await initConnection();
             }}
             onDemoToggle={async (val) => {
+              if (isProductionWebMode()) {
+                await saveDemoMode(false);
+                setDemo(false);
+                if (!val) await initConnection();
+                return;
+              }
               await saveDemoMode(val);
               if (val) {
                 await logout();
