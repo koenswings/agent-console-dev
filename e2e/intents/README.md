@@ -288,7 +288,24 @@ correctly disabled. Intent must **no-op PASS**, not hard-click Start.
 | Loud-fail | Not running **and** Start disabled (locked) |
 | Discovery | Prefer Path A `*grade5a*` testids — not zombie `kolibri-1.0-duration*` rows |
 | `stop_instance` | Symmetric no-op when already Stopped |
-| `start_after_install` | Reuses `start_instance` (same contract) |
+| `start_after_install` | **Not** grade5a — discover non-grade5a `start-*` after install (empty-002 uuid). Override `DURATION_START_AFTER_INSTALL_ID`. Leaves Install picker / ALL APPS first. |
+
+## start_after_install post-install instance (r27 FAIL@86)
+
+Late `install_app` on empty-002 creates a **new uuid** instance (Engine `installApp` /
+`processInstance`). Walker edge `op_install → start_after_install → op_instance` must
+start **that** instance — not Path A `kolibri-grade5a-001` (Stopped on nextcloud after
+move/backup). r27: Intent reused `start_instance` → looked for grade5a while UI still on
+Empty Disk 002 Install picker → `visible start-instance ids=[]`.
+
+| Detail | Contract |
+|---|---|
+| Target | Newly installed non-grade5a id (discover `start-/stop-/open-instance-*`) |
+| Override | `DURATION_START_AFTER_INSTALL_ID` (not `DURATION_START_INSTANCE_ID`) |
+| Leave picker | Wait install settle; Back on success; open ALL APPS |
+| `install_app` | Soft kickoff only (early walk needs empty-001 for make_files); **full settle in `start_after_install`** |
+| Scoped | `start_instance` / `open_instance_controls` keep Path A grade5a defaults |
+| Loud-fail | No non-grade5a controls after budget — no soft-pass |
 
 ## open_app ensure Running + sidecar HTTP (r18/r19)
 

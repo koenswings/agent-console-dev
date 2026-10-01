@@ -14,7 +14,6 @@ import {
   waitForSidecarStable,
 } from './openApp';
 import {
-  start_instance,
   resolveStartInstanceId,
   runStartInstance,
   isInstanceAlreadyRunning,
@@ -63,6 +62,10 @@ const clickCardOrFail = async (
 /**
  * Install App (proposal) — EmptyDiskPanel catalog → pick app → Install.
  * Defaults to first catalog radio; prefer Kolibri title when present.
+ *
+ * Prefer A: early walk install_app is followed by make_files on empty-001 — do
+ * **not** block for full installApp (minutes); that would turn empty-001 into an
+ * app disk and starve EmptyDiskPanel. Late path: start_after_install waits settle.
  */
 export const install_app: IntentFn = async ({ page, diskId }) => {
   await ensureEmptyDiskPanel(page, { diskId }, 'install_app');
@@ -91,16 +94,182 @@ export const install_app: IntentFn = async ({ page, diskId }) => {
     throw new Error('idea#168 install_app: Install App submit disabled (no app selected?).');
   }
   await submit.click();
-  // Best-effort: wait for pending indicator or leave for walker settle
+  // Soft: acknowledge pending if it appears quickly; full settle is start_after_install
   const pending = page.locator(sel.installPending);
-  if (await pending.isVisible().catch(() => false)) {
-    await pending.waitFor({ state: 'hidden', timeout: 5 * 60_000 }).catch(() => {});
-  }
+  await pending.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
 };
 
-/** Start after install — reuse start_instance on the just-installed (or ctx) instance. */
-export const start_after_install: IntentFn = async (ctx) => {
-  await start_instance(ctx);
+/**
+ * Wait until EmptyDiskPanel install finishes or DiskView appears with instance controls.
+ * Prior Intent raced: pending not yet visible → returned in ~3–8s while Install picker stayed open.
+ */
+export async function waitForInstallAppSettled(
+  page: Page,
+  timeoutMs = 5 * 60_000,
+): Promise<void> {
+  const pending = page.locator(sel.installPending);
+  const success = page.locator('[data-testid="install-configured-success"]');
+  const err = page.locator('[data-testid="install-error"]');
+  const timedOut = page.locator('[data-testid="install-timeout"]');
+  const instanceControl = page
+    .locator(
+      '[data-testid^="start-instance-"], [data-testid^="stop-instance-"], [data-testid^="open-instance-"]',
+    )
+    .first();
+
+  // pending may appear a tick after click — wait briefly for it
+  await pending.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await err.isVisible().catch(() => false)) {
+      const msg = ((await err.textContent()) ?? '').trim() || 'installApp error';
+      throw new Error(`idea#168 install_app: Engine install failed — ${msg}. No soft-pass.`);
+    }
+    if (await timedOut.isVisible().catch(() => false)) {
+      throw new Error(
+        'idea#168 install_app: EmptyDiskPanel install timed out (install-timeout). No soft-pass.',
+      );
+    }
+    if (await success.isVisible().catch(() => false)) return;
+    // Store caught up → EmptyDiskPanel unmounts (hasInstancesOn) → DiskView controls
+    if (!(await page.locator(sel.emptyDiskPanel).isVisible().catch(() => false))) {
+      if (await instanceControl.isVisible().catch(() => false)) return;
+      // brief blank between panels — keep polling
+    }
+    // pending gone without success yet — keep polling success / panel swap
+    await page.waitForTimeout(400);
+  }
+  throw new Error(
+    'idea#168 install_app: Engine did not finish installApp within budget ' +
+      `(${timeoutMs}ms). Still on Install picker or no instance controls. No soft-pass.`,
+  );
+}
+
+/** Path A Grade5A fixture ids — never treat as "just installed" on empty disk. */
+const GRADE5A_INSTANCE_RE = /grade5a/i;
+
+/**
+ * Resolve instance id for start_after_install (Prefer A r27).
+ * Does NOT default to kolibri-grade5a-001 (that is start_instance Path A).
+ * Override: DURATION_START_AFTER_INSTALL_ID. Discovers non-grade5a start-* /
+ * stop-* / open-* on overview after leaving Install picker.
+ */
+export function resolvePostInstallInstanceIdPreference(
+  instanceId?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const override = env.DURATION_START_AFTER_INSTALL_ID?.trim();
+  if (override) return override;
+  if (instanceId?.trim() && !GRADE5A_INSTANCE_RE.test(instanceId)) {
+    return instanceId.trim();
+  }
+  return undefined;
+}
+
+/** Collect visible instance ids from start/stop/open testids. */
+async function listVisibleInstanceControlIds(page: Page): Promise<string[]> {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const prefix of ['start-instance-', 'stop-instance-', 'open-instance-'] as const) {
+    const all = page.locator(`[data-testid^="${prefix}"]`);
+    const n = await all.count();
+    for (let i = 0; i < n; i++) {
+      const tid = await all.nth(i).getAttribute('data-testid');
+      if (!tid) continue;
+      const id = tid.slice(prefix.length);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Leave Install picker / EmptyDiskPanel success, open ALL APPS, discover the
+ * newly installed (non-grade5a) instance id. Loud-fail if none appear.
+ */
+export async function resolvePostInstallStartInstanceId(
+  page: Page,
+  opts: { instanceId?: string; timeoutMs?: number } = {},
+): Promise<string> {
+  const preferred = resolvePostInstallInstanceIdPreference(opts.instanceId);
+  const timeoutMs = opts.timeoutMs ?? 90_000;
+
+  // Late path: Install picker still open after soft install_app — submit if needed, then settle
+  const submit = page.locator(sel.installAppSubmit);
+  const pending = page.locator(sel.installPending);
+  if (await submit.isVisible().catch(() => false)) {
+    const disabled = await submit.isDisabled().catch(() => true);
+    if (!disabled) {
+      // Catalog may already have Kolibri selected (r27 screenshot)
+      await submit.click();
+    }
+  }
+  if (
+    (await pending.isVisible().catch(() => false)) ||
+    (await submit.isVisible().catch(() => false))
+  ) {
+    await waitForInstallAppSettled(page, Math.max(timeoutMs, 5 * 60_000));
+  }
+
+  if (await page.locator('[data-testid="install-configured-success"]').isVisible().catch(() => false)) {
+    const back = page.locator('.edp__success button, .edp button:has-text("Back")').first();
+    if (await back.count()) await back.click().catch(() => {});
+  }
+
+  // Prefer overview ALL APPS so start-* rows are visible even if disk still selected empty
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click().catch(() => {});
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  let lastIds: string[] = [];
+  while (Date.now() < deadline) {
+    lastIds = await listVisibleInstanceControlIds(page);
+    if (preferred && lastIds.includes(preferred)) return preferred;
+    const fresh = lastIds.filter((id) => !GRADE5A_INSTANCE_RE.test(id));
+    if (fresh.length) {
+      // Prefer last non-grade5a (most recently installed tends to appear later in tree)
+      return fresh[fresh.length - 1]!;
+    }
+    await page.waitForTimeout(400);
+  }
+
+  throw new Error(
+    `idea#168 start_after_install: no newly-installed (non-grade5a) instance controls after install. ` +
+      `preferred=${preferred ?? '(discover)'}, visible ids=[${lastIds.join(', ')}]. ` +
+      `Leave Install picker; target empty-002 install uuid — not kolibri-grade5a-001. ` +
+      `Set DURATION_START_AFTER_INSTALL_ID if known. No soft-pass.`,
+  );
+}
+
+/**
+ * Start after install — Prefer A r27: target newly installed instance on empty disk,
+ * NOT Path A kolibri-grade5a-001. Scoped: start_instance keeps grade5a behavior.
+ */
+export const start_after_install: IntentFn = async ({ page, instanceId }) => {
+  await ensureOpLayout(page);
+  const id = await resolvePostInstallStartInstanceId(page, { instanceId });
+  // Pass explicit id; do not let DURATION_START_INSTANCE_ID remap to grade5a.
+  // resolveStartInstanceId still honors DURATION_START_INSTANCE_ID — clear path:
+  // only DURATION_START_AFTER_INSTALL_ID should pin post-install (already applied).
+  const envPin = process.env.DURATION_START_INSTANCE_ID;
+  const afterPin = process.env.DURATION_START_AFTER_INSTALL_ID?.trim();
+  if (envPin && !afterPin && GRADE5A_INSTANCE_RE.test(envPin)) {
+    // Temporarily ignore grade5a Path A pin for this Intent only
+    const prev = process.env.DURATION_START_INSTANCE_ID;
+    delete process.env.DURATION_START_INSTANCE_ID;
+    try {
+      await runStartInstance(page, id);
+    } finally {
+      if (prev !== undefined) process.env.DURATION_START_INSTANCE_ID = prev;
+    }
+    return;
+  }
+  await runStartInstance(page, id);
 };
 
 /** Stay on disk — assert DiskView / EmptyDiskPanel for diskId and dwell briefly. */
