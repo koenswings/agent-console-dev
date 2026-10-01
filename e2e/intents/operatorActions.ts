@@ -9,6 +9,7 @@ import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
 import { performOperatorSignIn } from './signInReady';
+import { ensureEmptyDiskPanel } from './emptyDisk';
 
 /**
  * Resolve disk to eject (duration Prefer A / post-copy).
@@ -202,13 +203,17 @@ export const sign_in: IntentFn = async ({ page }) => {
 };
 
 /**
- * Make Files Disk (proposal) — EmptyDiskPanel card → share name → submit.
+ * Make Files Disk — select docked empty disk → EmptyDiskPanel card → share → submit.
+ * Prefer A: never remap onto Grade5A app disks.
  */
-export const make_files_disk: IntentFn = async ({ page }) => {
-  await page.locator(sel.emptyDiskPanel).or(page.locator(sel.makeFilesDisk)).first()
-    .waitFor({ state: 'visible', timeout: 15_000 });
+export const make_files_disk: IntentFn = async ({ page, diskId }) => {
+  await ensureEmptyDiskPanel(page, { diskId }, 'make_files_disk');
   if (await page.locator(sel.makeFilesDisk).count()) {
     await page.locator(sel.makeFilesDisk).click();
+  } else {
+    throw new Error(
+      'idea#168 make_files_disk: EmptyDiskPanel visible but [data-testid="make-files-disk"] missing.',
+    );
   }
   const share = page.locator(sel.filesShareName);
   await share.waitFor({ state: 'visible', timeout: 10_000 });

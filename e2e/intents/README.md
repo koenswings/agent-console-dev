@@ -214,3 +214,18 @@ Env: `DURATION_ADD_OPERATOR_USERNAME`, `DURATION_REMOVE_OPERATOR_USERNAME`, `DUR
 
 Axle: after `infra_dock_fixture`, prefer a short settle before `open_console_as_operator`, or rely on the 60s wait. Do **not** soft-pass while Connecting….
 
+## EmptyDiskPanel preload (`install_app` / `make_files_disk` / `make_backup_disk`)
+
+Path A Prefer A docks **app** disks (`duration-kolibri-grade5a-001`, …). Those show
+DiskView — **not** EmptyDiskPanel. Steve: **no soft-skip**, **no remap onto Grade5A**.
+
+| Requirement | Detail |
+|---|---|
+| Fixture | Dock an **empty** disk (`diskTypes: ['empty']`, no instances) |
+| Suggested id | **`duration-empty-001`** until Kid publishes a pin |
+| Env | `DURATION_EMPTY_DISK_ID` overrides |
+| Intents | Select empty via NetworkTree (`data-role="empty"` or preferred id) → EmptyDiskPanel → action |
+| Loud-fail | If no empty disk docked — Engine must add/dock empty fixture; Axle may interim-skip these steps |
+
+Registered-intents walk (not “hardpass”): Axle interim-skip until empty docks is OK.
+

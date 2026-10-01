@@ -11,6 +11,7 @@ import { DURATION_FIXTURES } from './fixtures';
 import { openAppInstance } from './openApp';
 import { start_instance } from './operatorActions';
 import { performOperatorSignIn } from './signInReady';
+import { ensureEmptyDiskPanel } from './emptyDisk';
 
 const ensureOpLayout = async (page: Page): Promise<void> => {
   await page
@@ -30,7 +31,7 @@ const clickCardOrFail = async (
   if (!(await card.count())) {
     throw new Error(
       `idea#168 ${intent}: [data-testid="${testId}"] not found — open an empty disk ` +
-        `(open_disk_inventory) so EmptyDiskPanel menu is visible.`,
+        `(ensureEmptyDiskPanel / dock duration-empty-001) so EmptyDiskPanel menu is visible.`,
     );
   }
   await card.waitFor({ state: 'visible', timeout: 10_000 });
@@ -48,8 +49,8 @@ const clickCardOrFail = async (
  * Install App (proposal) — EmptyDiskPanel catalog → pick app → Install.
  * Defaults to first catalog radio; prefer Kolibri title when present.
  */
-export const install_app: IntentFn = async ({ page }) => {
-  await page.locator(sel.emptyDiskPanel).waitFor({ state: 'visible', timeout: 15_000 });
+export const install_app: IntentFn = async ({ page, diskId }) => {
+  await ensureEmptyDiskPanel(page, { diskId }, 'install_app');
   await clickCardOrFail(page, 'install-app', 'install_app');
 
   // Prefer Kolibri catalog item by label text, else first install-app-item-*
@@ -108,8 +109,8 @@ export const stay_on_disk: IntentFn = async ({ page, diskId }) => {
  * Make Backup Disk — EmptyDiskPanel Backup card → Configure (on-demand default).
  * Fails loud when card is gated (no diskIdArgs / capability).
  */
-export const make_backup_disk: IntentFn = async ({ page }) => {
-  await page.locator(sel.emptyDiskPanel).waitFor({ state: 'visible', timeout: 15_000 });
+export const make_backup_disk: IntentFn = async ({ page, diskId }) => {
+  await ensureEmptyDiskPanel(page, { diskId }, 'make_backup_disk');
   await clickCardOrFail(page, 'make-backup-disk', 'make_backup_disk');
   const configure = page.locator(sel.configureBackupDisk);
   await configure.waitFor({ state: 'visible', timeout: 10_000 });

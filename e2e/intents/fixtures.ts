@@ -23,6 +23,7 @@
  *
  * Pins: diskIds duration-kolibri-grade5a-001 / duration-nextcloud-grade5a-001;
  * instanceIds kolibri-grade5a-001 / nextcloud-grade5a-001.
+ * EmptyDiskPanel: duration-empty-001 (suggested; DURATION_EMPTY_DISK_ID).
  *
  * Lesson chrome still deferred (unregistered). Kid preferred App testids live in
  * App `tests/duration-tests/LESSON_CHROME.md` (not in image yet).
@@ -42,6 +43,14 @@ export const uuidForms = (id: string): { dashed: string; raw: string } => {
 };
 
 export const DURATION_FIXTURES = {
+  /**
+   * Empty USB for EmptyDiskPanel Intents (install_app / make_files_disk /
+   * make_backup_disk). Suggested id until Kid publishes a pin — Engine must
+   * dock this (or set DURATION_EMPTY_DISK_ID). Never remap to Grade5A app disks.
+   */
+  empty: {
+    diskId: 'duration-empty-001',
+  },
   kolibri: {
     diskId: 'duration-kolibri-grade5a-001',
     instanceId: 'kolibri-grade5a-001',

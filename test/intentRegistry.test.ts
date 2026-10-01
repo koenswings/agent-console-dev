@@ -168,6 +168,7 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(DURATION_FIXTURES.kolibri.live.facility.idDashed).toBe('f0e1353e-8c40-d985-faab-5ead5c91d03f');
     expect(DURATION_FIXTURES.nextcloud.diskId).toBe('duration-nextcloud-grade5a-001');
     expect(DURATION_FIXTURES.nextcloud.instanceId).toBe('nextcloud-grade5a-001');
+    expect(DURATION_FIXTURES.empty.diskId).toBe('duration-empty-001');
     expect(DURATION_FIXTURES.kolibri.sidecarHttpPort).toBe(18080);
     expect(DURATION_FIXTURES.nextcloud.sidecarHttpPort).toBe(18280);
     expect(DURATION_FIXTURES.kolibri.auth.learner.username).toBe('learner01');
