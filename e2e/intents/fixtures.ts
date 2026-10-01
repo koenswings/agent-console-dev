@@ -29,6 +29,11 @@ export const DURATION_FIXTURES = {
     instanceId: 'kolibri-grade5a-001',
     channelId: '30b6c263-4b96-5a62-93bd-dcf9a5cad7ca',
     channelIdRaw: '30b6c2634b965a6293bddcf9a5cad7ca',
+    /** Kolibri facility logins (Kid pack; password = username). */
+    auth: {
+      teacher: { username: 'teacher', password: 'teacher' },
+      learner: { username: 'learner01', password: 'learner01' },
+    },
     /** open_video → video-grade5a-01 (API: ?content_id=<raw>) */
     video: {
       logicalId: 'video-grade5a-01',
@@ -96,6 +101,10 @@ export const DURATION_FIXTURES = {
   nextcloud: {
     diskId: 'duration-nextcloud-grade5a-001',
     instanceId: 'nextcloud-grade5a-001',
+    auth: {
+      teacher: { username: 'teacher', password: 'teacher' },
+      learner: { username: 'student01', password: 'student01' },
+    },
   },
 } as const;
 

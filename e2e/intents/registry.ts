@@ -23,7 +23,7 @@ import {
 import { open_disk_inventory, open_instance_controls } from './openDisk';
 import { open_exercise, open_video } from './openKolibriContent';
 import {
-  add_files,
+  add_files_role,
   cancel_eject,
   cancel_erase,
   close_account,
@@ -70,7 +70,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   close_settings,
   sign_in,
   make_files_disk,
-  add_files,
+  add_files_role,
 };
 
 export function getIntent(name: string): IntentFn | undefined {

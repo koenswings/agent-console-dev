@@ -11,6 +11,7 @@ import {
   DURATION_FIXTURES,
   uuidForms,
   sel,
+  hasDurationIntent,
 } from '../e2e/intents';
 
 const LOCKED = [
@@ -43,7 +44,7 @@ const LOCKED = [
   'close_settings',
   'sign_in',
   'make_files_disk',
-  'add_files',
+  'add_files_role',
 ] as const;
 
 const ENGINE_OWNED = [
@@ -62,7 +63,7 @@ const DEFERRED = [
   'exit_lesson',
 ] as const;
 
-describe('Intent registry (idea#166 Phase 5)', () => {
+describe('Intent registry (idea#166 Phase 5 / #168)', () => {
   it('registers Hub + dwell + Phase 3–5 Intents', () => {
     expect([...CONSOLE_INTENT_NAMES].sort()).toEqual([...LOCKED].sort());
     expect(Object.keys(intentRegistry).sort()).toEqual([...CONSOLE_INTENT_NAMES].sort());
@@ -79,6 +80,15 @@ describe('Intent registry (idea#166 Phase 5)', () => {
     for (const name of ENGINE_OWNED) {
       expect(getIntent(name)).toBeUndefined();
     }
+  });
+
+  it('hasDurationIntent mirrors registry for Engine bridge', () => {
+    expect(hasDurationIntent('open_console_as_teacher')).toBe(true);
+    expect(hasDurationIntent('eject_disk')).toBe(true);
+    expect(hasDurationIntent('open_video')).toBe(true);
+    expect(hasDurationIntent('add_files_role')).toBe(true);
+    expect(hasDurationIntent('infra_dock_fixture')).toBe(false);
+    expect(hasDurationIntent('keep_watching')).toBe(false);
   });
 
   it('does not register deferred usage / Kiwix Intents', () => {
@@ -100,10 +110,10 @@ describe('Intent registry (idea#166 Phase 5)', () => {
     expect(DURATION_FIXTURES.kolibri.live.class.id).toBe('a12df5408d20cbe5fd00c0cb036f48f6');
     expect(DURATION_FIXTURES.kolibri.live.lesson.id).toBe('2a955770551f7d583c31104f39653fdf');
     expect(DURATION_FIXTURES.kolibri.live.facility.idDashed).toBe('f0e1353e-8c40-d985-faab-5ead5c91d03f');
-    expect(DURATION_FIXTURES.nextcloud).toEqual({
-      diskId: 'duration-nextcloud-grade5a-001',
-      instanceId: 'nextcloud-grade5a-001',
-    });
+    expect(DURATION_FIXTURES.nextcloud.diskId).toBe('duration-nextcloud-grade5a-001');
+    expect(DURATION_FIXTURES.nextcloud.instanceId).toBe('nextcloud-grade5a-001');
+    expect(DURATION_FIXTURES.kolibri.auth.learner.username).toBe('learner01');
+    expect(DURATION_FIXTURES.nextcloud.auth.learner.username).toBe('student01');
   });
 
   it('uuidForms accepts dashed and undashed Morango IDs', () => {

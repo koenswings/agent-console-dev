@@ -1,5 +1,5 @@
 /**
- * Id-keyed Console selectors for duration walks (idea#166).
+ * Id-keyed Console selectors for duration walks (idea#166/#168).
  * Prefer data-testid; never position-based (nth-child / first()).
  */
 export const sel = {
@@ -23,6 +23,8 @@ export const sel = {
   emptyDiskPanel: '[data-testid="empty-disk-panel"]',
   makeFilesDisk: '[data-testid="make-files-disk"]',
   addFiles: '[data-testid="add-files"]',
+  filesShareName: '[data-testid="files-share-name"]',
+  filesShareSubmit: '[data-testid="files-share-submit"]',
   diskSectionFiles: '[data-testid="disk-section-files"]',
   engine: (id: string) => `[data-testid="engine-${id}"]`,
   disk: (id: string) => `[data-testid="disk-${id}"]`,

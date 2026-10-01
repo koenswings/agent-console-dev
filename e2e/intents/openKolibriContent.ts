@@ -3,10 +3,10 @@
  *
  * Content/node IDs from Kid CONTENT.seeded.json; live API verified in
  * CONTENT.live.json @2313112 (idea01). Matchers accept dashed + undashed
- * forms (Kolibri API uses 32-hex without dashes).
+ * forms (Kolibri API uses 32-hex without dashes). Tries lesson-scoped Learn
+ * URLs using fixtures.live.lesson when available.
  *
  * Deferred (pure in-App lesson chrome): keep_watching, next_resource, exit_lesson.
- * No ACTIONS.md `open_lesson` / Kolibri learner sign-in — see fixtures.live.
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -112,6 +112,40 @@ const openContentByIds = async (
   }
 
   if (origin) {
+    const live = DURATION_FIXTURES.kolibri.live;
+    const lessonIds = idSpellings(live.lesson.id, live.lesson.idDashed);
+    const classIds = idSpellings(live.class.id, live.class.idDashed);
+    // Lesson-scoped Learn routes (after facility login)
+    const lessonTargets: string[] = [];
+    for (const lid of lessonIds) {
+      lessonTargets.push(`${origin}/learn/#/lessons/${lid}`);
+      lessonTargets.push(`${origin}/learn/#/topics/lesson/${lid}`);
+      for (const nid of [nodeIdRaw, nodeId]) {
+        lessonTargets.push(`${origin}/learn/#/lessons/${lid}/resource/${nid}`);
+      }
+    }
+    for (const cid of classIds) {
+      lessonTargets.push(`${origin}/learn/#/classes/${cid}`);
+    }
+    for (const target of lessonTargets) {
+      try {
+        await app.goto(target, { waitUntil: 'domcontentloaded', timeout: 10_000 });
+        const still = app.url();
+        if (all.some((id) => still.includes(id)) || lessonIds.some((id) => still.includes(id))) {
+          // If lesson page loaded, try clicking the resource on that page
+          for (const selector of candidates) {
+            const loc = app.locator(selector).first();
+            if ((await loc.count()) > 0) {
+              await loc.click({ timeout: 5_000 });
+              return;
+            }
+          }
+          if (all.some((id) => still.includes(id))) return;
+        }
+      } catch {
+        /* try next */
+      }
+    }
     // Prefer undashed node id (live API style), then dashed
     for (const nid of [nodeIdRaw, nodeId, ...nodeIds]) {
       const target = `${origin}/learn/#/topics/c/${nid}`;

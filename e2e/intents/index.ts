@@ -1,4 +1,4 @@
-/** Public entry for duration-walk Playwright Intents (idea#166). */
+/** Public entry for duration-walk Playwright Intents (idea#166 / #168). */
 export {
   intentRegistry,
   getIntent,
@@ -10,3 +10,9 @@ export {
   type IntentFn,
   type IntentContext,
 } from './registry';
+export {
+  runDurationIntent,
+  hasDurationIntent,
+  type DurationIntentResult,
+  type RunDurationIntentOptions,
+} from './durationBridge';

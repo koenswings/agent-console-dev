@@ -19,7 +19,7 @@ export interface IntentContext {
 export type IntentFn = (ctx: IntentContext) => Promise<void>;
 
 /**
- * Console Intent names registered in e2e/intents (idea#166 Phase 1–5).
+ * Console Intent names registered in e2e/intents (idea#166 Phase 1–5 / idea#168 harden).
  * Engine-owned infra_* and enter_infra_fleet_walk are NOT registered here.
  * Keys match Axle ACTIONS.md / school-day.yaml; proposal snake_case for
  * Console-owned operator edges not yet listed in ACTIONS.md.
@@ -60,7 +60,7 @@ export const CONSOLE_INTENT_NAMES = [
   'close_settings',
   'sign_in',
   'make_files_disk',
-  'add_files',
+  'add_files_role',
 ] as const;
 
 export type ConsoleIntentName = (typeof CONSOLE_INTENT_NAMES)[number];

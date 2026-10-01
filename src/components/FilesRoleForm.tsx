@@ -63,6 +63,7 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
       <label class="edp-form__label" for="files-share-name">Share name</label>
       <input
         id="files-share-name"
+        data-testid="files-share-name"
         class="edp-form__search files-form__share-name"
         type="text"
         value={shareName()}
@@ -91,6 +92,7 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
       <div class="edp-form__actions">
         <button
           class="btn btn--primary"
+          data-testid="files-share-submit"
           disabled={!!blocked() || !!shareNameError() || pending() || result.state().kind === 'success'}
           title={blocked()}
           onClick={submit}

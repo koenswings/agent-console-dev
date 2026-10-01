@@ -48,6 +48,17 @@ describe('Operator control data-testid (idea#166 Phase 4)', () => {
     expect(container.querySelector('[data-testid="add-files"]')).not.toBeNull();
   });
 
+  it('FilesRoleForm exposes share name + submit testids after Add Files', async () => {
+    const { container, getByTestId } = render(() => (
+      <DiskView diskId={I.FA_APP} store={() => MOCK_FILES_STORE} />
+    ));
+    const add = container.querySelector('[data-testid="add-files"]') as HTMLButtonElement;
+    expect(add).not.toBeNull();
+    add.click();
+    expect(getByTestId('files-share-name')).toBeTruthy();
+    expect(getByTestId('files-share-submit')).toBeTruthy();
+  });
+
   it('InstanceRow start/stop are id-keyed', () => {
     const instanceId = I.INST_NC_A;
     const instance = () => MOCK_FILES_STORE.instanceDB[instanceId] as Instance;

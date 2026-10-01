@@ -1,5 +1,5 @@
 /**
- * Thin operator deeper path (idea#166): open disk inventory / instance controls
+ * Operator deeper path (idea#166/#168): open disk inventory / instance controls
  * using Kid stable disk + instance IDs (ACTIONS.md).
  */
 import type { IntentFn } from './types';
@@ -11,8 +11,9 @@ export const open_disk_inventory: IntentFn = async ({ page, diskId }) => {
   await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first()
     .waitFor({ state: 'visible', timeout: 15_000 });
   const id = diskId ?? DURATION_FIXTURES.kolibri.diskId;
-  await page.locator(sel.disk(id)).click();
-  // Disk view or empty panel for that id
+  const row = page.locator(sel.disk(id));
+  await row.waitFor({ state: 'visible', timeout: 15_000 });
+  await row.click();
   const view = page.locator(sel.diskView(id));
   const empty = page.locator(sel.emptyDiskPanel);
   await view.or(empty).first().waitFor({ state: 'visible', timeout: 10_000 });
@@ -26,4 +27,7 @@ export const open_instance_controls: IntentFn = async ({ page, instanceId }) => 
   const row = page.locator(sel.instance(id));
   await row.waitFor({ state: 'visible', timeout: 15_000 });
   await row.click();
+  // Start/Stop controls should be present on the focused row
+  await page.locator(sel.startInstance(id)).or(page.locator(sel.stopInstance(id))).first()
+    .waitFor({ state: 'visible', timeout: 10_000 });
 };
