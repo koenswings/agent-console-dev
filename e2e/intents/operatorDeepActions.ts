@@ -8,8 +8,12 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
-import { openAppInstance } from './openApp';
+import {
+  openAppInstance,
+  ensureInstanceRunningForOpen,
+} from './openApp';
 import { start_instance, resolveStartInstanceId } from './operatorActions';
+import { appKindForInstance, sidecarReadyTimeoutMs } from './sidecarUrls';
 import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
 import {
@@ -257,13 +261,93 @@ export const retry_login_first_time_setup: IntentFn = async ({ page }) => {
   await page.locator(sel.opOverview).waitFor({ state: 'visible', timeout: 20_000 });
 };
 
+/** Settle budget after restore Confirm (env DURATION_RESTORE_SETTLE_MS or sidecar budget). */
+export function restoreSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_RESTORE_SETTLE_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  // Restore+docker restart often > sidecar poll alone
+  return Math.max(sidecarReadyTimeoutMs(env), 120_000);
+}
+
+/**
+ * After Confirm Restore: wait unlock, return to overview, ensure real Running + sidecar.
+ * Prefer A r21: restore SIGTERM leaves Automerge ghost Running → docker-missing on move_app.
+ */
+export async function settleAfterRestoreConfirm(
+  page: Page,
+  linkedId: string,
+): Promise<void> {
+  const confirm = page.locator(sel.restoreConfirm(linkedId));
+  try {
+    await confirm.waitFor({ state: 'hidden', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      `idea#168 restore_from_backup: restore-confirm-${linkedId} still visible after Confirm. No soft-pass.`,
+    );
+  }
+
+  // Restore locks the instance ("Operation in progress" on Restore btn)
+  const btn = page.locator(sel.restoreBtn(linkedId));
+  const budget = restoreSettleTimeoutMs();
+  const deadline = Date.now() + budget;
+  let sawProgress = false;
+  while (Date.now() < deadline) {
+    if (await btn.isVisible().catch(() => false)) {
+      const label = ((await btn.textContent()) ?? '').trim();
+      if (/operation in progress/i.test(label)) {
+        sawProgress = true;
+        await page.waitForTimeout(500);
+        continue;
+      }
+      // Unlocked — restore command finished (or never locked briefly)
+      break;
+    }
+    // Confirm cleared; btn may briefly be absent while confirmingId flips
+    await page.waitForTimeout(400);
+  }
+  if (sawProgress && Date.now() >= deadline) {
+    throw new Error(
+      `idea#168 restore_from_backup: restore still "Operation in progress" after ${budget}ms ` +
+        `(instance=${linkedId}). Docker/store did not settle. No soft-pass.`,
+    );
+  }
+  // Brief quiet even if lock was too fast to observe
+  await page.waitForTimeout(800);
+
+  // Back to Operator overview / ALL APPS so instance cards are visible
+  if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
+    await page.locator(sel.accountBtn).click().catch(() => {});
+  }
+  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
+    await page.locator(sel.settingsBtn).click().catch(() => {});
+  }
+  await ensureOpLayout(page);
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click().catch(() => {});
+  }
+
+  // Ghost Running after restore SIGTERM — force-restart + sidecar HTTP (same as open_app r19)
+  const kind = appKindForInstance(linkedId);
+  try {
+    await ensureInstanceRunningForOpen(page, linkedId, kind);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `idea#168 restore_from_backup: post-Confirm settle failed for ${linkedId} — ${msg} ` +
+        `r21: restore may SIGTERM while Automerge stays Running; must force-restart + sidecar ready ` +
+        `before move_app. No soft-pass / no demo remap.`,
+    );
+  }
+}
+
 /**
  * Restore from Backup — ensure Backup Disk selected (RestorePanel), then
- * pick target disk → Restore → Confirm. Prefer A: no soft-skip / no Grade5A remap.
+ * pick target disk → Restore → Confirm → settle Running+sidecar.
+ * Prefer A: no soft-skip / no Grade5A remap.
  */
 export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }) => {
   await ensureBackupDiskPanel(page, { diskId }, 'restore_from_backup');
-  const panel = page.locator(sel.restorePanel);
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const row = page.locator(sel.restoreInstance(id));
   // Fall back to first restore-instance-* if fixture id not on this backup disk
@@ -296,6 +380,7 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }
   await select.selectOption(chosen);
   await page.locator(sel.restoreBtn(linkedId)).click();
   await page.locator(sel.restoreConfirm(linkedId)).click();
+  await settleAfterRestoreConfirm(page, linkedId);
 };
 
 /**

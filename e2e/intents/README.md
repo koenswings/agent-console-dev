@@ -307,3 +307,16 @@ r19: Automerge **Running ≠ sidecar up** (ghost Running after move_app docker-m
 | Classroom | No Start control → Path B still waits sidecar ready |
 | Engine | failAfter=1 on docker-missing welcome belt (no Console change) |
 | Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` share `openAppInstance` |
+
+## restore_from_backup settle (r21 FAIL@68)
+
+After Confirm, restore may **SIGTERM** kolibri (exit 143) while Automerge stays Running
+→ Engine docker-missing before `move_app`.
+
+| Step | Contract |
+|---|---|
+| Confirm | Wait `restore-confirm-*` hidden |
+| Unlock | Wait Restore btn leave "Operation in progress" (`DURATION_RESTORE_SETTLE_MS`, default ≥120s) |
+| Overview | ALL APPS / opOverview so instance cards visible |
+| Running | `ensureInstanceRunningForOpen` — ghost Running → force-restart + sidecar HTTP ready |
+| Loud-fail | Settle/sidecar timeout — **no** soft-pass / no demo remap |
