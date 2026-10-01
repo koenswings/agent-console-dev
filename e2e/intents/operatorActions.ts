@@ -385,6 +385,82 @@ export function startSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): numb
   return 120_000;
 }
 
+/**
+ * Prefer A stop settle budget (DURATION_STOP_SETTLE_MS).
+ * Default 180s — infra SSH flap after backup can delay Engine stopApp (r38 FAIL@83 @90s).
+ */
+export function stopSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_STOP_SETTLE_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 180_000;
+}
+
+/** How often to re-click Stop while still Running (lost command / SSH flap). */
+export function stopRetryIntervalMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_STOP_RETRY_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 15_000;
+}
+
+/**
+ * True when UI shows Stopping / stopApp progress / Stop locked after click
+ * (pendingAction Stopping…, operation in progress, Open still up but Stop disabled).
+ */
+export async function isInstanceStoppingOrInProgress(
+  page: Page,
+  id: string,
+): Promise<boolean> {
+  const row = instanceRowFor(page, sel.stopInstance(id));
+  if (
+    await row
+      .locator('.instance-row__progress-label')
+      .filter({ hasText: /Stopping|stopApp|operation in progress/i })
+      .count()
+  ) {
+    return true;
+  }
+  if (await row.getByText(/Stopping\.{2,}|Stopping containers|Stopping\s/i).count()) {
+    return true;
+  }
+  const stop = page.locator(sel.stopInstance(id));
+  const title = ((await stop.getAttribute('title')) ?? '').trim();
+  if (/stopping|operation in progress/i.test(title)) return true;
+  // Local pending stop: Open still visible, Stop disabled
+  const openVisible = await page.locator(sel.openInstance(id)).isVisible().catch(() => false);
+  if (openVisible && (await stop.isDisabled().catch(() => false))) return true;
+  return false;
+}
+
+/** Compact UI snapshot for Prefer A loud-fail messages. */
+export async function describeInstanceStopUi(page: Page, id: string): Promise<string> {
+  const open = await page.locator(sel.openInstance(id)).isVisible().catch(() => false);
+  const start = page.locator(sel.startInstance(id));
+  const stop = page.locator(sel.stopInstance(id));
+  const startDis = await start.isDisabled().catch(() => true);
+  const stopDis = await stop.isDisabled().catch(() => true);
+  const stopTitle = ((await stop.getAttribute('title')) ?? '').trim();
+  const row = instanceRowFor(page, sel.stopInstance(id));
+  let status = 'unknown';
+  if (await row.locator('[aria-label="Status: Running"], .status-dot--running').count()) {
+    status = 'Running';
+  } else if (await row.locator('[aria-label="Status: Starting"], .status-dot--starting').count()) {
+    status = 'Starting';
+  } else if (await row.locator('[aria-label="Status: Stopped"], .status-dot--stopped').count()) {
+    status = 'Stopped';
+  } else if (await row.locator('[aria-label="Status: Error"], .status-dot--error').count()) {
+    status = 'Error';
+  } else if (await row.locator('[aria-label="Status: Undocked"], .status-dot--undocked').count()) {
+    status = 'Undocked';
+  } else if (await row.locator('[aria-label="Status: Docked"], .status-dot--docked').count()) {
+    status = 'Docked';
+  }
+  const stopping = await isInstanceStoppingOrInProgress(page, id);
+  return (
+    `status=${status} open=${open} startDisabled=${startDis} stopDisabled=${stopDis} ` +
+    `stopTitle="${stopTitle}" stoppingUi=${stopping}`
+  );
+}
+
 export async function isInstanceAlreadyStopped(
   page: Page,
   id: string,
@@ -554,11 +630,18 @@ export const start_instance: IntentFn = async ({ page, instanceId }) => {
 };
 
 /**
- * Stop instance — Prefer A: no-op PASS if already Stopped (Stop correctly disabled).
- * Loud-fail if Running/Starting but Stop disabled (locked).
+ * Stop instance — Prefer A r38: status-driven settle (Stopping → Stopped),
+ * wait while in-progress, re-click Stop if still Running (lost command / SSH flap).
+ * Loud-fail with last UI snapshot — never soft-pass while Open/Running.
  */
-export const stop_instance: IntentFn = async ({ page, instanceId }) => {
-  await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first()
+export async function runStopInstance(
+  page: Page,
+  instanceId?: string,
+): Promise<string> {
+  await page
+    .locator(sel.opOverview)
+    .or(page.locator(sel.networkTree))
+    .first()
     .waitFor({ state: 'visible', timeout: 15_000 });
 
   const preferred = resolveStartInstanceId(instanceId);
@@ -567,33 +650,93 @@ export const stop_instance: IntentFn = async ({ page, instanceId }) => {
   await btn.waitFor({ state: 'visible', timeout: 15_000 });
 
   if (await isInstanceAlreadyStopped(page, id)) {
-    return;
+    return id;
   }
 
-  if (await btn.isDisabled().catch(() => false)) {
+  const budget = stopSettleTimeoutMs();
+  const retryEvery = stopRetryIntervalMs();
+  const unlockDeadline = Date.now() + Math.min(budget, 60_000);
+
+  // Wait out backup/start lock before first click (Stop title Operation in progress)
+  while (await btn.isDisabled().catch(() => false)) {
+    if (await isInstanceAlreadyStopped(page, id)) return id;
     const title = ((await btn.getAttribute('title')) ?? '').trim();
-    throw new Error(
-      `idea#168 stop_instance: stop-instance-${id} disabled (title="${title}") ` +
-        `while instance is not Stopped — cannot stop (locked?). No soft-pass.`,
-    );
+    const inProgress =
+      /operation in progress|stopping|backing/i.test(title) ||
+      (await isInstanceStoppingOrInProgress(page, id));
+    if (!inProgress) {
+      throw new Error(
+        `idea#168 stop_instance: stop-instance-${id} disabled (title="${title}") ` +
+          `while instance is not Stopped — cannot stop (locked?). No soft-pass.`,
+      );
+    }
+    if (Date.now() >= unlockDeadline) {
+      throw new Error(
+        `idea#168 stop_instance: stop-instance-${id} still disabled after unlock wait ` +
+          `(title="${title}"). ${await describeInstanceStopUi(page, id)}. Prefer A.`,
+      );
+    }
+    await page.waitForTimeout(400);
   }
 
   await btn.click();
+  let stopClicks = 1;
+  let sawStopping = false;
+  let lastUi = await describeInstanceStopUi(page, id);
+  const startedAt = Date.now();
+  let deadline = startedAt + budget;
+  let graceUsed = false;
+  let lastRetryAt = startedAt;
 
-  const stopBudget = (() => {
-    const raw = process.env.DURATION_STOP_SETTLE_MS?.trim();
-    if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
-    return 90_000;
-  })();
-  const deadline = Date.now() + stopBudget;
-  while (Date.now() < deadline) {
-    if (await isInstanceAlreadyStopped(page, id)) return;
-    await page.waitForTimeout(400);
+  while (true) {
+    if (await isInstanceAlreadyStopped(page, id)) return id;
+
+    // Row gone after stop/undock — treat as settled
+    if (!(await btn.count())) {
+      return id;
+    }
+
+    const stopping = await isInstanceStoppingOrInProgress(page, id);
+    if (stopping) sawStopping = true;
+    lastUi = await describeInstanceStopUi(page, id);
+
+    const now = Date.now();
+    if (now >= deadline) {
+      // Mirror start: one grace extension while Stopping UI still in progress
+      if (stopping && !graceUsed) {
+        graceUsed = true;
+        deadline = now + 60_000;
+        continue;
+      }
+      throw new Error(
+        `idea#168 stop_instance: clicked Stop on ${id} but never settled Stopped. ` +
+          `elapsed=${now - startedAt}ms budget=${budget}ms stopClicks=${stopClicks} ` +
+          `sawStopping=${sawStopping} last={${lastUi}}. ` +
+          `r38: wait Stopping/in-progress; re-click when still Running after infra flap. ` +
+          `Set DURATION_STOP_SETTLE_MS / DURATION_STOP_RETRY_MS. Prefer A — no soft-pass.`,
+      );
+    }
+
+    // Re-click if still Running (Open) and Stop enabled — command may have been lost (SSH flap @82)
+    const open = await page.locator(sel.openInstance(id)).isVisible().catch(() => false);
+    const stopDis = await btn.isDisabled().catch(() => true);
+    if (
+      open &&
+      !stopDis &&
+      !stopping &&
+      now - lastRetryAt >= retryEvery
+    ) {
+      await btn.click();
+      stopClicks += 1;
+      lastRetryAt = now;
+    }
+
+    await page.waitForTimeout(500);
   }
-  throw new Error(
-    `idea#168 stop_instance: clicked Stop on ${id} but instance still looks Running after ${stopBudget}ms. ` +
-      `Set DURATION_STOP_SETTLE_MS. Prefer A — no soft-pass.`,
-  );
+}
+
+export const stop_instance: IntentFn = async ({ page, instanceId }) => {
+  await runStopInstance(page, instanceId);
 };
 
 export const open_account: IntentFn = async ({ page }) => {

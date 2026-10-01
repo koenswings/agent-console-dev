@@ -134,7 +134,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `open_console_as_teacher` / `_learner` | Overview + `account-btn` required (no soft-catch). |
 | `close_account` | `op-entry` must **hide** after toggle. |
 | `cancel_erase` | `erase-dialog` must hide after Cancel. |
-| `stop_instance` | Settle until Stopped (`DURATION_STOP_SETTLE_MS`, default 90s). |
+| `stop_instance` | Prefer A r38: status-driven Stopping→Stopped; wait while Stopping/in-progress; **re-click** Stop every `DURATION_STOP_RETRY_MS` (15s) if still Running/Open (SSH flap). Default settle **180s** (`DURATION_STOP_SETTLE_MS`); +60s grace while Stopping UI. Loud-fail includes last status/open/stopTitle/elapsed/stopClicks. |
 | `add_files_role` | Requires visible `add-files` on DiskView; settle to files section/badge. Env `DURATION_FILES_DISK_ID`. |
 | `make_files_disk` | After submit, wait Files role / DiskView settle (still needs Engine empty dock). |
 | `stay_on_disk` / `stay_on_source_disk` | Resolve disk on tree; DiskView / EmptyDiskPanel visible. |
@@ -318,7 +318,7 @@ correctly disabled. Intent must **no-op PASS**, not hard-click Start.
 | Force restart | `DURATION_START_FORCE_RESTART=1` → Stop then Start |
 | Loud-fail | Not running **and** Start disabled (locked) |
 | Discovery | Prefer Path A `*grade5a*` testids — not zombie `kolibri-1.0-duration*` rows |
-| `stop_instance` | Symmetric no-op when already Stopped |
+| `stop_instance` | No-op when already Stopped; r38 status-driven settle + Stop retry (see Prefer A dwell table) |
 | `start_after_install` | **Not** grade5a — discover non-grade5a `start-*` after install (empty-002 uuid). Override `DURATION_START_AFTER_INSTALL_ID`. Leaves Install picker / ALL APPS first. |
 
 ## start_after_install post-install instance (r27 FAIL@86)
