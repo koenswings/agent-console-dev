@@ -159,13 +159,26 @@ export const eject_disk: IntentFn = async ({ page, diskId }) => {
 export const confirm_eject: IntentFn = async ({ page }) => {
   await page.locator(sel.ejectConfirm).waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(sel.ejectConfirmOk).click();
-  await page.locator(sel.ejectConfirm).waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+  try {
+    await page.locator(sel.ejectConfirm).waitFor({ state: 'hidden', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      'idea#168 confirm_eject: clicked eject-confirm-ok but dialog still visible after 15s. ' +
+        'Engine eject may be stuck — Prefer A loud-fail (no soft-pass).',
+    );
+  }
 };
 
 export const cancel_eject: IntentFn = async ({ page }) => {
   await page.locator(sel.ejectConfirm).waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(sel.ejectConfirmCancel).click();
-  await page.locator(sel.ejectConfirm).waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+  try {
+    await page.locator(sel.ejectConfirm).waitFor({ state: 'hidden', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 cancel_eject: clicked eject-confirm-cancel but dialog still visible.',
+    );
+  }
 };
 
 /**
@@ -581,14 +594,38 @@ export const close_account: IntentFn = async ({ page }) => {
   await page.locator(sel.accountBtn).click();
 };
 
+/**
+ * Open Settings — Prefer A: panel + Engine tab + settings-engine-status visible.
+ * Account tab exposes settings-change-password-* when operator.
+ */
 export const open_settings: IntentFn = async ({ page }) => {
-  await page.locator(sel.settingsBtn).click();
+  if (!(await page.locator(sel.settingsPanel).isVisible().catch(() => false))) {
+    await page.locator(sel.settingsBtn).click();
+  }
   await page.locator(sel.settingsPanel).waitFor({ state: 'visible', timeout: 10_000 });
+  const engineTab = page.locator(sel.settingsTabEngine);
+  if (await engineTab.count()) await engineTab.click();
+  try {
+    await page.locator(sel.settingsEngineStatus).waitFor({ state: 'visible', timeout: 5_000 });
+  } catch {
+    throw new Error(
+      'idea#168 open_settings: Settings panel open but [data-testid="settings-engine-status"] missing. ' +
+        'Engine Connection tab must show connected/demo status for Prefer A.',
+    );
+  }
 };
 
+/** Close Settings — Prefer A: panel must hide (not soft-ok while still open). */
 export const close_settings: IntentFn = async ({ page }) => {
   await page.locator(sel.settingsPanel).waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(sel.settingsBtn).click();
+  try {
+    await page.locator(sel.settingsPanel).waitFor({ state: 'hidden', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 close_settings: clicked settings-btn but [data-testid="settings-panel"] still visible.',
+    );
+  }
 };
 
 /**

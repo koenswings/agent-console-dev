@@ -192,7 +192,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   };
 
   return (
-    <div class="onboarding">
+    <div class="onboarding" data-testid="connection-management">
       <div class="onboarding__card">
         <div class="onboarding__title-row">
           <h1 class="onboarding__title">Connection Management</h1>
@@ -215,7 +215,11 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
               {(result) => (
                 <li class="engine-picker__item">
                   <span class="engine-picker__hostname">{result.hostname.replace(/\.local$/i, '')}</span>
-                  <button class="engine-picker__connect-btn" onClick={() => handleConnect(result)}>
+                  <button
+                    class="engine-picker__connect-btn"
+                    data-testid={`connect-engine-${result.hostname.replace(/\.local$/i, '')}`}
+                    onClick={() => handleConnect(result)}
+                  >
                     Connect
                   </button>
                 </li>
@@ -253,6 +257,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
             />
             <button
               class="engine-picker__connect-btn"
+              data-testid="connect-engine-manual"
               disabled={manualConnecting() || !manualInput().trim()}
               onClick={handleManualConnect}
             >

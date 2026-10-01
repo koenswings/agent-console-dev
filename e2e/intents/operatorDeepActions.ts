@@ -17,6 +17,7 @@ import {
   resolveStartInstanceId,
   runStartInstance,
   isInstanceAlreadyRunning,
+  listVisibleTreeDiskIds,
 } from './operatorActions';
 import { appKindForInstance, sidecarReadyTimeoutMs } from './sidecarUrls';
 import { performOperatorSignIn } from './signInReady';
@@ -465,13 +466,32 @@ export const log_out: IntentFn = async ({ page }) => {
 };
 
 /**
- * Notice USB dock — soft dwell: assert NetworkTree visible after a dock event.
- * Hardware dock is Engine/fleet-owned; this Intent only settles the Console UI.
+ * Notice USB dock — Prefer A: NetworkTree must show ≥1 disk row after dock.
+ * Hardware dock is Engine/fleet-owned; Console settles when disk-* appears.
+ * Loud-fail if tree empty (no soft 500ms dwell).
  */
 export const notice_usb_dock: IntentFn = async ({ page }) => {
   await ensureOpLayout(page);
+  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
+    await page.locator(sel.settingsBtn).click().catch(() => {});
+  }
+  if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
+    await page.locator(sel.accountBtn).click().catch(() => {});
+  }
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
-  await page.waitForTimeout(500);
+  const deadline = Date.now() + 20_000;
+  let disks: string[] = [];
+  while (Date.now() < deadline) {
+    disks = await listVisibleTreeDiskIds(page);
+    if (disks.length > 0) break;
+    await page.waitForTimeout(400);
+  }
+  if (disks.length === 0) {
+    throw new Error(
+      'idea#168 notice_usb_dock: NetworkTree visible but no [data-testid^="disk-"] rows after 20s. ' +
+        'Dock a USB / fixture disk on Engine first (Prefer A — no soft dwell).',
+    );
+  }
 };
 
 /**
@@ -932,26 +952,65 @@ export const done_redistribute: IntentFn = back_to_overview;
 /** Stay on source disk — dwell on DiskView after copy/move (same as stay_on_disk). */
 export const stay_on_source_disk: IntentFn = stay_on_disk;
 
-/** Open copied instance — focus instance controls (ctx.instanceId of the new copy). */
+/**
+ * Open copied instance — Prefer A: ALL APPS → instance row + start/stop/open controls.
+ * Id: DURATION_COPY_INSTANCE_ID → ctx.instanceId → loud-fail (no silent Grade5A remap
+ * when walk just copied a different id).
+ */
 export const open_copied_instance: IntentFn = async ({ page, instanceId }) => {
   await ensureOpLayout(page);
-  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
+    await page.locator(sel.settingsBtn).click().catch(() => {});
+  }
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click();
+  }
+  const id =
+    process.env.DURATION_COPY_INSTANCE_ID?.trim() ||
+    instanceId ||
+    '';
+  if (!id) {
+    throw new Error(
+      'idea#168 open_copied_instance: no instanceId — set DURATION_COPY_INSTANCE_ID after copy_app ' +
+        '(Prefer A; do not assume Grade5A source).',
+    );
+  }
   const row = page.locator(sel.instance(id));
+  if (!(await row.count())) {
+    const rows = page.locator(`${sel.networkTree} [data-testid^="instance-"], [data-testid^="instance-"]`);
+    const n = await rows.count();
+    const visible: string[] = [];
+    for (let i = 0; i < Math.min(n, 20); i++) {
+      const tid = await rows.nth(i).getAttribute('data-testid');
+      if (tid) visible.push(tid.replace(/^instance-/, ''));
+    }
+    throw new Error(
+      `idea#168 open_copied_instance: [data-testid="instance-${id}"] not found. ` +
+        `visible=[${visible.join(', ')}]. Set DURATION_COPY_INSTANCE_ID to the copy id.`,
+    );
+  }
   await row.waitFor({ state: 'visible', timeout: 15_000 });
   await row.click();
-  await page
-    .locator(sel.startInstance(id))
-    .or(page.locator(sel.stopInstance(id)))
-    .or(page.locator(sel.openInstance(id)))
-    .first()
-    .waitFor({ state: 'visible', timeout: 10_000 });
+  try {
+    await page
+      .locator(sel.startInstance(id))
+      .or(page.locator(sel.stopInstance(id)))
+      .or(page.locator(sel.openInstance(id)))
+      .first()
+      .waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      `idea#168 open_copied_instance: instance-${id} focused but no start/stop/open controls. ` +
+        'Prefer A — copy may still be settling.',
+    );
+  }
 };
 
 /**
- * Switch Engine — open Settings → Engine Connection.
- * Current Console Settings shows status/demo only (Connect picker is onboarding
- * ConnectionManagement). Fail loud if no connect control; succeed when tab visible
- * so the walk can settle in op_settings.
+ * Switch Engine — Prefer A: Settings → Change Engine… → ConnectionManagement → Connect.
+ * Opens real picker (not status-only). Host: DURATION_SWITCH_ENGINE_HOST or first
+ * discovered connect-engine-* (reconnect same Engine is ok Prefer A settle).
  */
 export const switch_engine: IntentFn = async ({ page }) => {
   if (!(await page.locator(sel.settingsPanel).isVisible().catch(() => false))) {
@@ -960,39 +1019,72 @@ export const switch_engine: IntentFn = async ({ page }) => {
   await page.locator(sel.settingsPanel).waitFor({ state: 'visible', timeout: 10_000 });
   const tab = page.locator(sel.settingsTabEngine);
   if (await tab.count()) await tab.click();
-  // Prefer a Connect control if present (future Settings reconnect UI)
-  const connect = page.locator(
-    '[data-testid="switch-engine-connect"], .engine-picker__connect-btn, button:has-text("Connect")',
-  );
-  if (await connect.count()) {
-    // Click first Connect that is not the current-only status — walker may pass engine via env
-    const target = process.env.DURATION_SWITCH_ENGINE_HOST?.trim();
-    if (target) {
-      const row = page.locator('.engine-picker__item').filter({ hasText: new RegExp(target, 'i') });
-      if (await row.count()) {
-        await row.locator('button').filter({ hasText: /connect/i }).click();
-        return;
-      }
-      throw new Error(
-        `idea#168 switch_engine: DURATION_SWITCH_ENGINE_HOST=${target} not in discovery list.`,
-      );
+  await page.locator(sel.settingsEngineStatus).waitFor({ state: 'visible', timeout: 5_000 });
+
+  const changeBtn = page.locator(sel.switchEngineConnect);
+  if (!(await changeBtn.count())) {
+    throw new Error(
+      'idea#168 switch_engine: [data-testid="switch-engine-connect"] missing on Engine Connection tab. ' +
+        'Settings must expose Change Engine… → ConnectionManagement (Prefer A).',
+    );
+  }
+  await changeBtn.click();
+  try {
+    await page.locator(sel.connectionManagement).waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      'idea#168 switch_engine: clicked Change Engine… but [data-testid="connection-management"] did not open.',
+    );
+  }
+
+  const target = process.env.DURATION_SWITCH_ENGINE_HOST?.trim()?.replace(/\.local$/i, '') || '';
+  if (target) {
+    const btn = page.locator(sel.connectEngine(target));
+    if (await btn.count()) {
+      await btn.click();
+      return;
     }
-    await connect.first().click();
+    const row = page.locator('.engine-picker__item').filter({ hasText: new RegExp(target, 'i') });
+    if (await row.count()) {
+      await row.locator('button').filter({ hasText: /connect/i }).click();
+      return;
+    }
+    throw new Error(
+      `idea#168 switch_engine: DURATION_SWITCH_ENGINE_HOST=${target} not in discovery list ` +
+        '(no matching connect-engine-* / engine-picker row).',
+    );
+  }
+
+  const discovered = page.locator('[data-testid^="connect-engine-"]:not([data-testid="connect-engine-manual"])');
+  if (await discovered.count()) {
+    await discovered.first().click();
     return;
   }
+  // Manual host fallback (env or typed)
+  const manualHost = process.env.DURATION_ENGINE_HOST?.trim();
+  if (manualHost && (await page.locator(sel.connectEngineManual).count())) {
+    const input = page.locator('.engine-picker input, input[placeholder*="host" i], input[name="hostname"]').first();
+    if (await input.count()) {
+      await input.fill(manualHost);
+      await page.locator(sel.connectEngineManual).click();
+      return;
+    }
+  }
   throw new Error(
-    'idea#168 switch_engine: Settings → Engine Connection has no Connect picker in current Console UI ' +
-      '(ConnectionManagement is onboarding-only). Open Settings tab for settle only is insufficient — ' +
-      'need Settings reconnect UI or set DURATION_SWITCH_ENGINE_HOST once Connect buttons exist.',
+    'idea#168 switch_engine: ConnectionManagement open but no Connect buttons / discovery empty. ' +
+      'Set DURATION_SWITCH_ENGINE_HOST or ensure Engine discovery finds ≥1 host. Prefer A — no soft-pass.',
   );
 };
 
 /**
- * Reboot Engine — NetworkTree reboot button on engine row (confirm dialog).
- * Defaults to first visible reboot-engine-* unless engineId in ctx.
+ * Reboot Engine — Prefer A: NetworkTree reboot-engine-* + native confirm dialog accept.
+ * Loud-fail if dialog never fires; assert engine row survives click (command dispatched).
  */
 export const reboot_engine: IntentFn = async ({ page, engineId }) => {
   await ensureOpLayout(page);
+  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
+    await page.locator(sel.settingsBtn).click().catch(() => {});
+  }
   const btn = engineId
     ? page.locator(sel.rebootEngine(engineId))
     : page.locator('[data-testid^="reboot-engine-"]').first();
@@ -1001,9 +1093,31 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
       'idea#168 reboot_engine: no reboot-engine-* button in NetworkTree (operator layout required).',
     );
   }
-  page.once('dialog', (d) => d.accept());
-  await btn.click();
-  await page.waitForTimeout(500);
+  let dialogSeen = false;
+  try {
+    const [dialog] = await Promise.all([
+      page.waitForEvent('dialog', { timeout: 8_000 }),
+      btn.click(),
+    ]);
+    dialogSeen = true;
+    await dialog.accept();
+  } catch (e) {
+    if (!dialogSeen) {
+      throw new Error(
+        'idea#168 reboot_engine: clicked reboot but confirm dialog did not appear within 8s. ' +
+          `Prefer A — ${(e as Error).message}`,
+      );
+    }
+    throw e;
+  }
+  // Engine row / reboot control should remain (reboot is async on Engine)
+  try {
+    await btn.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 reboot_engine: reboot control disappeared after confirm — NetworkTree lost engine row.',
+    );
+  }
 };
 
 /**
@@ -1028,7 +1142,11 @@ const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise
     }
   }
   await page.bringToFront().catch(() => {});
-  // Close account/settings overlays that hide overview
+  if (await page.locator(sel.connectionManagement).isVisible().catch(() => false)) {
+    const cmBtn = page.locator(sel.connectionMgmtBtn);
+    if (await cmBtn.count()) await cmBtn.click().catch(() => {});
+    else await page.locator('.status-bar__connection-btn').click().catch(() => {});
+  }
   if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
     await page.locator(sel.accountBtn).click().catch(() => {});
   }
@@ -1037,15 +1155,14 @@ const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise
   }
   const overview = page.locator(sel.consoleOverview);
   const op = page.locator(sel.opOverview);
-  if (await overview.isVisible().catch(() => false)) {
-    await overview.waitFor({ state: 'visible', timeout: 5_000 });
-    return;
+  try {
+    await overview.or(op).first().waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    throw new Error(
+      'idea#168 leave_*: Console overview not visible after closing app tabs / overlays. ' +
+        'Expected [data-testid="console-overview"] or [data-testid="op-overview"]. Prefer A loud-fail.',
+    );
   }
-  if (await op.isVisible().catch(() => false)) {
-    await op.waitFor({ state: 'visible', timeout: 5_000 });
-    return;
-  }
-  await overview.or(op).first().waitFor({ state: 'visible', timeout: 15_000 });
 };
 
 export const back_to_console: IntentFn = async ({ page }) => {

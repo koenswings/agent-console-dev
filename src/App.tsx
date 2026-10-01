@@ -414,6 +414,7 @@ const App: Component = () => {
           <Show when={!demo()}>
             <button
               class="status-bar__connection-btn"
+              data-testid="connection-mgmt-btn"
               title="Connection Management"
               onClick={() => {
                 setShowConnectionMgmt((v) => !v);
@@ -497,6 +498,10 @@ const App: Component = () => {
               setShowSettings(false);
               await logout();
               await initConnection();
+            }}
+            onChangeEngine={() => {
+              setShowSettings(false);
+              setShowConnectionMgmt(true);
             }}
             onDemoMode={async () => {
               // Production web: refuse demo (duration --live must stay on Engine store)

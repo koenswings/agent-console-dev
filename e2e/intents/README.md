@@ -106,9 +106,23 @@ Registered (fail loud when gated / UI missing):
 `copy_app` / `move_app` = **real** HTML5 drag instance→target disk + Copy/Move modal (loud-fail if <2 docked disks / no copyable instance). See § Multi-disk copy_app preload.
 
 Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
-`done_redistribute`, `stay_on_source_disk`, `open_copied_instance`, `switch_engine`
-(loud if no Connect picker), `reboot_engine`. Usage leave: `back_to_console`,
-`leave_kolibri`, `leave_nextcloud_as_*`.
+`done_redistribute`, `stay_on_source_disk`, `open_copied_instance`, `switch_engine`,
+`reboot_engine`. Usage leave: `back_to_console`, `leave_kolibri`, `leave_nextcloud_as_*`.
+
+### Settings / Connect / USB / reboot / leave (Prefer A)
+
+| Intent | Contract |
+|---|---|
+| `open_settings` | Panel + Engine tab + `settings-engine-status` (connected/demo). Account: `settings-change-password-*`. |
+| `close_settings` | Panel must **hide** after settings-btn (loud if still open). |
+| `switch_engine` | Settings → `switch-engine-connect` (Change Engine…) → `connection-management` → `connect-engine-*`. Env: `DURATION_SWITCH_ENGINE_HOST`. Prefer A real Connect — **not** status-only settle. |
+| `notice_usb_dock` | NetworkTree visible **and** ≥1 `disk-*` within 20s. No soft 500ms dwell. |
+| `reboot_engine` | `reboot-engine-*` + native confirm dialog accept; engine row survives. Loud if dialog missing. |
+| `open_copied_instance` | `DURATION_COPY_INSTANCE_ID` or ctx.instanceId required — **no** silent Grade5A remap. ALL APPS → instance controls. |
+| `confirm_eject` / `cancel_eject` | Dialog must hide after OK/Cancel (no soft `.catch`). |
+| `leave_*` / `back_to_console` | Close app tabs + overlays; assert `console-overview` / `op-overview`. Dismisses ConnectionManagement via `connection-mgmt-btn` if open. |
+
+**Still deferred / blocked (not this tip):** lesson chrome (`keep_watching`, …) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
 
 ## Kolibri coaching (kolibri_manage)
 

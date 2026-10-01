@@ -82,4 +82,14 @@ export const sel = {
   settingsTabEngine: '[data-testid="settings-tab-engine"]',
   settingsTabAccount: '[data-testid="settings-tab-account"]',
   settingsTabAbout: '[data-testid="settings-tab-about"]',
+  settingsEngineStatus: '[data-testid="settings-engine-status"]',
+  settingsDemoToggle: '[data-testid="settings-demo-toggle"]',
+  settingsAboutVersion: '[data-testid="settings-about-version"]',
+  settingsChangePasswordForm: '[data-testid="settings-change-password-form"]',
+  switchEngineConnect: '[data-testid="switch-engine-connect"]',
+  connectionManagement: '[data-testid="connection-management"]',
+  connectionMgmtBtn: '[data-testid="connection-mgmt-btn"]',
+  connectEngineManual: '[data-testid="connect-engine-manual"]',
+  connectEngine: (hostname: string) =>
+    `[data-testid="connect-engine-${hostname.replace(/\.local$/i, '')}"]`,
 } as const;
