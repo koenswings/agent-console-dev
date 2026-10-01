@@ -14,6 +14,8 @@ export interface SettingsPanelProps {
   onClose: () => void;
   onComplete: () => void;
   onConnect: (hostname: string, storeUrl: string) => void;
+  /** Open ConnectionManagement to pick another Engine (Prefer A switch_engine). */
+  onChangeEngine?: () => void;
   onDemoMode: () => void;
   onDemoToggle?: (val: boolean) => Promise<void>;
 }
@@ -74,13 +76,14 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
   };
 
   return (
-    <div class="settings-panel">
+    <div class="settings-panel" data-testid="settings-panel">
       {/* Left sidebar */}
       <nav class="settings-panel__sidebar">
         <For each={tabs()}>
           {(tab) => (
             <button
               class={`settings-panel__tab${activeTab() === tab.id ? ' settings-panel__tab--active' : ''}`}
+              data-testid={`settings-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -98,7 +101,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <h2 class="settings-panel__heading">Engine Connection</h2>
 
             {/* Status row */}
-            <div class="settings-panel__current-engine">
+            <div class="settings-panel__current-engine" data-testid="settings-engine-status">
               <Show when={props.demo}>
                 <span class="settings-panel__status-dot" style="background:var(--colour-text-dim)" />
                 <span class="settings-panel__current-label">Demo mode — simulated data, no engine connected</span>
@@ -118,6 +121,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               <label class="toggle-row">
                 <input
                   type="checkbox"
+                  data-testid="settings-demo-toggle"
                   checked={props.demo}
                   onChange={(e) => void props.onDemoToggle?.(e.currentTarget.checked)}
                 />
@@ -125,6 +129,20 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               </label>
               <span class="form-field__hint">Simulated data, no engine required</span>
             </div>
+
+            <Show when={props.onChangeEngine}>
+              <div class="settings-panel__actions" style="margin-top:1rem">
+                <button
+                  type="button"
+                  class="btn"
+                  data-testid="switch-engine-connect"
+                  onClick={() => props.onChangeEngine?.()}
+                >
+                  Change Engine…
+                </button>
+                <p class="form-field__hint">Opens connection picker to connect to another Engine on the network.</p>
+              </div>
+            </Show>
           </div>
         </Show>
 
@@ -132,12 +150,13 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
         <Show when={activeTab() === 'account' && isOperator()}>
           <div class="settings-panel__section">
             <h2 class="settings-panel__heading">Change Password</h2>
-            <form class="modal__form" onSubmit={handleChangePassword}>
+            <form class="modal__form" data-testid="settings-change-password-form" onSubmit={handleChangePassword}>
               <label class="form-field">
                 <span class="form-field__label">Current password</span>
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="settings-change-password-current"
                   value={currentPw()}
                   onInput={(e) => setCurrentPw(e.currentTarget.value)}
                   required
@@ -148,6 +167,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="settings-change-password-new"
                   value={newPw()}
                   onInput={(e) => setNewPw(e.currentTarget.value)}
                   required
@@ -159,14 +179,20 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="settings-change-password-confirm"
                   value={confirmPw()}
                   onInput={(e) => setConfirmPw(e.currentTarget.value)}
                   required
                 />
               </label>
-              {pwError() && <p class="form-error">{pwError()}</p>}
-              {pwSuccess() && <p class="form-success">{pwSuccess()}</p>}
-              <button class="btn btn--primary" type="submit" disabled={pwLoading()}>
+              {pwError() && <p class="form-error" data-testid="settings-change-password-error">{pwError()}</p>}
+              {pwSuccess() && <p class="form-success" data-testid="settings-change-password-success">{pwSuccess()}</p>}
+              <button
+                class="btn btn--primary"
+                type="submit"
+                data-testid="settings-change-password"
+                disabled={pwLoading()}
+              >
                 {pwLoading() ? 'Saving…' : 'Change password'}
               </button>
             </form>
@@ -179,7 +205,7 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
             <h2 class="settings-panel__heading">About</h2>
             <p class="settings-panel__about-name">IDEA Console</p>
             <p class="settings-panel__about-desc">Offline web app management for schools</p>
-            <p class="settings-panel__about-version">v{pkg.version}</p>
+            <p class="settings-panel__about-version" data-testid="settings-about-version">v{pkg.version}</p>
           </div>
         </Show>
       </div>

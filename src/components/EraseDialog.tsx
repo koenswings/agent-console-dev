@@ -253,7 +253,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   };
 
   return (
-    <div class="erase-dialog" role="dialog" aria-label={`Erase ${titleLabel()}`}>
+    <div class="erase-dialog" role="dialog" data-testid="erase-dialog" aria-label={`Erase ${titleLabel()}`}>
       <h2 class="erase-dialog__title">Erase {titleLabel()}?</h2>
 
       <Show when={phase().kind === 'summarising'}>
@@ -293,6 +293,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                 </label>
                 <input
                   id="erase-confirm-name"
+                  data-testid="erase-confirm-name"
                   class="edp-form__search erase-dialog__confirm"
                   type="text"
                   value={confirmName()}
@@ -301,10 +302,11 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                 />
               </Show>
               <div class="edp-form__actions">
-                <button class="btn" onClick={() => props.onClose()}>Cancel</button>
+                <button class="btn" onClick={() => props.onClose()} data-testid="erase-cancel">Cancel</button>
                 <Show when={!stale()}>
                   <button
                     class="btn btn--danger"
+                    data-testid="erase-confirm-ok"
                     disabled={!labelMatches()}
                     onClick={startErase}
                   >
@@ -321,7 +323,12 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       </Show>
 
       <Show when={phase().kind === 'erasing' || (phase().kind === 'success' && makingFiles())}>
-        <p class="erase-dialog__progress" role="status" data-erase-step={progressStep() ?? ''}>
+        <p
+          class="erase-dialog__progress"
+          role="status"
+          data-testid="erase-progress"
+          data-erase-step={progressStep() ?? ''}
+        >
           {progressStep() ?? 'checking'}…
         </p>
         <Show when={slow()}>
@@ -342,6 +349,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
         <div class="edp-form__actions">
           <button
             class="btn btn--primary"
+            data-testid="erase-done"
             onClick={() => {
               props.onErasedEmpty?.(props.targetId);
               props.onClose();
@@ -427,7 +435,7 @@ const SummaryBody: Component<{ summary: () => ContentSummary }> = (props) => {
 const SuccessBody: Component<{ summary: () => ContentSummary }> = (props) => {
   const s = () => props.summary();
   return (
-    <div class="erase-dialog__result" role="status">
+    <div class="erase-dialog__result" role="status" data-testid="erase-complete">
       <p>Disk erased. It is now an empty IDEA disk.</p>
       <Show when={s().instances.length > 0}>
         <p class="erase-dialog__label">Removed instances:</p>

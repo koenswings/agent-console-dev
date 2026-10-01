@@ -19,7 +19,11 @@ const AppCard: Component<AppCardProps> = (props) => {
   };
 
   return (
-    <div class={`app-card${isRunning() ? '' : ' app-card--unavailable'}`}>
+    <div
+      class={`app-card${isRunning() ? '' : ' app-card--unavailable'}`}
+      data-testid={`instance-${props.instance()?.id ?? ''}`}
+      data-instance-id={props.instance()?.id}
+    >
       <div class="app-card__header">
         <span class="app-card__title">
           {props.app()?.title ?? props.instance()?.name}
@@ -33,7 +37,11 @@ const AppCard: Component<AppCardProps> = (props) => {
       )}
       <div class="app-card__footer">
         {isRunning() ? (
-          <button class="app-card__open-btn" onClick={handleOpen}>
+          <button
+            class="app-card__open-btn"
+            data-testid={`open-instance-${props.instance()?.id ?? ''}`}
+            onClick={handleOpen}
+          >
             Open
           </button>
         ) : (

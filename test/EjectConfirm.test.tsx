@@ -111,9 +111,12 @@ describe('NetworkTree — eject confirmation on combined disks (idea#157)', () =
     expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `ejectDisk ${I.FA_APP_FILES}`);
   });
 
-  it('a single-role disk ejects immediately, without the confirmation', () => {
+  it('a single-role disk also opens confirmation (duration eject_disk / ACTIONS.md)', () => {
     const { container } = renderTree();
     fireEvent.click(ejectBtn(container, I.FA_FILES));
+    expect(sent).not.toHaveBeenCalled();
+    expect(dialog(container)).not.toBeNull();
+    fireEvent.click(button(dialog(container)!, 'Eject'));
     expect(dialog(container)).toBeNull();
     expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `ejectDisk ${I.FA_FILES}`);
   });
@@ -144,10 +147,12 @@ describe('FilesSection — Eject confirms on a combined disk (idea#157)', () => 
     expect(sent).not.toHaveBeenCalled();
   });
 
-  it('ejects a Files-only disk straight away', () => {
+  it('Files-only disk also opens confirmation before eject', () => {
     const { container } = renderView(I.FA_FILES);
     fireEvent.click(filesEject(container));
-    expect(dialog(container)).toBeNull();
+    expect(sent).not.toHaveBeenCalled();
+    expect(dialog(container)).not.toBeNull();
+    fireEvent.click(button(dialog(container)!, 'Eject'));
     expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `ejectDisk ${I.FA_FILES}`);
   });
 });

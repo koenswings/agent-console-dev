@@ -230,6 +230,8 @@ describe('FilesSection — states', () => {
   it('Eject sends ejectDisk <diskId> and shows a refusal inline', () => {
     const t = renderView(I.FA_FILES);
     fireEvent.click(screen.getByRole('button', { name: 'Eject' }));
+    // Always confirm (parity with NetworkTree / duration eject_disk)
+    fireEvent.click(screen.getByTestId('eject-confirm-ok'));
     expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `ejectDisk ${I.FA_FILES}`);
     t.setCls(log(trace({ command: 'ejectDisk', args: { diskId: I.FA_FILES }, status: 'error', errorMessage: 'locked' })));
     expect(screen.getByRole('alert').textContent).toBe("Couldn't eject School Files: locked");
