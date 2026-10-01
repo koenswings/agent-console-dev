@@ -53,6 +53,30 @@ export function resolveCopyMovePair(
   return { sourceDiskId, targetDiskId, instanceId, op };
 }
 
+/**
+ * Prefer A r34: after move_app, storedOn may be nextcloud — target must ≠ source.
+ * Prefer fixture disks that differ from source, else first other visible tree disk.
+ */
+export function pickTargetDiskId(
+  sourceDiskId: string,
+  visibleDiskIds: string[],
+  preferred: string[] = [
+    DURATION_FIXTURES.nextcloud.diskId,
+    DURATION_FIXTURES.kolibri.diskId,
+    DURATION_FIXTURES.empty.diskId,
+    DURATION_FIXTURES.backup.diskId,
+  ],
+): string | null {
+  const others = visibleDiskIds.filter(
+    (id) => id && id !== sourceDiskId && !/system/i.test(id),
+  );
+  if (!others.length) return null;
+  for (const pref of preferred) {
+    if (others.includes(pref)) return pref;
+  }
+  return others[0] ?? null;
+}
+
 const ensureOp = async (page: Page): Promise<void> => {
   await page
     .locator(sel.opOverview)
@@ -192,80 +216,112 @@ export async function settleAfterCopyMoveConfirm(
   }
 }
 
+const listVisibleTreeDiskIds = async (page: Page): Promise<string[]> => {
+  const rows = page.locator(`${sel.networkTree} [data-testid^="disk-"]`);
+  const n = await rows.count();
+  const ids: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const testId = await rows.nth(i).getAttribute('data-testid');
+    if (testId) ids.push(testId.replace(/^disk-/, ''));
+  }
+  return ids;
+};
+
 const runCopyOrMove = async (ctx: IntentContext, op: 'copy' | 'move'): Promise<void> => {
   const intent = op === 'copy' ? 'copy_app' : 'move_app';
   const { page } = ctx;
   await ensureOp(page);
 
-  const pair = resolveCopyMovePair(ctx, op);
-  if (pair.sourceDiskId === pair.targetDiskId) {
+  // Defaults from env/ctx — may be stale after move_app (storedOn changed)
+  const defaults = resolveCopyMovePair(ctx, op);
+  const instanceId = defaults.instanceId;
+
+  // Prefer ALL APPS so InstanceRow is visible regardless of which disk holds it
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click().catch(() => {});
+  }
+
+  let instance = page.locator(sel.instance(instanceId));
+  if (!(await instance.isVisible().catch(() => false))) {
+    // Fall back: click default source disk then look again
+    const guessSource = page.locator(sel.disk(defaults.sourceDiskId));
+    if (await guessSource.isVisible().catch(() => false)) {
+      await guessSource.click().catch(() => {});
+    }
+    await instance.waitFor({ state: 'visible', timeout: 12_000 }).catch(() => {});
+  }
+  if (!(await instance.isVisible().catch(() => false))) {
     throw preloadError(
       intent,
-      `source and target diskId are the same (${pair.sourceDiskId}).`,
+      `instance ${instanceId} not visible on ALL APPS / guessed source ${defaults.sourceDiskId}.`,
     );
   }
 
-  const sourceDisk = page.locator(sel.disk(pair.sourceDiskId));
-  const targetDisk = page.locator(sel.disk(pair.targetDiskId));
+  const copyable = (await instance.getAttribute('data-copyable')) ?? '';
+  const domSource = (await instance.getAttribute('data-source-disk-id'))?.trim() ?? '';
+  if (copyable === 'false' || !copyable) {
+    throw preloadError(
+      intent,
+      `instance ${instanceId} is not copyable (data-copyable="${copyable}", ` +
+        `data-source-disk-id="${domSource}"). Need storedOn / linked disk.`,
+    );
+  }
 
+  // Prefer A r34: DOM storedOn wins over stale resolveCopyMovePair after move
+  const sourceDiskId = domSource || defaults.sourceDiskId;
+  const visibleDisks = await listVisibleTreeDiskIds(page);
+  let targetDiskId =
+    defaults.targetDiskId !== sourceDiskId && visibleDisks.includes(defaults.targetDiskId)
+      ? defaults.targetDiskId
+      : pickTargetDiskId(sourceDiskId, visibleDisks);
+
+  if (!targetDiskId || targetDiskId === sourceDiskId) {
+    throw preloadError(
+      intent,
+      `no different-disk target for copy/move (source=${sourceDiskId} from ` +
+        `data-source-disk-id="${domSource}", visible=[${visibleDisks.join(', ')}]). ` +
+        `r34: after move_app, do not drop onto same storedOn disk (isDragTarget false → no modal).`,
+    );
+  }
+
+  const pair: CopyMovePair = { sourceDiskId, targetDiskId, instanceId, op };
+
+  const sourceDisk = page.locator(sel.disk(sourceDiskId));
+  const targetDisk = page.locator(sel.disk(targetDiskId));
   if (!(await sourceDisk.isVisible().catch(() => false))) {
     throw preloadError(
       intent,
-      `source disk ${pair.sourceDiskId} not visible on NetworkTree.`,
+      `source disk ${sourceDiskId} (data-source-disk-id) not visible on NetworkTree. ` +
+        `visible=[${visibleDisks.join(', ')}].`,
     );
   }
   if (!(await targetDisk.isVisible().catch(() => false))) {
     throw preloadError(
       intent,
-      `target disk ${pair.targetDiskId} not visible — need ≥2 docked disks.`,
-    );
-  }
-
-  // Select source disk so InstanceRow is in the right panel (DiskView Apps list)
-  await sourceDisk.click();
-  await page
-    .locator(sel.diskView(pair.sourceDiskId))
-    .or(page.locator(sel.instance(pair.instanceId)))
-    .first()
-    .waitFor({ state: 'visible', timeout: 12_000 })
-    .catch(() => {});
-
-  const instance = page.locator(sel.instance(pair.instanceId));
-  if (!(await instance.isVisible().catch(() => false))) {
-    // Try All apps list
-    const allApps = page.locator(sel.networkAllApps);
-    if (await allApps.count()) await allApps.click().catch(() => {});
-    await instance.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-  }
-  if (!(await instance.isVisible().catch(() => false))) {
-    throw preloadError(
-      intent,
-      `instance ${pair.instanceId} not visible on source disk ${pair.sourceDiskId} ` +
-        `(need Running/Stopped instance card restored after dock).`,
-    );
-  }
-
-  const copyable = await instance.getAttribute('data-copyable');
-  if (copyable === 'false') {
-    throw preloadError(
-      intent,
-      `instance ${pair.instanceId} is not copyable (missing storedOn / disk in store).`,
+      `target disk ${targetDiskId} not visible — need ≥2 docked disks. ` +
+        `visible=[${visibleDisks.join(', ')}].`,
     );
   }
 
   // Modal may already be open from a prior drop
   if (!(await page.locator(sel.copyMoveModal).isVisible().catch(() => false))) {
-    await dragInstanceOntoDisk(page, sel.instance(pair.instanceId), sel.disk(pair.targetDiskId));
+    await dragInstanceOntoDisk(page, sel.instance(instanceId), sel.disk(targetDiskId));
   }
 
   const modal = page.locator(sel.copyMoveModal);
   try {
     await modal.waitFor({ state: 'visible', timeout: 10_000 });
   } catch {
+    const copyableNow = (await instance.getAttribute('data-copyable')) ?? '';
+    const domNow = (await instance.getAttribute('data-source-disk-id')) ?? '';
     throw preloadError(
       intent,
-      `copy-move-modal did not open after dragging ${pair.instanceId} onto ${pair.targetDiskId}. ` +
-        `Confirm HTML5 drop target on NetworkTree disk row and that App dragData was set.`,
+      `copy-move-modal did not open after dragging ${instanceId} onto ${targetDiskId}. ` +
+        `sourceDiskId=${sourceDiskId}, targetDiskId=${targetDiskId}, ` +
+        `data-copyable="${copyableNow}", data-source-disk-id="${domNow}", ` +
+        `visible=[${visibleDisks.join(', ')}]. ` +
+        `r34: NetworkTree isDragTarget requires dragData.sourceDiskId !== targetDiskId.`,
     );
   }
 

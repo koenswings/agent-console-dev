@@ -341,6 +341,8 @@ After Confirm, restore may **SIGTERM** kolibri (exit 143) while Automerge stays 
 
 ## copy_app / move_app settle (r22 FAIL@71)
 
+r34: after `move_app`, read instance `data-source-disk-id` (storedOn) and pick a **different** docked target (`pickTargetDiskId`) — same-disk drop never opens modal (`isDragTarget`). Loud-fail if only same-disk remains.
+
 r33: synthetic `page.evaluate` drag must **not** use nested named helpers — esbuild `keepNames` injects `__name(...)` (undefined in page → ReferenceError). Inline `dispatchEvent` only.
 
 
