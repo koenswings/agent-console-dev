@@ -90,23 +90,21 @@ export async function dragInstanceOntoDisk(
 
   if (await page.locator(sel.copyMoveModal).isVisible().catch(() => false)) return;
 
-  // 2) Synthetic DragEvents on the same elements (still invoke Solid handlers)
+  // 2) Synthetic DragEvents — inline only (no nested named fn).
+  // esbuild keepNames would inject __name(fire,"fire") into the serialized
+  // evaluate body; __name is undefined in the browser (r33 Prefer A FAIL@87).
   const ok = await page.evaluate(
     ({ src, dst }) => {
       const sourceEl = document.querySelector(src);
       const targetEl = document.querySelector(dst);
       if (!sourceEl || !targetEl) return false;
       const dt = new DataTransfer();
-      const fire = (el: Element, type: string) => {
-        el.dispatchEvent(
-          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }),
-        );
-      };
-      fire(sourceEl, 'dragstart');
-      fire(targetEl, 'dragenter');
-      fire(targetEl, 'dragover');
-      fire(targetEl, 'drop');
-      fire(sourceEl, 'dragend');
+      const opts = { bubbles: true, cancelable: true, dataTransfer: dt };
+      sourceEl.dispatchEvent(new DragEvent('dragstart', opts));
+      targetEl.dispatchEvent(new DragEvent('dragenter', opts));
+      targetEl.dispatchEvent(new DragEvent('dragover', opts));
+      targetEl.dispatchEvent(new DragEvent('drop', opts));
+      sourceEl.dispatchEvent(new DragEvent('dragend', opts));
       return true;
     },
     { src: instanceSel, dst: targetDiskSel },

@@ -341,6 +341,9 @@ After Confirm, restore may **SIGTERM** kolibri (exit 143) while Automerge stays 
 
 ## copy_app / move_app settle (r22 FAIL@71)
 
+r33: synthetic `page.evaluate` drag must **not** use nested named helpers — esbuild `keepNames` injects `__name(...)` (undefined in page → ReferenceError). Inline `dispatchEvent` only.
+
+
 Move Confirm → kolibri Exited 143 / docker-missing while store Running.
 
 | Step | Contract |
