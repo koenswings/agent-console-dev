@@ -9,15 +9,101 @@ import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
 
-/** Click eject-<diskId> → wait for eject-confirm (ACTIONS.md `eject_disk`). */
+/**
+ * Resolve disk to eject (duration Prefer A / post-copy).
+ * Env: DURATION_EJECT_DISK_ID overrides ctx.diskId / kolibri fixture.
+ */
+export function resolveEjectDiskId(
+  diskId?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return (
+    env.DURATION_EJECT_DISK_ID?.trim() ||
+    diskId ||
+    DURATION_FIXTURES.kolibri.diskId
+  );
+}
+
+/**
+ * Click eject-<diskId> → wait for eject-confirm (ACTIONS.md `eject_disk`).
+ *
+ * Hardened for post-copy / done_redistribute → op_overview (ALL APPS):
+ * NetworkTree disk eject button is still on the tree row; we ensure overview
+ * chrome, wait out copy lock (disabled eject), then open confirm.
+ * Loud-fail if disk/button/modal missing — never silent skip / demo remap.
+ */
 export const eject_disk: IntentFn = async ({ page, diskId }) => {
-  await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first()
+  await page
+    .locator(sel.opOverview)
+    .or(page.locator(sel.networkTree))
+    .first()
     .waitFor({ state: 'visible', timeout: 15_000 });
-  const id = diskId ?? DURATION_FIXTURES.kolibri.diskId;
+
+  // Close overlays that hide the tree (account/settings)
+  if (await page.locator(sel.opEntry).isVisible().catch(() => false)) {
+    await page.locator(sel.accountBtn).click().catch(() => {});
+  }
+  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
+    await page.locator(sel.settingsBtn).click().catch(() => {});
+  }
+
+  // ALL APPS after redistribute is fine — eject lives on NetworkTree disk rows.
+  // Click All apps to clear disk-panel focus without leaving overview.
+  const allApps = page.locator(sel.networkAllApps);
+  if (await allApps.isVisible().catch(() => false)) {
+    await allApps.click().catch(() => {});
+  }
+  await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 10_000 });
+
+  const id = resolveEjectDiskId(diskId);
+  const diskRow = page.locator(sel.disk(id));
+  if (!(await diskRow.isVisible().catch(() => false))) {
+    throw new Error(
+      `idea#168 eject_disk: disk ${id} not visible on NetworkTree after redistribute/overview. ` +
+        `Preload: dock duration-kolibri-grade5a-001 (or set DURATION_EJECT_DISK_ID). ` +
+        `demoMode=false — no DISK001 remap.`,
+    );
+  }
+
   const btn = page.locator(sel.eject(id));
-  await btn.waitFor({ state: 'visible', timeout: 15_000 });
+  if (!(await btn.count())) {
+    throw new Error(
+      `idea#168 eject_disk: [data-testid="eject-${id}"] missing — canEject false ` +
+        `(system/backup-only disk, or undocked). Duration Apps disks should show eject.`,
+    );
+  }
+
+  // After copy_app, isDiskLocked may disable eject until op settles
+  try {
+    await btn.waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForFunction(
+      (selStr) => {
+        const el = document.querySelector(selStr) as HTMLButtonElement | null;
+        return !!el && !el.disabled;
+      },
+      sel.eject(id),
+      { timeout: 30_000 },
+    );
+  } catch {
+    const disabled = await btn.isDisabled().catch(() => true);
+    throw new Error(
+      `idea#168 eject_disk: eject-${id} visible but still disabled after 30s ` +
+        `(isDiskLocked — copy/move still running?). disabled=${disabled}. ` +
+        `Wait for redistribute ops to settle before eject_disk.`,
+    );
+  }
+
   await btn.click();
-  await page.locator(sel.ejectConfirm).waitFor({ state: 'visible', timeout: 10_000 });
+
+  try {
+    await page.locator(sel.ejectConfirm).waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      `idea#168 eject_disk: clicked eject-${id} but [data-testid="eject-confirm"] did not open. ` +
+        `Console must always show EjectConfirm (including pure Apps disks). ` +
+        `If still on ALL APPS only, NetworkTree row may have missed the click.`,
+    );
+  }
 };
 
 export const confirm_eject: IntentFn = async ({ page }) => {

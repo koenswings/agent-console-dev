@@ -109,6 +109,20 @@ const ejectButton = (container: HTMLElement): HTMLButtonElement => {
 
 const notice = (container: HTMLElement) => container.querySelector('.tree-item__eject-notice');
 
+
+const confirmEjectOk = (container: HTMLElement): void => {
+  const ok = container.querySelector<HTMLButtonElement>('[data-testid="eject-confirm-ok"]');
+  if (!ok) throw new Error('eject-confirm-ok missing after eject click');
+  fireEvent.click(ok);
+};
+
+/** Eject button now always opens confirm — confirm to send ejectDisk. */
+const ejectAndConfirm = (container: HTMLElement): void => {
+  fireEvent.click(ejectButton(container));
+  confirmEjectOk(container);
+};
+
+
 describe('NetworkTree eject — sends the disk ID (idea#152)', () => {
   let sent: ReturnType<typeof vi.fn>;
   beforeEach(() => { sent = vi.fn(); setSendCommandFn(sent); });
@@ -117,7 +131,7 @@ describe('NetworkTree eject — sends the disk ID (idea#152)', () => {
   it('sends ejectDisk <id> for the docked disk, not its (duplicated) name', () => {
     const { container } = renderTree(() => makeLog([]));
     expect(container.querySelectorAll('.tree-item--disk')).toHaveLength(2);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     expect(sent).toHaveBeenCalledOnce();
     expect(sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
     expect(sent).not.toHaveBeenCalledWith(ENGINE_ID, 'ejectDisk system-boot');
@@ -132,7 +146,7 @@ describe('NetworkTree eject — inline error surface (idea#152)', () => {
   it('shows the Engine error message with the disk name when eject fails', () => {
     const [log, setLog] = createSignal<CommandLogState>(makeLog([PRIOR_TRACE]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     // A pre-existing error trace (in the baseline) must not be reported
     expect(notice(container)).toBeNull();
 
@@ -157,7 +171,7 @@ describe('NetworkTree eject — inline error surface (idea#152)', () => {
   it('shows an error when the trace closes ok but logged an error line (current Engine)', () => {
     const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     setLog(makeLog([ejectTrace({
       status: 'ok',
       logs: [{ level: 'error', message: "\u001b[31mDisk name 'system-boot' is ambiguous.\u001b[39m", timestamp: 1 }],
@@ -170,7 +184,7 @@ describe('NetworkTree eject — inline error surface (idea#152)', () => {
   it('dismisses the error on click', () => {
     const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     setLog(makeLog([ejectTrace({ status: 'error', errorMessage: 'boom' })]));
     fireEvent.click(notice(container)!);
     expect(notice(container)).toBeNull();
@@ -179,17 +193,17 @@ describe('NetworkTree eject — inline error surface (idea#152)', () => {
   it('clears the error on the next eject attempt', () => {
     const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     setLog(makeLog([ejectTrace({ status: 'error', errorMessage: 'boom' })]));
     expect(notice(container)).not.toBeNull();
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     expect(notice(container)).toBeNull();
   });
 
   it('shows nothing when the eject succeeds', () => {
     const [log, setLog] = createSignal<CommandLogState>(makeLog([PRIOR_TRACE]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     setLog(makeLog([PRIOR_TRACE, ejectTrace({ status: 'ok' })]));
     expect(notice(container)).toBeNull();
     vi.advanceTimersByTime(EJECT_TIMEOUT_MS + 1000);
@@ -199,7 +213,7 @@ describe('NetworkTree eject — inline error surface (idea#152)', () => {
   it('shows a gentle no-response note after 15 s without a trace', () => {
     const [log] = createSignal<CommandLogState>(makeLog([]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     vi.advanceTimersByTime(EJECT_TIMEOUT_MS - 1);
     expect(notice(container)).toBeNull();
     vi.advanceTimersByTime(1);
@@ -212,7 +226,7 @@ describe('NetworkTree eject — inline error surface (idea#152)', () => {
   it('ignores ejectDisk traces for a different disk', () => {
     const [log, setLog] = createSignal<CommandLogState>(makeLog([]));
     const { container } = renderTree(log);
-    fireEvent.click(ejectButton(container));
+    ejectAndConfirm(container);
     setLog(makeLog([ejectTrace({ args: JSON.stringify({ diskId: STALE_ID }), status: 'error', errorMessage: 'nope' })]));
     expect(notice(container)).toBeNull();
   });
@@ -320,6 +334,7 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
   it('after a button eject that succeeds, re-dock brings the row back once with no stale notice', () => {
     const t = setup();
     fireEvent.click(t.liveEjectBtn()!);
+    confirmEjectOk(t.container);
     expect(t.sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
     // Engine undocks and closes the trace ok
     t.setStore(withLive(t.store()!, UNDOCKED));
@@ -337,6 +352,7 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
   it('re-dock while the eject is still pending (no trace seen) shows the row once, no timeout note', () => {
     const t = setup();
     fireEvent.click(t.liveEjectBtn()!);
+    confirmEjectOk(t.container);
     t.setStore(withLive(t.store()!, UNDOCKED));
     expect(t.rows()).toHaveLength(0);
     t.setStore(withLive(t.store()!, REDOCKED));
@@ -347,6 +363,7 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
   it('re-dock after the no-response note was showing gives a fresh row once', () => {
     const t = setup();
     fireEvent.click(t.liveEjectBtn()!);
+    confirmEjectOk(t.container);
     vi.advanceTimersByTime(EJECT_TIMEOUT_MS);
     expect(t.container.querySelector('.tree-item__eject-notice')?.textContent).toContain('No response');
     t.setStore(withLive(t.store()!, UNDOCKED));
@@ -359,6 +376,7 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
   it('if undock clears only device (dockedTo kept), the button hides and returns on re-dock', () => {
     const t = setup();
     fireEvent.click(t.liveEjectBtn()!);
+    confirmEjectOk(t.container);
     t.setStore(withLive(t.store()!, { device: null }));
     t.setLog(makeLog([ejectTrace({ status: 'ok' })]));
     expect(t.rows()).toHaveLength(1);
@@ -370,6 +388,7 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
   it('re-dock with a stale same-name record present still shows the live row once', () => {
     const t = setup(fixtureStore);
     fireEvent.click(t.liveEjectBtn()!);
+    confirmEjectOk(t.container);
     t.setStore(withLive(t.store()!, UNDOCKED));
     t.setLog(makeLog([ejectTrace({ status: 'ok' })]));
     t.setStore(withLive(t.store()!, REDOCKED));
@@ -384,6 +403,7 @@ describe('NetworkTree — undock then re-dock the same disk ID (idea#152)', () =
     const t = setup();
     for (let i = 0; i < 3; i++) {
       fireEvent.click(t.liveEjectBtn()!);
+    confirmEjectOk(t.container);
       t.setStore(withLive(t.store()!, UNDOCKED));
       t.setLog(makeLog([ejectTrace({ traceId: `trace-cycle-${i}`, status: 'ok' })]));
       expect(t.rows()).toHaveLength(0);
@@ -434,6 +454,7 @@ describe('NetworkTree eject — Engine older than #134, no capabilities (idea#12
     expect(btn).not.toBeDisabled();
     expect(btn.getAttribute('title')).toBe('Eject system-boot');
     fireEvent.click(btn);
+    confirmEjectOk(t.container);
     expect(t.sent).toHaveBeenCalledOnce();
     expect(t.sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
     expect(t.sent).not.toHaveBeenCalledWith(ENGINE_ID, 'ejectDisk system-boot');
@@ -447,7 +468,7 @@ describe('NetworkTree eject — Engine older than #134, no capabilities (idea#12
     })],
   ])('refusal as %s shows inline under the row; the disk stays docked', (_label, trace) => {
     const t = setup([liveDisk]);
-    fireEvent.click(ejectButton(t.container));
+    ejectAndConfirm(t.container);
     expect(t.sent).toHaveBeenCalledWith(ENGINE_ID, `ejectDisk ${LIVE_ID}`);
     // The old Engine refuses; it does not touch the store
     t.setLog(makeLog([trace]));

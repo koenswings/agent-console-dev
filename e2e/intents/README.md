@@ -175,3 +175,18 @@ Sequence: select source disk → drag `instance-*` onto target `disk-*` → moda
 Loud-fail messages name the missing preload — never silent ok / demo remap.
 
 After copy, walker may use `stay_on_source_disk` / `done_redistribute` / `open_copied_instance`.
+
+## eject_disk after redistribute (Axle hardpass)
+
+After `copy_app` → `done_redistribute` the UI is on **ALL APPS** (`network-all-apps`).
+Eject still lives on NetworkTree disk rows (`eject-<diskId>`).
+
+| Detail | Contract |
+|---|---|
+| Confirm | **Always** opens `eject-confirm` (including pure Apps duration disks) |
+| Intent | Ensures overview/tree, waits for eject enabled (copy lock cleared), clicks eject, waits confirm |
+| Default disk | `duration-kolibri-grade5a-001` — override `DURATION_EJECT_DISK_ID` / ctx `diskId` |
+| Next step | Walker `confirm_eject` clicks `eject-confirm-ok` |
+
+Loud-fail if disk/button/modal missing — no demo remap.
+

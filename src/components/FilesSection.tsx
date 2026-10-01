@@ -11,7 +11,6 @@ import { createCommandResult } from '../store/commandResult';
 import { isDiskLocked } from '../store/operations';
 import {
   canEject,
-  isCombinedDisk,
   filesAvailability,
   filesAvailabilityText,
   filesNotMountedReason,
@@ -67,8 +66,8 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
   const onEjectClick = () => {
     const d = props.disk();
     if (!d) return;
-    if (isCombinedDisk(d, props.store())) setConfirming(true);
-    else doEject();
+    // Always confirm (parity with NetworkTree / duration eject_disk Intent)
+    setConfirming(true);
   };
   const doEject = () => {
     setConfirming(false);

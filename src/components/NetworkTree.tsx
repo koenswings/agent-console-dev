@@ -10,7 +10,7 @@ import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ej
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk, Store, UnformattedDisk } from '../types/store';
 import { formatBytes } from '../store/diskRoles';
-import { canEject, isCombinedDisk, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
+import { canEject, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
 import EjectConfirm from './EjectConfirm';
 import RoleBadges from './RoleBadges';
 import type { DragAppData } from '../types/drag';
@@ -320,8 +320,10 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                               const eng = engine();
                               const d = disk();
                               if (!eng || !d) return;
-                              if (isCombinedDisk(d, props.store())) setConfirmingEject(true);
-                              else startEject(eng.id);
+                              // Always open eject-confirm (ACTIONS.md eject_disk → confirm_eject).
+                              // Pure Apps duration disks previously ejected immediately — hardpass
+                              // timed out waiting for [data-testid="eject-confirm"].
+                              setConfirmingEject(true);
                             }}
                           >
                             ⏏
