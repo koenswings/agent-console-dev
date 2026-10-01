@@ -123,3 +123,11 @@ export {
 } from './types';
 export { sel } from './selectors';
 export { DURATION_FIXTURES, uuidForms } from './fixtures';
+export {
+  resolveSidecarUrl,
+  sidecarPort,
+  SIDECAR_DEFAULT_PORTS,
+  APP_TAB_URL_RE,
+  type SidecarApp,
+} from './sidecarUrls';
+export { openAppInstance, tryOpenInstancePathA, openInstancePathB } from './openApp';

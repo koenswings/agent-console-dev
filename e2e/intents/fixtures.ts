@@ -6,21 +6,26 @@
  * Live auth: CONTENT.live.json @2313112 (idea01 import PASS) — facility/class/
  * lesson/learner Morango IDs **CHANGE on re-provision**.
  *
- * ## App-open Running path (Kid interim)
- * After `infra_dock_fixture`, Engine strips `instances/` — Console Open needs
- * **sidecar Running**, NOT startInstances on the dock tree:
+ * ## App-open Path A vs Path B (Kid App#10 @9ba7876)
+ * After `infra_dock_fixture`, Engine strips `instances/`. Sidecars can be Running
+ * via Kid script while Console overview cards still lack clickable Open (Path A
+ * needs Axle startInstances — not wired yet).
+ *
  *   cd /home/pi/idea/agents/agent-app-dev
- *   bash tests/duration-tests/scripts/post-dock-restore-running.sh
- *   # default --mode sidecar → /home/pi/idea166-kolibri-live :18080
- * diskId duration-kolibri-grade5a-001 / instanceId kolibri-grade5a-001.
- * Nextcloud sidecar landing on App#10 soon.
+ *   bash tests/duration-tests/scripts/post-dock-restore-running.sh --mode sidecar
+ *   # Kolibri idea01 :18080, idea03 :18081; Nextcloud both :18280
+ *   # idea03 Kolibri only: --apps kolibri --kolibri-port 18081
  *
- * No ACTIONS.md keys for Kolibri `open_lesson` / in-App learner sign-in —
- * use `open_kolibri_as_learner` (Console) then App-tab login with live IDs below.
+ * Path A: click open-instance-<id> when Console shows Running card.
+ * Path B: page.goto sidecar URL (same host as Console, port below / env override).
+ *   DURATION_KOLIBRI_URL / DURATION_NEXTCLOUD_URL (full URL wins)
+ *   DURATION_KOLIBRI_PORT (default 18080) / DURATION_NEXTCLOUD_PORT (default 18280)
  *
- * Lesson chrome (keep_watching / next_resource / exit_lesson / finish_exercise /
- * next_video): NOT hardpassable against stock Kolibri player + CONTENT pins alone
- * — need App-side testids (Kid). Stay **unregistered** (Engine clear miss).
+ * Pins: diskIds duration-kolibri-grade5a-001 / duration-nextcloud-grade5a-001;
+ * instanceIds kolibri-grade5a-001 / nextcloud-grade5a-001.
+ *
+ * Lesson chrome still deferred (unregistered). Kid preferred App testids live in
+ * App `tests/duration-tests/LESSON_CHROME.md` (not in image yet).
  */
 
 /** Dashed UUID and Morango 32-hex (no dashes) — Kolibri API uses undashed. */
@@ -42,6 +47,8 @@ export const DURATION_FIXTURES = {
     instanceId: 'kolibri-grade5a-001',
     channelId: '30b6c263-4b96-5a62-93bd-dcf9a5cad7ca',
     channelIdRaw: '30b6c2634b965a6293bddcf9a5cad7ca',
+    /** Path B default HTTP port (idea01); idea03 → 18081 via DURATION_KOLIBRI_PORT. */
+    sidecarHttpPort: 18080,
     /** Kolibri facility logins (Kid pack; password = username). */
     auth: {
       teacher: { username: 'teacher', password: 'teacher' },
@@ -114,6 +121,8 @@ export const DURATION_FIXTURES = {
   nextcloud: {
     diskId: 'duration-nextcloud-grade5a-001',
     instanceId: 'nextcloud-grade5a-001',
+    /** Path B default HTTP port (idea01+idea03). */
+    sidecarHttpPort: 18280,
     auth: {
       teacher: { username: 'teacher', password: 'teacher' },
       learner: { username: 'student01', password: 'student01' },

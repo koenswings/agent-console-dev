@@ -12,6 +12,7 @@ import {
   uuidForms,
   sel,
   hasDurationIntent,
+  resolveSidecarUrl,
 } from '../e2e/intents';
 
 const LOCKED = [
@@ -139,6 +140,8 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(DURATION_FIXTURES.kolibri.live.facility.idDashed).toBe('f0e1353e-8c40-d985-faab-5ead5c91d03f');
     expect(DURATION_FIXTURES.nextcloud.diskId).toBe('duration-nextcloud-grade5a-001');
     expect(DURATION_FIXTURES.nextcloud.instanceId).toBe('nextcloud-grade5a-001');
+    expect(DURATION_FIXTURES.kolibri.sidecarHttpPort).toBe(18080);
+    expect(DURATION_FIXTURES.nextcloud.sidecarHttpPort).toBe(18280);
     expect(DURATION_FIXTURES.kolibri.auth.learner.username).toBe('learner01');
     expect(DURATION_FIXTURES.nextcloud.auth.learner.username).toBe('student01');
   });
@@ -152,6 +155,11 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(uuidForms(DURATION_FIXTURES.kolibri.live.lesson.id).dashed).toBe(
       DURATION_FIXTURES.kolibri.live.lesson.idDashed,
     );
+  });
+
+  it('resolveSidecarUrl Path B defaults from Console host', () => {
+    expect(resolveSidecarUrl('kolibri', 'http://idea01/', {})).toBe('http://idea01:18080');
+    expect(resolveSidecarUrl('nextcloud', 'http://idea03/', {})).toBe('http://idea03:18280');
   });
 
   it('selectors encode Kid instance and disk ids + Phase 4/deep controls', () => {

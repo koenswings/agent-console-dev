@@ -26,44 +26,59 @@ if (!result.ok) { /* fail step / log result.message */ }
 ```
 
 Replace Engine `uiStub` when `stubUi: false` by calling `runDurationIntent`.
-Put thin wrappers under Engine `test/duration/ui/` if preferred — they should
-delegate here rather than re-implement selectors.
+Package export: `idea-console/duration-intents` → `e2e/intents/index.ts`.
 
-Package export: `idea-console/duration-intents` → `e2e/intents/index.ts`
-(requires path / workspace link to this repo; package is `private`).
+## App-open Path A vs Path B (Kid App#10 @9ba7876)
 
-## App-open Running path (Kid)
+**Gap:** sidecar HTTP can be Running while Console overview cards still lack
+clickable `open-instance-<id>` (Path A needs Axle `startInstances` — not wired).
 
-After dock, Engine strips `instances/`. Console **Open** needs **sidecar Running**:
+| Path | When | How |
+|---|---|---|
+| **A** | Console shows Running card with Open | Click `open-instance-<id>` |
+| **B** | Open missing / not Running | `page.goto` sidecar URL (same hostname as Console, swap port) |
+
+Bring sidecars up:
 
 ```bash
 cd /home/pi/idea/agents/agent-app-dev
-bash tests/duration-tests/scripts/post-dock-restore-running.sh
-# default --mode sidecar → /home/pi/idea166-kolibri-live :18080
+bash tests/duration-tests/scripts/post-dock-restore-running.sh --mode sidecar
+# idea03 Kolibri only:
+#   bash …/post-dock-restore-running.sh --mode sidecar --apps kolibri --kolibri-port 18081
 ```
 
-Pins: `diskId=duration-kolibri-grade5a-001`, `instanceId=kolibri-grade5a-001`.
-Nextcloud sidecar landing on App#10 soon. See `fixtures.ts`.
+| App | diskId | instanceId | Default port |
+|---|---|---|---|
+| Kolibri | `duration-kolibri-grade5a-001` | `kolibri-grade5a-001` | **18080** (idea01); idea03 → **18081** |
+| Nextcloud | `duration-nextcloud-grade5a-001` | `nextcloud-grade5a-001` | **18280** (both hosts) |
+
+**Env knobs** (full URL wins over port):
+
+- `DURATION_KOLIBRI_URL` / `DURATION_NEXTCLOUD_URL`
+- `DURATION_KOLIBRI_PORT` (default `18080`) / `DURATION_NEXTCLOUD_PORT` (default `18280`)
+
+Helpers: `resolveSidecarUrl` / `openAppInstance` in `sidecarUrls.ts` + `openApp.ts`.
+`open_video` / `open_exercise` use the same Path A→B open before content pins.
+Fail loud if neither Path A card nor Path B HTTP is reachable.
 
 ## Deferred (not registered — Engine clear miss / skip)
 
 | Key | Reason |
 |---|---|
 | `enter_infra_fleet_walk`, `infra_*` | Engine-owned |
-| `keep_watching`, `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — **not hardpassable** vs stock Kolibri player + CONTENT pins alone; need Kid App-side testids. Canonical Axle YAML keeps them; Console leaves unregistered (no silent stubs). |
+| `keep_watching`, `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. |
 | `open_wikipedia_as_teacher`, `open_wikipedia_as_learner` | Kiwix deferred (Kid) |
 
 ## Kid pins
 
 See `fixtures.ts` — content IDs + `live` facility/class/lesson (mutable on re-provision).
 
-## Operator deep (this batch)
+## Operator deep
 
-Registered real adapters (fail loud when gated / UI missing):
+Registered (fail loud when gated / UI missing):
 `install_app`, `start_after_install`, `stay_on_disk`, `make_backup_disk`,
 `restore_from_backup`, `open_app`, `backup_instance`, `back_to_disk`,
 `back_to_overview`, `log_out`, `notice_usb_dock`, `retry_login_first_time_setup`,
 `change_password`, `add_operator`, `remove_operator`, `copy_app`, `move_app`.
 
-`copy_app` / `move_app` complete the Copy/Move modal only — drag-drop init still
-needs multi-disk preload (loud throw if modal not open).
+`copy_app` / `move_app` = Copy/Move modal completion only (loud throw if modal not open).

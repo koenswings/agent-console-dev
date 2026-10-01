@@ -16,3 +16,14 @@ export {
   type DurationIntentResult,
   type RunDurationIntentOptions,
 } from './durationBridge';
+export {
+  resolveSidecarUrl,
+  sidecarPort,
+  SIDECAR_DEFAULT_PORTS,
+  APP_TAB_URL_RE,
+  openAppInstance,
+  tryOpenInstancePathA,
+  openInstancePathB,
+  type SidecarApp,
+} from './registry';
+

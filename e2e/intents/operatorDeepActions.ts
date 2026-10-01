@@ -8,7 +8,7 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
-import { openInstanceFromOverview } from './openApp';
+import { openAppInstance } from './openApp';
 import { start_instance } from './operatorActions';
 
 const ensureOpLayout = async (page: Page): Promise<void> => {
@@ -120,23 +120,12 @@ export const make_backup_disk: IntentFn = async ({ page }) => {
 };
 
 /**
- * Open app — generic Open ↗ on instance (defaults to Kolibri fixture).
+ * Open app — Path A Console Open ↗, else Path B sidecar URL (defaults Kolibri).
  * Distinct from open_kolibri_as_* (no App login).
  */
 export const open_app: IntentFn = async ({ page, instanceId }) => {
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
-  // Prefer operator layout Open; fall back to overview catalog Open
-  const opOpen = page.locator(sel.openInstance(id));
-  if (await page.locator(sel.opOverview).or(page.locator(sel.networkTree)).first().isVisible().catch(() => false)) {
-    if (await opOpen.count()) {
-      await opOpen.waitFor({ state: 'visible', timeout: 15_000 });
-      const popupPromise = page.context().waitForEvent('page', { timeout: 8_000 }).catch(() => null);
-      await opOpen.click();
-      await popupPromise;
-      return;
-    }
-  }
-  await openInstanceFromOverview(page, id);
+  await openAppInstance(page, id);
 };
 
 /**

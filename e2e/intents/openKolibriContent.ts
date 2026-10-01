@@ -12,35 +12,16 @@
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { DURATION_FIXTURES, uuidForms } from './fixtures';
-import { openInstanceFromOverview } from './openApp';
+import { openAppInstance, APP_TAB_URL_RE } from './openApp';
 
-const APP_URL_RE = /kolibri|18080|\/learn|\/coach|\/facility/i;
+const APP_URL_RE = APP_TAB_URL_RE;
 
-/** Prefer an already-open Kolibri tab; else the Console page. */
-const resolveAppPage = (consolePage: Page): Page => {
-  const pages = consolePage.context().pages();
-  for (let i = pages.length - 1; i >= 0; i--) {
-    const p = pages[i]!;
-    try {
-      if (APP_URL_RE.test(p.url())) return p;
-    } catch {
-      /* page may be closed */
-    }
-  }
-  return consolePage;
-};
-
-/** Open Kolibri instance from Console if no App tab is present yet. */
+/** Open Kolibri via Path A (Console Open) or Path B (sidecar URL) if needed. */
 const ensureKolibriAppPage = async (
   consolePage: Page,
   instanceId: string,
 ): Promise<Page> => {
-  let app = resolveAppPage(consolePage);
-  if (APP_URL_RE.test(app.url())) return app;
-  const popup = await openInstanceFromOverview(consolePage, instanceId);
-  if (popup) return popup;
-  app = resolveAppPage(consolePage);
-  return app;
+  return openAppInstance(consolePage, instanceId, 'kolibri');
 };
 
 /** All id spellings to try in selectors / URLs (dashed + Morango raw). */
