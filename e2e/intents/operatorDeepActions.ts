@@ -1565,9 +1565,11 @@ async function hoverAndClickReboot(
 }
 
 /**
- * Reboot Engine — Prefer A: NetworkTree reboot-engine-* + native confirm dialog accept.
+ * Reboot Engine — Prefer A r48: accept native confirm BEFORE click returns.
+ * Promise.all(waitForEvent('dialog'), click) deadlocks: confirm() blocks the page
+ * so click() never finishes and accept() never runs (r48 ~90s).
  * engineId may be store id OR hostname (idea01). Hover reveals opacity-0 reboot control.
- * Loud-fail if dialog never fires; assert engine row survives click (command dispatched).
+ * Loud-fail if no dialog; assert engine row survives (command dispatched).
  */
 export const reboot_engine: IntentFn = async ({ page, engineId }) => {
   await ensureOpLayout(page);
@@ -1581,21 +1583,28 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
   const btn = await resolveRebootButton(page, engineId);
   let dialogSeen = false;
-  try {
-    const [dialog] = await Promise.all([
-      page.waitForEvent('dialog', { timeout: 8_000 }),
-      hoverAndClickReboot(btn),
-    ]);
+  page.once('dialog', async (d) => {
     dialogSeen = true;
-    await dialog.accept();
+    await d.accept();
+  });
+  try {
+    await hoverAndClickReboot(btn);
   } catch (e) {
-    if (!dialogSeen) {
-      throw new Error(
-        'idea#168 reboot_engine: clicked reboot but confirm dialog did not appear within 8s. ' +
-          `Prefer A — ${(e as Error).message}`,
-      );
-    }
-    throw e;
+    throw new Error(
+      'idea#168 reboot_engine: reboot click failed before confirm settled. ' +
+        `Prefer A — ${(e as Error).message}`,
+    );
+  }
+  const budgetMs = 3_000;
+  const deadline = Date.now() + budgetMs;
+  while (!dialogSeen && Date.now() < deadline) {
+    await page.waitForTimeout(50);
+  }
+  if (!dialogSeen) {
+    throw new Error(
+      'idea#168 reboot_engine: clicked reboot but confirm dialog was not accepted ' +
+        `within ${budgetMs}ms. Prefer A — no soft-pass.`,
+    );
   }
   // Engine row / reboot control should remain (reboot is async on Engine)
   try {
