@@ -88,7 +88,7 @@ Fail loud if neither Path A card nor Path B HTTP is reachable.
 | Key | Reason |
 |---|---|
 | `enter_infra_fleet_walk`, `infra_*` | Engine-owned |
-| `keep_watching`, `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. |
+| `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. `keep_watching` is registered (stay on pinned video URL; no chrome testids). |
 | `open_wikipedia_as_teacher`, `open_wikipedia_as_learner` | Kiwix deferred (Kid) |
 
 ## Kid pins
@@ -139,7 +139,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `make_files_disk` | After submit, wait Files role / DiskView settle (still needs Engine empty dock). |
 | `stay_on_disk` / `stay_on_source_disk` | Resolve disk on tree; DiskView / EmptyDiskPanel visible. |
 
-**Still deferred / blocked (not this tip):** lesson chrome (`keep_watching`, …) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
+**Still deferred / blocked (not this tip):** lesson chrome (`next_resource`, `exit_lesson`, `finish_exercise`, `next_video`) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
 
 ## Kolibri coaching (kolibri_manage)
 
@@ -160,7 +160,7 @@ hash navigation — **fail loud** if UI missing (never silent ok).
 Class/lesson Morango ids: `fixtures.ts` → `DURATION_FIXTURES.kolibri.live` (CONTENT.live.json).
 Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G5A→**18081**.
 
-**Not registered:** lesson-chrome player Intents (`keep_watching`, …) — see LESSON_CHROME.md.
+**Not registered:** lesson-chrome player Intents (`next_resource`, `exit_lesson`, `finish_exercise`, `next_video`) — see LESSON_CHROME.md. `keep_watching` stays on the pinned video URL.
 
 ## Live duration — no bootDemo (`--live --ui`)
 

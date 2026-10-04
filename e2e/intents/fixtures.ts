@@ -26,8 +26,9 @@
  * EmptyDiskPanel: duration-empty-001 (DURATION_EMPTY_DISK_ID).
  * RestorePanel Backup Disk: duration-empty-001 after make_backup_disk (DURATION_BACKUP_DISK_ID).
  *
- * Lesson chrome still deferred (unregistered). Kid preferred App testids live in
- * App `tests/duration-tests/LESSON_CHROME.md` (not in image yet).
+ * keep_watching is registered (URL stay on video-grade5a-01). Other lesson chrome
+ * (next_resource, exit_lesson, finish_exercise, next_video) stays unregistered —
+ * Kid image has no lesson-chrome testids (`tests/duration-tests/LESSON_CHROME.md`).
  */
 
 /** Dashed UUID and Morango 32-hex (no dashes) — Kolibri API uses undashed. */

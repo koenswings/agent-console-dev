@@ -41,6 +41,7 @@ export const CONSOLE_INTENT_NAMES = [
   'open_nextcloud_as_learner',
   // Phase 5 — Kolibri content (Kid @0bca699 CONTENT.seeded.json)
   'open_video',
+  'keep_watching',
   'open_exercise',
   // Phase 3 — thin operator deeper path
   'open_disk_inventory',

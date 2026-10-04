@@ -6,8 +6,10 @@
  * forms (Kolibri API uses 32-hex without dashes). Tries lesson-scoped Learn
  * URLs using fixtures.live.lesson when available.
  *
- * Deferred (unregistered — need Kid App testids): keep_watching, next_resource,
- * exit_lesson, finish_exercise, next_video. Not hardpassable vs stock player + CONTENT pins.
+ * keep_watching is registered: stay on the pinned video open_video just opened
+ * (URL contains content id). No lesson-chrome testids in the Kolibri image.
+ * Still unregistered (need Kid App testids): next_resource, exit_lesson,
+ * finish_exercise, next_video.
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -176,6 +178,43 @@ const runOpenContent = async (
     action,
     logicalId: resource.logicalId,
   });
+};
+
+
+/**
+ * True when the Kolibri page URL is the pinned video (dashed or raw content id).
+ * Empty URL and any other content id (including the exercise pin) fail.
+ * A <video> element is not sufficient by itself.
+ */
+export function urlHasPinnedVideo(
+  url: string,
+  contentId: string,
+  contentIdRaw: string,
+): boolean {
+  if (!url || !url.trim()) return false;
+  return url.includes(contentId) || url.includes(contentIdRaw);
+}
+
+/**
+ * Stay on the video open_video just opened (kolibri_watching → kolibri_watching).
+ * Not a Console button and not a second open of the resource.
+ */
+export const keep_watching: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  const video = DURATION_FIXTURES.kolibri.video;
+  const url = app.url();
+  const onPinned = urlHasPinnedVideo(url, video.contentId, video.contentIdRaw);
+  if (!onPinned) {
+    throw new Error(
+      `idea#166 keep_watching: pinned video ${video.logicalId} ` +
+        `(contentId=${video.contentId}/${video.contentIdRaw}) is not the current page ` +
+        `(url=${url || '(empty)'}). Lesson chrome testids are not the missing piece — ` +
+        `stay on the video open_video just opened; do not open a new resource.`,
+    );
+  }
+  // <video> is accepted only as extra evidence when the URL already has the pin.
+  await app.locator('video').count().catch(() => 0);
 };
 
 /** Open pinned Grade 5A video (Kid CONTENT.seeded + live @2313112 → open_video). */
