@@ -252,7 +252,7 @@ describe('DiskView — Install Kolibri lesson path', () => {
     const app = {
       id: 'kolibri-1.0',
       name: 'kolibri',
-      version: '1.0',
+      version: '1.0-duration',
       title: 'Kolibri',
       description: null,
       url: null,
