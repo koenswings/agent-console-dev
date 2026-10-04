@@ -40,8 +40,51 @@ const idSpellings = (...ids: string[]): string[] => {
 };
 
 /**
+ * True when the Kolibri page URL is the pinned video (dashed or raw content id).
+ * Empty URL and any other content id (including the exercise pin) fail.
+ * A <video> element is not sufficient by itself. A lesson-id-only URL is not success.
+ */
+export function urlHasPinnedVideo(
+  url: string,
+  contentId: string,
+  contentIdRaw: string,
+): boolean {
+  if (!url || !url.trim()) return false;
+  return url.includes(contentId) || url.includes(contentIdRaw);
+}
+
+const CONTENT_URL_WAIT_MS = 15_000;
+
+/**
+ * open_video / open_exercise succeed only when the URL contains the content id
+ * (same bar as keep_watching / urlHasPinnedVideo). A lesson id alone is not success.
+ */
+export function contentUrlHasPinnedId(
+  url: string,
+  contentId: string,
+  contentIdRaw: string,
+): boolean {
+  return urlHasPinnedVideo(url, contentId, contentIdRaw);
+}
+
+async function waitForContentIdInUrl(
+  app: Page,
+  contentId: string,
+  contentIdRaw: string,
+): Promise<boolean> {
+  const deadline = Date.now() + CONTENT_URL_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (urlHasPinnedVideo(app.url(), contentId, contentIdRaw)) return true;
+    await app.waitForTimeout(200);
+  }
+  return urlHasPinnedVideo(app.url(), contentId, contentIdRaw);
+}
+
+/**
  * Click a Kolibri resource by pinned contentId / nodeId (dashed or undashed).
- * Tries data-content-id, data-node-id, data-testid, href; then learn hash nav.
+ * Tries data-content-id, data-node-id, data-testid, href; then learn hash nav
+ * under both /learn and /en/learn. Each click or goto must leave the content id
+ * in the URL within 15s or the attempt is discarded.
  */
 const openContentByIds = async (
   app: Page,
@@ -57,7 +100,8 @@ const openContentByIds = async (
   const { contentId, contentIdRaw, nodeId, nodeIdRaw, action, logicalId } = opts;
   const contentIds = idSpellings(contentId, contentIdRaw);
   const nodeIds = idSpellings(nodeId, nodeIdRaw);
-  const all = [...contentIds, ...nodeIds];
+
+  if (urlHasPinnedVideo(app.url(), contentId, contentIdRaw)) return;
 
   const candidates: string[] = [];
   for (const id of contentIds) {
@@ -79,10 +123,13 @@ const openContentByIds = async (
 
   for (const selector of candidates) {
     const loc = app.locator(selector).first();
-    if ((await loc.count()) > 0) {
+    if ((await loc.count()) === 0) continue;
+    try {
       await loc.click({ timeout: 8_000 });
-      return;
+    } catch {
+      continue;
     }
+    if (await waitForContentIdInUrl(app, contentId, contentIdRaw)) return;
   }
 
   let origin: string | null = null;
@@ -99,57 +146,65 @@ const openContentByIds = async (
     const live = DURATION_FIXTURES.kolibri.live;
     const lessonIds = idSpellings(live.lesson.id, live.lesson.idDashed);
     const classIds = idSpellings(live.class.id, live.class.idDashed);
-    // Lesson-scoped Learn routes (after facility login)
+    // Live Kolibri is ${origin}/en/learn/#/home; also keep bare /learn.
+    const learnRoots = [`${origin}/en/learn`, `${origin}/learn`];
     const lessonTargets: string[] = [];
-    for (const lid of lessonIds) {
-      lessonTargets.push(`${origin}/learn/#/lessons/${lid}`);
-      lessonTargets.push(`${origin}/learn/#/topics/lesson/${lid}`);
-      for (const nid of [nodeIdRaw, nodeId]) {
-        lessonTargets.push(`${origin}/learn/#/lessons/${lid}/resource/${nid}`);
+    for (const root of learnRoots) {
+      for (const lid of lessonIds) {
+        lessonTargets.push(`${root}/#/lessons/${lid}`);
+        lessonTargets.push(`${root}/#/topics/lesson/${lid}`);
+        for (const nid of [nodeIdRaw, nodeId]) {
+          lessonTargets.push(`${root}/#/lessons/${lid}/resource/${nid}`);
+        }
       }
-    }
-    for (const cid of classIds) {
-      lessonTargets.push(`${origin}/learn/#/classes/${cid}`);
+      for (const cid of classIds) {
+        lessonTargets.push(`${root}/#/classes/${cid}`);
+      }
     }
     for (const target of lessonTargets) {
       try {
         await app.goto(target, { waitUntil: 'domcontentloaded', timeout: 10_000 });
-        const still = app.url();
-        if (all.some((id) => still.includes(id)) || lessonIds.some((id) => still.includes(id))) {
-          // If lesson page loaded, try clicking the resource on that page
-          for (const selector of candidates) {
-            const loc = app.locator(selector).first();
-            if ((await loc.count()) > 0) {
-              await loc.click({ timeout: 5_000 });
-              return;
-            }
-          }
-          if (all.some((id) => still.includes(id))) return;
-        }
       } catch {
-        /* try next */
+        continue;
+      }
+      // Lesson id in the URL is not success — wait for the content id, then try a click.
+      if (await waitForContentIdInUrl(app, contentId, contentIdRaw)) return;
+      for (const selector of candidates) {
+        const loc = app.locator(selector).first();
+        if ((await loc.count()) === 0) continue;
+        try {
+          await loc.click({ timeout: 5_000 });
+        } catch {
+          continue;
+        }
+        if (await waitForContentIdInUrl(app, contentId, contentIdRaw)) return;
       }
     }
-    // Prefer undashed node id (live API style), then dashed
-    for (const nid of [nodeIdRaw, nodeId, ...nodeIds]) {
-      const target = `${origin}/learn/#/topics/c/${nid}`;
-      await app.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
-      const still = app.url();
-      if (all.some((id) => still.includes(id))) return;
-      const after = app.locator(
-        contentIds.map((id) => `[data-content-id="${id}"]`).concat(
-          nodeIds.map((id) => `[data-node-id="${id}"]`),
-          all.map((id) => `a[href*="${id}"]`),
-        ).join(', '),
-      ).first();
-      if ((await after.count()) > 0) return;
+    for (const root of learnRoots) {
+      for (const nid of [nodeIdRaw, nodeId, ...nodeIds]) {
+        const target = `${root}/#/topics/c/${nid}`;
+        try {
+          await app.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+        } catch {
+          continue;
+        }
+        if (await waitForContentIdInUrl(app, contentId, contentIdRaw)) return;
+      }
     }
   }
 
+  const finalUrl = (() => {
+    try {
+      return app.url() || '(empty)';
+    } catch {
+      return '(empty)';
+    }
+  })();
   throw new Error(
     `idea#166 ${action}: resource ${logicalId} (contentId=${contentId}/${contentIdRaw}, ` +
       `nodeId=${nodeId}/${nodeIdRaw}) not found via data-content-id / data-node-id / href / ` +
-      `learn hash nav (dashed+undashed). Live import on idea01 (@2313112) — confirm ` +
+      `learn hash nav (dashed+undashed, /learn and /en/learn). Final URL ${finalUrl} does not ` +
+      `contain the content id. Live import on idea01 (@2313112) — confirm ` +
       `kolibri-grade5a-001 is Running and App tab reached the Learn UI.`,
   );
 };
@@ -180,20 +235,6 @@ const runOpenContent = async (
   });
 };
 
-
-/**
- * True when the Kolibri page URL is the pinned video (dashed or raw content id).
- * Empty URL and any other content id (including the exercise pin) fail.
- * A <video> element is not sufficient by itself.
- */
-export function urlHasPinnedVideo(
-  url: string,
-  contentId: string,
-  contentIdRaw: string,
-): boolean {
-  if (!url || !url.trim()) return false;
-  return url.includes(contentId) || url.includes(contentIdRaw);
-}
 
 /**
  * Stay on the video open_video just opened (kolibri_watching → kolibri_watching).

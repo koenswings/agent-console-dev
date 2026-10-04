@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { urlHasPinnedVideo } from '../e2e/intents/openKolibriContent';
+import { contentUrlHasPinnedId, urlHasPinnedVideo } from '../e2e/intents/openKolibriContent';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
 
 const video = DURATION_FIXTURES.kolibri.video;
@@ -46,5 +46,13 @@ describe('urlHasPinnedVideo (keep_watching)', () => {
   it('fails for an empty URL', () => {
     expect(urlHasPinnedVideo('', video.contentId, video.contentIdRaw)).toBe(false);
     expect(urlHasPinnedVideo('   ', video.contentId, video.contentIdRaw)).toBe(false);
+  });
+
+  it('fails for /en/learn/#/home and a lesson-id-only URL', () => {
+    const home = 'http://idea01:18080/en/learn/#/home';
+    expect(urlHasPinnedVideo(home, video.contentId, video.contentIdRaw)).toBe(false);
+    const lessonOnly = 'http://idea01:18080/en/learn/#/lessons/11111111-2222-3333-4444-555555555555';
+    expect(contentUrlHasPinnedId(lessonOnly, video.contentId, video.contentIdRaw)).toBe(false);
+    expect(urlHasPinnedVideo(lessonOnly, video.contentId, video.contentIdRaw)).toBe(false);
   });
 });
