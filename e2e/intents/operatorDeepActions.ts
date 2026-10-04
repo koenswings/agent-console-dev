@@ -1504,7 +1504,69 @@ export const switch_engine: IntentFn = async ({ page }) => {
 };
 
 /**
+ * Prefer A r47: walker engineId may be hostname (idea01) while testid is
+ * reboot-engine-${storeId} (ENGINE_…). Match row label / aria, not only suffix.
+ */
+export function rebootRowMatchesEngineHint(
+  hint: string,
+  label: string,
+  aria = '',
+  title = '',
+): boolean {
+  const want = hint.trim().replace(/\.local$/i, '').toLowerCase();
+  if (!want) return false;
+  const lab = label.trim().replace(/\.local$/i, '').toLowerCase();
+  if (lab === want) return true;
+  const re = new RegExp(`\\b${want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  return re.test(aria) || re.test(title);
+}
+
+async function resolveRebootButton(
+  page: import('@playwright/test').Page,
+  engineId?: string,
+): Promise<import('@playwright/test').Locator> {
+  const buttons = page.locator('[data-testid^="reboot-engine-"]');
+  if (engineId) {
+    const exact = page.locator(sel.rebootEngine(engineId));
+    if (await exact.count()) return exact.first();
+  }
+  const n = await buttons.count();
+  const seen: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const btn = buttons.nth(i);
+    const row = btn.locator('xpath=ancestor::*[contains(@class,"tree-item--engine")][1]');
+    const label = ((await row.locator('.tree-item__label').textContent().catch(() => null)) ?? '').trim();
+    const aria = (await btn.getAttribute('aria-label')) ?? '';
+    const title = (await btn.getAttribute('title')) ?? '';
+    const tid = (await btn.getAttribute('data-testid')) ?? '';
+    seen.push(`${tid} label="${label}"`);
+    if (!engineId) return btn;
+    if (rebootRowMatchesEngineHint(engineId, label, aria, title)) return btn;
+  }
+  throw new Error(
+    `idea#168 reboot_engine: no reboot-engine-* for engineId=${JSON.stringify(engineId ?? '')}. ` +
+      `Walker may pass hostname (idea01) while testid is reboot-engine-ENGINE_…. ` +
+      `visible=[${seen.join('; ') || 'none'}]. Prefer A — no soft-pass.`,
+  );
+}
+
+async function hoverAndClickReboot(
+  btn: import('@playwright/test').Locator,
+): Promise<void> {
+  const row = btn.locator('xpath=ancestor::*[contains(@class,"tree-item--engine")][1]');
+  if (await row.count()) await row.hover().catch(() => {});
+  await btn.hover().catch(() => {});
+  const opacity = await btn.evaluate((el) => getComputedStyle(el).opacity).catch(() => '1');
+  if (opacity === '0' && (await row.count())) {
+    await row.hover();
+  }
+  const stillHidden = await btn.evaluate((el) => getComputedStyle(el).opacity).catch(() => '1');
+  await btn.click(stillHidden === '0' ? { force: true } : undefined);
+}
+
+/**
  * Reboot Engine — Prefer A: NetworkTree reboot-engine-* + native confirm dialog accept.
+ * engineId may be store id OR hostname (idea01). Hover reveals opacity-0 reboot control.
  * Loud-fail if dialog never fires; assert engine row survives click (command dispatched).
  */
 export const reboot_engine: IntentFn = async ({ page, engineId }) => {
@@ -1512,19 +1574,17 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
   if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
     await page.locator(sel.settingsBtn).click().catch(() => {});
   }
-  const btn = engineId
-    ? page.locator(sel.rebootEngine(engineId))
-    : page.locator('[data-testid^="reboot-engine-"]').first();
-  if (!(await btn.count())) {
-    throw new Error(
-      'idea#168 reboot_engine: no reboot-engine-* button in NetworkTree (operator layout required).',
-    );
+  if (await page.locator(sel.connectionManagement).isVisible().catch(() => false)) {
+    const cm = page.locator(sel.connectionMgmtBtn);
+    if (await cm.count()) await cm.click().catch(() => {});
   }
+  await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
+  const btn = await resolveRebootButton(page, engineId);
   let dialogSeen = false;
   try {
     const [dialog] = await Promise.all([
       page.waitForEvent('dialog', { timeout: 8_000 }),
-      btn.click(),
+      hoverAndClickReboot(btn),
     ]);
     dialogSeen = true;
     await dialog.accept();
