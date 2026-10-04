@@ -15,9 +15,18 @@ import RoleBadges from './RoleBadges';
 import {
   DEFAULT_SHARE_NAME,
   UPDATE_ENGINE_TOOLTIP,
+  diskArgFor,
   engineHasCapability,
+  installApp,
   validateShareName,
 } from '../store/commands';
+import {
+  KOLIBRI_CATALOG_ERROR,
+  KOLIBRI_LESSON_APP_ID,
+  kolibriLessonCatalogOk,
+  lessonInstallForDisk,
+  lessonInstanceStoredOnDisk,
+} from '../store/lessonInstall';
 import { canAddFiles, hasAppRole } from '../store/diskRoles';
 import { canEraseDisk, eraseBlockedReason } from '../store/erase';
 import type { Selection } from './NetworkTree';
@@ -69,6 +78,45 @@ const DiskView: Component<DiskViewProps> = (props) => {
     eraseBlockedReason(engine(), props.store(), props.diskId)
   );
 
+  const lesson = createMemo(() => {
+    const d = disk();
+    return d ? lessonInstallForDisk(d) : null;
+  });
+  const lessonAlreadyInstalled = createMemo(() => {
+    const spec = lesson();
+    const d = disk();
+    if (!spec || !d) return false;
+    return lessonInstanceStoredOnDisk(props.store()?.instanceDB ?? {}, d.id, spec.instanceName);
+  });
+  const showLessonInstall = createMemo(() => !!lesson() && !lessonAlreadyInstalled());
+  const lessonArgBlocked = createMemo((): string | undefined => {
+    const d = disk();
+    if (!d || !showLessonInstall()) return undefined;
+    const arg = diskArgFor(engine(), d, props.store()?.diskDB);
+    return arg.ok ? undefined : arg.reason;
+  });
+  const lessonCatalogError = createMemo(() => {
+    if (!showLessonInstall()) return '';
+    const app = props.store()?.appDB[KOLIBRI_LESSON_APP_ID];
+    return kolibriLessonCatalogOk(app) ? '' : KOLIBRI_CATALOG_ERROR;
+  });
+  const [lessonClickError, setLessonClickError] = createSignal('');
+
+  const installLesson = () => {
+    const spec = lesson();
+    const d = disk();
+    const eng = engineId();
+    if (!spec || !d || !eng || lessonArgBlocked()) return;
+    if (!kolibriLessonCatalogOk(props.store()?.appDB[KOLIBRI_LESSON_APP_ID])) {
+      setLessonClickError(KOLIBRI_CATALOG_ERROR);
+      return;
+    }
+    const arg = diskArgFor(engine(), d, props.store()?.diskDB);
+    if (!arg.ok) return;
+    setLessonClickError('');
+    installApp(eng, KOLIBRI_LESSON_APP_ID, arg.arg, { name: spec.instanceName });
+  };
+
   const [addFilesOpen, setAddFilesOpen] = createSignal(false);
   const [dialog, setDialog] = createSignal<{ mode: EraseMode; shareName?: string } | null>(
     props.initialEraseMode ? { mode: props.initialEraseMode } : null
@@ -113,6 +161,26 @@ const DiskView: Component<DiskViewProps> = (props) => {
 
         <Show when={showFiles()}>
           <FilesSection disk={disk} store={props.store} commandLogStore={props.commandLogStore} />
+        </Show>
+
+
+        <Show when={showLessonInstall()}>
+          <section class="disk-section" aria-label="Install Kolibri">
+            <Show when={lessonCatalogError() || lessonClickError()}>
+              <p class="edp-form__error" role="alert" data-testid="install-lesson-error">
+                {lessonCatalogError() || lessonClickError()}
+              </p>
+            </Show>
+            <button
+              class="btn"
+              data-testid={`install-lesson-${props.diskId}`}
+              disabled={!!lessonArgBlocked()}
+              title={lessonArgBlocked()}
+              onClick={installLesson}
+            >
+              Install Kolibri
+            </button>
+          </section>
         </Show>
 
         <Show when={offerAddFiles() || addFilesOpen()}>

@@ -23,6 +23,12 @@ import {
 } from '../store/commands';
 import { canEraseDisk, eraseBlockedReason } from '../store/erase';
 import {
+  KOLIBRI_CATALOG_ERROR,
+  KOLIBRI_LESSON_APP_ID,
+  kolibriLessonCatalogOk,
+  lessonInstallForDisk,
+} from '../store/lessonInstall';
+import {
   createCommandResult,
 } from '../store/commandResult';
 import FilesRoleForm from './FilesRoleForm';
@@ -195,8 +201,21 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const arg = diskArg();
     if (!arg || !arg.ok) return;
 
-    // --source: the source disk ID on a 0b Engine, its name otherwise (as before).
     const app = props.store()?.appDB[appId];
+    const lesson = appId === KOLIBRI_LESSON_APP_ID ? lessonInstallForDisk(disk) : null;
+    if (lesson) {
+      // Lesson disks: named instance, never --source (even if catalog source is disk).
+      if (!kolibriLessonCatalogOk(app)) {
+        setError(KOLIBRI_CATALOG_ERROR);
+        return;
+      }
+      installResult.start(arg.arg, () =>
+        installApp(engineId, appId, arg.arg, { name: lesson.instanceName }),
+      );
+      return;
+    }
+
+    // --source: the source disk ID on a 0b Engine, its name otherwise (as before).
     const source = app?.source === 'disk'
       ? (arg.byId ? app.sourceDiskId ?? app.sourceDiskName : app.sourceDiskName)
       : undefined;

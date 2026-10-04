@@ -237,3 +237,68 @@ describe('FilesSection — states', () => {
     expect(screen.getByRole('alert').textContent).toBe("Couldn't eject School Files: locked");
   });
 });
+
+describe('DiskView — Install Kolibri lesson path', () => {
+  const DISK = 'duration-kolibri-grade5a-001';
+  const lessonStore = (withInstance: boolean): Store => {
+    const base = MOCK_FILES_STORE;
+    const sample = Object.values(base.instanceDB)[0];
+    const disk: Disk = {
+      ...base.diskDB[I.FA_APP],
+      id: DISK,
+      name: DISK,
+      diskTypes: ['app'],
+    };
+    const app = {
+      id: 'kolibri-1.0',
+      name: 'kolibri',
+      version: '1.0',
+      title: 'Kolibri',
+      description: null,
+      url: null,
+      category: 'education' as const,
+      icon: null,
+      author: null,
+      source: 'disk' as const,
+      sourceDiskName: 'catalog-disk',
+    };
+    const instanceDB = { ...base.instanceDB };
+    if (withInstance && sample) {
+      instanceDB['lesson-kolibri'] = {
+        ...sample,
+        id: 'lesson-kolibri',
+        name: 'kolibri-grade5a-001',
+        storedOn: DISK,
+      };
+    }
+    return {
+      ...base,
+      diskDB: { ...base.diskDB, [DISK]: disk },
+      appDB: { ...base.appDB, 'kolibri-1.0': app },
+      instanceDB,
+    };
+  };
+
+  it('shows Install Kolibri when the named instance is not on the disk', () => {
+    renderView(DISK, lessonStore(false));
+    expect(screen.getByTestId(`install-lesson-${DISK}`)).toHaveTextContent('Install Kolibri');
+  });
+
+  it('hides Install Kolibri when kolibri-grade5a-001 is already stored on the disk', () => {
+    renderView(DISK, lessonStore(true));
+    expect(screen.queryByTestId(`install-lesson-${DISK}`)).toBeNull();
+  });
+
+  it('sends installApp kolibri-1.0 with --name and no --source', () => {
+    renderView(DISK, lessonStore(false));
+    fireEvent.click(screen.getByTestId(`install-lesson-${DISK}`));
+    expect(sent).toHaveBeenCalledOnce();
+    const [engineId, cmd] = sent.mock.calls[0];
+    expect(engineId).toBe(I.ENGINE_A);
+    expect(cmd).toBe(
+      'installApp kolibri-1.0 duration-kolibri-grade5a-001 --name kolibri-grade5a-001',
+    );
+    expect(cmd).not.toContain('--source');
+  });
+});
+
