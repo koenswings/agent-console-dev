@@ -1079,6 +1079,54 @@ async function describeSwitchEngineUi(
   return `scanLabel="${label}" connectButtons=${n} manualOpen=${manualOpen} err="${err.slice(0, 80)}"`;
 }
 
+/** True when status-bar label is the same Engine host (strips .local / scheme). */
+export function switchHostsMatch(statusLabel: string, host: string): boolean {
+  const raw = statusLabel.trim();
+  if (!raw || /connecting|searching|demo|offline|disconnected/i.test(raw)) return false;
+  const s = normalizeSwitchHost(raw).toLowerCase();
+  const h = normalizeSwitchHost(host).toLowerCase();
+  if (!s || !h) return false;
+  if (s === h) return true;
+  // status label may be "idea01" while host is "idea01.local" (normalize already strips)
+  return s.split(/\s+/)[0] === h;
+}
+
+async function readConnectedStatusHostname(
+  page: import('@playwright/test').Page,
+): Promise<string> {
+  const statusText = (
+    (await page.locator(sel.statusBarHostname).textContent().catch(() => null)) ??
+    (await page.locator(`${sel.statusBarIndicator} span`).last().textContent().catch(() => null)) ??
+    ''
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!statusText || /connecting|searching|demo|offline|disconnected/i.test(statusText)) {
+    return '';
+  }
+  const m = statusText.match(
+    /\b(idea\d+|appdocker\d+|engine\d+|\d{1,3}(?:\.\d{1,3}){3})\b/i,
+  );
+  if (m) return normalizeSwitchHost(m[1]!);
+  return normalizeSwitchHost(statusText.split(/\s+/)[0] ?? '');
+}
+
+async function dismissConnectionManagement(
+  page: import('@playwright/test').Page,
+): Promise<void> {
+  if (!(await page.locator(sel.connectionManagement).isVisible().catch(() => false))) return;
+  const btn = page.locator(sel.connectionMgmtBtn);
+  if (await btn.count()) await btn.click().catch(() => {});
+  else await page.locator('.status-bar__connection-btn').click().catch(() => {});
+  try {
+    await page.locator(sel.connectionManagement).waitFor({ state: 'hidden', timeout: 10_000 });
+  } catch {
+    throw new Error(
+      'idea#168 switch_engine: already on target host but connection-management stayed open after dismiss.',
+    );
+  }
+}
+
 /** Prefer hostname labels over bare IPv4 (r43: Tailscale IP Connect failed). */
 export function orderSwitchEngineHosts(hosts: string[]): string[] {
   const norm = hosts.map(normalizeSwitchHost).filter(Boolean);
@@ -1377,8 +1425,10 @@ async function connectEngineWithRetries(
 }
 
 /**
- * Switch Engine — Prefer A r39/r43: wait discovery → Connect hostname-first
- * (idea01 over IP) with reachability retries.
+ * Switch Engine — Prefer A r44: if status-bar hostname already matches
+ * DURATION_SWITCH_ENGINE_HOST, PASS after ConnectionManagement opens
+ * (discovery "No engine found" is N/A — do not manual-Connect retry).
+ * Connect path only when status hostname ≠ HOST.
  */
 export const switch_engine: IntentFn = async ({ page }) => {
   if (!(await page.locator(sel.settingsPanel).isVisible().catch(() => false))) {
@@ -1398,6 +1448,13 @@ export const switch_engine: IntentFn = async ({ page }) => {
         'Settings must expose Change Engine… → ConnectionManagement (Prefer A).',
     );
   }
+  const hostEnv = (
+    process.env.DURATION_SWITCH_ENGINE_HOST?.trim() ||
+    process.env.DURATION_ENGINE_HOST?.trim() ||
+    ''
+  );
+  const statusBefore = await readConnectedStatusHostname(page);
+
   await changeBtn.click();
   try {
     await page.locator(sel.connectionManagement).waitFor({ state: 'visible', timeout: 15_000 });
@@ -1407,8 +1464,32 @@ export const switch_engine: IntentFn = async ({ page }) => {
     );
   }
 
+  // Prefer A r44: already connected to HOST — discovery empty must not burn Connect retries
+  const statusNow = (await readConnectedStatusHostname(page)) || statusBefore;
+  if (hostEnv && switchHostsMatch(statusNow, hostEnv)) {
+    await dismissConnectionManagement(page);
+    const after = await readConnectedStatusHostname(page);
+    if (!switchHostsMatch(after || statusNow, hostEnv)) {
+      throw new Error(
+        `idea#168 switch_engine: status was ${JSON.stringify(statusNow)} matching HOST=${hostEnv} ` +
+          `but after dismiss status=${JSON.stringify(after)}. Prefer A loud-fail.`,
+      );
+    }
+    return;
+  }
+
   const scanBudget = switchEngineScanTimeoutMs();
-  await waitForEngineDiscoverySettle(page, scanBudget);
+  const settle = await waitForEngineDiscoverySettle(page, scanBudget);
+
+  // Scan finished "No engine found" but status still matches HOST (race / late read)
+  const statusAfterScan = await readConnectedStatusHostname(page);
+  if (hostEnv && switchHostsMatch(statusAfterScan, hostEnv)) {
+    await dismissConnectionManagement(page);
+    return;
+  }
+  if (settle === 'empty' && hostEnv && !switchHostsMatch(statusAfterScan, hostEnv)) {
+    // fall through to Connect — status ≠ HOST
+  }
 
   // Merge any discovered hostname Connect labels into candidates (hostname before IP)
   const btns = discoveredConnectBtns(page);

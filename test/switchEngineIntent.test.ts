@@ -4,6 +4,7 @@ import {
   switchEngineConnectTimeoutMs,
   orderSwitchEngineHosts,
   isIpv4SwitchHost,
+  switchHostsMatch,
 } from '../e2e/intents/operatorDeepActions';
 
 describe('switchEngineScanTimeoutMs (Prefer A r39)', () => {
@@ -54,5 +55,18 @@ describe('orderSwitchEngineHosts / isIpv4SwitchHost (Prefer A r43)', () => {
       'idea01',
       '100.1.1.1',
     ]);
+  });
+});
+
+describe('switchHostsMatch (Prefer A r44 already connected)', () => {
+  it('matches idea01 status to HOST idea01', () => {
+    expect(switchHostsMatch('idea01', 'idea01')).toBe(true);
+    expect(switchHostsMatch('idea01', 'idea01.local')).toBe(true);
+  });
+
+  it('does not match Connecting or a different host', () => {
+    expect(switchHostsMatch('Connecting…', 'idea01')).toBe(false);
+    expect(switchHostsMatch('idea03', 'idea01')).toBe(false);
+    expect(switchHostsMatch('100.99.231.94', 'idea01')).toBe(false);
   });
 });

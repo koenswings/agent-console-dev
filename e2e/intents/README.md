@@ -115,7 +115,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 |---|---|
 | `open_settings` | Panel + Engine tab + `settings-engine-status` (connected/demo). Account: `settings-change-password-*`. |
 | `close_settings` | Panel must **hide** after settings-btn (loud if still open). |
-| `switch_engine` | Prefer A r43: wait scan (`DURATION_SWITCH_ENGINE_SCAN_MS` 45s) → Connect **hostname-first** (`idea01` over Tailscale/IPv4). Retries on "Could not reach engine" (`DURATION_SWITCH_ENGINE_CONNECT_MS` 60s). Prefer set `DURATION_SWITCH_ENGINE_HOST=idea01`; when unset Intent still prefers idea01-ish over status-bar IP. |
+| `switch_engine` | Prefer A r44: open ConnectionManagement; if status-bar hostname **already matches** `DURATION_SWITCH_ENGINE_HOST` → **PASS** (already connected; "No engine found" is N/A — do **not** manual-Connect retry). Connect/retry only when status hostname ≠ HOST. Scan `DURATION_SWITCH_ENGINE_SCAN_MS`; connect `DURATION_SWITCH_ENGINE_CONNECT_MS`. |
 | `notice_usb_dock` | NetworkTree visible **and** ≥1 `disk-*` within 20s. No soft 500ms dwell. |
 | `reboot_engine` | `reboot-engine-*` + native confirm dialog accept; engine row survives. Loud if dialog missing. |
 | `open_copied_instance` | `DURATION_COPY_INSTANCE_ID` or ctx.instanceId required — **no** silent Grade5A remap. ALL APPS → instance controls. |
