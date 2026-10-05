@@ -471,14 +471,46 @@ export const EXERCISE_SELECTORS = {
    * router-link wrapping KIconButton aria "Close" (or "Go back"), to Library or
    * Home (when query last=HOME).
    */
+  // aria-current="page" = the link targets the route we are already on (stale
+  // toolbar left over during a route change, r8). Never click those.
   toolbarExit: [
-    'a:has(> button[aria-label="Close"])',
-    'a:has(button[aria-label="Close"])',
-    'button[aria-label="Close"]',
-    'a:has(button[aria-label="Go back"])',
-    'button[aria-label="Go back"]',
+    'a:not([aria-current="page"]):has(> button[aria-label="Close"])',
+    'a:not([aria-current="page"]):has(button[aria-label="Close"])',
+    'a:not([aria-current="page"]):has(button[aria-label="Go back"])',
+    'span > button[aria-label="Close"]',
+    'span > button[aria-label="Go back"]',
   ],
 } as const;
+
+/**
+ * Kolibri 0.15.5 Learn `router.afterEach` → `blockDoubleClicks`: CoreBase /
+ * LearnImmersiveLayout render `div.click-mask` over the page for 500ms after
+ * every route change. Clicks during that window are intercepted (r8).
+ */
+export const CLICK_MASK_SELECTOR = '.click-mask';
+const CLICK_MASK_MIN_SETTLE_MS = 600;
+const CLICK_MASK_CLEAR_MS = 300;
+const CLICK_MASK_BUDGET_MS = 5_000;
+
+/**
+ * Wait until the post-navigation click-mask is gone: at least 600ms since the
+ * call and no `.click-mask` for 300ms straight. False if it never clears.
+ */
+export async function waitForClickMaskGone(app: Page, budgetMs = CLICK_MASK_BUDGET_MS): Promise<boolean> {
+  const start = Date.now();
+  let clearSince: number | null = null;
+  while (Date.now() - start < budgetMs) {
+    const masked = (await app.locator(CLICK_MASK_SELECTOR).count().catch(() => 0)) > 0;
+    const now = Date.now();
+    if (masked) clearSince = null;
+    else if (clearSince === null) clearSince = now;
+    if (clearSince !== null && now - start >= CLICK_MASK_MIN_SETTLE_MS && now - clearSince >= CLICK_MASK_CLEAR_MS) {
+      return true;
+    }
+    await app.waitForTimeout(100);
+  }
+  return false;
+}
 
 /** Learn hash route without query (e.g. `/topics/t/<id>/search`), or ''. */
 export function learnHashRoute(url: string): string {
@@ -597,27 +629,51 @@ export const runFinishExercise = async (
   if (close) await app.locator(close).first().click({ timeout: 8_000 });
 
   // Walk Learn chrome to #/home: content "Go back" → topic/search toolbar
-  // Close → Library top-nav "Home". Each hop must change the URL.
+  // Close → Library top-nav "Home". Each hop must change the URL. Before every
+  // pick, wait out Kolibri's 500ms post-navigation click-mask and re-resolve
+  // controls on the page actually shown (no force / JS clicks).
   const hops: string[] = [];
+  const maskStuck = (where: string) =>
+    new Error(
+      `${tag}: Kolibri click-mask (${CLICK_MASK_SELECTOR}) still covering ${where} after ` +
+        `${CLICK_MASK_BUDGET_MS}ms (hops: ${hops.join(' → ') || 'none'}).`,
+    );
   for (let hop = 1; hop <= LEARN_HOME_MAX_HOPS && !isLearnHomeUrl(app.url()); hop++) {
     const before = app.url();
-    const hit = await waitForFirstPresent(app, learnHomeHopSelectors(before), 10_000);
-    if (!hit) {
+    let clicked: string | null = null;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3 && !clicked; attempt++) {
+      if (!(await waitForClickMaskGone(app))) throw maskStuck(before);
+      if (app.url() !== before) break; // route moved under us; re-plan next hop
+      const hit = await waitForFirstPresent(app, learnHomeHopSelectors(before), 10_000);
+      if (!hit) {
+        throw new Error(
+          `${tag}: exercise completed (${trail.join(', ')}) but no Learn nav control on ` +
+            `${before || '(empty)'} to head home (hops: ${hops.join(' → ') || 'none'}; tried ` +
+            `${learnHomeHopSelectors(before).join(' | ')}).`,
+        );
+      }
+      try {
+        await app.locator(hit).first().click({ timeout: 3_000 });
+        clicked = hit;
+      } catch (e) {
+        lastErr = `${hit}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`;
+      }
+    }
+    if (!clicked && app.url() === before) {
       throw new Error(
-        `${tag}: exercise completed (${trail.join(', ')}) but no Learn nav control on ` +
-          `${before || '(empty)'} to head home (hops: ${hops.join(' → ') || 'none'}; tried ` +
-          `${learnHomeHopSelectors(before).join(' | ')}).`,
+        `${tag}: Learn nav click on ${before} failed 3 times (last ${lastErr}; hops: ` +
+          `${hops.join(' → ') || 'none'}).`,
       );
     }
-    await app.locator(hit).first().click({ timeout: 8_000 });
-    hops.push(`${learnHashRoute(before) || before} [${hit}]`);
+    hops.push(`${learnHashRoute(before) || before} [${clicked ?? 'route moved'}]`);
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline && app.url() === before) {
       await app.waitForTimeout(200);
     }
     if (app.url() === before) {
       throw new Error(
-        `${tag}: clicked ${hit} on ${before} but the URL did not change (hops: ${hops.join(' → ')}).`,
+        `${tag}: clicked ${clicked} on ${before} but the URL did not change (hops: ${hops.join(' → ')}).`,
       );
     }
   }

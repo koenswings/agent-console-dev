@@ -25,13 +25,35 @@ const HOME = S.homeLink[0];
 const TOOLBAR_CLOSE = S.toolbarExit[0];
 const SEARCH = `/topics/t/${exercise.parentTopicNodeIdRaw}/search`;
 
-type Effect = { show?: string[]; hide?: string[]; to?: string };
+/**
+ * `afterMask` effects apply once the post-navigation mask clears (models the
+ * old page's toolbar lingering until Library renders).
+ */
+type Effect = { show?: string[]; hide?: string[]; to?: string; afterMask?: { show?: string[]; hide?: string[] } };
 
-function fakeExercisePage(opts: { start: string; visible: string[]; onClick: Record<string, Effect | (() => Effect)> }) {
+function fakeExercisePage(opts: {
+  start: string;
+  visible: string[];
+  onClick: Record<string, Effect | (() => Effect)>;
+  /** Kolibri blockDoubleClicks: `.click-mask` for this long after each route change. */
+  maskMs?: number;
+}) {
   let url = opts.start;
   const visible = new Set(opts.visible);
   const clicks: string[] = [];
+  const intercepted: string[] = [];
   const gotos: string[] = [];
+  let maskUntil = 0;
+  let pendingAfterMask: Effect['afterMask'] | null = null;
+  const masked = () => {
+    if (Date.now() < maskUntil) return true;
+    if (pendingAfterMask) {
+      for (const s of pendingAfterMask.hide ?? []) visible.delete(s);
+      for (const s of pendingAfterMask.show ?? []) visible.add(s);
+      pendingAfterMask = null;
+    }
+    return false;
+  };
   const page = {
     url: () => url,
     async goto(t: string) {
@@ -45,22 +67,34 @@ function fakeExercisePage(opts: { start: string; visible: string[]; onClick: Rec
     locator(selector: string) {
       const first = {
         async count() {
+          if (selector === '.click-mask') return masked() ? 1 : 0;
+          masked();
           return visible.has(selector) ? 1 : 0;
         },
         async click() {
+          if (masked()) {
+            intercepted.push(selector);
+            // Playwright: waits, mask intercepts, then the element detaches.
+            if (pendingAfterMask?.hide?.includes(selector)) vi.setSystemTime(maskUntil);
+            throw new Error('locator.click: Timeout exceeded. <div class="click-mask"></div> intercepts pointer events');
+          }
           if (!visible.has(selector)) throw new Error(`not visible: ${selector}`);
           clicks.push(selector);
           const raw = opts.onClick[selector];
           const eff = typeof raw === 'function' ? raw() : raw ?? {};
           for (const s of eff.hide ?? []) visible.delete(s);
           for (const s of eff.show ?? []) visible.add(s);
-          if (eff.to) url = `${url.split('#')[0]}#${eff.to}`;
+          if (eff.to) {
+            url = `${url.split('#')[0]}#${eff.to}`;
+            if (opts.maskMs) maskUntil = Date.now() + opts.maskMs;
+            pendingAfterMask = eff.afterMask ?? null;
+          }
         },
       };
       return { first: () => first, count: first.count };
     },
   };
-  return { page: page as unknown as Page, clicks, gotos };
+  return { page: page as unknown as Page, clicks, gotos, intercepted };
 }
 
 describe('isLearnHomeUrl', () => {
@@ -117,6 +151,55 @@ describe('runFinishExercise (exercise → completed → Learn home)', () => {
     expect(clicks).toEqual([CHOICE, CHECK, CLOSE, BACK, TOOLBAR_CLOSE, HOME]);
     expect(gotos).toEqual([]);
     expect(isLearnHomeUrl(page.url())).toBe(true);
+  });
+
+  it('r8: waits out the 500ms click-mask after each route change; never clicks the stale Close on Library', async () => {
+    const STALE_CLOSE = 'a[aria-current="page"]:has(> button[aria-label="Close"])';
+    const { page, clicks, intercepted, gotos } = fakeExercisePage({
+      start: EX_URL,
+      maskMs: 500,
+      visible: [CHECK, CHOICE, BACK],
+      onClick: {
+        [CHECK]: { hide: [CHECK], show: [NEXT, MODAL, CLOSE] },
+        [CLOSE]: { hide: [MODAL, CLOSE] },
+        [BACK]: { to: SEARCH, hide: [BACK, NEXT, CHOICE], show: [TOOLBAR_CLOSE] },
+        // On #/library the old toolbar lingers (now aria-current=page) until the mask clears.
+        [TOOLBAR_CLOSE]: {
+          to: '/library',
+          hide: [TOOLBAR_CLOSE],
+          show: [STALE_CLOSE],
+          afterMask: { hide: [STALE_CLOSE], show: [HOME] },
+        },
+        [HOME]: { to: '/home' },
+      },
+    });
+    await runFinishExercise(page, exercise);
+    expect(clicks).toEqual([CHOICE, CHECK, CLOSE, BACK, TOOLBAR_CLOSE, HOME]);
+    expect(clicks).not.toContain(STALE_CLOSE);
+    expect(intercepted).toEqual([]);
+    expect(gotos).toEqual([]);
+    expect(isLearnHomeUrl(page.url())).toBe(true);
+  });
+
+  it('toolbarExit selectors skip links to the current page (aria-current="page")', () => {
+    for (const s of S.toolbarExit.filter((x) => x.startsWith('a'))) {
+      expect(s).toContain(':not([aria-current="page"])');
+    }
+  });
+
+  it('loud-fails when the click-mask never clears', async () => {
+    const { page } = fakeExercisePage({
+      start: EX_URL,
+      maskMs: 60_000,
+      visible: [CHECK, CHOICE, BACK],
+      onClick: {
+        [CHECK]: { hide: [CHECK], show: [NEXT, STATUS] },
+        [BACK]: { to: SEARCH, hide: [BACK], show: [TOOLBAR_CLOSE] },
+      },
+    });
+    await expect(runFinishExercise(page, exercise)).rejects.toThrow(
+      /click-mask \(\.click-mask\) still covering http:\/\/idea01:18080\/en\/learn\/#\/topics\/t\/63427029c7eb5e86b62a731d9564aa50\/search/,
+    );
   });
 
   it('topic page toolbar Close goes straight home when the route has last=HOME', async () => {

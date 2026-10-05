@@ -191,8 +191,11 @@ CompletionModal `[role="dialog"]` "Resource completed" (first completion) or Ove
 and walk Learn chrome to home, one hop per page (each click must change the URL, max 5 hops): content page → bar
 "Go back"; topic / search page (immersive, no top nav; r7 landed on `#/topics/t/63427029…/search`) → ImmersiveToolbar
 "Close" link (to `#/library`, or `#/home` when `last=HOME`); any page with LearnTopNav → "Home" (`a[href*="#/home"]`).
-No hash goto. Success only when completion was seen AND the URL is Learn `#/home`; otherwise loud-fail with the hop
-trail and final URL. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
+No hash goto. Before each pick it waits out Kolibri's post-navigation `div.click-mask` (Learn `router.afterEach` →
+`blockDoubleClicks`, 500ms; we wait ≥600ms and 300ms clear, max 5s, else loud-fail) and re-resolves controls on the page
+actually shown. Toolbar links with `aria-current="page"` (stale Close pointing at the current route, r8) are never
+clicked. No force / JS clicks; up to 3 click attempts per hop. Success only when completion was seen AND the URL is
+Learn `#/home`; otherwise loud-fail with the hop trail and final URL. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
 `finish_exercise` from deferred / add it to `PIXEL_REGISTERED_INTENTS` (Axle).
 
 ## Live duration — no bootDemo (`--live --ui`)
