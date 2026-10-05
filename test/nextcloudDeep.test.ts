@@ -68,6 +68,10 @@ function fakeNextcloud(opts: {
   wizardDelayMs?: number;
   /** Wizard pops up exactly when the Files link is first clicked (late modal race). */
   wizardOnFirstClick?: boolean;
+  /** Login form fields (user/password/submit) mount this long after /login is up (r25 race). */
+  loginFormDelayMs?: number;
+  /** Login form fields never mount until the page is reloaded once. */
+  loginFormNeedsReload?: boolean;
 }) {
   let url = opts.start === 'login' ? `${ORIGIN}/login` : opts.start === 'files' ? filesUrl('/') : `${ORIGIN}/apps/dashboard/`;
   const fields: Record<string, string> = {};
@@ -79,6 +83,10 @@ function fakeNextcloud(opts: {
   let wizardDismissed = false;
   let wizardArmed = !opts.wizardOnFirstClick;
   const wizardKeys: string[] = [];
+  let loginAt = Date.now();
+  let reloads = 0;
+  const loginFieldsUp = () =>
+    (!opts.loginFormNeedsReload || reloads > 0) && Date.now() - loginAt >= (opts.loginFormDelayMs ?? 0);
   const wizardUp = () =>
     !!opts.wizard && wizardArmed && !wizardDismissed && !isNcLoginUrl(url) && Date.now() - signedInAt >= (opts.wizardDelayMs ?? 0);
   const dir = () => ncFilesDir(url);
@@ -97,8 +105,8 @@ function fakeNextcloud(opts: {
     if (sel === '#firstrunwizard') return wizardUp();
     if (sel === '#firstrunwizard button[aria-label="Close"]') return wizardUp() && opts.wizard !== 'intro';
     if (sel === '#firstrunwizard .header-close') return false;
-    if (sel === '[data-login-form]' || sel === 'input#password') return onLogin;
-    if (sel === 'input#user' || sel === '[data-login-form-submit]') return onLogin;
+    if (sel === '[data-login-form]') return onLogin;
+    if (sel === 'input#password' || sel === 'input#user' || sel === '[data-login-form-submit]') return onLogin && loginFieldsUp();
     if (sel === '[data-cy-files-content-breadcrumbs]') return dir() !== null;
     if (sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
     if (sel === 'nav.app-menu a[href$="/apps/files/"]') return !onLogin && Date.now() - signedInAt >= (opts.navDelayMs ?? 0);
@@ -113,6 +121,10 @@ function fakeNextcloud(opts: {
     url: () => url,
     async waitForTimeout(ms: number) {
       vi.setSystemTime(Date.now() + ms);
+    },
+    async reload() {
+      reloads++;
+      loginAt = Date.now();
     },
     keyboard: {
       async press(k: string) {
@@ -132,6 +144,9 @@ function fakeNextcloud(opts: {
           return sel === 'head' && name === 'data-user' ? uid : null;
         },
         async isVisible() {
+          return present(sel);
+        },
+        async isEnabled() {
           return present(sel);
         },
         async click() {
@@ -184,7 +199,15 @@ function fakeNextcloud(opts: {
       };
     },
   };
-  return { page: page as unknown as Page, clicks, submitted, wizardKeys, wizardGone: () => wizardDismissed, getUid: () => uid };
+  return {
+    page: page as unknown as Page,
+    clicks,
+    submitted,
+    wizardKeys,
+    wizardGone: () => wizardDismissed,
+    getUid: () => uid,
+    reloads: () => reloads,
+  };
 }
 
 describe('ensureNextcloudFiles (verified sign-in)', () => {
@@ -274,6 +297,33 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
       /First-run wizard \(#firstrunwizard\) still blocks the page after close, close, close, close/,
     );
     expect(f.clicks).not.toContain('nav.app-menu a[href$="/apps/files/"]');
+  });
+
+  it('r25 FAIL@27: waits for late login form fields before filling (learner path, no reload)', async () => {
+    const f = fakeNextcloud({ start: 'login', accept: [NC.auth.learner.password], tree: { '/': [] }, loginFormDelayMs: 6_000 });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
+    expect(f.submitted).toEqual([NC.auth.learner.password]);
+    expect(f.reloads()).toBe(0);
+    expect(ncFilesDir(f.page.url())).toBe('/');
+  });
+
+  it('r25 FAIL@27: login form still missing after the wait → reload once, then signs in', async () => {
+    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, loginFormNeedsReload: true });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher);
+    expect(f.reloads()).toBe(1);
+    expect(f.submitted).toEqual(['TeacherGrade5A!']);
+    expect(ncFilesDir(f.page.url())).toBe('/');
+  });
+
+  it('r25 FAIL@27: loud-fails "login form incomplete" only after wait + one reload + wait', async () => {
+    const f = fakeNextcloud({ start: 'login', accept: [], tree: {}, loginFormDelayMs: Number.POSITIVE_INFINITY });
+    const t0 = Date.now();
+    await expect(ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner)).rejects.toThrow(
+      /open_nextcloud_as_learner: Nextcloud login form incomplete on http:\/\/idea01:18280\/login \(user=false password=false submit=false\)/,
+    );
+    expect(f.reloads()).toBe(1);
+    expect(f.submitted).toEqual([]);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(40_000);
   });
 
   it('falls back once to the legacy password=username', async () => {

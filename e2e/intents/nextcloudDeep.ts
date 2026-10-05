@@ -240,10 +240,25 @@ export const ensureNextcloudFiles = async (
       );
     }
     const tried: string[] = [];
+    // r25 FAIL@27: /login can be up before the Vue login form mounts; one count() saw
+    // user/password/submit all missing. Poll up to SETTLE_MS, reload the page once, poll
+    // again, and only then loud-fail.
+    let reloaded = false;
     for (const pw of ncPasswordCandidates(creds)) {
-      const user = await firstPresent(app, NC_SELECTORS.loginUser);
-      const pass = await firstPresent(app, NC_SELECTORS.loginPassword);
-      const submit = await firstPresent(app, NC_SELECTORS.loginSubmit);
+      let user: string | null = null;
+      let pass: string | null = null;
+      let submit: string | null = null;
+      const formReady = async () => {
+        user = await firstPresent(app, NC_SELECTORS.loginUser);
+        pass = await firstPresent(app, NC_SELECTORS.loginPassword);
+        submit = await firstPresent(app, NC_SELECTORS.loginSubmit);
+        return !!(user && pass && submit);
+      };
+      if (!(await waitFor(formReady, app, SETTLE_MS)) && !reloaded) {
+        reloaded = true;
+        await app.reload?.({ waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch(() => {});
+        await waitFor(formReady, app, SETTLE_MS);
+      }
       if (!user || !pass || !submit) {
         throw new Error(`${tag}: Nextcloud login form incomplete on ${app.url()} (user=${!!user} password=${!!pass} submit=${!!submit}).`);
       }
