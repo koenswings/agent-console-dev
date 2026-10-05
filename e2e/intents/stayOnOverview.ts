@@ -10,19 +10,55 @@ import { collectConnectionDiagnostics } from './signInReady';
 
 /**
  * Prefer A catalog settle budget (DURATION_OVERVIEW_CATALOG_MS).
- * Default 60s — r40 cold connect showed cards by ~15s; leave headroom.
+ * Default 180s: r40 cold connect showed cards by ~15s, but cover-all-1dee371-r10
+ * (store_mode unique + fresh Console redeploy) needed ~127s of cold WS/store sync.
  */
+export const OVERVIEW_CATALOG_DEFAULT_MS = 180_000;
+
 export function overviewCatalogTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.DURATION_OVERVIEW_CATALOG_MS?.trim();
   if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
-  return 60_000;
+  return OVERVIEW_CATALOG_DEFAULT_MS;
 }
 
+/** Per-read cap so a missing status element can't eat Playwright's 30s default (r10). */
+const STATUS_READ_MS = 1_000;
+
 export async function readStatusBarLabel(page: Page): Promise<string> {
-  const host = await page.locator(sel.statusBarHostname).innerText().catch(() => '');
+  const host = await page
+    .locator(sel.statusBarHostname)
+    .innerText({ timeout: STATUS_READ_MS })
+    .catch(() => '');
   if (host.trim()) return host.replace(/\s+/g, ' ').trim();
-  const ind = await page.locator(sel.statusBarIndicator).innerText().catch(() => '');
+  const ind = await page
+    .locator(sel.statusBarIndicator)
+    .innerText({ timeout: STATUS_READ_MS })
+    .catch(() => '');
   return ind.replace(/\s+/g, ' ').trim();
+}
+
+export type OverviewCatalogState = { status: string; instanceCards: number; openButtons: number };
+
+/**
+ * Prefer A ready predicate: status left Connecting…/Searching… AND the catalog is
+ * populated: ≥1 instance-* card or ≥1 open-instance-* Open button on console-overview
+ * (r10 screenshot: kolibri + nextcloud cards with Open). Empty catalog is never ready.
+ */
+export function isOverviewCatalogReady(s: OverviewCatalogState): boolean {
+  return !isConnectingStatusLabel(s.status) && (s.instanceCards >= 1 || s.openButtons >= 1);
+}
+
+export async function readOverviewCatalogState(page: Page): Promise<OverviewCatalogState> {
+  const status = await readStatusBarLabel(page);
+  const instanceCards = await page
+    .locator(`${sel.consoleOverview} [data-testid^="instance-"]`)
+    .count()
+    .catch(() => 0);
+  const openButtons = await page
+    .locator(`${sel.consoleOverview} [data-testid^="open-instance-"]`)
+    .count()
+    .catch(() => 0);
+  return { status, instanceCards, openButtons };
 }
 
 export function isConnectingStatusLabel(label: string): boolean {
@@ -40,32 +76,29 @@ export async function waitForUserOverviewCatalog(
   await page.locator(sel.consoleOverview).waitFor({ state: 'visible', timeout: 15_000 });
   const budget = overviewCatalogTimeoutMs();
   const started = Date.now();
-  const cards = page.locator(`${sel.consoleOverview} [data-testid^="instance-"]`);
-  let lastStatus = '';
-  let n = 0;
+  let s: OverviewCatalogState = { status: '', instanceCards: 0, openButtons: 0 };
 
   while (Date.now() - started < budget) {
-    lastStatus = await readStatusBarLabel(page);
-    n = await cards.count();
-    const connecting = isConnectingStatusLabel(lastStatus);
-    // Prefer A: need catalog cards; hostname alone (IP shown) is not enough if count=0
-    if (!connecting && n >= 1) {
+    s = await readOverviewCatalogState(page);
+    // Prefer A: need catalog cards/Open; hostname alone (IP shown) is not enough if empty
+    if (isOverviewCatalogReady(s)) {
       await page.waitForTimeout(200);
       return;
     }
     await page.waitForTimeout(400);
   }
 
-  lastStatus = await readStatusBarLabel(page);
-  n = await cards.count();
-  const connecting = isConnectingStatusLabel(lastStatus);
+  // Final read: r10 threw with instanceCards=2 connecting=false. If the predicate
+  // holds now, the catalog IS ready (same check, not a soft-pass).
+  s = await readOverviewCatalogState(page);
+  if (isOverviewCatalogReady(s)) return;
   const elapsed = Date.now() - started;
   const diag = await collectConnectionDiagnostics(page).catch(() => '');
   throw new Error(
     `idea#168 ${intent}: overview catalog not ready after ${budget}ms. ` +
-      `status=${JSON.stringify(lastStatus)} instanceCards=${n} connecting=${connecting} ` +
-      `elapsed=${elapsed}ms. r40: cold WS/store sync (~15s observed) — ` +
-      `set DURATION_OVERVIEW_CATALOG_MS. Prefer A — no soft-pass. ${diag}`,
+      `status=${JSON.stringify(s.status)} instanceCards=${s.instanceCards} openButtons=${s.openButtons} ` +
+      `connecting=${isConnectingStatusLabel(s.status)} elapsed=${elapsed}ms. ` +
+      `Cold WS/store sync (r40 ~15s; r10 ~127s). Prefer A — no soft-pass. ${diag}`,
   );
 }
 
@@ -118,6 +151,7 @@ export const stay_on_overview: IntentFn = async ({ page }) => {
   }
   lastStatus = await readStatusBarLabel(page);
   count = await disks.count();
+  if (!isConnectingStatusLabel(lastStatus) && count > 0) return; // final read: predicate met
   throw new Error(
     `idea#168 stay_on_overview: NetworkTree catalog not ready after ${budget}ms. ` +
       `status=${JSON.stringify(lastStatus)} diskRows=${count} ` +
