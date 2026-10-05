@@ -513,9 +513,18 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   `CONTENT.live.json collab.selectors`.
 - **`close_doc` (nc_collab → nc_browse):** Viewer `.header-close` (NcModal, aria-label "Close") → Viewer gone, same
   `dir`, `openfile` dropped from the URL.
-- **Held (not registered):** `open_file_drop` / `after_upload` / `leave_file_drop`. Kid's live file request on the mount
-  root `/Drop Zone` shows "This directory is unavailable"; Kid is moving it to `/Drop Zone/inbox` (token URL stays
-  `/s/grade5a-drop-zone`). These get wired in a follow-up tip after that App#11 update.
+- **File Drop trio** (Kid App#11 @2d9a052 `fileRequest`: token `grade5adropzone`, `/Drop Zone/inbox`, permissions 4).
+  The token is [A-Za-z0-9] only because NC 31.0.1 public DAV cuts hyphenated tokens, so the old `/s/grade5a-drop-zone`
+  now 404s. The URL path comes from `fileRequest.url` and the origin from the Nextcloud tab, so it stays on hostname
+  `idea01` (NC answers HTTP 400 on the raw Tailscale IP). Override with `DURATION_NC_FILE_REQUEST_URL`.
+  - **`open_file_drop` (nc_browse → nc_drop, learner):** loud-fail unless `<head data-user>` is the fixture learner.
+    Opens the link in a new tab. Success = `[data-cy-files-sharing-file-drop]` reads "Upload files to inbox.", no file
+    rows, no "This directory is unavailable". HTTP 404/400 = loud-fail with the reason.
+  - **`after_upload` (nc_drop → nc_browse):** File drop **Upload** button → "Upload files" → file chooser with a unique
+    `drop-<ISO>.txt` (falls back to the picker's own `input[type=file]`). Proof = `PUT /public.php/dav/files/<token>/<name>`
+    2xx. Then closes the drop tab and re-proves the signed-in Files tab.
+  - **`leave_file_drop` (nc_drop → console_learner):** needs the `/s/<token>` tab, then `leaveAppToConsole`; the drop
+    tab must be closed.
 
 ## Wikipedia / Kiwix (Prefer A, `wikipedia.ts`)
 

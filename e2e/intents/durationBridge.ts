@@ -55,8 +55,7 @@ export async function runDurationIntent(
       ok: false,
       registered: false,
       message:
-        `Console Intent '${action}' not registered (Engine-owned infra_*, held ` +
-        `File Drop trio, or unknown)`,
+        `Console Intent '${action}' not registered (Engine-owned infra_* or unknown)`,
     };
     // Still capture when recording — useful to see Console state on miss
     if (screenshotPath) {

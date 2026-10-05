@@ -40,6 +40,9 @@ const LOCKED = [
   'open_collab_doc',
   'close_doc',
   'keep_editing',
+  'open_file_drop',
+  'after_upload',
+  'leave_file_drop',
   'open_wikipedia_as_teacher',
   'open_wikipedia_as_learner',
   'search_browse_wikipedia',
@@ -109,12 +112,7 @@ const ENGINE_OWNED = [
   'infra_reboot_engine',
 ] as const;
 
-/** File Drop trio held until Kid App#11 moves the request to /Drop Zone/inbox. */
-const DEFERRED = [
-  'open_file_drop',
-  'after_upload',
-  'leave_file_drop',
-] as const;
+const DEFERRED = [] as const;
 
 describe('Intent registry (idea#166 Phase 5 / #168)', () => {
   it('registers Hub + dwell + Phase 3–5 + operator deep Intents', () => {
@@ -168,6 +166,9 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('open_collab_doc')).toBe(true);
     expect(hasDurationIntent('close_doc')).toBe(true);
     expect(hasDurationIntent('keep_editing')).toBe(true);
+    expect(hasDurationIntent('open_file_drop')).toBe(true);
+    expect(hasDurationIntent('after_upload')).toBe(true);
+    expect(hasDurationIntent('leave_file_drop')).toBe(true);
     expect(hasDurationIntent('open_wikipedia_as_teacher')).toBe(true);
     expect(hasDurationIntent('open_wikipedia_as_learner')).toBe(true);
     expect(hasDurationIntent('search_browse_wikipedia')).toBe(true);
@@ -175,7 +176,7 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('leave_wikipedia_as_learner')).toBe(true);
   });
 
-  it('does not register the held File Drop trio', () => {
+  it('has no deferred Console Intents left', () => {
     for (const name of DEFERRED) {
       expect(getIntent(name)).toBeUndefined();
     }

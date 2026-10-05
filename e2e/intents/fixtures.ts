@@ -176,6 +176,21 @@ export const DURATION_FIXTURES = {
     },
     collabDoc: 'Grade5A-collab-notes.md',
     group: 'Grade 5A',
+    /**
+     * Kid App#11 @2d9a052 nextcloud CONTENT.live.json `fileRequest` (teacher, shareType 3,
+     * permissions 4 = upload-only, on `/Drop Zone/inbox`). Token is [A-Za-z0-9] only: NC 31.0.1
+     * public DAV cuts hyphenated tokens (old /s/grade5a-drop-zone → 404). The path comes from
+     * `url`; the origin is the Nextcloud tab's (hostname idea01, not the Tailscale IP that NC
+     * answers HTTP 400 on). Full override: DURATION_NC_FILE_REQUEST_URL.
+     */
+    fileRequest: {
+      token: 'grade5adropzone',
+      url: 'http://idea01:18280/s/grade5adropzone',
+      path: '/Drop Zone/inbox',
+      /** ui.text: "Upload files to inbox." (folder = last path segment). */
+      uiFolder: 'inbox',
+      uiHeading: 'File drop',
+    },
     /** Kid CONTENT.live.json `collab` (editor nextcloud-text, collabora false). */
     collab: {
       editor: 'nextcloud-text',

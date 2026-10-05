@@ -46,6 +46,9 @@ export const CONSOLE_INTENT_NAMES = [
   'open_collab_doc',
   'close_doc',
   'keep_editing',
+  'open_file_drop',
+  'after_upload',
+  'leave_file_drop',
   // Wikipedia (Kiwix stub, Kid App#11)
   'open_wikipedia_as_teacher',
   'open_wikipedia_as_learner',

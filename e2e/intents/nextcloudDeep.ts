@@ -831,3 +831,181 @@ export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise
 export const keep_editing: IntentFn = async ({ page }) => {
   await runKeepEditing(ncAppPage(page, 'idea#166 keep_editing'));
 };
+
+/* ------------------------------------------------------------------------- */
+/* File Drop trio: open_file_drop / after_upload / leave_file_drop            */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * NC 31 public file-drop page (apps/files_sharing FilesViewFileDropEmptyContent.vue,
+ * upstream cypress public-share/view_file-drop.cy.ts):
+ *   [data-cy-files-sharing-file-drop] "Upload files to <folder>." + UploadPicker;
+ *   uploads PUT /public.php/dav/files/<token>/<name>; no file rows are listed.
+ */
+export const NC_DROP_SELECTORS = {
+  drop: '[data-cy-files-sharing-file-drop]',
+  fileInput: '[data-cy-files-sharing-file-drop] input[type="file"]',
+} as const;
+
+/** Kid fileRequest.url path on the Nextcloud tab origin (hostname, not IP); DURATION_NC_FILE_REQUEST_URL wins. */
+export function resolveFileRequestUrl(ncTabUrl: string, env: NodeJS.ProcessEnv = process.env): string {
+  const full = env.DURATION_NC_FILE_REQUEST_URL?.trim();
+  if (full) return full;
+  const path = new URL(NC.fileRequest.url).pathname;
+  return `${new URL(ncTabUrl).origin}${path}`;
+}
+
+/** True for a public share page URL /s/<token> (index.php optional). */
+export function isPublicShareUrl(url: string, token?: string): boolean {
+  try {
+    const m = /\/s\/([^/?#]+)/.exec(new URL(url).pathname);
+    return !!m && (!token || m[1] === token);
+  } catch {
+    return false;
+  }
+}
+
+const dropTag = (name: string) => `idea#166 ${name}`;
+
+/** Newest open file-drop tab (/s/<token>), or loud-fail (not nc_drop). */
+export const ncDropPage = (page: Page, tag: string): Page => {
+  const pages = page.context().pages();
+  for (let i = pages.length - 1; i >= 0; i--) {
+    try {
+      if (isPublicShareUrl(pages[i]!.url())) return pages[i]!;
+    } catch {
+      /* closed */
+    }
+  }
+  throw new Error(`${tag}: not in nc_drop: no Nextcloud file request tab (/s/<token>) open. Run open_file_drop first.`);
+};
+
+/** Assert the upload-only file-drop UI for the Drop Zone. */
+export const ncAssertDropPage = async (drop: Page, tag: string): Promise<void> => {
+  const ui = drop.locator(NC_DROP_SELECTORS.drop).first();
+  if (!(await waitFor(async () => ui.isVisible().catch(() => false), drop, SETTLE_MS))) {
+    const body = ((await drop.locator('body').first().innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 160);
+    throw new Error(
+      `${tag}: ${drop.url()} is not a Nextcloud File drop page (${NC_DROP_SELECTORS.drop} missing; page: "${body}"). ` +
+        `Kid fileRequest not applied on this host, or token differs (set DURATION_NC_FILE_REQUEST_URL from hosts.<host>.fileRequestUrl).`,
+    );
+  }
+  const text = ((await ui.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
+  const pageText = ((await drop.locator('body').first().innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
+  if (/directory is unavailable/i.test(pageText)) {
+    throw new Error(`${tag}: File drop says "This directory is unavailable" (share broken; Kid fileRequest).`);
+  }
+  if (!text.includes(`Upload files to ${NC.fileRequest.uiFolder}`)) {
+    throw new Error(
+      `${tag}: File drop page is not for "${NC.fileRequest.path}" (want "Upload files to ${NC.fileRequest.uiFolder}."; got "${text.slice(0, 120)}").`,
+    );
+  }
+  if ((await drop.locator(NC_SELECTORS.anyRow).count().catch(() => 0)) > 0) {
+    throw new Error(`${tag}: File drop page lists files (${await rowNames(drop)}); share is not upload-only.`);
+  }
+};
+
+/**
+ * open_file_drop (nc_browse → nc_drop, learner): from the signed-in learner Files
+ * tab, open Kid's Drop Zone file request link (CONTENT.live.json fileRequest.url)
+ * in a new tab, the way a link from the teacher opens. Success = upload-only
+ * File drop UI ("Upload files to inbox." for /Drop Zone/inbox).
+ */
+export const runOpenFileDrop = async (app: Page): Promise<Page> => {
+  const tag = dropTag('open_file_drop');
+  await ensureNextcloudFiles(app, tag, null);
+  const uid = await ncSignedInUser(app);
+  if (uid !== NC.auth.learner.username) {
+    throw new Error(`${tag}: learner Intent; Nextcloud is signed in as ${uid ?? '(unknown)'}. Run open_nextcloud_as_learner first.`);
+  }
+  const url = resolveFileRequestUrl(app.url());
+  const drop = await app.context().newPage();
+  const resp = await drop.goto(url, { waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch((e: unknown) => {
+    throw new Error(`${tag}: file request ${url} unreachable (${e instanceof Error ? e.message : String(e)}).`);
+  });
+  if (resp && resp.status() >= 400) {
+    throw new Error(
+      `${tag}: file request ${url} returned HTTP ${resp.status()} (404 = old/wrong token; 400 = raw IP not in NC trusted_domains, use hostname).`,
+    );
+  }
+  await ncAssertDropPage(drop, tag);
+  return drop;
+};
+
+export const open_file_drop: IntentFn = async ({ page }) => {
+  await runOpenFileDrop(ncAppPage(page, dropTag('open_file_drop')));
+};
+
+/** Name + bytes for one walker upload (unique, so a re-walk never collides). */
+export const dropUploadFile = (now: Date = new Date()) => ({
+  name: `drop-${now.toISOString().replace(/[:.]/g, '-')}.txt`,
+  mimeType: 'text/plain',
+  buffer: Buffer.from(`duration-tests after_upload ${now.toISOString()}\n`),
+});
+
+/**
+ * after_upload (nc_drop → nc_browse): upload one file through the File drop
+ * Upload button (file chooser), proven by the public DAV PUT 2xx, then close the
+ * drop tab and return to the signed-in Files tab.
+ */
+export const runAfterUpload = async (page: Page, now: Date = new Date()): Promise<string> => {
+  const tag = dropTag('after_upload');
+  const drop = ncDropPage(page, tag);
+  await ncAssertDropPage(drop, tag);
+  const file = dropUploadFile(now);
+  const put = drop
+    .waitForResponse(
+      (r) => r.request().method() === 'PUT' && /\/public\.php\/dav\/files\//.test(r.url()) && r.url().includes(encodeURIComponent(file.name)),
+      { timeout: SETTLE_MS },
+    )
+    .catch(() => null);
+
+  const ui = drop.locator(NC_DROP_SELECTORS.drop).first();
+  const upload = ui.getByRole('button', { name: 'Upload' }).first();
+  let chosen = false;
+  if (await upload.isVisible().catch(() => false)) {
+    const chooser = drop.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
+    await upload.click({ timeout: 8_000 });
+    const item = drop.getByRole('menuitem', { name: 'Upload files' }).first();
+    if (await waitFor(async () => item.isVisible().catch(() => false), drop, 3_000)) {
+      await item.click({ timeout: 8_000 });
+    }
+    const fc = await chooser;
+    if (fc) {
+      await fc.setFiles(file);
+      chosen = true;
+    }
+  }
+  if (!chosen) {
+    // UploadPicker's own <input type=file> (same element the chooser drives).
+    const input = drop.locator(NC_DROP_SELECTORS.fileInput).first();
+    if ((await input.count().catch(() => 0)) === 0) {
+      throw new Error(`${tag}: File drop page has no Upload button / file input (${drop.url()}).`);
+    }
+    await input.setInputFiles(file);
+  }
+  const resp = await put;
+  if (!resp) throw new Error(`${tag}: no upload request for ${file.name} within ${SETTLE_MS}ms.`);
+  if (resp.status() >= 400) {
+    throw new Error(`${tag}: Nextcloud rejected the upload of ${file.name} (HTTP ${resp.status()}).`);
+  }
+
+  await drop.close();
+  const files = ncAppPage(page, tag);
+  await files.bringToFront().catch(() => {});
+  await ensureNextcloudFiles(files, tag, null);
+  return file.name;
+};
+
+export const after_upload: IntentFn = async ({ page }) => {
+  await runAfterUpload(page);
+};
+
+/** leave_file_drop (nc_drop → console_learner): close Nextcloud tabs, prove the Console overview. */
+export const leave_file_drop: IntentFn = async ({ page }) => {
+  const tag = dropTag('leave_file_drop');
+  const drop = ncDropPage(page, tag);
+  if (drop === page) throw new Error(`${tag}: file request opened in the Console tab; cannot leave without closing the Console.`);
+  await leaveAppToConsole(page);
+  if (!drop.isClosed()) throw new Error(`${tag}: file request tab still open after leaving to the Console (${drop.url()}).`);
+};

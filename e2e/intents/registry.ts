@@ -10,7 +10,7 @@
  * registered; share_to_class registered (sharing sidebar → group Grade 5A, View only);
  * done_sharing / back_to_console_from_share leave nc_share; open_collab_doc / close_doc /
  * keep_editing on Nextcloud Text (Kid Prefer A). Wikipedia open/search/leave on the Kiwix
- * stub (wikipedia.ts). File Drop trio held until Kid moves the request to /Drop Zone/inbox.
+ * stub (wikipedia.ts). File Drop trio on Kid fileRequest /s/grade5adropzone (/Drop Zone/inbox).
  */
 import type { ConsoleIntentName, IntentFn } from './types';
 import {
@@ -38,6 +38,9 @@ import {
   open_collab_doc,
   close_doc,
   keep_editing,
+  open_file_drop,
+  after_upload,
+  leave_file_drop,
 } from './nextcloudDeep';
 import {
   open_wikipedia_as_teacher,
@@ -131,6 +134,9 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_collab_doc,
   close_doc,
   keep_editing,
+  open_file_drop,
+  after_upload,
+  leave_file_drop,
   open_wikipedia_as_teacher,
   open_wikipedia_as_learner,
   search_browse_wikipedia,
