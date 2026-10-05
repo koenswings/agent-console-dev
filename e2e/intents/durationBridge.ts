@@ -56,7 +56,7 @@ export async function runDurationIntent(
       registered: false,
       message:
         `Console Intent '${action}' not registered (Engine-owned infra_*, deferred ` +
-        `exit_lesson/finish_exercise/next_video/open_wikipedia_*, or unknown)`,
+        `exit_lesson/next_video/open_wikipedia_*, or unknown)`,
     };
     // Still capture when recording — useful to see Console state on miss
     if (screenshotPath) {

@@ -3,7 +3,8 @@
  * Engine-owned keys (enter_infra_fleet_walk, infra_*) are intentionally absent.
  * keep_watching is registered (stay on /topics/c/<video node id> — no chrome testids).
  * next_resource is registered (Kolibri resource-list panel → exercise sibling).
- * Lesson chrome (exit_lesson / finish_exercise / next_video) and
+ * finish_exercise is registered (Perseus Check → completion → Learn home).
+ * Lesson chrome (exit_lesson / next_video) and
  * open_wikipedia_* stay unregistered until Kid App testids.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
@@ -25,7 +26,13 @@ import {
   open_nextcloud_as_teacher,
 } from './openApp';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
-import { keep_watching, next_resource, open_exercise, open_video } from './openKolibriContent';
+import {
+  finish_exercise,
+  keep_watching,
+  next_resource,
+  open_exercise,
+  open_video,
+} from './openKolibriContent';
 import {
   add_files_role,
   cancel_eject,
@@ -97,6 +104,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_video,
   keep_watching,
   next_resource,
+  finish_exercise,
   open_exercise,
   open_disk_inventory,
   open_instance_controls,

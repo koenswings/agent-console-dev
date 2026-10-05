@@ -30,6 +30,7 @@ const LOCKED = [
   'open_video',
   'keep_watching',
   'next_resource',
+  'finish_exercise',
   'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
@@ -98,7 +99,6 @@ const DEFERRED = [
   'open_wikipedia_as_teacher',
   'open_wikipedia_as_learner',
   'exit_lesson',
-  'finish_exercise',
   'next_video',
 ] as const;
 
@@ -144,7 +144,7 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('infra_dock_fixture')).toBe(false);
     expect(hasDurationIntent('keep_watching')).toBe(true);
     expect(hasDurationIntent('next_resource')).toBe(true);
-    expect(hasDurationIntent('finish_exercise')).toBe(false);
+    expect(hasDurationIntent('finish_exercise')).toBe(true);
     expect(hasDurationIntent('next_video')).toBe(false);
   });
 

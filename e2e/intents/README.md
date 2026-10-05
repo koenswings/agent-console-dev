@@ -96,7 +96,7 @@ Fail loud if neither Path A card nor Path B HTTP is reachable.
 | Key | Reason |
 |---|---|
 | `enter_infra_fleet_walk`, `infra_*` | Engine-owned |
-| `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. `keep_watching` is registered (stay on `/topics/c/<video node id>`; no chrome testids). `next_resource` is registered (see below). |
+| `exit_lesson`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. `keep_watching` is registered (stay on `/topics/c/<video node id>`; no chrome testids). `next_resource` and `finish_exercise` are registered (see below). |
 | `open_wikipedia_as_teacher`, `open_wikipedia_as_learner` | Kiwix deferred (Kid) |
 
 ## Kid pins
@@ -147,7 +147,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `make_files_disk` | After submit, wait Files role / DiskView settle (still needs Engine empty dock). |
 | `stay_on_disk` / `stay_on_source_disk` | Resolve disk on tree; DiskView / EmptyDiskPanel visible. |
 
-**Still deferred / blocked (not this tip):** lesson chrome (`exit_lesson`, `finish_exercise`, `next_video`) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
+**Still deferred / blocked (not this tip):** lesson chrome (`exit_lesson`, `next_video`) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
 
 ## Kolibri coaching (kolibri_manage)
 
@@ -170,7 +170,7 @@ Coach list settle (Prefer A): `build_lesson` / `create_quiz` / `read_reports` po
 Class/lesson Morango ids: `fixtures.ts` → `DURATION_FIXTURES.kolibri.live` (CONTENT.live.json).
 Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G5A→**18081**.
 
-**Not registered:** lesson-chrome player Intents (`exit_lesson`, `finish_exercise`, `next_video`) — see LESSON_CHROME.md. `keep_watching` stays on `/topics/c/<video node id>`.
+**Not registered:** lesson-chrome player Intents (`exit_lesson`, `next_video`) — see LESSON_CHROME.md. `keep_watching` stays on `/topics/c/<video node id>`.
 
 **`next_resource` (Prefer A, kolibri_watching → kolibri_exercise):** must start on the pinned video route
 `/topics/c/4a1a1b923f6d59eba94c3f91f0011dd5` (loud-fail otherwise; the video is not re-opened). Clicks Kolibri
@@ -180,6 +180,17 @@ Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G
 list it clicks the exercise sibling (`a[href*="/topics/c/94a47ec7…"]`, else title "Open exercise target").
 Success only when the URL reaches `/topics/c/94a47ec7f30d5cd193f8ad08c42b6c2a` within 15s. No deep-link fallback.
 Engine must drop `next_resource` from `DEFERRED_UI_INTENTS` (Axle) before the walk calls this adapter.
+
+**`finish_exercise` (Prefer A, kolibri_exercise → kolibri_home):** must start on the pinned exercise route
+`/topics/c/94a47ec7f30d5cd193f8ad08c42b6c2a` (loud-fail otherwise; the exercise is not re-opened). Kid's Perseus
+item set (randomize off, mastery 1 of 1) has two single-choice radios, both correct = "4" (index 1). Per item:
+click choice `.perseus-widget-radio li:has-text("4")` (else radio `nth=1`), click Kolibri's `Check` KButton, and
+require `Next` (correct). Always answers at least one item, even if a prior run mastered it. Completion =
+CompletionModal `[role="dialog"]` "Resource completed" (first completion) or OverallStatus
+`.overall-status-text .completed` (re-runs). Up to 4 items. Then close the modal (aria "Close" / "Stay here"),
+click the bar's "Go back", and LearnTopNav "Home" if needed. Success only when completion was seen AND the URL is
+Learn `#/home`. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
+`finish_exercise` from deferred / add it to `PIXEL_REGISTERED_INTENTS` (Axle).
 
 ## Live duration — no bootDemo (`--live --ui`)
 

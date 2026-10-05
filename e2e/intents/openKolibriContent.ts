@@ -432,6 +432,169 @@ export const next_resource: IntentFn = async ({ page, instanceId }) => {
   await runNextResource(app, DURATION_FIXTURES.kolibri.video, DURATION_FIXTURES.kolibri.exercise);
 };
 
+/**
+ * True on Kolibri Learn home: hash route `/home` (query allowed). Topic
+ * folders, content pages and other routes fail.
+ */
+export function isLearnHomeUrl(url: string): boolean {
+  if (!url) return false;
+  const hashAt = url.indexOf('#');
+  if (hashAt < 0) return false;
+  const route = url.slice(hashAt + 1).split('?')[0];
+  return /^\/home\/?$/.test(route);
+}
+
+/**
+ * Kolibri 0.15.5 exercise UI (upstream markup, not Kid testids).
+ * AssessmentWrapper: KButton "Check" → "Next" once the item is answered correctly.
+ * OverallStatus: `.overall-status-text .completed` ("Completed") when mastered.
+ * CompletionModal (first completion only): role=dialog "Resource completed",
+ * close KIconButton aria "Close", section button "Stay here".
+ * LearningActivityBar back: aria "Go back". LearnTopNav: "Home" link.
+ */
+export const EXERCISE_SELECTORS = {
+  check: ['button:text-is("Check")', 'button:has-text("Check")'],
+  next: ['button:text-is("Next")'],
+  completed: [
+    '[role="dialog"]:has-text("Resource completed")',
+    '.overall-status-text .completed',
+  ],
+  modalClose: [
+    '[role="dialog"] button[aria-label="Close"]',
+    '[role="dialog"] button:has-text("Stay here")',
+  ],
+  back: ['button[aria-label="Go back"]'],
+  homeLink: ['a[href*="#/home"]', 'a:text-is("Home")'],
+} as const;
+
+/** Perseus radio choice selectors: exact answer text first, then fixture index. */
+export function exerciseChoiceSelectors(answer: { correctChoiceText: string; correctChoiceIndex: number }): string[] {
+  const q = answer.correctChoiceText.replace(/"/g, '\\"');
+  return [
+    `.perseus-widget-radio li:has-text("${q}")`,
+    `#perseus li:has-text("${q}")`,
+    `.perseus-widget-radio input[type="radio"] >> nth=${answer.correctChoiceIndex}`,
+    `#perseus input[type="radio"] >> nth=${answer.correctChoiceIndex}`,
+  ];
+}
+
+const FINISH_SETTLE_MS = 20_000;
+const FINISH_MAX_ITEMS = 4;
+
+/**
+ * From the pinned exercise (kolibri_exercise) to Learn home (kolibri_home).
+ * 1. Must start on /topics/c/<exercise node> (loud-fail otherwise; no re-open).
+ * 2. Pick the fixture's correct choice, click Check, wait for Next (correct).
+ *    Repeat on the next item until completion shows (modal or "Completed").
+ * 3. Close the modal if shown, Go back, then Learn "Home" if not already home.
+ * Success only when completion was seen AND the URL is Learn #/home.
+ */
+export const runFinishExercise = async (
+  app: Page,
+  exercise: PinnedNode & {
+    logicalId: string;
+    correctChoiceText: string;
+    correctChoiceIndex: number;
+  },
+): Promise<void> => {
+  const tag = 'idea#166 finish_exercise';
+  const S = EXERCISE_SELECTORS;
+  const startUrl = app.url();
+  if (!urlHasPinnedVideo(startUrl, exercise)) {
+    throw new Error(
+      `${tag}: expected to start on ${exercise.logicalId} (/topics/c/${rawHex(exercise.nodeIdRaw)}) ` +
+        `after next_resource, but URL is ${startUrl || '(empty)'}. Not re-opening the exercise.`,
+    );
+  }
+
+  const choices = exerciseChoiceSelectors(exercise);
+  // Always answer at least one item, even if a prior run already mastered it.
+  let completed = false;
+  let attempts = 0;
+  const trail: string[] = [];
+
+  while (!completed && attempts < FINISH_MAX_ITEMS) {
+    attempts += 1;
+    const ready = await waitForFirstPresent(app, [...S.check, ...S.next], FINISH_SETTLE_MS);
+    if (!ready) {
+      throw new Error(
+        `${tag}: exercise controls (Check/Next) did not render on ${app.url()} within ` +
+          `${FINISH_SETTLE_MS}ms (item ${attempts}). Perseus may not have loaded.`,
+      );
+    }
+    if ((S.next as readonly string[]).includes(ready)) {
+      // Item already answered: move to a fresh one.
+      await app.locator(ready).first().click({ timeout: 8_000 });
+      trail.push(`item${attempts}:next(pre-answered)`);
+      continue;
+    }
+    const choice = await waitForFirstPresent(app, choices, FINISH_SETTLE_MS);
+    if (!choice) {
+      throw new Error(
+        `${tag}: no Perseus choice "${exercise.correctChoiceText}" on ${app.url()} (item ${attempts}; ` +
+          `tried ${choices.join(' | ')}).`,
+      );
+    }
+    await app.locator(choice).first().click({ timeout: 8_000, force: true });
+    await app.locator(ready).first().click({ timeout: 8_000 });
+    const correct = await waitForFirstPresent(app, [...S.next, ...S.completed], 10_000);
+    if (!correct) {
+      throw new Error(
+        `${tag}: Check on "${exercise.correctChoiceText}" (${choice}) did not mark item ${attempts} ` +
+          `correct (no Next / completion) on ${app.url()}.`,
+      );
+    }
+    trail.push(`item${attempts}:correct`);
+    completed = (await waitForFirstPresent(app, S.completed, 5_000)) !== null;
+    if (!completed) {
+      const nxt = await firstPresent(app, S.next);
+      if (nxt) await app.locator(nxt).first().click({ timeout: 8_000 });
+    }
+  }
+
+  if (!completed) {
+    throw new Error(
+      `${tag}: ${exercise.logicalId} answered ${attempts} item(s) (${trail.join(', ')}) but no completion ` +
+        `("Resource completed" modal or "Completed" status) on ${app.url()}.`,
+    );
+  }
+
+  const close = await firstPresent(app, S.modalClose);
+  if (close) await app.locator(close).first().click({ timeout: 8_000 });
+
+  if (!isLearnHomeUrl(app.url())) {
+    const back = await waitForFirstPresent(app, S.back, 5_000);
+    if (back) {
+      await app.locator(back).first().click({ timeout: 8_000 });
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline && urlHasPinnedVideo(app.url(), exercise)) {
+        await app.waitForTimeout(200);
+      }
+    }
+  }
+  if (!isLearnHomeUrl(app.url())) {
+    const home = await waitForFirstPresent(app, S.homeLink, 10_000);
+    if (home) await app.locator(home).first().click({ timeout: 8_000 });
+  }
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline && !isLearnHomeUrl(app.url())) {
+    await app.waitForTimeout(200);
+  }
+  if (!isLearnHomeUrl(app.url())) {
+    throw new Error(
+      `${tag}: exercise completed (${trail.join(', ') || 'already complete'}) but Go back / Home did ` +
+        `not reach Learn #/home (final ${app.url() || '(empty)'}).`,
+    );
+  }
+};
+
+/** finish_exercise: pinned exercise → completed → Learn home. */
+export const finish_exercise: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runFinishExercise(app, DURATION_FIXTURES.kolibri.exercise);
+};
+
 /** Open pinned Grade 5A video (Kid CONTENT.seeded + live @2313112 → open_video). */
 export const open_video: IntentFn = async ({ page, instanceId }) => {
   await runOpenContent(page, instanceId, DURATION_FIXTURES.kolibri.video, 'open_video');

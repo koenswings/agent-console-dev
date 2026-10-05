@@ -27,8 +27,9 @@
  * RestorePanel Backup Disk: duration-empty-001 after make_backup_disk (DURATION_BACKUP_DISK_ID).
  *
  * keep_watching is registered (URL stays on /topics/c/<video node id>). next_resource is
- * registered (video → exercise via Kolibri's resource panel). Other lesson chrome
- * (exit_lesson, finish_exercise, next_video) stays unregistered —
+ * registered (video → exercise via Kolibri's resource panel). finish_exercise is
+ * registered (answer "4", Check, completion, Learn home). Other lesson chrome
+ * (exit_lesson, next_video) stays unregistered —
  * Kid image has no lesson-chrome testids (`tests/duration-tests/LESSON_CHROME.md`).
  */
 
@@ -97,6 +98,12 @@ export const DURATION_FIXTURES = {
       nodeIdRaw: '94a47ec7f30d5cd193f8ad08c42b6c2a',
       title: 'Open exercise target',
       parentTopicNodeIdRaw: '63427029c7eb5e86b62a731d9564aa50',
+      /**
+       * Kid perseus exercise-grade5a-01 (randomize=false, m_of_n 1/1): both items
+       * are single-choice radios whose correct choice is "4" at index 1.
+       */
+      correctChoiceText: '4',
+      correctChoiceIndex: 1,
     },
     /**
      * Live auth from Kid CONTENT.live.json @2313112 (idea01).
