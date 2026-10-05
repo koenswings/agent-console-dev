@@ -21,6 +21,7 @@ import { attemptAppLogin } from './appLogin';
 import {
   APP_TAB_URL_RE,
   appKindForInstance,
+  appKindForUrl,
   resolveSidecarUrl,
   sidecarReadyTimeoutMs,
   isSidecarHttpReadyStatus,
@@ -28,6 +29,7 @@ import {
 } from './sidecarUrls';
 
 export {
+  appKindForUrl,
   resolveSidecarUrl,
   sidecarPort,
   SIDECAR_DEFAULT_PORTS,
@@ -37,19 +39,31 @@ export {
 } from './sidecarUrls';
 
 /**
- * Prefer an already-open App tab matching Kolibri/Nextcloud sidecar URLs.
+ * Prefer an already-open App tab (newest first). With `kind`, only a tab of that
+ * App counts: a leftover Kolibri tab is never returned for Nextcloud (r9).
  */
-export const resolveAppPage = (consolePage: Page): Page => {
+export const resolveAppPage = (consolePage: Page, kind?: SidecarApp): Page => {
   const pages = consolePage.context().pages();
   for (let i = pages.length - 1; i >= 0; i--) {
     const p = pages[i]!;
     try {
-      if (APP_TAB_URL_RE.test(p.url())) return p;
+      if (p.isClosed?.()) continue;
+      const url = p.url();
+      if (kind ? p !== consolePage && appKindForUrl(url) === kind : APP_TAB_URL_RE.test(url)) return p;
     } catch {
       /* page may be closed */
     }
   }
   return consolePage;
+};
+
+/** True when `p` is a tab of App `kind` (never the Console tab). */
+export const isAppTabOfKind = (p: Page, consolePage: Page, kind: SidecarApp): boolean => {
+  try {
+    return p !== consolePage && appKindForUrl(p.url()) === kind;
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -60,6 +74,7 @@ export const resolveAppPage = (consolePage: Page): Page => {
 export const tryOpenInstancePathA = async (
   page: Page,
   instanceId: string,
+  kind?: SidecarApp,
 ): Promise<Page | null> => {
   const openBtn = page.locator(sel.openInstance(instanceId));
   const count = await openBtn.count();
@@ -79,7 +94,7 @@ export const tryOpenInstancePathA = async (
     return popup;
   }
   // Same-tab navigation or link handled without popup
-  return resolveAppPage(page);
+  return resolveAppPage(page, kind);
 };
 
 /**
@@ -342,37 +357,33 @@ export const openAppInstance = async (
   const preferred = resolveStartInstanceId(instanceId);
   const kind = app ?? appKindForInstance(preferred);
 
-  // Already on an App tab?
-  const existing = resolveAppPage(page);
-  if (APP_TAB_URL_RE.test(existing.url())) return existing;
+  // Already on a tab of THIS App? (kind-aware: a leftover Kolibri tab after a
+  // mid-walk Kolibri segment is not Nextcloud; cover-all-8c8fe30-r9 FAIL@21.)
+  const existing = resolveAppPage(page, kind);
+  if (isAppTabOfKind(existing, page, kind)) return existing;
+
+  const pick = (opened: Page | null): Page | null => {
+    if (!opened) return null;
+    if (isAppTabOfKind(opened, page, kind)) return opened;
+    const landed = resolveAppPage(page, kind);
+    return isAppTabOfKind(landed, page, kind) ? landed : null;
+  };
 
   // Path A only when Open visible
-  const earlyA = await tryOpenInstancePathA(page, preferred);
-  if (earlyA) {
-    const landed = resolveAppPage(page);
-    if (earlyA !== page && APP_TAB_URL_RE.test(earlyA.url())) return earlyA;
-    if (APP_TAB_URL_RE.test(landed.url())) return landed;
-  }
+  const earlyA = pick(await tryOpenInstancePathA(page, preferred, kind));
+  if (earlyA) return earlyA;
 
   if (await hasConsoleStartControl(page, preferred)) {
     const id = await ensureInstanceRunningForOpen(page, preferred, kind);
-    const pathA = await tryOpenInstancePathA(page, id);
-    if (pathA) {
-      const landed = resolveAppPage(page);
-      if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
-      if (APP_TAB_URL_RE.test(landed.url())) return landed;
-    }
+    const pathA = pick(await tryOpenInstancePathA(page, id, kind));
+    if (pathA) return pathA;
     // Open still missing — Path B only after sidecar HTTP ready
     return openInstancePathB(page, kind);
   }
 
   // Classroom / no Start control — Path B waits sidecar ready
-  const pathA = await tryOpenInstancePathA(page, preferred);
-  if (pathA) {
-    const landed = resolveAppPage(page);
-    if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
-    if (APP_TAB_URL_RE.test(landed.url())) return landed;
-  }
+  const pathA = pick(await tryOpenInstancePathA(page, preferred, kind));
+  if (pathA) return pathA;
   return openInstancePathB(page, kind);
 };
 

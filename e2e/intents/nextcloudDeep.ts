@@ -13,7 +13,7 @@
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { DURATION_FIXTURES } from './fixtures';
-import { openAppInstance, resolveAppPage } from './openApp';
+import { appKindForUrl, openAppInstance, resolveAppPage } from './openApp';
 import { leaveAppToConsole } from './operatorDeepActions';
 
 const NC = DURATION_FIXTURES.nextcloud;
@@ -314,10 +314,9 @@ export const ncOpenClassRoot = async (app: Page, tag: string): Promise<string> =
   return ncOpenFolder(app, tag, NC.shareName);
 };
 
-/** True for a Nextcloud tab URL (sidecar :18280, /apps/…, NC login), never Kolibri. */
+/** True for a Nextcloud tab URL (sidecar :18280, /apps/…, /s/<token>, NC login), never Kolibri/Kiwix. */
 export function isNextcloudTabUrl(url: string): boolean {
-  if (!url || /\/(learn|coach|facility)\b|:1808\d/i.test(url)) return false;
-  return /:18280\b|nextcloud|\/apps\/|\/index\.php\/|\/login\b/i.test(url);
+  return !!url && appKindForUrl(url) === 'nextcloud';
 }
 
 /**
@@ -333,7 +332,7 @@ export const ncAppPage = (page: Page, tag: string): Page => {
       /* closed */
     }
   }
-  const fallback = resolveAppPage(page);
+  const fallback = resolveAppPage(page, 'nextcloud');
   if (fallback !== page && isNextcloudTabUrl(fallback.url())) return fallback;
   throw new Error(
     `${tag}: no Nextcloud tab open (tabs: ${pages.map((p) => p.url() || 'about:blank').join(', ')}). ` +
@@ -349,6 +348,13 @@ const openNextcloudVerified = async (
 ): Promise<void> => {
   const tag = `idea#166 open_nextcloud_as_${role}`;
   const app = await openAppInstance(page, instanceId ?? NC.instanceId, 'nextcloud');
+  // Never wait 20s for a login form on a non-Nextcloud tab (leftover Kolibri, Console).
+  if (app === page || !isNextcloudTabUrl(app.url())) {
+    throw new Error(
+      `${tag}: opened tab is not Nextcloud (${app === page ? 'Console tab' : app.url()}); ` +
+        `tabs: ${page.context().pages().map((p) => p.url() || 'about:blank').join(', ')}.`,
+    );
+  }
   await ensureNextcloudFiles(app, tag, NC.auth[role]);
 };
 

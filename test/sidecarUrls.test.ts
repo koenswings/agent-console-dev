@@ -8,6 +8,7 @@ import {
   SIDECAR_DEFAULT_PORTS,
   appKindForInstance,
   APP_TAB_URL_RE,
+  appKindForUrl,
 } from '../e2e/intents/sidecarUrls';
 
 describe('sidecarUrls (App-open Path B)', () => {
@@ -49,6 +50,26 @@ describe('sidecarUrls (App-open Path B)', () => {
   it('appKindForInstance maps fixture ids', () => {
     expect(appKindForInstance('kolibri-grade5a-001')).toBe('kolibri');
     expect(appKindForInstance('nextcloud-grade5a-001')).toBe('nextcloud');
+    expect(appKindForInstance('kiwix-ideaa-001')).toBe('kiwix');
+  });
+
+  it('appKindForUrl: ports and path markers; Kolibri leftover never nextcloud (r9)', () => {
+    const e = {};
+    // cover-all-8c8fe30-r9 FAIL@21 URL
+    expect(appKindForUrl('http://idea01:18080/en/device/#/content', e)).toBe('kolibri');
+    expect(appKindForUrl('http://idea01:18080/en/learn/#/home', e)).toBe('kolibri');
+    expect(appKindForUrl('http://idea03:18081/en/coach/#/classes', e)).toBe('kolibri');
+    expect(appKindForUrl('http://idea01:18280/apps/files/', e)).toBe('nextcloud');
+    expect(appKindForUrl('http://idea01:18280/login', e)).toBe('nextcloud');
+    expect(appKindForUrl('http://idea01:18280/apps/dashboard/', e)).toBe('nextcloud');
+    expect(appKindForUrl('http://idea01:18280/s/grade5adropzone', e)).toBe('nextcloud');
+    expect(appKindForUrl('http://idea01:18380/viewer#book/Main_Page', e)).toBe('kiwix');
+    expect(appKindForUrl('http://idea01:8080/', e)).toBeNull();
+    expect(appKindForUrl('about:blank', e)).toBeNull();
+    // env full-URL origin wins over port
+    expect(
+      appKindForUrl('http://custom:9999/apps/files/', { DURATION_NEXTCLOUD_URL: 'http://custom:9999' }),
+    ).toBe('nextcloud');
   });
 
   it('APP_TAB_URL_RE matches sidecar ports and app paths', () => {

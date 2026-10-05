@@ -18,8 +18,8 @@ const LESSON_TITLE = DURATION_FIXTURES.kolibri.live.lesson.title;
 
 /** Resolve Kolibri app tab; ensure teacher session when possible. */
 const ensureKolibriCoachPage = async (consolePage: Page): Promise<Page> => {
-  let app = resolveAppPage(consolePage);
-  if (!APP_TAB_URL_RE.test(app.url()) || /nextcloud|18280/i.test(app.url())) {
+  let app = resolveAppPage(consolePage, 'kolibri');
+  if (app === consolePage || !APP_TAB_URL_RE.test(app.url()) || /nextcloud|18280/i.test(app.url())) {
     app = await openAppInstance(
       consolePage,
       DURATION_FIXTURES.kolibri.instanceId,

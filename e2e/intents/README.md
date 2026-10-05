@@ -469,7 +469,7 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
 `tr[data-cy-files-list-row-name="<name>"]`, `[data-cy-files-list-row-name-link]`; folder state from the URL
 `/apps/files/files[/<id>]?dir=/<path>`.
 
-- **`open_nextcloud_as_teacher` / `open_nextcloud_as_learner`:** now prove sign-in (previously the Kolibri-style
+- **`open_nextcloud_as_teacher` / `open_nextcloud_as_learner`:** now prove sign-in (kind-aware App tab: a leftover Kolibri `:18080` tab after a mid-walk Kolibri segment is never treated as Nextcloud — cover-all-8c8fe30-r9) (previously the Kolibri-style
   login helper returned ok without checking). Passwords: Kid `CONTENT.live.json` (`TeacherGrade5A!`,
   `Student01Grade5A!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
   password=username tried once if refused. Success only with a signed-in Files list (header Files link clicked if NC

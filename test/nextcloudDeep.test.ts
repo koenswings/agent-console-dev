@@ -42,6 +42,7 @@ describe('Nextcloud URL helpers', () => {
     expect(isNextcloudTabUrl(filesUrl('/'))).toBe(true);
     expect(isNextcloudTabUrl(`${ORIGIN}/login`)).toBe(true);
     expect(isNextcloudTabUrl('http://idea01:18080/en/learn/#/home')).toBe(false);
+    expect(isNextcloudTabUrl('http://idea01:18080/en/device/#/content')).toBe(false); // cover-all r9 leftover
     expect(isNextcloudTabUrl('http://idea01:8080/')).toBe(false);
   });
 
