@@ -278,3 +278,262 @@ export const runBrowseFolders = async (app: Page): Promise<string[]> => {
 export const browse_folders: IntentFn = async ({ page }) => {
   await runBrowseFolders(ncAppPage(page, 'idea#166 browse_folders'));
 };
+
+/* ------------------------------------------------------------------------- */
+/* share_to_class (nc_browse → nc_share)                                      */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Nextcloud 31.0.1 sharing sidebar markup (apps/files_sharing + apps/files
+ * sources at v31.0.1; same hooks as upstream cypress/e2e/files_sharing):
+ *   - row inline action  [data-cy-files-list-row-action="sharing-status"]
+ *   - row menu fallback  button "Actions" → [data-cy-files-list-row-action="details"]
+ *   - sidebar            [data-cy-sidebar], tab [aria-controls="tab-sharing"]
+ *   - sharee search      #sharing-search-input (NcSelect, disabled when !canReshare)
+ *   - share entries      li.sharing-entry, title "<name> (group)",
+ *                        .share-select aria-label 'Quick share options, the current selected is "View only"'
+ *   - details editor     .sharingTabDetailsView h1 ("Share with group"),
+ *                        [data-cy-files-sharing-share-permissions-bundle="read-only"],
+ *                        [data-cy-files-sharing-share-editor-action="save"]
+ */
+export const NC_SHARE_SELECTORS = {
+  rowShareAction: '[data-cy-files-list-row-action="sharing-status"]',
+  rowActionsButton: 'button[aria-label="Actions"]',
+  menuDetails: '[data-cy-files-list-row-action="details"]',
+  sidebar: ['[data-cy-sidebar]', '#app-sidebar-vue'],
+  sharingTab: '[aria-controls="tab-sharing"]',
+  search: '#sharing-search-input',
+  option: '.vs__dropdown-menu [role="option"]',
+  entry: 'li.sharing-entry',
+  entryTitle: '.sharing-entry__summary__desc',
+  entryQuickSelect: '.share-select',
+  entryDetails: '[data-cy-files-sharing-share-actions]',
+  details: '.sharingTabDetailsView',
+  detailsTitle: '.sharingTabDetailsView h1',
+  readOnly: '[data-cy-files-sharing-share-permissions-bundle="read-only"]',
+  save: '[data-cy-files-sharing-share-editor-action="save"]',
+} as const;
+
+/** Title NC 31 renders for a group share entry (SharingEntry.vue `title`). */
+export const ncGroupShareTitle = (group: string): string => `${group} (group)`;
+
+/** True when a sharing entry's text/aria names exactly this group share (owner suffix allowed). */
+export function isGroupShareEntryText(text: string, group: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  const want = ncGroupShareTitle(group);
+  return t === want || t.startsWith(`${want} `);
+}
+
+/** Selected bundle from the quick-share select aria-label / text, or null. */
+export function ncQuickShareSelected(label: string): string | null {
+  const m = /current selected is "([^"]+)"/.exec(label);
+  if (m) return m[1]!;
+  const t = label.replace(/\s+/g, ' ').trim();
+  return t || null;
+}
+
+/** OCS failure text from a files_sharing API JSON body (or null). */
+export function ncOcsFailure(status: number, body: unknown): string | null {
+  const meta = (body as { ocs?: { meta?: { status?: string; statuscode?: number; message?: string } } })?.ocs?.meta;
+  if (status < 400 && (!meta || meta.status === 'ok' || (meta.statuscode ?? 200) < 400)) return null;
+  return `HTTP ${status}${meta?.statuscode ? ` / OCS ${meta.statuscode}` : ''}${meta?.message ? `: ${meta.message}` : ''}`;
+}
+
+/** Signed-in Nextcloud uid from <head data-user> (core layout.user.php). */
+export const ncSignedInUser = async (app: Page): Promise<string | null> => {
+  const uid = await app.locator('head').first().getAttribute('data-user').catch(() => null);
+  return uid && uid.trim() ? uid.trim() : null;
+};
+
+const SHARE_API = /\/ocs\/v[12]\.php\/apps\/files_sharing\/api\/v1\/shares(\/\d+)?(\?|$)/;
+
+const firstVisible = async (app: Page, selectors: readonly string[]): Promise<string | null> => {
+  for (const s of selectors) {
+    if (await app.locator(s).first().isVisible().catch(() => false)) return s;
+  }
+  return null;
+};
+
+/** Open the Files sidebar on the Sharing tab for a row (inline Share icon, else Actions → Details). */
+export const ncOpenSharingSidebar = async (app: Page, tag: string, name: string): Promise<string> => {
+  const row = app.locator(ncRowSelector(name)).first();
+  if (!(await waitFor(async () => (await row.count().catch(() => 0)) > 0, app, SETTLE_MS))) {
+    throw new Error(`${tag}: "${name}" not listed in ${ncFilesDir(app.url())} (rows: ${await rowNames(app)}).`);
+  }
+  const inline = row.locator(NC_SHARE_SELECTORS.rowShareAction).first();
+  if ((await inline.count().catch(() => 0)) > 0 && (await inline.isVisible().catch(() => false))) {
+    await inline.click({ timeout: 8_000 });
+  } else {
+    const menu = row.locator(NC_SHARE_SELECTORS.rowActionsButton).first();
+    if ((await menu.count().catch(() => 0)) === 0) {
+      throw new Error(`${tag}: "${name}" row has neither a Share action nor an Actions menu (${app.url()}).`);
+    }
+    await menu.click({ timeout: 8_000 });
+    const details = app.locator(`${NC_SHARE_SELECTORS.menuDetails} button, button${NC_SHARE_SELECTORS.menuDetails}`).last();
+    if (!(await waitFor(async () => details.isVisible().catch(() => false), app, 8_000))) {
+      throw new Error(`${tag}: Actions menu for "${name}" has no "Details" entry (${app.url()}).`);
+    }
+    await details.click({ timeout: 8_000 });
+  }
+  let sidebar: string | null = null;
+  if (!(await waitFor(async () => (sidebar = await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) !== null, app, SETTLE_MS))) {
+    throw new Error(`${tag}: Files sidebar did not open for "${name}" (${app.url()}).`);
+  }
+  const side = app.locator(sidebar!).first();
+  if (!(await waitFor(async () => ((await side.innerText().catch(() => '')) ?? '').includes(name), app, 8_000))) {
+    throw new Error(`${tag}: sidebar opened but is not for "${name}" (${app.url()}).`);
+  }
+  const tab = side.locator(NC_SHARE_SELECTORS.sharingTab).first();
+  if ((await tab.count().catch(() => 0)) === 0) {
+    throw new Error(`${tag}: sidebar for "${name}" has no Sharing tab (files_sharing disabled?) (${app.url()}).`);
+  }
+  if ((await tab.getAttribute('aria-selected').catch(() => null)) !== 'true') {
+    await tab.click({ timeout: 8_000 });
+  }
+  const ready = await waitFor(
+    async () =>
+      (await side.locator(NC_SHARE_SELECTORS.search).count().catch(() => 0)) > 0 ||
+      (await side.locator(NC_SHARE_SELECTORS.entry).count().catch(() => 0)) > 0,
+    app,
+    SETTLE_MS,
+  );
+  if (!ready) throw new Error(`${tag}: Sharing tab for "${name}" did not render (${app.url()}).`);
+  return sidebar!;
+};
+
+/** The sharing entry for a group, or null. */
+const groupEntry = async (app: Page, sidebar: string, group: string) => {
+  const entries = app.locator(`${sidebar} ${NC_SHARE_SELECTORS.entry}`);
+  const n = await entries.count().catch(() => 0);
+  for (let i = 0; i < n; i++) {
+    const e = entries.nth(i);
+    const text = (await e.locator(NC_SHARE_SELECTORS.entryTitle).first().innerText().catch(() => '')) ?? '';
+    if (isGroupShareEntryText(text, group)) return e;
+  }
+  return null;
+};
+
+const entryTitles = async (app: Page, sidebar: string): Promise<string> => {
+  const t = await app
+    .locator(`${sidebar} ${NC_SHARE_SELECTORS.entry} ${NC_SHARE_SELECTORS.entryTitle}`)
+    .allInnerTexts()
+    .catch(() => [] as string[]);
+  return t.length ? t.map((s) => s.trim()).join(' | ') : '(none)';
+};
+
+/**
+ * share_to_class: teacher shares Class Materials with group Grade 5A, View only,
+ * through the Files sharing sidebar. Creates the share, or (repeat walk) opens
+ * the existing group share and re-saves it as View only. Success = the group
+ * entry's quick-share select reads "View only" and the OCS save did not fail.
+ * Ends on nc_share (sidebar open on the Sharing tab).
+ */
+export const runShareToClass = async (app: Page): Promise<'created' | 'updated'> => {
+  const tag = 'idea#166 share_to_class';
+  const group = NC.group;
+  const folder = NC.folders.materials;
+  await ensureNextcloudFiles(app, tag, null);
+  const uid = await ncSignedInUser(app);
+  if (uid !== NC.auth.teacher.username) {
+    throw new Error(
+      `${tag}: needs the teacher session; Nextcloud is signed in as ${uid ?? '(unknown)'} (${app.url()}). ` +
+        `Run open_nextcloud_as_teacher first.`,
+    );
+  }
+  await ncOpenClassRoot(app, tag);
+  const sidebar = await ncOpenSharingSidebar(app, tag, folder);
+  const side = app.locator(sidebar).first();
+
+  const existing = await groupEntry(app, sidebar, group);
+  let mode: 'created' | 'updated';
+  if (existing) {
+    mode = 'updated';
+    const btn = existing.locator(NC_SHARE_SELECTORS.entryDetails).first();
+    if ((await btn.count().catch(() => 0)) === 0) {
+      throw new Error(`${tag}: existing "${ncGroupShareTitle(group)}" share on "${folder}" is not editable by ${uid}.`);
+    }
+    await btn.click({ timeout: 8_000 });
+  } else {
+    mode = 'created';
+    const search = side.locator(NC_SHARE_SELECTORS.search).first();
+    if ((await search.count().catch(() => 0)) === 0) {
+      throw new Error(`${tag}: no sharee search on "${folder}" (shares: ${await entryTitles(app, sidebar)}).`);
+    }
+    if (await search.isDisabled().catch(() => false)) {
+      throw new Error(
+        `${tag}: Nextcloud does not allow sharing "${folder}" (sharee search disabled; resharing not permitted). ` +
+          `If it lives on the Files Disk mount "${NC.shareName}", the files_external mount needs enable_sharing (Kid fixture).`,
+      );
+    }
+    await search.click({ timeout: 8_000 });
+    await search.pressSequentially(group, { delay: 40 });
+    const option = app.locator(NC_SHARE_SELECTORS.option).filter({ has: app.getByText(group, { exact: true }) }).first();
+    if (!(await waitFor(async () => option.isVisible().catch(() => false), app, SETTLE_MS))) {
+      const offered = await app.locator(NC_SHARE_SELECTORS.option).allInnerTexts().catch(() => [] as string[]);
+      throw new Error(
+        `${tag}: group "${group}" not offered by sharee search (offered: ${offered.map((s) => s.replace(/\s+/g, ' ').trim()).join(' | ') || '(none)'}).`,
+      );
+    }
+    await option.click({ timeout: 8_000 });
+  }
+
+  const details = side.locator(NC_SHARE_SELECTORS.details).first();
+  if (!(await waitFor(async () => details.isVisible().catch(() => false), app, SETTLE_MS))) {
+    throw new Error(`${tag}: share details editor did not open for "${group}" (${mode}).`);
+  }
+  const h1 = ((await side.locator(NC_SHARE_SELECTORS.detailsTitle).first().innerText().catch(() => '')) ?? '').trim();
+  if (mode === 'created' && h1 !== 'Share with group') {
+    throw new Error(`${tag}: picked a non-group sharee for "${group}" (editor title "${h1}").`);
+  }
+  const ro = side.locator(NC_SHARE_SELECTORS.readOnly).first();
+  if ((await ro.count().catch(() => 0)) === 0) {
+    throw new Error(`${tag}: share editor has no "View only" option (${NC_SHARE_SELECTORS.readOnly}).`);
+  }
+  await ro.click({ timeout: 8_000 });
+  const radio = ro.locator('input[type="radio"]').first();
+  if (!(await waitFor(async () => radio.isChecked().catch(() => false), app, 5_000))) {
+    throw new Error(`${tag}: clicked "View only" but the permission radio is not checked.`);
+  }
+
+  const saved = app
+    .waitForResponse((r) => SHARE_API.test(r.url()) && ['POST', 'PUT'].includes(r.request().method()), { timeout: SETTLE_MS })
+    .catch(() => null);
+  await side.locator(NC_SHARE_SELECTORS.save).first().click({ timeout: 8_000 });
+  const resp = await saved;
+  if (resp) {
+    const failure = ncOcsFailure(resp.status(), await resp.json().catch(() => null));
+    if (failure) throw new Error(`${tag}: Nextcloud rejected the ${mode === 'created' ? 'new' : 'updated'} share of "${folder}" with "${group}" (${failure}).`);
+  } else if (mode === 'created') {
+    throw new Error(`${tag}: Save sent no share request to Nextcloud within ${SETTLE_MS}ms.`);
+  }
+
+  let label = '';
+  const proven = await waitFor(
+    async () => {
+      if (await details.isVisible().catch(() => false)) return false;
+      const e = await groupEntry(app, sidebar, group);
+      if (!e) return false;
+      const qs = e.locator(NC_SHARE_SELECTORS.entryQuickSelect).first();
+      // NcActions puts the aria-label on its toggle button; the root shows the name.
+      const aria =
+        (await qs.getAttribute('aria-label').catch(() => null)) ??
+        (await qs.locator('[aria-label*="current selected"]').first().getAttribute('aria-label').catch(() => null)) ??
+        '';
+      label = aria || ((await qs.innerText().catch(() => '')) ?? '');
+      return ncQuickShareSelected(label) === 'View only';
+    },
+    app,
+    SETTLE_MS,
+  );
+  if (!proven) {
+    throw new Error(
+      `${tag}: after Save, "${ncGroupShareTitle(group)}" is not shown as View only on "${folder}" ` +
+        `(quick-share "${ncQuickShareSelected(label) ?? '(missing)'}"; shares: ${await entryTitles(app, sidebar)}).`,
+    );
+  }
+  return mode;
+};
+
+export const share_to_class: IntentFn = async ({ page }) => {
+  await runShareToClass(ncAppPage(page, 'idea#166 share_to_class'));
+};

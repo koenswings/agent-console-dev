@@ -7,6 +7,11 @@ import {
   ncFilesDir,
   ncPasswordCandidates,
   runBrowseFolders,
+  runShareToClass,
+  isGroupShareEntryText,
+  ncGroupShareTitle,
+  ncOcsFailure,
+  ncQuickShareSelected,
 } from '../e2e/intents/nextcloudDeep';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
 
@@ -41,7 +46,7 @@ describe('Nextcloud URL helpers', () => {
 });
 
 /** Fake Nextcloud tab: login page + Files folders keyed by dir. */
-function fakeNextcloud(opts: { start: 'login' | 'files' | 'dashboard'; accept?: string[]; tree: Record<string, string[]> }) {
+function fakeNextcloud(opts: { start: 'login' | 'files' | 'dashboard'; accept?: string[]; tree: Record<string, string[]>; uid?: string }) {
   let url = opts.start === 'login' ? `${ORIGIN}/login` : opts.start === 'files' ? filesUrl('/') : `${ORIGIN}/apps/dashboard/`;
   const fields: Record<string, string> = {};
   const clicks: string[] = [];
@@ -71,6 +76,9 @@ function fakeNextcloud(opts: { start: 'login' | 'files' | 'dashboard'; accept?: 
         },
         async fill(v: string) {
           fields[sel] = v;
+        },
+        async getAttribute(name: string) {
+          return sel === 'head' && name === 'data-user' ? (opts.uid ?? null) : null;
         },
         async click() {
           if (!present(sel)) throw new Error(`not present: ${sel}`);
@@ -173,5 +181,50 @@ describe('runBrowseFolders', () => {
   it('loud-fails naming the missing folder', async () => {
     const { page } = fakeNextcloud({ start: 'files', tree: { '/': ['Class Materials', 'Collab'] } });
     await expect(runBrowseFolders(page)).rejects.toThrow(/folder "Drop Zone" not listed in \/ .*rows: Class Materials, Collab/);
+  });
+});
+
+describe('share_to_class helpers (NC 31.0.1 sharing markup)', () => {
+  it('group entry title matches SharingEntry.vue "<name> (group)", owner suffix allowed', () => {
+    expect(ncGroupShareTitle('Grade 5A')).toBe('Grade 5A (group)');
+    expect(isGroupShareEntryText(' Grade 5A (group)\n', 'Grade 5A')).toBe(true);
+    expect(isGroupShareEntryText('Grade 5A (group) by admin', 'Grade 5A')).toBe(true);
+    expect(isGroupShareEntryText('Grade 5AB (group)', 'Grade 5A')).toBe(false);
+    expect(isGroupShareEntryText('Grade 5A', 'Grade 5A')).toBe(false);
+  });
+
+  it('reads the quick-share selection from aria-label or visible name', () => {
+    expect(ncQuickShareSelected('Quick share options, the current selected is "View only"')).toBe('View only');
+    expect(ncQuickShareSelected('Quick share options, the current selected is "Can edit"')).toBe('Can edit');
+    expect(ncQuickShareSelected(' View only ')).toBe('View only');
+    expect(ncQuickShareSelected('')).toBeNull();
+  });
+
+  it('ncOcsFailure surfaces HTTP / OCS errors, passes ok', () => {
+    expect(ncOcsFailure(200, { ocs: { meta: { status: 'ok', statuscode: 200 } } })).toBeNull();
+    expect(ncOcsFailure(403, { ocs: { meta: { status: 'failure', statuscode: 403, message: 'Sharing is not allowed' } } })).toBe(
+      'HTTP 403 / OCS 403: Sharing is not allowed',
+    );
+    expect(ncOcsFailure(200, { ocs: { meta: { status: 'failure', statuscode: 404, message: 'Wrong path' } } })).toMatch(/OCS 404: Wrong path/);
+    expect(ncOcsFailure(500, null)).toBe('HTTP 500');
+  });
+});
+
+describe('runShareToClass guards', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T14:20:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('loud-fails on a learner session before touching the sharing UI', async () => {
+    const { page, clicks } = fakeNextcloud({ start: 'files', uid: 'student01', tree: { '/': ['Class Materials'] } });
+    await expect(runShareToClass(page)).rejects.toThrow(/needs the teacher session; Nextcloud is signed in as student01/);
+    expect(clicks).toEqual([]);
+  });
+
+  it('loud-fails on the login page (no role guessing)', async () => {
+    const { page } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {} });
+    await expect(runShareToClass(page)).rejects.toThrow(/not signed in/);
   });
 });

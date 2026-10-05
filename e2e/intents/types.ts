@@ -40,6 +40,7 @@ export const CONSOLE_INTENT_NAMES = [
   'open_nextcloud_as_teacher',
   'open_nextcloud_as_learner',
   'browse_folders',
+  'share_to_class',
   // Phase 5 — Kolibri content (Kid @0bca699 CONTENT.seeded.json)
   'open_video',
   'keep_watching',

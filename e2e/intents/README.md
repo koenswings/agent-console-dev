@@ -479,6 +479,17 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   (`shareName` "Grade 5A Files", from the `10-idea-files.sh` external storage). Opens Class Materials, Drop Zone and
   Collab in turn by clicking their rows, each proven by `dir`, returning to the class root between them via the root
   breadcrumb. Loud-fail includes the row names actually listed.
-- Still to do in later tips: `share_to_class`, `done_sharing`, `back_to_console_from_share`, `open_file_drop`,
+- **`share_to_class` (nc_browse → nc_share, teacher):** loud-fail unless `<head data-user>` is the fixture teacher.
+  From the class root, opens the Class Materials row's inline Share action (`[data-cy-files-list-row-action="sharing-status"]`,
+  else Actions → Details) → sidebar `[data-cy-sidebar]` → Sharing tab `[aria-controls="tab-sharing"]`. New share: type
+  "Grade 5A" in `#sharing-search-input`, pick that `[role="option"]`, editor must read "Share with group". Repeat walk: the
+  existing "Grade 5A (group)" entry → `[data-cy-files-sharing-share-actions]`. Then
+  `[data-cy-files-sharing-share-permissions-bundle="read-only"]` (radio must be checked) →
+  `[data-cy-files-sharing-share-editor-action="save"]`. Success = the files_sharing OCS POST/PUT did not fail **and**
+  the group entry's quick-share select reads "View only". Ends with the sidebar still open on Sharing (nc_share).
+  Disabled sharee search = loud-fail. **Fixture note:** files_external mounts default `enable_sharing=false`
+  (NC 31 `StorageConfig`), so if Class Materials is on the "Grade 5A Files" mount, Kid's `10-idea-files.sh` must set
+  `enable_sharing true` or this Intent fails (by design).
+- Still to do in later tips: `done_sharing`, `back_to_console_from_share`, `open_file_drop`,
   `after_upload`, `leave_file_drop`, `open_collab_doc`, `close_doc`. `keep_editing` is blocked on Kid's Collabora pack
   (walker-ref `blocked_until_collabora`).
