@@ -8,6 +8,7 @@ import {
   ncPasswordCandidates,
   runBrowseFolders,
   runShareToClass,
+  runDoneSharing,
   isGroupShareEntryText,
   ncGroupShareTitle,
   ncOcsFailure,
@@ -226,5 +227,86 @@ describe('runShareToClass guards', () => {
   it('loud-fails on the login page (no role guessing)', async () => {
     const { page } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {} });
     await expect(runShareToClass(page)).rejects.toThrow(/not signed in/);
+  });
+});
+
+/** Fake NC tab in nc_share: Files dir + sidebar (Sharing tab / editor / close button). */
+function fakeShareState(o: { uid?: string; sidebar?: boolean; tab?: boolean; editor?: boolean; stuck?: boolean }) {
+  const url = filesUrl('/Grade 5A Files');
+  const s = { sidebar: o.sidebar ?? true, tab: o.tab ?? true, editor: o.editor ?? false };
+  const clicks: string[] = [];
+  const visible = (sel: string): boolean => {
+    if (sel.endsWith('[data-cy-sidebar]') || sel.endsWith('#app-sidebar-vue')) return s.sidebar;
+    if (!s.sidebar && sel.startsWith('[data-cy-sidebar] ')) return false;
+    if (sel.endsWith('.sharingTabDetailsView')) return s.editor;
+    if (sel.endsWith('.app-sidebar__close')) return s.sidebar;
+    if (sel.endsWith('[aria-controls="tab-sharing"]')) return s.sidebar;
+    if (sel === '[data-cy-files-content-breadcrumbs]') return true;
+    return false;
+  };
+  const L = (sel: string): unknown => ({
+    first: () => L(sel),
+    locator: (sub: string) => L(`${sel} ${sub}`),
+    count: async () => (visible(sel) ? 1 : 0),
+    isVisible: async () => visible(sel),
+    getAttribute: async (name: string) => {
+      if (sel === 'head' && name === 'data-user') return o.uid ?? 'teacher';
+      if (sel.endsWith('[aria-controls="tab-sharing"]') && name === 'aria-selected') return s.tab ? 'true' : 'false';
+      return null;
+    },
+    click: async () => {
+      if (!visible(sel)) throw new Error(`not visible: ${sel}`);
+      clicks.push(sel);
+      if (sel.endsWith('.app-sidebar__close') && !o.stuck) s.sidebar = false;
+    },
+  });
+  const page = {
+    url: () => url,
+    waitForTimeout: async (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+    },
+    locator: (sel: string) => L(sel),
+  };
+  return { page: page as unknown as Page, clicks, s };
+}
+
+describe('runDoneSharing (nc_share → nc_browse)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T14:30:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('closes the sharing sidebar and stays in the same Files folder', async () => {
+    const { page, clicks, s } = fakeShareState({});
+    expect(await runDoneSharing(page)).toBe('/Grade 5A Files');
+    expect(s.sidebar).toBe(false);
+    expect(clicks).toEqual(['[data-cy-sidebar] .app-sidebar__close']);
+  });
+
+  it('loud-fails when no sidebar is open (not nc_share)', async () => {
+    const { page } = fakeShareState({ sidebar: false });
+    await expect(runDoneSharing(page)).rejects.toThrow(/not in nc_share: no Files sidebar open.*share_to_class first/);
+  });
+
+  it('loud-fails when the sidebar is not on the Sharing tab', async () => {
+    const { page } = fakeShareState({ tab: false });
+    await expect(runDoneSharing(page)).rejects.toThrow(/not on the Sharing tab/);
+  });
+
+  it('loud-fails while the share editor is still open (unsaved)', async () => {
+    const { page, clicks } = fakeShareState({ editor: true });
+    await expect(runDoneSharing(page)).rejects.toThrow(/share editor still open/);
+    expect(clicks).toEqual([]);
+  });
+
+  it('loud-fails on a learner session', async () => {
+    const { page } = fakeShareState({ uid: 'student01' });
+    await expect(runDoneSharing(page)).rejects.toThrow(/teacher state; Nextcloud is signed in as student01/);
+  });
+
+  it('loud-fails when Close sidebar does not close it', async () => {
+    const { page } = fakeShareState({ stuck: true });
+    await expect(runDoneSharing(page)).rejects.toThrow(/still open/);
   });
 });

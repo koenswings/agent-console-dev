@@ -7,7 +7,8 @@
  * next_video is registered (exercise → video via the resource panel).
  * exit_lesson is registered (video/exercise → Learn home via Kolibri chrome).
  * Nextcloud: open_nextcloud_as_* now prove a signed-in Files list; browse_folders
- * registered; share_to_class registered (sharing sidebar → group Grade 5A, View only).
+ * registered; share_to_class registered (sharing sidebar → group Grade 5A, View only);
+ * done_sharing / back_to_console_from_share leave nc_share.
  * open_wikipedia_* stay unregistered.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
@@ -31,6 +32,8 @@ import {
   open_nextcloud_as_learner,
   open_nextcloud_as_teacher,
   share_to_class,
+  done_sharing,
+  back_to_console_from_share,
 } from './nextcloudDeep';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
 import {
@@ -112,6 +115,8 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_nextcloud_as_learner,
   browse_folders,
   share_to_class,
+  done_sharing,
+  back_to_console_from_share,
   open_video,
   keep_watching,
   next_resource,

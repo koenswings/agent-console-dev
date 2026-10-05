@@ -490,6 +490,13 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   Disabled sharee search = loud-fail. **Fixture note:** files_external mounts default `enable_sharing=false`
   (NC 31 `StorageConfig`), so if Class Materials is on the "Grade 5A Files" mount, Kid's `10-idea-files.sh` must set
   `enable_sharing true` or this Intent fails (by design).
-- Still to do in later tips: `done_sharing`, `back_to_console_from_share`, `open_file_drop`,
+- **`done_sharing` (nc_share → nc_browse):** nc_share is asserted first: teacher uid, Files sidebar open with
+  `[aria-controls="tab-sharing"]` `aria-selected="true"`, share editor closed. Otherwise loud-fail. Clicks NcAppSidebar
+  `.app-sidebar__close` ("Close sidebar", @nextcloud/vue 8.23.1). Success = sidebar gone and Files still browsing the
+  same `dir`.
+- **`back_to_console_from_share` (nc_share → console_teacher):** same nc_share assertion, then the shared
+  `leaveAppToConsole` (close app tabs, prove `console-overview`) used by `leave_nextcloud_as_teacher`, and the
+  Nextcloud tab must be closed. (No App spec for this name; semantics from the action name + nc_share.)
+- Still to do in later tips: `open_file_drop`,
   `after_upload`, `leave_file_drop`, `open_collab_doc`, `close_doc`. `keep_editing` is blocked on Kid's Collabora pack
   (walker-ref `blocked_until_collabora`).

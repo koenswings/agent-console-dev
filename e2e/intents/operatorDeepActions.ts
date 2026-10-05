@@ -1620,7 +1620,7 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
  * Back to Console / Leave Kolibri / Leave Nextcloud —
  * Close App tab if present; assert Console overview (teacher/learner) or op_overview.
  */
-const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise<void> => {
+export const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise<void> => {
   const pages = page.context().pages();
   for (const p of pages) {
     try {

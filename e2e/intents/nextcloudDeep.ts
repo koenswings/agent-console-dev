@@ -14,6 +14,7 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { DURATION_FIXTURES } from './fixtures';
 import { openAppInstance, resolveAppPage } from './openApp';
+import { leaveAppToConsole } from './operatorDeepActions';
 
 const NC = DURATION_FIXTURES.nextcloud;
 const SETTLE_MS = 20_000;
@@ -312,6 +313,8 @@ export const NC_SHARE_SELECTORS = {
   detailsTitle: '.sharingTabDetailsView h1',
   readOnly: '[data-cy-files-sharing-share-permissions-bundle="read-only"]',
   save: '[data-cy-files-sharing-share-editor-action="save"]',
+  /** NcAppSidebar (@nextcloud/vue 8.23.1) close button: NcButton.app-sidebar__close, aria-label "Close sidebar". */
+  sidebarClose: ['.app-sidebar__close', 'button[aria-label="Close sidebar"]'],
 } as const;
 
 /** Title NC 31 renders for a group share entry (SharingEntry.vue `title`). */
@@ -536,4 +539,83 @@ export const runShareToClass = async (app: Page): Promise<'created' | 'updated'>
 
 export const share_to_class: IntentFn = async ({ page }) => {
   await runShareToClass(ncAppPage(page, 'idea#166 share_to_class'));
+};
+
+/* ------------------------------------------------------------------------- */
+/* done_sharing / back_to_console_from_share (leave nc_share)                 */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * nc_share precondition: teacher session, Files sidebar open on the Sharing tab,
+ * share editor closed (share_to_class saved). Returns the sidebar selector.
+ */
+export const ncAssertShareState = async (app: Page, tag: string): Promise<string> => {
+  await ensureNextcloudFiles(app, tag, null);
+  const uid = await ncSignedInUser(app);
+  if (uid !== NC.auth.teacher.username) {
+    throw new Error(`${tag}: nc_share is a teacher state; Nextcloud is signed in as ${uid ?? '(unknown)'} (${app.url()}).`);
+  }
+  const sidebar = await firstVisible(app, NC_SHARE_SELECTORS.sidebar);
+  if (!sidebar) {
+    throw new Error(`${tag}: not in nc_share: no Files sidebar open (${app.url()}). Run share_to_class first.`);
+  }
+  const side = app.locator(sidebar).first();
+  const tab = side.locator(NC_SHARE_SELECTORS.sharingTab).first();
+  if ((await tab.getAttribute('aria-selected').catch(() => null)) !== 'true') {
+    throw new Error(`${tag}: not in nc_share: Files sidebar is open but not on the Sharing tab (${app.url()}).`);
+  }
+  if (await side.locator(NC_SHARE_SELECTORS.details).first().isVisible().catch(() => false)) {
+    throw new Error(`${tag}: share editor still open (unsaved share); share_to_class did not finish (${app.url()}).`);
+  }
+  return sidebar;
+};
+
+/** done_sharing (nc_share → nc_browse): close the sharing sidebar; Files list stays in the same folder. */
+export const runDoneSharing = async (app: Page): Promise<string> => {
+  const tag = 'idea#166 done_sharing';
+  const sidebar = await ncAssertShareState(app, tag);
+  const dir = ncFilesDir(app.url());
+  const side = app.locator(sidebar).first();
+  let close: string | null = null;
+  for (const s of NC_SHARE_SELECTORS.sidebarClose) {
+    if (await side.locator(s).first().isVisible().catch(() => false)) {
+      close = s;
+      break;
+    }
+  }
+  if (!close) throw new Error(`${tag}: sharing sidebar has no "Close sidebar" button (${app.url()}).`);
+  await side.locator(close).first().click({ timeout: 8_000 });
+  const closed = await waitFor(async () => (await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) === null, app, SETTLE_MS);
+  if (!closed) throw new Error(`${tag}: clicked "Close sidebar" but the Files sidebar is still open (${app.url()}).`);
+  const browse = await waitFor(
+    async () => ncFilesDir(app.url()) === dir && (await app.locator(NC_SELECTORS.breadcrumbs).count().catch(() => 0)) > 0,
+    app,
+    SETTLE_MS,
+  );
+  if (!browse) {
+    throw new Error(`${tag}: after closing the sidebar Files is not browsing ${dir} (now ${ncFilesDir(app.url())}; ${app.url()}).`);
+  }
+  return dir!;
+};
+
+export const done_sharing: IntentFn = async ({ page }) => {
+  await runDoneSharing(ncAppPage(page, 'idea#166 done_sharing'));
+};
+
+/**
+ * back_to_console_from_share (nc_share → console_teacher): from the open sharing
+ * sidebar, leave Nextcloud the same way as leave_nextcloud_as_teacher (close the
+ * app tab, prove the Console overview). Loud-fail if not in nc_share first.
+ */
+export const back_to_console_from_share: IntentFn = async ({ page }) => {
+  const tag = 'idea#166 back_to_console_from_share';
+  const app = ncAppPage(page, tag);
+  if (app === page) {
+    throw new Error(`${tag}: Nextcloud is not in its own tab; cannot leave it without closing the Console.`);
+  }
+  await ncAssertShareState(app, tag);
+  await leaveAppToConsole(page);
+  if (!app.isClosed()) {
+    throw new Error(`${tag}: Nextcloud tab still open after leaving to the Console (${app.url()}).`);
+  }
 };

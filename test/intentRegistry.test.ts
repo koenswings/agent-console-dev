@@ -35,6 +35,8 @@ const LOCKED = [
   'exit_lesson',
   'browse_folders',
   'share_to_class',
+  'done_sharing',
+  'back_to_console_from_share',
   'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
@@ -151,6 +153,8 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('exit_lesson')).toBe(true);
     expect(hasDurationIntent('browse_folders')).toBe(true);
     expect(hasDurationIntent('share_to_class')).toBe(true);
+    expect(hasDurationIntent('done_sharing')).toBe(true);
+    expect(hasDurationIntent('back_to_console_from_share')).toBe(true);
   });
 
   it('does not register deferred usage / Kiwix / lesson-chrome Intents', () => {
