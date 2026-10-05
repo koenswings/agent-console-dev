@@ -242,4 +242,19 @@ describe('SettingsPanel', () => {
     });
     expect(changePassword).not.toHaveBeenCalled();
   });
+
+  it('exposes settings-engine-status and Change Engine… when onChangeEngine set', () => {
+    const onChangeEngine = vi.fn();
+    render(() => <SettingsPanel {...defaultProps()} onChangeEngine={onChangeEngine} />);
+    expect(screen.getByTestId('settings-engine-status')).toBeInTheDocument();
+    const btn = screen.getByTestId('switch-engine-connect');
+    fireEvent.click(btn);
+    expect(onChangeEngine).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides Change Engine… when onChangeEngine omitted', () => {
+    render(() => <SettingsPanel {...defaultProps()} />);
+    expect(screen.queryByTestId('switch-engine-connect')).toBeNull();
+  });
+
 });

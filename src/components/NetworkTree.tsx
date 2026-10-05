@@ -10,7 +10,7 @@ import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ej
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk, Store, UnformattedDisk } from '../types/store';
 import { formatBytes } from '../store/diskRoles';
-import { canEject, isCombinedDisk, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
+import { canEject, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
 import EjectConfirm from './EjectConfirm';
 import RoleBadges from './RoleBadges';
 import type { DragAppData } from '../types/drag';
@@ -70,7 +70,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
   const [dropTargetDiskId, setDropTargetDiskId] = createSignal<string | null>(null);
 
   return (
-    <nav class="network-tree" aria-label="Network tree">
+    <nav class="network-tree" aria-label="Network tree" data-testid="network-tree">
       <div class="network-tree__header">Network</div>
 
       {/* ── "All apps" row ──────────────────────────────────────── */}
@@ -78,6 +78,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
         class={`tree-item tree-item--network ${isSelected('network', '') ? 'tree-item--selected' : ''}`}
         role="treeitem"
         tabIndex={0}
+        data-testid="network-all-apps"
         aria-selected={isSelected('network', '')}
         onClick={() => props.onSelect({ type: 'network', id: '' })}
         onKeyDown={(e) => {
@@ -117,6 +118,8 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           return (
             <Show when={engine()}>
               <div
+                data-testid={`engine-${engineId}`}
+                data-engine-id={engineId}
                 class={`tree-item tree-item--engine ${isSelected('engine', engineId) ? 'tree-item--selected' : ''}`}
                 role="treeitem"
                 tabIndex={0}
@@ -139,6 +142,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 <span class="tree-item__label">{engine()?.hostname}</span>
                 <button
                   class="tree-item__reboot-btn"
+                  data-testid={`reboot-engine-${engineId}`}
                   title={`Reboot ${engine()?.hostname}`}
                   aria-label={`Reboot engine ${engine()?.hostname}`}
                   onClick={(e) => {
@@ -179,6 +183,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     <Show when={cand()}>
                       {(u) => (
                         <div
+                          data-testid={`candidate-${candidateId}`}
                           data-candidate-id={candidateId}
                           data-engine-id={engineId}
                           class={`tree-item tree-item--disk tree-item--unformatted ${isSelected('unformatted', candidateId) && props.selection.engineId === engineId ? 'tree-item--selected' : ''}`}
@@ -267,6 +272,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   return (
                     <Show when={disk()}>
                       <div
+                        data-testid={`disk-${diskId}`}
                         data-disk-id={diskId}
                         class={`tree-item tree-item--disk ${isSelected('disk', diskId) ? 'tree-item--selected' : ''} ${isDragOver() && isDragTarget() ? 'tree-item--drag-over' : ''}`}
                         role="treeitem"
@@ -301,6 +307,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                         <Show when={canEject(disk()!)}>
                           <button
                             class="tree-item__eject-btn"
+                            data-testid={`eject-${diskId}`}
                             disabled={isDiskLocked(props.store(), diskId)}
                             title={
                               isDiskLocked(props.store(), diskId)
@@ -313,8 +320,10 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                               const eng = engine();
                               const d = disk();
                               if (!eng || !d) return;
-                              if (isCombinedDisk(d, props.store())) setConfirmingEject(true);
-                              else startEject(eng.id);
+                              // Always open eject-confirm (ACTIONS.md eject_disk → confirm_eject).
+                              // Pure Apps duration disks previously ejected immediately — hardpass
+                              // timed out waiting for [data-testid="eject-confirm"].
+                              setConfirmingEject(true);
                             }}
                           >
                             ⏏

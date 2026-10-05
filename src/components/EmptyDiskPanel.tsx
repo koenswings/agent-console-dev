@@ -23,6 +23,12 @@ import {
 } from '../store/commands';
 import { canEraseDisk, eraseBlockedReason } from '../store/erase';
 import {
+  KOLIBRI_CATALOG_ERROR,
+  KOLIBRI_LESSON_APP_ID,
+  kolibriLessonCatalogOk,
+  lessonInstallForDisk,
+} from '../store/lessonInstall';
+import {
   createCommandResult,
 } from '../store/commandResult';
 import FilesRoleForm from './FilesRoleForm';
@@ -195,8 +201,21 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const arg = diskArg();
     if (!arg || !arg.ok) return;
 
-    // --source: the source disk ID on a 0b Engine, its name otherwise (as before).
     const app = props.store()?.appDB[appId];
+    const lesson = appId === KOLIBRI_LESSON_APP_ID ? lessonInstallForDisk(disk) : null;
+    if (lesson) {
+      // Lesson disks: named instance, never --source (even if catalog source is disk).
+      if (!kolibriLessonCatalogOk(app)) {
+        setError(KOLIBRI_CATALOG_ERROR);
+        return;
+      }
+      installResult.start(arg.arg, () =>
+        installApp(engineId, appId, arg.arg, { name: lesson.instanceName }),
+      );
+      return;
+    }
+
+    // --source: the source disk ID on a 0b Engine, its name otherwise (as before).
     const source = app?.source === 'disk'
       ? (arg.byId ? app.sourceDiskId ?? app.sourceDiskName : app.sourceDiskName)
       : undefined;
@@ -225,7 +244,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
   const goMenu = () => { setError(''); setPanel('menu'); };
 
   return (
-    <section class="edp" aria-label="Empty disk configuration">
+    <section class="edp" data-testid="empty-disk-panel" aria-label="Empty disk configuration">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header class="edp__header">
@@ -251,7 +270,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         <Show when={actionDone()}>
           <div class="edp__success">
             <div class="edp__success-icon">✓</div>
-            <p class="edp__success-msg">
+            <p
+              class="edp__success-msg"
+              data-testid={backupResult.state().kind === 'success' ? 'backup-configured-success' : 'install-configured-success'}
+            >
               {backupResult.state().kind === 'success'
                 ? 'Done. This disk is now a Backup Disk.'
                 : 'Done. The app is installed on this disk.'}
@@ -267,6 +289,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              data-testid="make-files-disk"
               disabled={!!filesBlocked()}
               title={filesBlocked()}
               onClick={() => setPanel('files')}
@@ -285,6 +308,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              data-testid="make-backup-disk"
               disabled={!!diskBlocked()}
               title={diskBlocked()}
               onClick={() => setPanel('backup')}
@@ -304,6 +328,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
 
             <button
               class="edp-card"
+              data-testid="install-app"
               disabled={!!diskBlocked()}
               title={diskBlocked()}
               onClick={() => setPanel('install')}
@@ -331,7 +356,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <div class="edp-radios">
               <For each={BACKUP_MODES}>
                 {(m) => (
-                  <label class={`edp-radio ${backupMode() === m.value ? 'edp-radio--on' : ''}`}>
+                  <label
+                    class={`edp-radio ${backupMode() === m.value ? 'edp-radio--on' : ''}`}
+                    data-testid={`backup-mode-${m.value}`}
+                  >
                     <input
                       type="radio"
                       name="backupMode"
@@ -360,7 +388,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                     return (
                       <Show when={inst()}>
                         {(i) => (
-                          <label class={`edp-check ${selectedInstanceIds().includes(id) ? 'edp-check--on' : ''}`}>
+                          <label
+                            class={`edp-check ${selectedInstanceIds().includes(id) ? 'edp-check--on' : ''}`}
+                            data-testid={`backup-link-instance-${id}`}
+                          >
                             <input
                               type="checkbox"
                               checked={selectedInstanceIds().includes(id)}
@@ -377,7 +408,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
             </Show>
 
-            <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
+            <Show when={error()}><p class="edp-form__error" data-testid="backup-form-error" role="alert">{error()}</p></Show>
             <Show when={backupPending()}>
               <p class="edp-form__hint" data-testid="backup-pending">Waiting for the Engine…</p>
             </Show>
@@ -390,6 +421,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <div class="edp-form__actions">
               <button
                 class="btn btn--primary"
+                data-testid="configure-backup-disk"
                 disabled={backupPending()}
                 onClick={handleConfigureBackup}
               >
@@ -449,7 +481,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                     return (
                       <Show when={app()}>
                         {(a) => (
-                          <label class={`edp-appitem ${selectedAppId() === id ? 'edp-appitem--on' : ''}`}>
+                          <label class={`edp-appitem ${selectedAppId() === id ? 'edp-appitem--on' : ''}`} data-testid={`install-app-item-${id}`}>
                             <input
                               type="radio"
                               name="installApp"
@@ -482,6 +514,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <div class="edp-form__actions">
               <button
                 class="btn btn--primary"
+                data-testid="install-app-submit"
                 disabled={!selectedAppId() || installPending()}
                 onClick={handleInstallApp}
               >

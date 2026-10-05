@@ -34,6 +34,7 @@ import {
   STORAGE_KEY_PORT,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
+import { resolveDemoMode } from './store/demoMode';
 import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
@@ -211,8 +212,19 @@ const App: Component = () => {
 
     const myId = ++currentInitId;
 
-    const isDemo = await readStoredDemoMode();
+    // Production web (Engine :8080): NEVER honor stale localStorage demoMode —
+    // bootDemo disks (DISK001) break duration Intents (duration-kolibri-grade5a-001).
+    const storedDemo = await readStoredDemoMode();
     if (myId !== currentInitId) return; // superseded
+    const resolved = resolveDemoMode({
+      productionWeb: isProductionWebMode(),
+      storedDemo,
+      searchParams: typeof window !== 'undefined' ? window.location.search : '',
+    });
+    if (resolved.persistFalse) await saveDemoMode(false);
+    else if (resolved.persistTrue) await saveDemoMode(true);
+    if (myId !== currentInitId) return; // superseded during persist
+    const isDemo = resolved.isDemo;
     setDemo(isDemo);
 
     const conn = isDemo
@@ -384,9 +396,9 @@ const App: Component = () => {
       {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div class="status-bar">
         <span class="status-bar__title">IDEA Console <span class="status-bar__version">v{pkg.version}</span></span>
-        <div class="status-bar__indicator">
+        <div class="status-bar__indicator" data-testid="status-bar-indicator">
           <span class={`status-bar__dot ${dotClass()}`} />
-          <span>{statusLabel()}</span>
+          <span data-testid="status-bar-hostname">{statusLabel()}</span>
         </div>
 
         <Show when={demo()}>
@@ -402,6 +414,7 @@ const App: Component = () => {
           <Show when={!demo()}>
             <button
               class="status-bar__connection-btn"
+              data-testid="connection-mgmt-btn"
               title="Connection Management"
               onClick={() => {
                 setShowConnectionMgmt((v) => !v);
@@ -416,7 +429,7 @@ const App: Component = () => {
 
           {/* 👤 Account — always visible */}
           <button
-            class="status-bar__account-btn"
+            class="status-bar__account-btn" data-testid="account-btn"
             title="Account"
             onClick={() => {
               setShowAccount((v) => !v);
@@ -442,7 +455,7 @@ const App: Component = () => {
           </button>
 
           <button
-            class="status-bar__settings-btn"
+            class="status-bar__settings-btn" data-testid="settings-btn"
             title="Settings"
             onClick={() => {
               setShowSettings((v) => !v);
@@ -486,13 +499,29 @@ const App: Component = () => {
               await logout();
               await initConnection();
             }}
+            onChangeEngine={() => {
+              setShowSettings(false);
+              setShowConnectionMgmt(true);
+            }}
             onDemoMode={async () => {
+              // Production web: refuse demo (duration --live must stay on Engine store)
+              if (isProductionWebMode()) {
+                await saveDemoMode(false);
+                setDemo(false);
+                return;
+              }
               await saveDemoMode(true);
               await logout();
               setHostname(await readStoredHostname());
               await initConnection();
             }}
             onDemoToggle={async (val) => {
+              if (isProductionWebMode()) {
+                await saveDemoMode(false);
+                setDemo(false);
+                if (!val) await initConnection();
+                return;
+              }
               await saveDemoMode(val);
               if (val) {
                 await logout();
@@ -534,7 +563,7 @@ const App: Component = () => {
           <Show
             when={isMobile()}
             fallback={
-              <div class="main-layout">
+              <div class="main-layout" data-testid="op-overview">
                 <NetworkTree
                   selection={selection()}
                   onSelect={setSelection}
@@ -608,16 +637,16 @@ const App: Component = () => {
                 {/* Copy/Move modal — shown when an app is dropped onto a disk */}
                 <Show when={pendingMove()}>
                   {(pm) => (
-                    <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move">
+                    <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move" data-testid="copy-move-modal">
                       <div class="copy-move-modal">
                         <div class="copy-move-modal__title">Copy or Move?</div>
                         <p class="copy-move-modal__desc">
                           <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em> on <em>{pm().targetEngineHostname}</em>
                         </p>
                         <div class="copy-move-modal__actions">
-                          <button class="btn" onClick={() => setPendingMove(null)}>Cancel</button>
-                          <button class="btn" onClick={() => handleCopyMoveChoice('move')}>Move</button>
-                          <button class="btn btn--primary" onClick={() => handleCopyMoveChoice('copy')}>Copy</button>
+                          <button class="btn" data-testid="copy-move-cancel" onClick={() => setPendingMove(null)}>Cancel</button>
+                          <button class="btn" data-testid="copy-move-move" onClick={() => handleCopyMoveChoice('move')}>Move</button>
+                          <button class="btn btn--primary" data-testid="copy-move-copy" onClick={() => handleCopyMoveChoice('copy')}>Copy</button>
                         </div>
                       </div>
                     </div>

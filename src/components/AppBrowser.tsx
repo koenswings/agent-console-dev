@@ -34,7 +34,7 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
   );
 
   return (
-    <div class="app-browser">
+    <div class="app-browser" data-testid="console-overview">
       <div class="app-browser__header">
         <h1 class="app-browser__title">Apps</h1>
       </div>

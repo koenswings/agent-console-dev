@@ -104,7 +104,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
   };
 
   return (
-    <div class="operator-mgmt">
+    <div class="operator-mgmt" data-testid="operator-management">
       {/* Operator list */}
       <section class="operator-mgmt__section">
         <h2 class="operator-mgmt__heading">Operators</h2>
@@ -115,7 +115,11 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
           <ul class="operator-mgmt__list">
             <For each={operators()}>
               {(op) => (
-                <li class="operator-mgmt__item">
+                <li
+                  class="operator-mgmt__item"
+                  data-testid={`operator-row-${op.id}`}
+                  data-username={op.username}
+                >
                   <span class="operator-mgmt__name">
                     {op.username}
                     {op.id === currentUser()?.id && (
@@ -124,6 +128,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
                   </span>
                   <button
                     class="btn btn--danger btn--small"
+                    data-testid={`remove-operator-${op.id}`}
                     onClick={() => handleRemove(op.id, op.username)}
                     disabled={op.id === currentUser()?.id}
                   >
@@ -139,7 +144,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
       {/* Add operator */}
       <section class="operator-mgmt__section">
         <h2 class="operator-mgmt__heading">Add Operator</h2>
-        <form class="modal__form" onSubmit={handleAddOperator}>
+        <form class="modal__form" data-testid="add-operator-form" onSubmit={handleAddOperator}>
           <label class="form-field">
             <span class="form-field__label">Username</span>
             <input
@@ -162,8 +167,8 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
             />
           </label>
           {addError() && <p class="form-error">{addError()}</p>}
-          {addSuccess() && <p class="form-success">{addSuccess()}</p>}
-          <button class="btn btn--primary" type="submit" disabled={addLoading()}>
+          {addSuccess() && <p class="form-success" data-testid="add-operator-success">{addSuccess()}</p>}
+          <button class="btn btn--primary" type="submit" data-testid="add-operator" disabled={addLoading()}>
             {addLoading() ? 'Creating…' : 'Add operator'}
           </button>
         </form>
@@ -172,12 +177,17 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
       {/* Change own password */}
       <section class="operator-mgmt__section">
         <h2 class="operator-mgmt__heading">Change My Password</h2>
-        <form class="modal__form" onSubmit={handleChangePassword}>
+        <form
+          class="modal__form"
+          data-testid="change-password-form"
+          onSubmit={handleChangePassword}
+        >
           <label class="form-field">
             <span class="form-field__label">Current password</span>
             <input
               class="form-field__input"
               type="password"
+              data-testid="change-password-current"
               value={currentPw()}
               onInput={(e) => setCurrentPw(e.currentTarget.value)}
               required
@@ -188,6 +198,7 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
             <input
               class="form-field__input"
               type="password"
+              data-testid="change-password-new"
               value={newPw()}
               onInput={(e) => setNewPw(e.currentTarget.value)}
               required
@@ -199,14 +210,20 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
             <input
               class="form-field__input"
               type="password"
+              data-testid="change-password-confirm"
               value={confirmPw()}
               onInput={(e) => setConfirmPw(e.currentTarget.value)}
               required
             />
           </label>
-          {pwError() && <p class="form-error">{pwError()}</p>}
-          {pwSuccess() && <p class="form-success">{pwSuccess()}</p>}
-          <button class="btn btn--primary" type="submit" disabled={pwLoading()}>
+          {pwError() && <p class="form-error" data-testid="change-password-error">{pwError()}</p>}
+          {pwSuccess() && <p class="form-success" data-testid="change-password-success">{pwSuccess()}</p>}
+          <button
+            class="btn btn--primary"
+            type="submit"
+            data-testid="change-password"
+            disabled={pwLoading()}
+          >
             {pwLoading() ? 'Saving…' : 'Change password'}
           </button>
         </form>

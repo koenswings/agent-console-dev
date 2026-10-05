@@ -62,7 +62,7 @@ const LoginForm: Component<LoginFormProps> = (props) => {
           <button class="modal__close" onClick={props.onCancel}>✕</button>
         </div>
 
-        <form class="modal__form" onSubmit={handleSubmit}>
+        <form class="modal__form" data-testid="login-form" onSubmit={handleSubmit}>
           <label class="form-field">
             <span class="form-field__label">Username</span>
             <input

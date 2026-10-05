@@ -192,7 +192,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   };
 
   return (
-    <div class="onboarding">
+    <div class="onboarding" data-testid="connection-management">
       <div class="onboarding__card">
         <div class="onboarding__title-row">
           <h1 class="onboarding__title">Connection Management</h1>
@@ -202,7 +202,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
         </div>
 
         {/* Status label */}
-        <p class="onboarding__scan-label">
+        <p class="onboarding__scan-label" data-testid="connection-scan-label">
           <Show when={scanState() === "scanning"}>Scanning for engines…</Show>
           <Show when={scanState() !== "scanning" && results().length === 0}>No engine found</Show>
           <Show when={results().length > 0}>{results().length} engine{results().length > 1 ? "s" : ""} found</Show>
@@ -215,7 +215,11 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
               {(result) => (
                 <li class="engine-picker__item">
                   <span class="engine-picker__hostname">{result.hostname.replace(/\.local$/i, '')}</span>
-                  <button class="engine-picker__connect-btn" onClick={() => handleConnect(result)}>
+                  <button
+                    class="engine-picker__connect-btn"
+                    data-testid={`connect-engine-${result.hostname.replace(/\.local$/i, '')}`}
+                    onClick={() => handleConnect(result)}
+                  >
                     Connect
                   </button>
                 </li>
@@ -230,6 +234,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
           fallback={
             <button
               class="onboarding__manual-link"
+              data-testid="connection-manual-link"
               onClick={() => { setShowManual(true); setManualInput(''); setManualError(null); }}
             >
               Enter hostname manually ›
@@ -240,6 +245,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
             <input
               class="form-field__input"
               type="text"
+              data-testid="connection-manual-host"
               placeholder="idea01, 192.168.1.10, or host:8080"
               value={manualInput()}
               onInput={(e) => setManualInput(e.currentTarget.value)}
@@ -253,6 +259,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
             />
             <button
               class="engine-picker__connect-btn"
+              data-testid="connect-engine-manual"
               disabled={manualConnecting() || !manualInput().trim()}
               onClick={handleManualConnect}
             >

@@ -117,7 +117,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
   };
 
   return (
-    <div class="account-screen">
+    <div class="account-screen" data-testid="op-entry">
 
       {/* ── Operator Management sub-view ───────────────────────────────────── */}
       <Show when={subView() === 'operator-mgmt' && isOperator() && props.store && props.connection}>
@@ -139,7 +139,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
         <Show when={!isOperator()}>
           <div class="account-screen__section">
             <h2 class="account-screen__heading">Operator Login</h2>
-            <form class="modal__form" onSubmit={handleLogin}>
+            <form class="modal__form" data-testid="login-form" onSubmit={handleLogin}>
               <label class="form-field">
                 <span class="form-field__label">Username</span>
                 <input
@@ -177,7 +177,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
               <Show when={!props.store}>
                 <p class="form-field__hint" style="color:var(--colour-text-muted)">Waiting for engine to sync…</p>
               </Show>
-              <button class="btn btn--primary" type="submit" disabled={loginLoading() || !props.store}>
+              <button class="btn btn--primary" type="submit" data-testid="sign-in" disabled={loginLoading() || !props.store}>
                 {loginLoading() ? 'Verifying…' : !props.store ? 'Connecting…' : 'Log in'}
               </button>
             </form>
@@ -194,12 +194,13 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
 
           <div class="account-screen__section">
             <h2 class="account-screen__heading">Change Password</h2>
-            <form class="modal__form" onSubmit={handleChangePassword}>
+            <form class="modal__form" data-testid="change-password-form" onSubmit={handleChangePassword}>
               <label class="form-field">
                 <span class="form-field__label">Current password</span>
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="change-password-current"
                   value={currentPw()}
                   onInput={(e) => setCurrentPw(e.currentTarget.value)}
                   required
@@ -210,6 +211,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="change-password-new"
                   value={newPw()}
                   onInput={(e) => setNewPw(e.currentTarget.value)}
                   required
@@ -221,14 +223,15 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                 <input
                   class="form-field__input"
                   type="password"
+                  data-testid="change-password-confirm"
                   value={confirmPw()}
                   onInput={(e) => setConfirmPw(e.currentTarget.value)}
                   required
                 />
               </label>
               {pwError() && <p class="form-error">{pwError()}</p>}
-              {pwSuccess() && <p class="form-success">{pwSuccess()}</p>}
-              <button class="btn btn--primary" type="submit" disabled={pwLoading()}>
+              {pwSuccess() && <p class="form-success" data-testid="change-password-success">{pwSuccess()}</p>}
+              <button class="btn btn--primary" type="submit" data-testid="change-password" disabled={pwLoading()}>
                 {pwLoading() ? 'Saving…' : 'Change password'}
               </button>
             </form>
@@ -237,6 +240,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
           <div class="account-screen__section">
             <button
               class="btn btn--secondary"
+              data-testid="manage-operators"
               onClick={() => setSubView('operator-mgmt')}
             >
               Manage Operators
@@ -244,7 +248,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
           </div>
 
           <div class="account-screen__section account-screen__section--danger">
-            <button class="btn btn--danger" onClick={handleLogout}>
+            <button class="btn btn--danger" data-testid="log-out" onClick={handleLogout}>
               Log out
             </button>
           </div>

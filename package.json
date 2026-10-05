@@ -2,7 +2,7 @@
   "name": "idea-console",
   "version": "0.2.85",
   "private": true,
-  "description": "IDEA Console — real-time operator dashboard for the IDEA Engine network",
+  "description": "IDEA Console \u2014 real-time operator dashboard for the IDEA Engine network",
   "scripts": {
     "dev": "vite",
     "build": "{ sudo rm -rf dist 2>/dev/null || rm -rf dist 2>/dev/null || true; } && vite build",
@@ -32,5 +32,10 @@
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.6.0",
     "vitest": "^2.1.0"
+  },
+  "exports": {
+    "./duration-intents": "./e2e/intents/index.ts",
+    "./duration-intents/bridge": "./e2e/intents/durationBridge.ts",
+    "./duration-intents/package.json": "./package.json"
   }
 }
