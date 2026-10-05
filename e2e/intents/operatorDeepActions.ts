@@ -1627,7 +1627,7 @@ export const leaveAppToConsole = async (page: import('@playwright/test').Page): 
       const url = p.url();
       if (
         p !== page &&
-        /kolibri|nextcloud|18080|18081|18280|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files/i.test(
+        /kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
           url,
         )
       ) {

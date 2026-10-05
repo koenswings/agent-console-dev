@@ -176,6 +176,38 @@ export const DURATION_FIXTURES = {
     },
     collabDoc: 'Grade5A-collab-notes.md',
     group: 'Grade 5A',
+    /** Kid CONTENT.live.json `collab` (editor nextcloud-text, collabora false). */
+    collab: {
+      editor: 'nextcloud-text',
+      fileName: 'Grade5A-collab-notes.md',
+      /** First heading of Kid's Collab/Grade5A-collab-notes.md. */
+      heading: 'Grade 5A collab notes',
+      selectors: {
+        editor: '[data-text-el="editor-container"]',
+        content: '[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]',
+        menubarWhenEditable: '[data-text-el="menubar"]',
+        readonlyBarMustBeAbsent: '[data-text-el="readonly-bar"]',
+        sessionAvatars: '.text-editor__session-list .avatar-list',
+      },
+    },
+  },
+  /**
+   * Kid App#11 @a443398 kiwix CONTENT.live.json (stub ZIM, kiwix-serve 3.8.2, no login).
+   * `<host>` = Console host (Path B, like the other sidecars); override with
+   * DURATION_KIWIX_URL (full base) or DURATION_KIWIX_PORT.
+   */
+  kiwix: {
+    diskId: 'duration-kiwix-ideaa-001',
+    instanceId: 'kiwix-ideaa-001',
+    sidecarHttpPort: 18380,
+    bookName: 'duration_wikipedia_en_grade5a_stub_2026-10',
+    urls: {
+      library: 'http://<host>:18380/',
+      viewerHome: 'http://<host>:18380/viewer#duration_wikipedia_en_grade5a_stub_2026-10/Main_Page',
+    },
+    /** intentResolution */
+    homeTitle: 'Grade 5A Offline Wikipedia',
+    search: { term: 'fraction', resultPath: 'Fraction', expectTitle: 'Fraction', followLink: 'Numerator', expectResults: 'Results 1-4 of 4' },
   },
 } as const;
 

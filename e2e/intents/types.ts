@@ -45,6 +45,13 @@ export const CONSOLE_INTENT_NAMES = [
   'back_to_console_from_share',
   'open_collab_doc',
   'close_doc',
+  'keep_editing',
+  // Wikipedia (Kiwix stub, Kid App#11)
+  'open_wikipedia_as_teacher',
+  'open_wikipedia_as_learner',
+  'search_browse_wikipedia',
+  'leave_wikipedia_as_teacher',
+  'leave_wikipedia_as_learner',
   // Phase 5 — Kolibri content (Kid @0bca699 CONTENT.seeded.json)
   'open_video',
   'keep_watching',

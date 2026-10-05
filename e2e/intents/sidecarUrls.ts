@@ -10,21 +10,24 @@
  *   DURATION_KOLIBRI_PORT (default 18080; idea03 Kolibri → 18081)
  *   DURATION_NEXTCLOUD_PORT (default 18280)
  */
-export type SidecarApp = 'kolibri' | 'nextcloud';
+export type SidecarApp = 'kolibri' | 'nextcloud' | 'kiwix';
 
 export const SIDECAR_DEFAULT_PORTS: Record<SidecarApp, number> = {
   kolibri: 18080,
   nextcloud: 18280,
+  kiwix: 18380,
 };
 
 const ENV_URL: Record<SidecarApp, string> = {
   kolibri: 'DURATION_KOLIBRI_URL',
   nextcloud: 'DURATION_NEXTCLOUD_URL',
+  kiwix: 'DURATION_KIWIX_URL',
 };
 
 const ENV_PORT: Record<SidecarApp, string> = {
   kolibri: 'DURATION_KOLIBRI_PORT',
   nextcloud: 'DURATION_NEXTCLOUD_PORT',
+  kiwix: 'DURATION_KIWIX_PORT',
 };
 
 /** Read sidecar port from env or default (pure; no I/O). */
@@ -68,6 +71,7 @@ export const APP_TAB_URL_RE =
 
 export const appKindForInstance = (instanceId: string): SidecarApp => {
   if (instanceId.includes('nextcloud')) return 'nextcloud';
+  if (instanceId.includes('kiwix')) return 'kiwix';
   return 'kolibri';
 };
 

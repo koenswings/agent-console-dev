@@ -39,6 +39,12 @@ const LOCKED = [
   'back_to_console_from_share',
   'open_collab_doc',
   'close_doc',
+  'keep_editing',
+  'open_wikipedia_as_teacher',
+  'open_wikipedia_as_learner',
+  'search_browse_wikipedia',
+  'leave_wikipedia_as_teacher',
+  'leave_wikipedia_as_learner',
   'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
@@ -103,9 +109,11 @@ const ENGINE_OWNED = [
   'infra_reboot_engine',
 ] as const;
 
+/** File Drop trio held until Kid App#11 moves the request to /Drop Zone/inbox. */
 const DEFERRED = [
-  'open_wikipedia_as_teacher',
-  'open_wikipedia_as_learner',
+  'open_file_drop',
+  'after_upload',
+  'leave_file_drop',
 ] as const;
 
 describe('Intent registry (idea#166 Phase 5 / #168)', () => {
@@ -159,9 +167,15 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('back_to_console_from_share')).toBe(true);
     expect(hasDurationIntent('open_collab_doc')).toBe(true);
     expect(hasDurationIntent('close_doc')).toBe(true);
+    expect(hasDurationIntent('keep_editing')).toBe(true);
+    expect(hasDurationIntent('open_wikipedia_as_teacher')).toBe(true);
+    expect(hasDurationIntent('open_wikipedia_as_learner')).toBe(true);
+    expect(hasDurationIntent('search_browse_wikipedia')).toBe(true);
+    expect(hasDurationIntent('leave_wikipedia_as_teacher')).toBe(true);
+    expect(hasDurationIntent('leave_wikipedia_as_learner')).toBe(true);
   });
 
-  it('does not register deferred usage / Kiwix / lesson-chrome Intents', () => {
+  it('does not register the held File Drop trio', () => {
     for (const name of DEFERRED) {
       expect(getIntent(name)).toBeUndefined();
     }

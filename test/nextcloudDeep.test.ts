@@ -12,6 +12,8 @@ import {
   runOpenCollabDoc,
   runCloseDoc,
   ncOpenFileQuery,
+  runKeepEditing,
+  keepEditingLine,
   isGroupShareEntryText,
   ncGroupShareTitle,
   ncOcsFailure,
@@ -323,16 +325,26 @@ function fakeCollab(o: {
   title?: string;
   content?: string;
   stuckClose?: boolean;
+  text?: boolean;
+  readonly?: boolean;
+  push?: number | null;
+  echo?: boolean;
 }) {
   let url = o.start ?? filesUrl('/');
   let viewer = o.start ? ncOpenFileQuery(o.start) : false;
   const clicks: string[] = [];
+  let typed = '';
+  const keys: string[] = [];
+  const text = o.text ?? true;
   const dir = () => ncFilesDir(url);
   const rowName = (sel: string) => /data-cy-files-list-row-name="([^"]+)"/.exec(sel)?.[1];
   const withQuery = (d: string, open: boolean) => `${filesUrl(d).split('?')[0]}?dir=${encodeURIComponent(d)}${open ? '&openfile=true' : ''}`;
   const present = (sel: string): boolean => {
     if (sel.startsWith('#viewer')) {
       if (!viewer) return false;
+      if (sel.endsWith('[data-text-el="editor-container"]')) return text;
+      if (sel.endsWith('[data-text-el="readonly-bar"]')) return text && !!o.readonly;
+      if (sel.endsWith('.ProseMirror[contenteditable="true"]') || sel.endsWith('[data-text-el="menubar"]')) return text && !o.readonly;
       return sel === '#viewer' || sel.endsWith('.modal-header__name') || sel.endsWith('.header-close');
     }
     if (sel === '[data-cy-files-content-breadcrumbs]' || sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
@@ -348,7 +360,8 @@ function fakeCollab(o: {
     innerText: async () => {
       if (!present(sel)) throw new Error('detached');
       if (sel.endsWith('.modal-header__name')) return o.title ?? 'Grade5A-collab-notes.md';
-      if (sel === '#viewer') return o.content ?? '# Grade 5A collab notes (placeholder)\nDuration-tests';
+      const doc = (o.content ?? '# Grade 5A collab notes\nShared class notes') + typed;
+      if (sel === '#viewer' || sel.endsWith('[data-text-el="editor-container"]') || sel.endsWith('.ProseMirror[contenteditable="true"]')) return doc;
       return '';
     },
     evaluateAll: async () => (dir() !== null ? (o.tree[dir()!] ?? []) : []),
@@ -383,11 +396,27 @@ function fakeCollab(o: {
       vi.setSystemTime(Date.now() + ms);
     },
     locator: (sel: string) => L(sel),
+    keyboard: {
+      press: async (k: string) => {
+        keys.push(k);
+      },
+      type: async (s: string) => {
+        if (o.echo ?? true) typed += `\n${s}`;
+      },
+    },
+    waitForResponse: async () => {
+      if (o.push === null || o.push === undefined) throw new Error('timeout');
+      return {
+        url: () => `${ORIGIN}/apps/text/session/77/push`,
+        status: () => o.push,
+        request: () => ({ method: () => 'POST' }),
+      };
+    },
   };
-  return { page: page as unknown as Page, clicks, isViewerOpen: () => viewer };
+  return { page: page as unknown as Page, clicks, keys, typed: () => typed, isViewerOpen: () => viewer };
 }
 
-describe('open_collab_doc / close_doc (Kid placeholder .md in the Viewer)', () => {
+describe('open_collab_doc / close_doc (Nextcloud Text in the Viewer)', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-05T14:40:00Z'));
@@ -429,6 +458,9 @@ describe('open_collab_doc / close_doc (Kid placeholder .md in the Viewer)', () =
     await expect(runOpenCollabDoc(fakeCollab({ tree, files, content: 'Loading…' }).page)).rejects.toThrow(
       /never rendered the doc heading/,
     );
+    await expect(runOpenCollabDoc(fakeCollab({ tree, files, text: false }).page)).rejects.toThrow(
+      /not in Nextcloud Text/,
+    );
   });
 
   it('loud-fails naming the rows when the placeholder doc is missing', async () => {
@@ -441,5 +473,47 @@ describe('open_collab_doc / close_doc (Kid placeholder .md in the Viewer)', () =
     const stuck = fakeCollab({ tree, files, stuckClose: true });
     await runOpenCollabDoc(stuck.page);
     await expect(runCloseDoc(stuck.page)).rejects.toThrow(/Viewer is still open/);
+  });
+});
+
+describe('keep_editing (Nextcloud Text, Kid Prefer A)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T15:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const tree = { '/': ['Collab'], '/Collab': ['Grade5A-collab-notes.md'] };
+  const files = ['Grade5A-collab-notes.md'];
+  const opened = (o: Partial<Parameters<typeof fakeCollab>[0]> = {}) =>
+    fakeCollab({ tree, files, start: `${ORIGIN}/apps/files/files/9?dir=%2FCollab&openfile=true`, push: 200, ...o });
+  const at = new Date('2026-10-05T15:00:00.000Z');
+
+  it('appends a unique line at the end of the doc and requires the Text session push', async () => {
+    const f = opened();
+    expect(await runKeepEditing(f.page, at)).toBe('keep_editing 2026-10-05T15:00:00.000Z');
+    expect(f.keys).toEqual(['Control+End', 'Enter']);
+    expect(f.typed()).toContain(keepEditingLine(at));
+  });
+
+  it('loud-fails read-only (Kid collab apply pending) without typing', async () => {
+    const f = opened({ readonly: true });
+    await expect(runKeepEditing(f.page, at)).rejects.toThrow(/read-only .*collabProvisioned=false/);
+    expect(f.keys).toEqual([]);
+  });
+
+  it('loud-fails when the edit is not pushed or is rejected', async () => {
+    await expect(runKeepEditing(opened({ push: null }).page, at)).rejects.toThrow(/never pushed the edit/);
+    await expect(runKeepEditing(opened({ push: 403 }).page, at)).rejects.toThrow(/push rejected \(HTTP 403\)/);
+  });
+
+  it('loud-fails when the typed line never shows in the editor', async () => {
+    await expect(runKeepEditing(opened({ echo: false }).page, at)).rejects.toThrow(/does not appear in the Text editor/);
+  });
+
+  it('loud-fails outside nc_collab or on another file / non-Text viewer', async () => {
+    await expect(runKeepEditing(fakeCollab({ tree, files, push: 200 }).page, at)).rejects.toThrow(/not in nc_collab/);
+    await expect(runKeepEditing(opened({ title: 'welcome.txt' }).page, at)).rejects.toThrow(/Viewer shows "welcome.txt"/);
+    await expect(runKeepEditing(opened({ text: false }).page, at)).rejects.toThrow(/not open in Nextcloud Text/);
   });
 });

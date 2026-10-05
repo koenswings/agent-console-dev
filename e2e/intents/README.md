@@ -498,15 +498,34 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   `leaveAppToConsole` (close app tabs, prove `console-overview`) used by `leave_nextcloud_as_teacher`, and the
   Nextcloud tab must be closed. (No App spec for this name; semantics from the action name + nc_share.)
 - **`open_collab_doc` (nc_browse → nc_collab):** class root → Collab → click `Grade5A-collab-notes.md` (row name link).
-  Success = Nextcloud Viewer `#viewer` (nextcloud/viewer stable31 NcModal) open, `.modal-header__name` equals the
-  file name, and the doc heading "Grade 5A collab notes" is rendered (Text app). Kid's placeholder doc (Collabora not
-  in pack), opened in Nextcloud's own viewer, so nothing is stubbed. Download instead of Viewer = loud-fail.
+  Success = Nextcloud Viewer `#viewer` open (nextcloud/viewer stable31 NcModal), `.modal-header__name` equals the
+  file name, **Nextcloud Text** mounted (`[data-text-el="editor-container"]`, Kid App#11 Prefer A; Collabora = Prefer B,
+  not shipped), and the doc heading "Grade 5A collab notes" rendered. Read-only is fine here. Download or non-Text
+  viewer = loud-fail.
+- **`keep_editing` (nc_collab dwell):** same file in Text. Loud-fail if `[data-text-el="readonly-bar"]` is visible (Kid
+  collab apply pending, `collabProvisioned=false`), or if editable content
+  (`[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]`) or the menubar is missing. Clicks the
+  content, Ctrl+End, Enter, types `keep_editing <ISO time>`. Proof = the line is in the editor **and** Text's sync
+  `POST /apps/text/session/<id>/push` returned 2xx (nextcloud/text stable31 SessionApi). Selectors come from Kid
+  `CONTENT.live.json collab.selectors`.
 - **`close_doc` (nc_collab → nc_browse):** Viewer `.header-close` (NcModal, aria-label "Close") → Viewer gone, same
   `dir`, `openfile` dropped from the URL.
-- **Blocked (not registered, no stub):**
-  - `open_file_drop` / `after_upload` / `leave_file_drop`: the Kid fixture says the Drop Zone is a teacher-preloaded
-    **File request public link** ("often outside the walk"), but nothing provisions it. There is no link/token in
-    `CONTENT.live.json`, and the files_external mount defaults `enable_sharing=false`, so it can't be created through
-    the UI either. Opening Drop Zone as a normal folder would remap the upload-only screen. Owner Kid: provision the
-    file request and publish its URL.
-  - `keep_editing`: Kid's Collabora pack (`blocked_until_collabora`).
+- **Held (not registered):** `open_file_drop` / `after_upload` / `leave_file_drop`. Kid's live file request on the mount
+  root `/Drop Zone` shows "This directory is unavailable"; Kid is moving it to `/Drop Zone/inbox` (token URL stays
+  `/s/grade5a-drop-zone`). These get wired in a follow-up tip after that App#11 update.
+
+## Wikipedia / Kiwix (Prefer A, `wikipedia.ts`)
+
+Kid App#11 @a443398 stub ZIM `duration_wikipedia_en_grade5a_stub_2026-10` on kiwix-serve 3.8.2 (`kiwix-ideaa-001`,
+port 18380, no login). Markup checked locally against Kid's ZIM with the official kiwix-tools 3.8.2 binary, and all five
+Intents pass end to end there (Path A via library tile and Path B).
+
+- **`open_wikipedia_as_teacher` / `_learner` (console_* → wiki_browse):** Path A = Console `open-instance-kiwix-ideaa-001`
+  → new tab (if it lands on the library, click `a.book__link` for the book). Path B = Kid `urls.viewerHome` with `<host>` =
+  Console host (`DURATION_KIWIX_URL` / `DURATION_KIWIX_PORT`), after an HTTP readiness poll. Success = viewer hash
+  `#<book>/Main_Page` and `iframe#content_iframe h1#firstHeading` = "Grade 5A Offline Wikipedia".
+- **`search_browse_wikipedia` (wiki_browse dwell):** `#kiwixsearchbox` ← "fraction" + Enter → iframe shows
+  "Results 1-4 of 4" → click the `Fraction` result (hash + heading "Fraction") → follow the `Numerator` link (hash +
+  heading "Numerator").
+- **`leave_wikipedia_as_teacher` / `_learner` (wiki_browse → console_*):** needs an open Kiwix tab, then the shared
+  `leaveAppToConsole` (now also closes :18380 / `/viewer#` tabs); the Kiwix tab must be closed.

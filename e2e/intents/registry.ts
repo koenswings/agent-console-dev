@@ -8,9 +8,9 @@
  * exit_lesson is registered (video/exercise → Learn home via Kolibri chrome).
  * Nextcloud: open_nextcloud_as_* now prove a signed-in Files list; browse_folders
  * registered; share_to_class registered (sharing sidebar → group Grade 5A, View only);
- * done_sharing / back_to_console_from_share leave nc_share; open_collab_doc / close_doc
- * (Kid placeholder .md in the Viewer). File Drop trio blocked on Kid file-request fixture.
- * open_wikipedia_* stay unregistered.
+ * done_sharing / back_to_console_from_share leave nc_share; open_collab_doc / close_doc /
+ * keep_editing on Nextcloud Text (Kid Prefer A). Wikipedia open/search/leave on the Kiwix
+ * stub (wikipedia.ts). File Drop trio held until Kid moves the request to /Drop Zone/inbox.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
 import {
@@ -37,7 +37,15 @@ import {
   back_to_console_from_share,
   open_collab_doc,
   close_doc,
+  keep_editing,
 } from './nextcloudDeep';
+import {
+  open_wikipedia_as_teacher,
+  open_wikipedia_as_learner,
+  search_browse_wikipedia,
+  leave_wikipedia_as_teacher,
+  leave_wikipedia_as_learner,
+} from './wikipedia';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
 import {
   exit_lesson,
@@ -122,6 +130,12 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   back_to_console_from_share,
   open_collab_doc,
   close_doc,
+  keep_editing,
+  open_wikipedia_as_teacher,
+  open_wikipedia_as_learner,
+  search_browse_wikipedia,
+  leave_wikipedia_as_teacher,
+  leave_wikipedia_as_learner,
   open_video,
   keep_watching,
   next_resource,

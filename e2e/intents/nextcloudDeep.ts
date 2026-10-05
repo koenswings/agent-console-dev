@@ -637,7 +637,9 @@ export const NC_VIEWER_SELECTORS = {
 } as const;
 
 /** Heading Kid ships in Collab/Grade5A-collab-notes.md (proves real content rendered). */
-export const NC_COLLAB_DOC_MARKER = 'Grade 5A collab notes';
+export const NC_COLLAB_DOC_MARKER = NC.collab.heading;
+/** Nextcloud Text markers (Kid CONTENT.live.json collab.selectors; nextcloud/text stable31). */
+const TEXT = NC.collab.selectors;
 
 /** True when the Files URL marks a file as opened (?openfile, not "false"). */
 export function ncOpenFileQuery(url: string): boolean {
@@ -654,9 +656,9 @@ const viewerOpen = async (app: Page): Promise<boolean> =>
 
 /**
  * open_collab_doc (nc_browse → nc_collab): Files → class root → Collab → click
- * Grade5A-collab-notes.md. Success = Viewer open titled with the file name and
- * showing the doc's heading. Placeholder doc per Kid (Collabora not in pack);
- * this opens the real file in Nextcloud's own viewer, no stub.
+ * Grade5A-collab-notes.md. Success = Viewer open titled with the file name, the
+ * Nextcloud Text editor (Kid Prefer A; Collabora = Prefer B) mounted, and the
+ * doc heading rendered. Read-only is fine here (keep_editing proves writes).
  */
 export const runOpenCollabDoc = async (app: Page): Promise<string> => {
   const tag = 'idea#166 open_collab_doc';
@@ -685,13 +687,20 @@ export const runOpenCollabDoc = async (app: Page): Promise<string> => {
     SETTLE_MS,
   );
   if (!titled) throw new Error(`${tag}: Viewer opened "${name || '(no title)'}", not "${doc}".`);
+  const editor = app.locator(`${NC_VIEWER_SELECTORS.viewer} ${TEXT.editor}`).first();
+  if (!(await waitFor(async () => editor.isVisible().catch(() => false), app, SETTLE_MS))) {
+    throw new Error(
+      `${tag}: "${doc}" opened in the Viewer but not in Nextcloud Text (${TEXT.editor} missing); ` +
+        `Kid Prefer A editor is nextcloud-text (Text app disabled?).`,
+    );
+  }
   const content = await waitFor(
-    async () => ((await app.locator(NC_VIEWER_SELECTORS.viewer).first().innerText().catch(() => '')) ?? '').includes(NC_COLLAB_DOC_MARKER),
+    async () => ((await editor.innerText().catch(() => '')) ?? '').includes(NC_COLLAB_DOC_MARKER),
     app,
     SETTLE_MS,
   );
   if (!content) {
-    throw new Error(`${tag}: Viewer for "${doc}" never rendered the doc heading "${NC_COLLAB_DOC_MARKER}" (empty/failed load).`);
+    throw new Error(`${tag}: Text editor for "${doc}" never rendered the doc heading "${NC_COLLAB_DOC_MARKER}" (empty/failed load).`);
   }
   return dir;
 };
@@ -736,4 +745,70 @@ export const runCloseDoc = async (app: Page): Promise<string> => {
 
 export const close_doc: IntentFn = async ({ page }) => {
   await runCloseDoc(ncAppPage(page, 'idea#166 close_doc'));
+};
+
+/* ------------------------------------------------------------------------- */
+/* keep_editing (nc_collab dwell, Nextcloud Text)                             */
+/* ------------------------------------------------------------------------- */
+
+const TEXT_PUSH = /\/apps\/text\/(public\/)?session\/\d+\/push(\?|$)/;
+
+/** The line keep_editing appends (unique per run so the proof can't match old text). */
+export const keepEditingLine = (now: Date = new Date()): string => `keep_editing ${now.toISOString()}`;
+
+/**
+ * keep_editing: type a new line at the end of Grade5A-collab-notes.md in
+ * Nextcloud Text. Loud-fail when Text is read-only (Kid collab apply pending).
+ * Proof = the line is in the editor AND Text pushed the steps to the server
+ * (POST /apps/text/session/<id>/push 2xx). Stays in nc_collab.
+ */
+export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise<string> => {
+  const tag = 'idea#166 keep_editing';
+  await ensureNextcloudFiles(app, tag, null);
+  if (!(await viewerOpen(app))) {
+    throw new Error(`${tag}: not in nc_collab: no Nextcloud Viewer open (${app.url()}). Run open_collab_doc first.`);
+  }
+  const name = ((await app.locator(NC_VIEWER_SELECTORS.name).first().innerText().catch(() => '')) ?? '').trim();
+  if (name !== NC.collab.fileName) {
+    throw new Error(`${tag}: Viewer shows "${name || '(no title)'}", not "${NC.collab.fileName}".`);
+  }
+  const scope = NC_VIEWER_SELECTORS.viewer;
+  if (!(await app.locator(`${scope} ${TEXT.editor}`).first().isVisible().catch(() => false))) {
+    throw new Error(`${tag}: "${name}" is not open in Nextcloud Text (${TEXT.editor} missing).`);
+  }
+  if (await app.locator(`${scope} ${TEXT.readonlyBarMustBeAbsent}`).first().isVisible().catch(() => false)) {
+    throw new Error(
+      `${tag}: Nextcloud Text opened "${name}" read-only (${TEXT.readonlyBarMustBeAbsent} visible). ` +
+        `Kid collab apply pending (CONTENT.live.json collabProvisioned=false): ` +
+        `post-dock-restore-running.sh --mode sidecar --apps nextcloud.`,
+    );
+  }
+  const content = app.locator(`${scope} ${TEXT.content}`).first();
+  if (!(await waitFor(async () => content.isVisible().catch(() => false), app, SETTLE_MS))) {
+    throw new Error(`${tag}: no editable Text content (${TEXT.content}) for "${name}".`);
+  }
+  if (!(await app.locator(`${scope} ${TEXT.menubarWhenEditable}`).first().isVisible().catch(() => false))) {
+    throw new Error(`${tag}: Text menubar (${TEXT.menubarWhenEditable}) missing: editor not in edit mode.`);
+  }
+  const line = keepEditingLine(now);
+  const pushed = app
+    .waitForResponse((r) => TEXT_PUSH.test(r.url()) && r.request().method() === 'POST', { timeout: SETTLE_MS })
+    .catch(() => null);
+  await content.click({ timeout: 8_000 });
+  await app.keyboard.press('Control+End');
+  await app.keyboard.press('Enter');
+  await app.keyboard.type(line, { delay: 20 });
+  if (!(await waitFor(async () => ((await content.innerText().catch(() => '')) ?? '').includes(line), app, 8_000))) {
+    throw new Error(`${tag}: typed "${line}" but it does not appear in the Text editor.`);
+  }
+  const resp = await pushed;
+  if (!resp) throw new Error(`${tag}: Text never pushed the edit to Nextcloud within ${SETTLE_MS}ms (no session push).`);
+  if (resp.status() >= 400) {
+    throw new Error(`${tag}: Text session push rejected (HTTP ${resp.status()}); edit not saved by Nextcloud.`);
+  }
+  return line;
+};
+
+export const keep_editing: IntentFn = async ({ page }) => {
+  await runKeepEditing(ncAppPage(page, 'idea#166 keep_editing'));
 };
