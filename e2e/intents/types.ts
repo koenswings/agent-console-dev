@@ -42,6 +42,7 @@ export const CONSOLE_INTENT_NAMES = [
   // Phase 5 — Kolibri content (Kid @0bca699 CONTENT.seeded.json)
   'open_video',
   'keep_watching',
+  'next_resource',
   'open_exercise',
   // Phase 3 — thin operator deeper path
   'open_disk_inventory',

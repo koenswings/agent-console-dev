@@ -26,8 +26,9 @@
  * EmptyDiskPanel: duration-empty-001 (DURATION_EMPTY_DISK_ID).
  * RestorePanel Backup Disk: duration-empty-001 after make_backup_disk (DURATION_BACKUP_DISK_ID).
  *
- * keep_watching is registered (URL stays on /topics/c/<video node id>). Other lesson chrome
- * (next_resource, exit_lesson, finish_exercise, next_video) stays unregistered —
+ * keep_watching is registered (URL stays on /topics/c/<video node id>). next_resource is
+ * registered (video → exercise via Kolibri's resource panel). Other lesson chrome
+ * (exit_lesson, finish_exercise, next_video) stays unregistered —
  * Kid image has no lesson-chrome testids (`tests/duration-tests/LESSON_CHROME.md`).
  */
 

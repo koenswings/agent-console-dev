@@ -2,8 +2,9 @@
  * Intent registry keyed by Axle YAML / ACTIONS.md action names (idea#166).
  * Engine-owned keys (enter_infra_fleet_walk, infra_*) are intentionally absent.
  * keep_watching is registered (stay on /topics/c/<video node id> — no chrome testids).
- * Lesson chrome (next_resource / exit_lesson / finish_exercise / next_video)
- * and open_wikipedia_* stay unregistered until Kid App testids.
+ * next_resource is registered (Kolibri resource-list panel → exercise sibling).
+ * Lesson chrome (exit_lesson / finish_exercise / next_video) and
+ * open_wikipedia_* stay unregistered until Kid App testids.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
 import {
@@ -24,7 +25,7 @@ import {
   open_nextcloud_as_teacher,
 } from './openApp';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
-import { keep_watching, open_exercise, open_video } from './openKolibriContent';
+import { keep_watching, next_resource, open_exercise, open_video } from './openKolibriContent';
 import {
   add_files_role,
   cancel_eject,
@@ -95,6 +96,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_nextcloud_as_learner,
   open_video,
   keep_watching,
+  next_resource,
   open_exercise,
   open_disk_inventory,
   open_instance_controls,

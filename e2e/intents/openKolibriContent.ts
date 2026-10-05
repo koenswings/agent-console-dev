@@ -292,6 +292,146 @@ export const keep_watching: IntentFn = async ({ page, instanceId }) => {
   await app.locator('video').count().catch(() => 0);
 };
 
+/**
+ * Kolibri 0.15.5 LearningActivityBar "resource list" control (upstream markup,
+ * not Kid testids): KIconButton `data-test="bar_viewTopicResourcesButton"` /
+ * `bar_viewLessonPlanButton`, aria-label "View folder resources" / "View lesson
+ * resources". On narrow windows it moves into More options (`moreOptionsButton`
+ * → `menu_*`).
+ */
+export const RESOURCE_LIST_BAR_SELECTORS = [
+  '[data-test="bar_viewTopicResourcesButton"]',
+  '[data-test="bar_viewLessonPlanButton"]',
+  'button[aria-label="View folder resources"]',
+  'button[aria-label="View lesson resources"]',
+] as const;
+export const RESOURCE_LIST_MENU_SELECTORS = [
+  '[data-test="menu_viewTopicResourcesButton"]',
+  '[data-test="menu_viewLessonPlanButton"]',
+  '[role="menuitem"]:has-text("View folder resources")',
+  '[role="menuitem"]:has-text("View lesson resources")',
+] as const;
+export const MORE_OPTIONS_SELECTORS = [
+  '[data-test="moreOptionsButton"]',
+  'button[aria-label="More options"]',
+] as const;
+/** AlsoInThis side panel (`.also-in-this-side-panel`), router-link rows. */
+export const RESOURCE_PANEL_SELECTOR = '.also-in-this-side-panel';
+
+/** Selectors for the next resource's row inside the resource panel. */
+export function nextResourceRowSelectors(next: { nodeId: string; nodeIdRaw: string; title?: string }): string[] {
+  const out: string[] = [];
+  for (const id of idSpellings(next.nodeId, next.nodeIdRaw)) {
+    out.push(`${RESOURCE_PANEL_SELECTOR} a[href*="/topics/c/${id}"]`);
+  }
+  if (next.title) {
+    const q = next.title.replace(/"/g, '\\"');
+    out.push(`${RESOURCE_PANEL_SELECTOR} a:has-text("${q}")`);
+  }
+  // Panel wrapper class missing in some builds: fall back to any node link.
+  for (const id of idSpellings(next.nodeId, next.nodeIdRaw)) {
+    out.push(`a[href*="/topics/c/${id}"]`);
+  }
+  return out;
+}
+
+const firstPresent = async (app: Page, selectors: readonly string[]): Promise<string | null> => {
+  for (const s of selectors) {
+    if ((await app.locator(s).first().count().catch(() => 0)) > 0) return s;
+  }
+  return null;
+};
+
+const waitForFirstPresent = async (
+  app: Page,
+  selectors: readonly string[],
+  ms: number,
+): Promise<string | null> => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const hit = await firstPresent(app, selectors);
+    if (hit) return hit;
+    await app.waitForTimeout(250);
+  }
+  return firstPresent(app, selectors);
+};
+
+const NEXT_RESOURCE_SETTLE_MS = 15_000;
+
+/**
+ * From the pinned video (kolibri_watching) to the next resource in its folder,
+ * the pinned exercise (kolibri_exercise), through Kolibri's resource-list panel.
+ * Needs the video node route first (open_video / keep_watching). Success only
+ * when the URL is /topics/c/<exercise node id>. No deep-link fallback.
+ */
+export const runNextResource = async (
+  app: Page,
+  from: PinnedNode & { logicalId: string },
+  next: PinnedNode & { logicalId: string; title?: string },
+): Promise<void> => {
+  const tag = 'idea#166 next_resource';
+  const startUrl = app.url();
+  if (!urlHasPinnedVideo(startUrl, from)) {
+    throw new Error(
+      `${tag}: expected to start on ${from.logicalId} (/topics/c/${rawHex(from.nodeIdRaw)}) after ` +
+        `open_video/keep_watching, but URL is ${startUrl || '(empty)'}. Not re-opening the video.`,
+    );
+  }
+
+  const rowSelectors = nextResourceRowSelectors(next);
+  let opened = 'bar';
+  const barHit = await waitForFirstPresent(app, RESOURCE_LIST_BAR_SELECTORS, NEXT_RESOURCE_SETTLE_MS);
+  if (barHit) {
+    await app.locator(barHit).first().click({ timeout: 8_000 });
+  } else {
+    opened = 'more-options menu';
+    const more = await firstPresent(app, MORE_OPTIONS_SELECTORS);
+    if (!more) {
+      throw new Error(
+        `${tag}: Kolibri resource-list control not found on ${startUrl} after ` +
+          `${NEXT_RESOURCE_SETTLE_MS}ms (tried ${[...RESOURCE_LIST_BAR_SELECTORS, ...MORE_OPTIONS_SELECTORS].join(' | ')}).`,
+      );
+    }
+    await app.locator(more).first().click({ timeout: 8_000 });
+    const item = await waitForFirstPresent(app, RESOURCE_LIST_MENU_SELECTORS, 5_000);
+    if (!item) {
+      throw new Error(
+        `${tag}: More options opened on ${startUrl} but no "View folder/lesson resources" item ` +
+          `(tried ${RESOURCE_LIST_MENU_SELECTORS.join(' | ')}).`,
+      );
+    }
+    await app.locator(item).first().click({ timeout: 8_000 });
+  }
+
+  const row = await waitForFirstPresent(app, rowSelectors, NEXT_RESOURCE_SETTLE_MS);
+  if (!row) {
+    throw new Error(
+      `${tag}: resource panel (opened via ${opened}) has no row for ${next.logicalId} ` +
+        `(/topics/c/${rawHex(next.nodeIdRaw)}${next.title ? `, "${next.title}"` : ''}) after ` +
+        `${NEXT_RESOURCE_SETTLE_MS}ms on ${app.url()}.`,
+    );
+  }
+  await app.locator(row).first().click({ timeout: 8_000 });
+
+  const deadline = Date.now() + NEXT_RESOURCE_SETTLE_MS;
+  while (Date.now() < deadline) {
+    if (urlHasPinnedVideo(app.url(), next)) return;
+    await app.waitForTimeout(200);
+  }
+  if (urlHasPinnedVideo(app.url(), next)) return;
+  throw new Error(
+    `${tag}: clicked ${next.logicalId} row (${row}) but URL did not reach ` +
+      `/topics/c/${rawHex(next.nodeIdRaw)} within ${NEXT_RESOURCE_SETTLE_MS}ms (final ${app.url() || '(empty)'}).`,
+  );
+};
+
+/** next_resource: pinned video → pinned exercise (next sibling in "Grade 5A Duration"). */
+export const next_resource: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runNextResource(app, DURATION_FIXTURES.kolibri.video, DURATION_FIXTURES.kolibri.exercise);
+};
+
 /** Open pinned Grade 5A video (Kid CONTENT.seeded + live @2313112 → open_video). */
 export const open_video: IntentFn = async ({ page, instanceId }) => {
   await runOpenContent(page, instanceId, DURATION_FIXTURES.kolibri.video, 'open_video');
