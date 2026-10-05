@@ -464,8 +464,41 @@ export const EXERCISE_SELECTORS = {
     '[role="dialog"] button:has-text("Stay here")',
   ],
   back: ['button[aria-label="Go back"]'],
-  homeLink: ['a[href*="#/home"]', 'a:text-is("Home")'],
+  /** LearnTopNav NavbarLink (non-immersive pages only, e.g. #/library). */
+  homeLink: ['a[href$="#/home"]', 'a[href*="#/home"]', 'a:text-is("Home")'],
+  /**
+   * CoreBase ImmersiveToolbar on topic / search pages (no top nav there):
+   * router-link wrapping KIconButton aria "Close" (or "Go back"), to Library or
+   * Home (when query last=HOME).
+   */
+  toolbarExit: [
+    'a:has(> button[aria-label="Close"])',
+    'a:has(button[aria-label="Close"])',
+    'button[aria-label="Close"]',
+    'a:has(button[aria-label="Go back"])',
+    'button[aria-label="Go back"]',
+  ],
 } as const;
+
+/** Learn hash route without query (e.g. `/topics/t/<id>/search`), or ''. */
+export function learnHashRoute(url: string): string {
+  const hashAt = url ? url.indexOf('#') : -1;
+  return hashAt < 0 ? '' : url.slice(hashAt + 1).split('?')[0];
+}
+
+/**
+ * Which Learn chrome to click next to head for #/home, in order.
+ * Content page (immersive, no top nav): bar "Go back".
+ * Other pages: top-nav Home if shown, else the immersive toolbar Close/Go back
+ * (topic & search pages → Library or Home).
+ */
+export function learnHomeHopSelectors(url: string): string[] {
+  const S = EXERCISE_SELECTORS;
+  if (kolibriContentRouteNodeId(url)) return [...S.homeLink, ...S.back];
+  return [...S.homeLink, ...S.toolbarExit];
+}
+
+const LEARN_HOME_MAX_HOPS = 5;
 
 /** Perseus radio choice selectors: exact answer text first, then fixture index. */
 export function exerciseChoiceSelectors(answer: { correctChoiceText: string; correctChoiceIndex: number }): string[] {
@@ -486,7 +519,8 @@ const FINISH_MAX_ITEMS = 4;
  * 1. Must start on /topics/c/<exercise node> (loud-fail otherwise; no re-open).
  * 2. Pick the fixture's correct choice, click Check, wait for Next (correct).
  *    Repeat on the next item until completion shows (modal or "Completed").
- * 3. Close the modal if shown, Go back, then Learn "Home" if not already home.
+ * 3. Close the modal if shown, then walk Learn chrome home: content "Go back"
+ *    → topic/search toolbar "Close" → Library top-nav "Home" (no hash goto).
  * Success only when completion was seen AND the URL is Learn #/home.
  */
 export const runFinishExercise = async (
@@ -562,28 +596,35 @@ export const runFinishExercise = async (
   const close = await firstPresent(app, S.modalClose);
   if (close) await app.locator(close).first().click({ timeout: 8_000 });
 
-  if (!isLearnHomeUrl(app.url())) {
-    const back = await waitForFirstPresent(app, S.back, 5_000);
-    if (back) {
-      await app.locator(back).first().click({ timeout: 8_000 });
-      const deadline = Date.now() + 10_000;
-      while (Date.now() < deadline && urlHasPinnedVideo(app.url(), exercise)) {
-        await app.waitForTimeout(200);
-      }
+  // Walk Learn chrome to #/home: content "Go back" → topic/search toolbar
+  // Close → Library top-nav "Home". Each hop must change the URL.
+  const hops: string[] = [];
+  for (let hop = 1; hop <= LEARN_HOME_MAX_HOPS && !isLearnHomeUrl(app.url()); hop++) {
+    const before = app.url();
+    const hit = await waitForFirstPresent(app, learnHomeHopSelectors(before), 10_000);
+    if (!hit) {
+      throw new Error(
+        `${tag}: exercise completed (${trail.join(', ')}) but no Learn nav control on ` +
+          `${before || '(empty)'} to head home (hops: ${hops.join(' → ') || 'none'}; tried ` +
+          `${learnHomeHopSelectors(before).join(' | ')}).`,
+      );
+    }
+    await app.locator(hit).first().click({ timeout: 8_000 });
+    hops.push(`${learnHashRoute(before) || before} [${hit}]`);
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && app.url() === before) {
+      await app.waitForTimeout(200);
+    }
+    if (app.url() === before) {
+      throw new Error(
+        `${tag}: clicked ${hit} on ${before} but the URL did not change (hops: ${hops.join(' → ')}).`,
+      );
     }
   }
   if (!isLearnHomeUrl(app.url())) {
-    const home = await waitForFirstPresent(app, S.homeLink, 10_000);
-    if (home) await app.locator(home).first().click({ timeout: 8_000 });
-  }
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline && !isLearnHomeUrl(app.url())) {
-    await app.waitForTimeout(200);
-  }
-  if (!isLearnHomeUrl(app.url())) {
     throw new Error(
-      `${tag}: exercise completed (${trail.join(', ') || 'already complete'}) but Go back / Home did ` +
-        `not reach Learn #/home (final ${app.url() || '(empty)'}).`,
+      `${tag}: exercise completed (${trail.join(', ')}) but Learn nav did not reach #/home after ` +
+        `${LEARN_HOME_MAX_HOPS} hops (hops: ${hops.join(' → ')}; final ${app.url() || '(empty)'}).`,
     );
   }
 };

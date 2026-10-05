@@ -187,9 +187,12 @@ item set (randomize off, mastery 1 of 1) has two single-choice radios, both corr
 click choice `.perseus-widget-radio li:has-text("4")` (else radio `nth=1`), click Kolibri's `Check` KButton, and
 require `Next` (correct). Always answers at least one item, even if a prior run mastered it. Completion =
 CompletionModal `[role="dialog"]` "Resource completed" (first completion) or OverallStatus
-`.overall-status-text .completed` (re-runs). Up to 4 items. Then close the modal (aria "Close" / "Stay here"),
-click the bar's "Go back", and LearnTopNav "Home" if needed. Success only when completion was seen AND the URL is
-Learn `#/home`. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
+`.overall-status-text .completed` (re-runs). Up to 4 items. Then close the modal (aria "Close" / "Stay here")
+and walk Learn chrome to home, one hop per page (each click must change the URL, max 5 hops): content page → bar
+"Go back"; topic / search page (immersive, no top nav; r7 landed on `#/topics/t/63427029…/search`) → ImmersiveToolbar
+"Close" link (to `#/library`, or `#/home` when `last=HOME`); any page with LearnTopNav → "Home" (`a[href*="#/home"]`).
+No hash goto. Success only when completion was seen AND the URL is Learn `#/home`; otherwise loud-fail with the hop
+trail and final URL. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
 `finish_exercise` from deferred / add it to `PIXEL_REGISTERED_INTENTS` (Axle).
 
 ## Live duration — no bootDemo (`--live --ui`)

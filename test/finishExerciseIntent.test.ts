@@ -4,6 +4,8 @@ import {
   EXERCISE_SELECTORS as S,
   exerciseChoiceSelectors,
   isLearnHomeUrl,
+  learnHashRoute,
+  learnHomeHopSelectors,
   runFinishExercise,
 } from '../e2e/intents/openKolibriContent';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
@@ -20,6 +22,8 @@ const STATUS = S.completed[1];
 const CLOSE = S.modalClose[0];
 const BACK = S.back[0];
 const HOME = S.homeLink[0];
+const TOOLBAR_CLOSE = S.toolbarExit[0];
+const SEARCH = `/topics/t/${exercise.parentTopicNodeIdRaw}/search`;
 
 type Effect = { show?: string[]; hide?: string[]; to?: string };
 
@@ -70,6 +74,17 @@ describe('isLearnHomeUrl', () => {
   });
 });
 
+describe('learnHomeHopSelectors', () => {
+  it('uses bar Go back on a content page and toolbar Close on topic/search pages', () => {
+    expect(learnHomeHopSelectors(EX_URL)).toContain(BACK);
+    expect(learnHomeHopSelectors(EX_URL)).not.toContain(TOOLBAR_CLOSE);
+    const search = `${BASE}${SEARCH}`;
+    expect(learnHomeHopSelectors(search)).toContain(TOOLBAR_CLOSE);
+    expect(learnHomeHopSelectors(search)[0]).toBe(HOME);
+    expect(learnHashRoute(search)).toBe(SEARCH);
+  });
+});
+
 describe('exerciseChoiceSelectors', () => {
   it('targets choice "4" by text first, then fixture index 1', () => {
     const sel = exerciseChoiceSelectors(exercise);
@@ -85,21 +100,65 @@ describe('runFinishExercise (exercise → completed → Learn home)', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it('first completion: choose 4, Check, modal, Close, Go back to topic, then Home', async () => {
+  it('r7 path: Go back lands on topic search; toolbar Close → Library; top-nav Home → #/home', async () => {
     const { page, clicks, gotos } = fakeExercisePage({
       start: EX_URL,
       visible: [CHECK, CHOICE, BACK],
       onClick: {
         [CHECK]: { hide: [CHECK], show: [NEXT, MODAL, CLOSE] },
         [CLOSE]: { hide: [MODAL, CLOSE] },
-        [BACK]: { to: `/topics/t/${exercise.parentTopicNodeIdRaw}/folders`, show: [HOME] },
+        // Immersive topic search page: no top nav, only the toolbar Close.
+        [BACK]: { to: SEARCH, hide: [BACK, NEXT, CHOICE], show: [TOOLBAR_CLOSE] },
+        [TOOLBAR_CLOSE]: { to: '/library', hide: [TOOLBAR_CLOSE], show: [HOME] },
         [HOME]: { to: '/home' },
       },
     });
     await runFinishExercise(page, exercise);
-    expect(clicks).toEqual([CHOICE, CHECK, CLOSE, BACK, HOME]);
+    expect(clicks).toEqual([CHOICE, CHECK, CLOSE, BACK, TOOLBAR_CLOSE, HOME]);
     expect(gotos).toEqual([]);
     expect(isLearnHomeUrl(page.url())).toBe(true);
+  });
+
+  it('topic page toolbar Close goes straight home when the route has last=HOME', async () => {
+    const { page, clicks } = fakeExercisePage({
+      start: EX_URL,
+      visible: [CHECK, CHOICE, BACK],
+      onClick: {
+        [CHECK]: { hide: [CHECK], show: [NEXT, STATUS] },
+        [BACK]: { to: `${SEARCH}?last=HOME`, hide: [BACK], show: [TOOLBAR_CLOSE] },
+        [TOOLBAR_CLOSE]: { to: '/home' },
+      },
+    });
+    await runFinishExercise(page, exercise);
+    expect(clicks).toEqual([CHOICE, CHECK, BACK, TOOLBAR_CLOSE]);
+  });
+
+  it('loud-fails on the topic search page when no nav control is present (no soft-pass)', async () => {
+    const { page } = fakeExercisePage({
+      start: EX_URL,
+      visible: [CHECK, CHOICE, BACK],
+      onClick: {
+        [CHECK]: { hide: [CHECK], show: [NEXT, STATUS] },
+        [BACK]: { to: SEARCH, hide: [BACK] },
+      },
+    });
+    await expect(runFinishExercise(page, exercise)).rejects.toThrow(
+      /no Learn nav control on http:\/\/idea01:18080\/en\/learn\/#\/topics\/t\/63427029c7eb5e86b62a731d9564aa50\/search/,
+    );
+    expect(isLearnHomeUrl(page.url())).toBe(false);
+  });
+
+  it('loud-fails when a nav click does not change the URL', async () => {
+    const { page } = fakeExercisePage({
+      start: EX_URL,
+      visible: [CHECK, CHOICE, BACK],
+      onClick: {
+        [CHECK]: { hide: [CHECK], show: [NEXT, STATUS] },
+        [BACK]: { to: SEARCH, hide: [BACK], show: [TOOLBAR_CLOSE] },
+        [TOOLBAR_CLOSE]: {},
+      },
+    });
+    await expect(runFinishExercise(page, exercise)).rejects.toThrow(/URL did not change/);
   });
 
   it('re-run (already mastered, no modal): still answers one item, then "Completed" status counts', async () => {
@@ -157,15 +216,19 @@ describe('runFinishExercise (exercise → completed → Learn home)', () => {
     await expect(runFinishExercise(page, exercise)).rejects.toThrow(/answered 4 item\(s\) .*but no completion/);
   });
 
-  it('loud-fails when completed but Learn home is never reached', async () => {
+  it('loud-fails when nav keeps bouncing between non-home pages', async () => {
+    let n = 0;
     const { page } = fakeExercisePage({
       start: EX_URL,
       visible: [CHECK, CHOICE, BACK],
       onClick: {
         [CHECK]: { hide: [CHECK], show: [NEXT, STATUS] },
-        [BACK]: { to: `/topics/t/${exercise.parentTopicNodeIdRaw}/folders` },
+        [BACK]: { to: SEARCH, hide: [BACK], show: [TOOLBAR_CLOSE] },
+        [TOOLBAR_CLOSE]: () => ({ to: `${SEARCH}?n=${++n}` }),
       },
     });
-    await expect(runFinishExercise(page, exercise)).rejects.toThrow(/did not reach Learn #\/home/);
+    await expect(runFinishExercise(page, exercise)).rejects.toThrow(
+      /did not reach #\/home after 5 hops .*final http:\/\/idea01:18080\/en\/learn\/#\/topics\/t\/63427029c7eb5e86b62a731d9564aa50\/search/,
+    );
   });
 });
