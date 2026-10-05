@@ -34,6 +34,18 @@ export const NC_SELECTORS = {
   anyRow: 'tr[data-cy-files-list-row]',
 } as const;
 
+/**
+ * Nextcloud First-run wizard (nextcloud/firstrunwizard stable31 App.vue): NcModal
+ * id="firstrunwizard" (aria-modal) that blocks every click on first login. The intro
+ * video page has no button (Escape → NcModal @close); the slides have a custom
+ * NcButton aria-label "Close" (SlideShow.vue). close() also DELETEs
+ * /apps/firstrunwizard/wizard so it does not come back for that user.
+ */
+export const NC_FIRSTRUN = {
+  root: '#firstrunwizard',
+  close: ['#firstrunwizard button[aria-label="Close"]', '#firstrunwizard .header-close'],
+} as const;
+
 export const ncRowSelector = (name: string): string =>
   `tr[data-cy-files-list-row-name="${name.replace(/"/g, '\\"')}"]`;
 export const ncRowLinkSelector = (name: string): string =>
@@ -168,7 +180,24 @@ export const ensureNextcloudFiles = async (
             `tried ${NC_SELECTORS.filesNav.join(' | ')}).`,
         );
       }
-      await app.locator(nav).first().click({ timeout: 8_000 });
+      // The First-run wizard opens on first login and intercepts the click
+      // (Axle smoke 198eb69-r1); it may also appear a moment after the header.
+      let lastErr: unknown = null;
+      let done = false;
+      for (let attempt = 0; attempt < 3 && !done; attempt++) {
+        await ncDismissFirstRunWizard(app, tag);
+        try {
+          await app.locator(nav).first().click({ timeout: 5_000 });
+          done = true;
+        } catch (e) {
+          lastErr = e;
+          if (!(await wizardOpen(app))) break;
+        }
+      }
+      if (!done) {
+        const msg = lastErr instanceof Error ? lastErr.message.split('\n')[0] : String(lastErr);
+        throw new Error(`${tag}: could not click the Nextcloud Files link on ${app.url()} (${msg}).`);
+      }
     }
   }
   const files = await waitFor(
@@ -179,6 +208,58 @@ export const ensureNextcloudFiles = async (
   if (!files) {
     throw new Error(`${tag}: Nextcloud Files list (${NC_SELECTORS.breadcrumbs}) did not render on ${app.url()}.`);
   }
+  // Wizard can also open over Files (first login straight into /apps/files).
+  await ncDismissFirstRunWizard(app, tag);
+};
+
+const wizardOpen = async (app: Page): Promise<boolean> => {
+  try {
+    return await app.locator(NC_FIRSTRUN.root).first().isVisible();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Dismiss the First-run wizard if it is up: Close (or a Skip button, if this NC build
+ * has one), else Escape; retried until it is gone. Loud-fail if it stays.
+ * Returns how it was dismissed ('none' when it was not shown).
+ */
+export const ncDismissFirstRunWizard = async (app: Page, tag: string): Promise<string> => {
+  if (!(await wizardOpen(app))) return 'none';
+  const used: string[] = [];
+  for (let attempt = 0; attempt < 4 && (await wizardOpen(app)); attempt++) {
+    let clicked = false;
+    for (const s of NC_FIRSTRUN.close) {
+      const btn = app.locator(s).first();
+      if (await btn.isVisible().catch(() => false)) {
+        await btn.click({ timeout: 3_000 }).catch(() => {});
+        used.push('close');
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked) {
+      const skip = app.locator(NC_FIRSTRUN.root).first().getByRole?.('button', { name: /skip/i }).first();
+      if (skip && (await skip.isVisible().catch(() => false))) {
+        await skip.click({ timeout: 3_000 }).catch(() => {});
+        used.push('skip');
+        clicked = true;
+      }
+    }
+    if (!clicked) {
+      await app.keyboard.press('Escape');
+      used.push('escape');
+    }
+    await waitFor(async () => !(await wizardOpen(app)), app, 2_500);
+  }
+  if (await wizardOpen(app)) {
+    throw new Error(
+      `${tag}: Nextcloud First-run wizard (${NC_FIRSTRUN.root}) still blocks the page after ${used.join(', ')} on ${app.url()}. ` +
+        `Fixture alternative: occ app:disable firstrunwizard.`,
+    );
+  }
+  return used[used.length - 1] ?? 'none';
 };
 
 /** Click the root breadcrumb until the Files dir is '/'. */

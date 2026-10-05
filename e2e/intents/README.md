@@ -477,6 +477,12 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   After leaving `/login` (or landing signed in on Dashboard), the header Files link is **polled up to 20s**
   (`waitForLoadState('load')` + poll), never counted once. Axle smoke 2da863c-r1 failed on that one-shot count while the
   dashboard header was still rendering. Missing after 20s = loud-fail with URL, title and header links.
+  **First-run wizard** (`#firstrunwizard`, nextcloud/firstrunwizard stable31) opens on a user's first login and intercepts
+  every click (Axle smoke 198eb69-r1). Before the Files click (and again once Files has rendered), it is dismissed with
+  its **Close** button (`#firstrunwizard button[aria-label="Close"]` on the slides, or Skip if a build has one), falling
+  back to **Escape** on the intro video, which has no button. It's retried until gone, and the Files click is retried if
+  the wizard opens late. Still up = loud-fail. Closing it also tells NC not to show it again for that user. Fixture
+  alternative: `occ app:disable firstrunwizard`.
 - **`browse_folders` (nc_browse dwell):** needs an open Nextcloud tab and an existing session (no role guessing; login
   page = loud-fail). Class folders are found at the Files root or inside the Files Disk mount folder
   (`shareName` "Grade 5A Files", from the `10-idea-files.sh` external storage). Opens Class Materials, Drop Zone and

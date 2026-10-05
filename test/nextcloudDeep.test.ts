@@ -59,16 +59,30 @@ function fakeNextcloud(opts: {
   uid?: string;
   /** Header Files link renders this long after landing signed in (race repro). */
   navDelayMs?: number;
+  /** First-run wizard: intro (Escape only), slides (Close button), stuck (never closes). */
+  wizard?: 'intro' | 'slides' | 'stuck';
+  /** Wizard opens this long after sign-in (late modal). */
+  wizardDelayMs?: number;
+  /** Wizard pops up exactly when the Files link is first clicked (late modal race). */
+  wizardOnFirstClick?: boolean;
 }) {
   let url = opts.start === 'login' ? `${ORIGIN}/login` : opts.start === 'files' ? filesUrl('/') : `${ORIGIN}/apps/dashboard/`;
   const fields: Record<string, string> = {};
   const clicks: string[] = [];
   const submitted: string[] = [];
   let signedInAt = opts.start === 'login' ? Number.POSITIVE_INFINITY : Date.now();
+  let wizardDismissed = false;
+  let wizardArmed = !opts.wizardOnFirstClick;
+  const wizardKeys: string[] = [];
+  const wizardUp = () =>
+    !!opts.wizard && wizardArmed && !wizardDismissed && !isNcLoginUrl(url) && Date.now() - signedInAt >= (opts.wizardDelayMs ?? 0);
   const dir = () => ncFilesDir(url);
   const rowName = (sel: string) => /data-cy-files-list-row-name="([^"]+)"/.exec(sel)?.[1];
   const present = (sel: string): boolean => {
     const onLogin = isNcLoginUrl(url);
+    if (sel === '#firstrunwizard') return wizardUp();
+    if (sel === '#firstrunwizard button[aria-label="Close"]') return wizardUp() && opts.wizard !== 'intro';
+    if (sel === '#firstrunwizard .header-close') return false;
     if (sel === '[data-login-form]' || sel === 'input#password') return onLogin;
     if (sel === 'input#user' || sel === '[data-login-form-submit]') return onLogin;
     if (sel === '[data-cy-files-content-breadcrumbs]') return dir() !== null;
@@ -83,6 +97,12 @@ function fakeNextcloud(opts: {
     async waitForTimeout(ms: number) {
       vi.setSystemTime(Date.now() + ms);
     },
+    keyboard: {
+      async press(k: string) {
+        wizardKeys.push(k);
+        if (k === 'Escape' && wizardUp() && opts.wizard !== 'stuck') wizardDismissed = true;
+      },
+    },
     locator(sel: string) {
       const first = {
         async count() {
@@ -94,9 +114,20 @@ function fakeNextcloud(opts: {
         async getAttribute(name: string) {
           return sel === 'head' && name === 'data-user' ? (opts.uid ?? null) : null;
         },
+        async isVisible() {
+          return present(sel);
+        },
         async click() {
           if (!present(sel)) throw new Error(`not present: ${sel}`);
+          if (!wizardArmed && sel === 'nav.app-menu a[href$="/apps/files/"]') wizardArmed = true;
+          if (wizardUp() && !sel.startsWith('#firstrunwizard')) {
+            throw new Error('locator.click: Timeout 5000ms exceeded.\n  - div#firstrunwizard subtree intercepts pointer events');
+          }
           clicks.push(sel);
+          if (sel === '#firstrunwizard button[aria-label="Close"]') {
+            if (opts.wizard !== 'stuck') wizardDismissed = true;
+            return;
+          }
           if (sel === '[data-login-form-submit]') {
             const pw = fields['input#password'] ?? '';
             submitted.push(pw);
@@ -123,7 +154,7 @@ function fakeNextcloud(opts: {
       };
     },
   };
-  return { page: page as unknown as Page, clicks, submitted };
+  return { page: page as unknown as Page, clicks, submitted, wizardKeys, wizardGone: () => wizardDismissed };
 }
 
 describe('ensureNextcloudFiles (verified sign-in)', () => {
@@ -163,6 +194,45 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
     await expect(ensureNextcloudFiles(page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher)).rejects.toThrow(
       /signed in but no Files app link in the Nextcloud header within 20000ms on http:\/\/idea01:18280\/apps\/dashboard\/ \(title=.*header links: .*tried nav\.app-menu/,
     );
+  });
+
+  it('First-run wizard (slides): clicks its Close button before the Files link (Axle 198eb69-r1)', async () => {
+    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, wizard: 'slides' });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher);
+    expect(f.clicks.indexOf('#firstrunwizard button[aria-label="Close"]')).toBeGreaterThanOrEqual(0);
+    expect(f.clicks.indexOf('#firstrunwizard button[aria-label="Close"]')).toBeLessThan(
+      f.clicks.indexOf('nav.app-menu a[href$="/apps/files/"]'),
+    );
+    expect(f.wizardKeys).toEqual([]);
+    expect(f.wizardGone()).toBe(true);
+    expect(ncFilesDir(f.page.url())).toBe('/');
+  });
+
+  it('First-run wizard (intro video, no button): Escape closes it, learner path too', async () => {
+    const f = fakeNextcloud({ start: 'dashboard', tree: { '/': [] }, wizard: 'intro' });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
+    expect(f.wizardKeys).toEqual(['Escape']);
+    expect(ncFilesDir(f.page.url())).toBe('/');
+  });
+
+  it('First-run wizard opening late intercepts the Files click: dismiss and retry', async () => {
+    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, wizard: 'slides', wizardOnFirstClick: true });
+    await ensureNextcloudFiles(f.page, 't', NC.auth.teacher);
+    expect(f.wizardGone()).toBe(true);
+    // first Files click was intercepted (not recorded), then Close, then the Files click landed
+    expect(f.clicks.filter((c) => c.startsWith('#firstrunwizard') || c.startsWith('nav.app-menu'))).toEqual([
+      '#firstrunwizard button[aria-label="Close"]',
+      'nav.app-menu a[href$="/apps/files/"]',
+    ]);
+    expect(ncFilesDir(f.page.url())).toBe('/');
+  });
+
+  it('loud-fails when the First-run wizard cannot be dismissed', async () => {
+    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, wizard: 'stuck' });
+    await expect(ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher)).rejects.toThrow(
+      /First-run wizard \(#firstrunwizard\) still blocks the page after close, close, close, close/,
+    );
+    expect(f.clicks).not.toContain('nav.app-menu a[href$="/apps/files/"]');
   });
 
   it('falls back once to the legacy password=username', async () => {
