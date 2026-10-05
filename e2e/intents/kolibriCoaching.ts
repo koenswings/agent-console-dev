@@ -101,6 +101,110 @@ const bodyHas = async (app: Page, re: RegExp): Promise<boolean> => {
   return re.test(text);
 };
 
+/** Settle budget for Kolibri coach SPA lists (lessons / quizzes / reports). */
+export const coachSettleMs = (): number => {
+  const raw = Number(process.env.DURATION_COACH_SETTLE_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 30_000;
+};
+
+export type CoachPageState = 'target' | 'signin' | 'loading';
+
+/**
+ * Pure classifier for a coach page poll. 'target' when the wanted control
+ * (lesson row, NEW LESSON, NEW QUIZ, …) is present; 'signin' when Kolibri
+ * bounced to its auth page; otherwise still 'loading'.
+ */
+export function classifyCoachPage(s: {
+  url: string;
+  hasTarget: boolean;
+  hasPasswordField: boolean;
+}): CoachPageState {
+  if (s.hasTarget) return 'target';
+  if (/\/auth\b|#\/signin/i.test(s.url) || s.hasPasswordField) return 'signin';
+  return 'loading';
+}
+
+/**
+ * True once the coach tab left the lessons list for one lesson:
+ * URL has a pinned lesson id, or `/plan/lessons/<id>` (live ids can change on
+ * re-provision, so any lesson summary route counts). The bare list does not.
+ */
+export function isLessonDetailUrl(url: string, pinnedLessonIds: string[]): boolean {
+  if (!url) return false;
+  if (pinnedLessonIds.some((id) => id && url.includes(id))) return true;
+  return /\/plan\/lessons\/[0-9a-f-]{32,36}(?:[/?]|$)/i.test(url.split('#')[1] ?? '');
+}
+
+const NEW_LESSON_RE = /^\s*new lesson\s*$/i;
+
+const newLessonControl = (app: Page) =>
+  app
+    .getByRole('button', { name: /new lesson/i })
+    .or(app.getByRole('link', { name: /new lesson/i }))
+    .or(app.getByText(NEW_LESSON_RE));
+
+const visibleCount = async (loc: ReturnType<Page['locator']>): Promise<number> =>
+  loc.count().catch(() => 0);
+
+/**
+ * Poll until `hasTarget` is true. On a Kolibri sign-in bounce, log in as the
+ * fixture teacher once and re-open `reopen`. Returns the last state seen.
+ */
+const settleCoachPage = async (
+  app: Page,
+  hasTarget: () => Promise<boolean>,
+  reopen: () => Promise<void>,
+  budgetMs = coachSettleMs(),
+): Promise<{ state: CoachPageState; signinRetried: boolean }> => {
+  const deadline = Date.now() + budgetMs;
+  let signinRetried = false;
+  let state: CoachPageState = 'loading';
+  while (Date.now() < deadline) {
+    state = classifyCoachPage({
+      url: app.url(),
+      hasTarget: await hasTarget(),
+      hasPasswordField: (await visibleCount(app.locator('input[type="password"]'))) > 0,
+    });
+    if (state === 'target') return { state, signinRetried };
+    if (state === 'signin' && !signinRetried) {
+      signinRetried = true;
+      await attemptAppLogin(app, DURATION_FIXTURES.kolibri.auth.teacher).catch(() => 'no_form');
+      await reopen();
+      continue;
+    }
+    await app.waitForTimeout(500);
+  }
+  return { state, signinRetried };
+};
+
+const bodySnippet = async (app: Page): Promise<string> => {
+  const text = await app.locator('body').innerText().catch(() => '');
+  return text.replace(/\s+/g, ' ').trim().slice(0, 240) || '(empty body)';
+};
+
+/**
+ * Real UI route to a class tab: coach class list → click class → Plan/Reports
+ * tab → sub-tab (Lessons / Quizzes). Best-effort clicks; caller re-settles.
+ */
+const clickIntoClassTab = async (
+  app: Page,
+  origin: string,
+  tab: RegExp,
+  subTab: RegExp,
+): Promise<void> => {
+  await gotoCoach(app, origin, '#/');
+  const cls = app.getByRole('link', { name: new RegExp(CLASS_NAME, 'i') })
+    .or(app.getByText(CLASS_NAME, { exact: true }));
+  await cls.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+  if (!(await cls.count())) return;
+  await cls.first().click({ timeout: 5_000 }).catch(() => {});
+  for (const re of [tab, subTab]) {
+    const link = app.getByRole('link', { name: re }).or(app.getByRole('tab', { name: re }));
+    await link.first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+    if (await link.count()) await link.first().click({ timeout: 5_000 }).catch(() => {});
+  }
+};
+
 /**
  * create_class — Facility Classes: assert Grade 5A exists, else NEW CLASS → save.
  * Preload-friendly create-or-assert (Kid CONTENT.live usually has Grade 5A).
@@ -180,41 +284,50 @@ export const enroll_learners: IntentFn = async ({ page }) => {
 };
 
 /**
- * build_lesson — Coach Plan → Lessons: open existing Grade 5A Duration Lesson
- * (preload) or NEW LESSON form. Prefer assert+open existing (non-destructive).
+ * build_lesson — Coach Plan → Lessons for the pinned class: open the preloaded
+ * Grade 5A Duration Lesson, or open NEW LESSON and cancel (non-destructive).
+ * Settles up to DURATION_COACH_SETTLE_MS (default 30s) for the SPA list, logs
+ * in once on a sign-in bounce, then retries via real clicks (class → Plan →
+ * Lessons). Loud-fail if neither the lesson nor NEW LESSON ever renders.
  */
 export const build_lesson: IntentFn = async ({ page }) => {
   const app = await ensureKolibriCoachPage(page);
   const origin = kolibriOrigin(app, page);
   const cid = classIds()[0]!;
-  await gotoCoach(app, origin, `#/${cid}/plan/lessons`);
+  const route = `#/${cid}/plan/lessons`;
+  const reopen = () => gotoCoach(app, origin, route);
+  await reopen();
 
-  const lessonLink = app.getByText(LESSON_TITLE, { exact: false }).first();
-  if (await lessonLink.count()) {
-    await lessonLink.click();
-    await app.waitForTimeout(1000);
-    // Lesson detail / resources should mention resources or title
-    if (!(await bodyHas(app, new RegExp(LESSON_TITLE.slice(0, 12), 'i')))) {
-      // URL may include lesson id
-      const ok = lessonIds().some((id) => app.url().includes(id));
-      if (!ok) {
-        throw new Error(
-          `idea#168 build_lesson: clicked '${LESSON_TITLE}' but detail did not settle (${app.url()})`,
-        );
-      }
-    }
-    return;
+  const lessonLink = () => app.getByText(LESSON_TITLE, { exact: false }).first();
+  const hasTarget = async () =>
+    (await visibleCount(lessonLink())) > 0 || (await visibleCount(newLessonControl(app))) > 0;
+
+  let settled = await settleCoachPage(app, hasTarget, reopen);
+  if (settled.state !== 'target') {
+    await clickIntoClassTab(app, origin, /^plan$/i, /^lessons$/i);
+    settled = await settleCoachPage(app, hasTarget, reopen, Math.min(coachSettleMs(), 15_000));
   }
-
-  const newLesson = app.getByRole('button', { name: /new lesson/i })
-    .or(app.getByText(/^NEW LESSON$/i));
-  if (!(await newLesson.count())) {
+  if (settled.state !== 'target') {
     throw new Error(
-      `idea#168 build_lesson: '${LESSON_TITLE}' not listed and NEW LESSON missing on ${app.url()}`,
+      `idea#168 build_lesson: '${LESSON_TITLE}' not listed and NEW LESSON missing on ${app.url()} ` +
+        `after ${coachSettleMs()}ms settle + class→Plan→Lessons clicks (state=${settled.state}, ` +
+        `signinRetried=${settled.signinRetried}). Class ${CLASS_NAME} id=${cid}. Body: ${await bodySnippet(app)}`,
     );
   }
-  await newLesson.first().click();
-  await app.waitForTimeout(800);
+
+  if (await visibleCount(lessonLink())) {
+    await lessonLink().click();
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      if (isLessonDetailUrl(app.url(), lessonIds())) return;
+      await app.waitForTimeout(400);
+    }
+    throw new Error(
+      `idea#168 build_lesson: clicked '${LESSON_TITLE}' but lesson detail did not settle (${app.url()})`,
+    );
+  }
+
+  await newLessonControl(app).first().click();
   const titleInput = app.locator('input[type="text"]').first();
   await titleInput.waitFor({ state: 'visible', timeout: 10_000 });
   // Minimal: fill title then leave without full resource add (destructive-safe)
@@ -238,12 +351,18 @@ export const create_quiz: IntentFn = async ({ page }) => {
   const app = await ensureKolibriCoachPage(page);
   const origin = kolibriOrigin(app, page);
   const cid = classIds()[0]!;
-  await gotoCoach(app, origin, `#/${cid}/plan/quizzes`);
+  const reopen = () => gotoCoach(app, origin, `#/${cid}/plan/quizzes`);
+  await reopen();
 
   const newQuiz = app.getByRole('button', { name: /new quiz/i })
-    .or(app.getByText(/^NEW QUIZ$/i));
-  if (!(await newQuiz.count())) {
-    throw new Error(`idea#168 create_quiz: NEW QUIZ button missing on ${app.url()}`);
+    .or(app.getByRole('link', { name: /new quiz/i }))
+    .or(app.getByText(/^\s*new quiz\s*$/i));
+  const settled = await settleCoachPage(app, async () => (await visibleCount(newQuiz)) > 0, reopen);
+  if (settled.state !== 'target') {
+    throw new Error(
+      `idea#168 create_quiz: NEW QUIZ button missing on ${app.url()} after ${coachSettleMs()}ms ` +
+        `(state=${settled.state}). Body: ${await bodySnippet(app)}`,
+    );
   }
   await newQuiz.first().click();
   await app.waitForTimeout(1000);
@@ -265,12 +384,15 @@ export const read_reports: IntentFn = async ({ page }) => {
   const app = await ensureKolibriCoachPage(page);
   const origin = kolibriOrigin(app, page);
   const cid = classIds()[0]!;
-  await gotoCoach(app, origin, `#/${cid}/reports/lessons`);
+  const reopen = () => gotoCoach(app, origin, `#/${cid}/reports/lessons`);
+  await reopen();
 
   const lesson = app.getByText(LESSON_TITLE, { exact: false }).first();
-  if (!(await lesson.count())) {
+  const settled = await settleCoachPage(app, async () => (await visibleCount(lesson)) > 0, reopen);
+  if (settled.state !== 'target') {
     throw new Error(
-      `idea#168 read_reports: '${LESSON_TITLE}' not in reports lessons on ${app.url()}`,
+      `idea#168 read_reports: '${LESSON_TITLE}' not in reports lessons on ${app.url()} after ` +
+        `${coachSettleMs()}ms (state=${settled.state}). Body: ${await bodySnippet(app)}`,
     );
   }
   await lesson.click();

@@ -161,6 +161,8 @@ hash navigation — **fail loud** if UI missing (never silent ok).
 | `build_lesson` | Coach Plan → Lessons | Open **Grade 5A Duration Lesson** (or NEW LESSON+Cancel) |
 | `create_quiz` | Coach Plan → Quizzes | Open NEW QUIZ wizard; Cancel when possible (no quiz preload) |
 | `read_reports` | Coach Reports → Lessons | Open lesson report; assert learner/progress table |
+
+Coach list settle (Prefer A): `build_lesson` / `create_quiz` / `read_reports` poll up to `DURATION_COACH_SETTLE_MS` (default 30s) for their control (lesson row / NEW LESSON, NEW QUIZ, lesson row) instead of one count after 800ms. A Kolibri sign-in bounce gets one fixture-teacher login and re-open. `build_lesson` then retries via real clicks (class list → Grade 5A → Plan → Lessons). Lesson detail must reach `/plan/lessons/<id>`. Loud-fail includes state, URL and a body snippet.
 | `preview_as_learner` | Learn tab | Navigate `/en/learn/` |
 | `browse_classes` | Learn home | Scan library/classes without starting a resource |
 | `back_to_console` | Console | Close Kolibri tabs; assert `console-overview` / `op-overview` |
