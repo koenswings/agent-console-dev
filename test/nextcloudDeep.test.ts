@@ -5,7 +5,9 @@ import {
   isNcLoginUrl,
   isNextcloudTabUrl,
   ncFilesDir,
+  ncLogout,
   ncPasswordCandidates,
+  ncSignedInUser,
   runBrowseFolders,
   runShareToClass,
   runDoneSharing,
@@ -71,6 +73,8 @@ function fakeNextcloud(opts: {
   const fields: Record<string, string> = {};
   const clicks: string[] = [];
   const submitted: string[] = [];
+  let uid: string | null = opts.uid ?? null;
+  let menuOpen = false;
   let signedInAt = opts.start === 'login' ? Number.POSITIVE_INFINITY : Date.now();
   let wizardDismissed = false;
   let wizardArmed = !opts.wizardOnFirstClick;
@@ -79,6 +83,15 @@ function fakeNextcloud(opts: {
     !!opts.wizard && wizardArmed && !wizardDismissed && !isNcLoginUrl(url) && Date.now() - signedInAt >= (opts.wizardDelayMs ?? 0);
   const dir = () => ncFilesDir(url);
   const rowName = (sel: string) => /data-cy-files-list-row-name="([^"]+)"/.exec(sel)?.[1];
+  const menuSels = new Set([
+    '#user-menu button',
+    'nav#user-menu button',
+    '#header-menu-user-menu',
+    'button[aria-label="Settings menu"]',
+    'button[aria-label="User menu"]',
+    '[data-user-menu]',
+  ]);
+  const logoutSels = new Set(['a[href*="logout"]', '#user-menu a[href*="logout"]', 'li#logout a', '[data-id="logout"] a']);
   const present = (sel: string): boolean => {
     const onLogin = isNcLoginUrl(url);
     if (sel === '#firstrunwizard') return wizardUp();
@@ -89,6 +102,9 @@ function fakeNextcloud(opts: {
     if (sel === '[data-cy-files-content-breadcrumbs]') return dir() !== null;
     if (sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
     if (sel === 'nav.app-menu a[href$="/apps/files/"]') return !onLogin && Date.now() - signedInAt >= (opts.navDelayMs ?? 0);
+    if (menuSels.has(sel)) return !onLogin;
+    if (logoutSels.has(sel)) return !onLogin && menuOpen;
+    if (sel === 'head') return !onLogin;
     const name = rowName(sel);
     if (name && dir() !== null) return (opts.tree[dir()!] ?? []).includes(name);
     return false;
@@ -113,7 +129,7 @@ function fakeNextcloud(opts: {
           fields[sel] = v;
         },
         async getAttribute(name: string) {
-          return sel === 'head' && name === 'data-user' ? (opts.uid ?? null) : null;
+          return sel === 'head' && name === 'data-user' ? uid : null;
         },
         async isVisible() {
           return present(sel);
@@ -121,10 +137,21 @@ function fakeNextcloud(opts: {
         async click() {
           if (!present(sel)) throw new Error(`not present: ${sel}`);
           if (!wizardArmed && sel === 'nav.app-menu a[href$="/apps/files/"]') wizardArmed = true;
-          if (wizardUp() && !sel.startsWith('#firstrunwizard')) {
+          if (wizardUp() && !sel.startsWith('#firstrunwizard') && !menuSels.has(sel) && !logoutSels.has(sel)) {
             throw new Error('locator.click: Timeout 5000ms exceeded.\n  - div#firstrunwizard subtree intercepts pointer events');
           }
           clicks.push(sel);
+          if (menuSels.has(sel)) {
+            menuOpen = true;
+            return;
+          }
+          if (logoutSels.has(sel)) {
+            url = `${ORIGIN}/login`;
+            uid = null;
+            menuOpen = false;
+            signedInAt = Number.POSITIVE_INFINITY;
+            return;
+          }
           if (sel === '#firstrunwizard button[aria-label="Close"]') {
             if (opts.wizard !== 'stuck') wizardDismissed = true;
             return;
@@ -135,6 +162,8 @@ function fakeNextcloud(opts: {
             if ((opts.accept ?? []).includes(pw)) {
               url = `${ORIGIN}/apps/dashboard/`;
               signedInAt = Date.now();
+              uid = fields['input#user'] ?? uid;
+              menuOpen = false;
             }
             return;
           }
@@ -155,7 +184,7 @@ function fakeNextcloud(opts: {
       };
     },
   };
-  return { page: page as unknown as Page, clicks, submitted, wizardKeys, wizardGone: () => wizardDismissed };
+  return { page: page as unknown as Page, clicks, submitted, wizardKeys, wizardGone: () => wizardDismissed, getUid: () => uid };
 }
 
 describe('ensureNextcloudFiles (verified sign-in)', () => {
@@ -185,9 +214,15 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('race: same wait for an existing session landing on the dashboard (learner path)', async () => {
-    const { page } = fakeNextcloud({ start: 'dashboard', tree: { '/': [] }, navDelayMs: 3_000 });
+    const { page } = fakeNextcloud({
+      start: 'dashboard',
+      tree: { '/': [] },
+      navDelayMs: 3_000,
+      uid: NC.auth.learner.username,
+    });
     await ensureNextcloudFiles(page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
     expect(ncFilesDir(page.url())).toBe('/');
+    expect(await ncSignedInUser(page)).toBe(NC.auth.learner.username);
   });
 
   it('loud-fails with page state when the Files link never renders within SETTLE_MS', async () => {
@@ -210,7 +245,12 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('First-run wizard (intro video, no button): Escape closes it, learner path too', async () => {
-    const f = fakeNextcloud({ start: 'dashboard', tree: { '/': [] }, wizard: 'intro' });
+    const f = fakeNextcloud({
+      start: 'dashboard',
+      tree: { '/': [] },
+      wizard: 'intro',
+      uid: NC.auth.learner.username,
+    });
     await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
     expect(f.wizardKeys).toEqual(['Escape']);
     expect(ncFilesDir(f.page.url())).toBe('/');
@@ -253,6 +293,69 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
     const { page, submitted } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {} });
     await expect(ensureNextcloudFiles(page, 'idea#166 browse_folders', null)).rejects.toThrow(/not signed in/);
     expect(submitted).toEqual([]);
+  });
+
+  it('cover-all-aeef795-r12: teacher session + learner creds → logout, sign in as learner, Files uid matches', async () => {
+    const f = fakeNextcloud({
+      start: 'files',
+      uid: NC.auth.teacher.username,
+      accept: ['Student01Grade5A!'],
+      tree: { '/': [] },
+    });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
+    expect(f.clicks).toContain('#user-menu button');
+    expect(f.clicks).toContain('a[href*="logout"]');
+    expect(f.submitted).toEqual(['Student01Grade5A!']);
+    expect(ncFilesDir(f.page.url())).toBe('/');
+    expect(await ncSignedInUser(f.page)).toBe(NC.auth.learner.username);
+  });
+
+  it('already signed in as learner + learner creds → no logout', async () => {
+    const f = fakeNextcloud({
+      start: 'files',
+      uid: NC.auth.learner.username,
+      tree: { '/': [] },
+    });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
+    expect(f.clicks.filter((c) => c.includes('logout') || c.includes('user-menu'))).toEqual([]);
+    expect(f.submitted).toEqual([]);
+    expect(await ncSignedInUser(f.page)).toBe(NC.auth.learner.username);
+  });
+
+  it('already signed in as teacher + teacher creds → no logout', async () => {
+    const f = fakeNextcloud({
+      start: 'files',
+      uid: NC.auth.teacher.username,
+      tree: { '/': [] },
+    });
+    await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher);
+    expect(f.clicks.filter((c) => c.includes('logout') || c.includes('user-menu'))).toEqual([]);
+    expect(f.submitted).toEqual([]);
+    expect(await ncSignedInUser(f.page)).toBe(NC.auth.teacher.username);
+  });
+
+  it('deep Intents (null creds) leave a leftover teacher session alone (no logout)', async () => {
+    const f = fakeNextcloud({ start: 'files', uid: NC.auth.teacher.username, tree: { '/': ['Class Materials'] } });
+    // browse path uses null creds; role gates stay in share/file-drop
+    await ensureNextcloudFiles(f.page, 'idea#166 browse_folders', null);
+    expect(f.clicks.filter((c) => c.includes('logout'))).toEqual([]);
+    expect(await ncSignedInUser(f.page)).toBe(NC.auth.teacher.username);
+  });
+});
+
+describe('ncLogout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T14:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('opens the user menu and lands on /login', async () => {
+    const f = fakeNextcloud({ start: 'files', uid: 'teacher', tree: { '/': [] } });
+    await ncLogout(f.page, 't');
+    expect(isNcLoginUrl(f.page.url())).toBe(true);
+    expect(f.clicks).toEqual(['#user-menu button', 'a[href*="logout"]']);
+    expect(await ncSignedInUser(f.page)).toBeNull();
   });
 });
 

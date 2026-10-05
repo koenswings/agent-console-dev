@@ -473,7 +473,11 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   login helper returned ok without checking). Passwords: Kid `CONTENT.live.json` (`TeacherGrade5A!`,
   `Student01Grade5A!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
   password=username tried once if refused. Success only with a signed-in Files list (header Files link clicked if NC
-  lands on Dashboard). Loud-fail names the refused account.
+  lands on Dashboard) **and** `<head data-user>` matching the requested role. If the leftover tab is already signed
+  in as the other role (cover-all-aeef795-r12: teacher session after `leave_nextcloud_as_teacher` soft-passed
+  `open_nextcloud_as_learner`), Prefer A logs out via the real NC 31 user menu (`#user-menu` → `a[href*="logout"]`)
+  and signs in as the requested account before opening Files. Matching uid = no logout. Deep Intents (`creds=null`)
+  never switch sessions. Loud-fail names the refused account or a post-settle uid mismatch.
   After leaving `/login` (or landing signed in on Dashboard), the header Files link is **polled up to 20s**
   (`waitForLoadState('load')` + poll), never counted once. Axle smoke 2da863c-r1 failed on that one-shot count while the
   dashboard header was still rendering. Missing after 20s = loud-fail with URL, title and header links.

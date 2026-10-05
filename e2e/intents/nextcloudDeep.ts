@@ -48,6 +48,27 @@ export const NC_FIRSTRUN = {
   close: ['#firstrunwizard button[aria-label="Close"]', '#firstrunwizard .header-close'],
 } as const;
 
+/**
+ * Nextcloud 31 AccountMenu (core AccountMenu.vue / layout.user.php #user-menu):
+ * open the Settings/user menu, then the logout entry (settingsNavEntries id=logout).
+ */
+export const NC_LOGOUT = {
+  menu: [
+    '#user-menu button',
+    'nav#user-menu button',
+    '#header-menu-user-menu',
+    'button[aria-label="Settings menu"]',
+    'button[aria-label="User menu"]',
+    '[data-user-menu]',
+  ],
+  logout: [
+    'a[href*="logout"]',
+    '#user-menu a[href*="logout"]',
+    'li#logout a',
+    '[data-id="logout"] a',
+  ],
+} as const;
+
 export const ncRowSelector = (name: string): string =>
   `tr[data-cy-files-list-row-name="${name.replace(/"/g, '\\"')}"]`;
 export const ncRowLinkSelector = (name: string): string =>
@@ -91,6 +112,13 @@ const firstPresent = async (app: Page, selectors: readonly string[]): Promise<st
   return null;
 };
 
+const firstVisible = async (app: Page, selectors: readonly string[]): Promise<string | null> => {
+  for (const s of selectors) {
+    if (await app.locator(s).first().isVisible().catch(() => false)) return s;
+  }
+  return null;
+};
+
 const waitFor = async (pred: () => Promise<boolean> | boolean, app: Page, ms: number): Promise<boolean> => {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
@@ -109,9 +137,77 @@ const rowNames = async (app: Page): Promise<string> => {
 };
 
 /**
- * Make sure the tab is Nextcloud Files, signed in. With `creds`, a login form
- * is filled (configured password, then legacy password=username once). Without
- * creds, a login form is a loud-fail (deep Intents must not guess the role).
+ * Prefer A logout via the real Nextcloud 31 user menu (AccountMenu), then wait for /login.
+ * Loud-fail with page state if the menu or logout entry cannot be used.
+ */
+export const ncLogout = async (app: Page, tag: string): Promise<void> => {
+  const onLogin = async () => isNcLoginUrl(app.url()) || (await firstPresent(app, NC_SELECTORS.loginForm)) !== null;
+  if (await onLogin()) return;
+
+  let logout = await firstVisible(app, NC_LOGOUT.logout);
+  if (!logout) {
+    let opened = false;
+    const menu = (await firstVisible(app, NC_LOGOUT.menu)) ?? (await firstPresent(app, NC_LOGOUT.menu));
+    if (menu) {
+      await app.locator(menu).first().click({ timeout: 5_000 });
+      opened = true;
+    } else if (typeof app.getByRole === 'function') {
+      const btn = app.getByRole('button', { name: /settings menu|user menu/i }).first();
+      if (await btn.isVisible().catch(() => false)) {
+        await btn.click({ timeout: 5_000 });
+        opened = true;
+      }
+    }
+    if (!opened) {
+      throw new Error(
+        `${tag}: cannot open Nextcloud user menu to log out on ${app.url()} ` +
+          `(tried ${NC_LOGOUT.menu.join(' | ')}).`,
+      );
+    }
+    const found = await waitFor(
+      async () => (logout = await firstVisible(app, NC_LOGOUT.logout)) !== null,
+      app,
+      8_000,
+    );
+    if (!found || !logout) {
+      if (typeof app.getByRole === 'function') {
+        const item = app.getByRole('menuitem', { name: /log\s*out/i }).first();
+        const link = app.getByRole('link', { name: /log\s*out/i }).first();
+        if (await item.isVisible().catch(() => false)) {
+          await item.click({ timeout: 5_000 });
+          logout = '__role_menuitem__';
+        } else if (await link.isVisible().catch(() => false)) {
+          await link.click({ timeout: 5_000 });
+          logout = '__role_link__';
+        }
+      }
+      if (!logout) {
+        throw new Error(
+          `${tag}: Nextcloud user menu open but no Log out entry on ${app.url()} ` +
+            `(tried ${NC_LOGOUT.logout.join(' | ')}).`,
+        );
+      }
+    }
+  }
+  if (logout && !logout.startsWith('__role_')) {
+    await app.locator(logout).first().click({ timeout: 5_000 });
+  }
+  if (!(await waitFor(async () => onLogin(), app, SETTLE_MS))) {
+    throw new Error(
+      `${tag}: Nextcloud logout clicked but login page did not appear within ${SETTLE_MS}ms ` +
+        `(still on ${app.url()}; uid=${(await ncSignedInUser(app)) ?? 'none'}).`,
+    );
+  }
+};
+
+/**
+ * Make sure the tab is Nextcloud Files, signed in as `creds` when provided.
+ * With `creds`: if already signed in as a different uid, log out first, then sign in
+ * (configured password, then legacy password=username once). After Files settle,
+ * assert head[data-user] === creds.username (cover-all-aeef795-r12: leftover teacher
+ * session must not soft-pass open_nextcloud_as_learner).
+ * Without creds, a login form is a loud-fail (deep Intents must not guess the role);
+ * an existing session is left as-is (share/file-drop keep their own role gates).
  */
 export const ensureNextcloudFiles = async (
   app: Page,
@@ -127,6 +223,13 @@ export const ensureNextcloudFiles = async (
   );
   if (!landed) {
     throw new Error(`${tag}: Nextcloud did not render a login form or an app page within ${SETTLE_MS}ms (${app.url()}).`);
+  }
+
+  if (creds && !(await onLogin())) {
+    const uid = await ncSignedInUser(app);
+    if (uid && uid !== creds.username) {
+      await ncLogout(app, tag);
+    }
   }
 
   if (await onLogin()) {
@@ -212,6 +315,16 @@ export const ensureNextcloudFiles = async (
   }
   // Wizard can also open over Files (first login straight into /apps/files).
   await ncDismissFirstRunWizard(app, tag);
+
+  if (creds) {
+    const uid = await ncSignedInUser(app);
+    if (uid !== creds.username) {
+      throw new Error(
+        `${tag}: Nextcloud Files settled but signed-in uid is ${uid ? JSON.stringify(uid) : '(none)'}, ` +
+          `want ${JSON.stringify(creds.username)} on ${app.url()}.`,
+      );
+    }
+  }
 };
 
 const wizardOpen = async (app: Page): Promise<boolean> => {
@@ -457,13 +570,6 @@ export const ncSignedInUser = async (app: Page): Promise<string | null> => {
 };
 
 const SHARE_API = /\/ocs\/v[12]\.php\/apps\/files_sharing\/api\/v1\/shares(\/\d+)?(\?|$)/;
-
-const firstVisible = async (app: Page, selectors: readonly string[]): Promise<string | null> => {
-  for (const s of selectors) {
-    if (await app.locator(s).first().isVisible().catch(() => false)) return s;
-  }
-  return null;
-};
 
 /** Open the Files sidebar on the Sharing tab for a row (inline Share icon, else Actions → Details). */
 export const ncOpenSharingSidebar = async (app: Page, tag: string, name: string): Promise<string> => {
