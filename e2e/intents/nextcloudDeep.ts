@@ -619,3 +619,121 @@ export const back_to_console_from_share: IntentFn = async ({ page }) => {
     throw new Error(`${tag}: Nextcloud tab still open after leaving to the Console (${app.url()}).`);
   }
 };
+
+/* ------------------------------------------------------------------------- */
+/* open_collab_doc / close_doc (nc_browse ⇄ nc_collab)                        */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Viewer (nextcloud/viewer stable31 Viewer.vue): NcModal id="viewer", name = file
+ * basename; @nextcloud/vue 8.23.1 NcModal header: .modal-header__name, close
+ * button .header-close (aria-label "Close"). Markdown opens with the Text app
+ * inside the Viewer. Kid placeholder doc heading: "Grade 5A collab notes".
+ */
+export const NC_VIEWER_SELECTORS = {
+  viewer: '#viewer',
+  name: '#viewer .modal-header__name',
+  close: ['#viewer .header-close', '#viewer button[aria-label="Close"]'],
+} as const;
+
+/** Heading Kid ships in Collab/Grade5A-collab-notes.md (proves real content rendered). */
+export const NC_COLLAB_DOC_MARKER = 'Grade 5A collab notes';
+
+/** True when the Files URL marks a file as opened (?openfile, not "false"). */
+export function ncOpenFileQuery(url: string): boolean {
+  try {
+    const q = new URL(url).searchParams;
+    return q.has('openfile') && (q.get('openfile') ?? '').toLowerCase() !== 'false';
+  } catch {
+    return false;
+  }
+}
+
+const viewerOpen = async (app: Page): Promise<boolean> =>
+  app.locator(NC_VIEWER_SELECTORS.viewer).first().isVisible().catch(() => false);
+
+/**
+ * open_collab_doc (nc_browse → nc_collab): Files → class root → Collab → click
+ * Grade5A-collab-notes.md. Success = Viewer open titled with the file name and
+ * showing the doc's heading. Placeholder doc per Kid (Collabora not in pack);
+ * this opens the real file in Nextcloud's own viewer, no stub.
+ */
+export const runOpenCollabDoc = async (app: Page): Promise<string> => {
+  const tag = 'idea#166 open_collab_doc';
+  const doc = NC.collabDoc;
+  await ensureNextcloudFiles(app, tag, null);
+  if (await viewerOpen(app)) {
+    throw new Error(`${tag}: a Viewer is already open (not nc_browse) on ${app.url()}.`);
+  }
+  await ncOpenClassRoot(app, tag);
+  const dir = await ncOpenFolder(app, tag, NC.folders.collab);
+  const link = app.locator(ncRowLinkSelector(doc)).first();
+  if (!(await waitFor(async () => (await link.count().catch(() => 0)) > 0, app, SETTLE_MS))) {
+    throw new Error(`${tag}: "${doc}" not listed in ${dir} (rows: ${await rowNames(app)}).`);
+  }
+  await link.click({ timeout: 8_000 });
+  if (!(await waitFor(() => viewerOpen(app), app, SETTLE_MS))) {
+    throw new Error(
+      `${tag}: clicking "${doc}" did not open the Nextcloud Viewer (${NC_VIEWER_SELECTORS.viewer}); ` +
+        `Text/Viewer app disabled or file downloaded instead (${app.url()}).`,
+    );
+  }
+  let name = '';
+  const titled = await waitFor(
+    async () => (name = ((await app.locator(NC_VIEWER_SELECTORS.name).first().innerText().catch(() => '')) ?? '').trim()) === doc,
+    app,
+    SETTLE_MS,
+  );
+  if (!titled) throw new Error(`${tag}: Viewer opened "${name || '(no title)'}", not "${doc}".`);
+  const content = await waitFor(
+    async () => ((await app.locator(NC_VIEWER_SELECTORS.viewer).first().innerText().catch(() => '')) ?? '').includes(NC_COLLAB_DOC_MARKER),
+    app,
+    SETTLE_MS,
+  );
+  if (!content) {
+    throw new Error(`${tag}: Viewer for "${doc}" never rendered the doc heading "${NC_COLLAB_DOC_MARKER}" (empty/failed load).`);
+  }
+  return dir;
+};
+
+export const open_collab_doc: IntentFn = async ({ page }) => {
+  await runOpenCollabDoc(ncAppPage(page, 'idea#166 open_collab_doc'));
+};
+
+/** close_doc (nc_collab → nc_browse): Viewer Close → Files list of the doc's folder. */
+export const runCloseDoc = async (app: Page): Promise<string> => {
+  const tag = 'idea#166 close_doc';
+  await ensureNextcloudFiles(app, tag, null);
+  if (!(await viewerOpen(app))) {
+    throw new Error(`${tag}: not in nc_collab: no Nextcloud Viewer open (${app.url()}). Run open_collab_doc first.`);
+  }
+  const dir = ncFilesDir(app.url());
+  let close: string | null = null;
+  for (const s of NC_VIEWER_SELECTORS.close) {
+    if (await app.locator(s).first().isVisible().catch(() => false)) {
+      close = s;
+      break;
+    }
+  }
+  if (!close) throw new Error(`${tag}: Viewer has no Close button (${NC_VIEWER_SELECTORS.close.join(', ')}).`);
+  await app.locator(close).first().click({ timeout: 8_000 });
+  if (!(await waitFor(async () => !(await viewerOpen(app)), app, SETTLE_MS))) {
+    throw new Error(`${tag}: clicked Close but the Viewer is still open (${app.url()}).`);
+  }
+  const browse = await waitFor(
+    async () =>
+      ncFilesDir(app.url()) === dir &&
+      !ncOpenFileQuery(app.url()) &&
+      (await app.locator(NC_SELECTORS.breadcrumbs).count().catch(() => 0)) > 0,
+    app,
+    SETTLE_MS,
+  );
+  if (!browse) {
+    throw new Error(`${tag}: Viewer closed but Files is not browsing ${dir} without openfile (${app.url()}).`);
+  }
+  return dir!;
+};
+
+export const close_doc: IntentFn = async ({ page }) => {
+  await runCloseDoc(ncAppPage(page, 'idea#166 close_doc'));
+};

@@ -8,7 +8,8 @@
  * exit_lesson is registered (video/exercise → Learn home via Kolibri chrome).
  * Nextcloud: open_nextcloud_as_* now prove a signed-in Files list; browse_folders
  * registered; share_to_class registered (sharing sidebar → group Grade 5A, View only);
- * done_sharing / back_to_console_from_share leave nc_share.
+ * done_sharing / back_to_console_from_share leave nc_share; open_collab_doc / close_doc
+ * (Kid placeholder .md in the Viewer). File Drop trio blocked on Kid file-request fixture.
  * open_wikipedia_* stay unregistered.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
@@ -34,6 +35,8 @@ import {
   share_to_class,
   done_sharing,
   back_to_console_from_share,
+  open_collab_doc,
+  close_doc,
 } from './nextcloudDeep';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
 import {
@@ -117,6 +120,8 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   share_to_class,
   done_sharing,
   back_to_console_from_share,
+  open_collab_doc,
+  close_doc,
   open_video,
   keep_watching,
   next_resource,

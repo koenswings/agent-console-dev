@@ -497,6 +497,16 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
 - **`back_to_console_from_share` (nc_share → console_teacher):** same nc_share assertion, then the shared
   `leaveAppToConsole` (close app tabs, prove `console-overview`) used by `leave_nextcloud_as_teacher`, and the
   Nextcloud tab must be closed. (No App spec for this name; semantics from the action name + nc_share.)
-- Still to do in later tips: `open_file_drop`,
-  `after_upload`, `leave_file_drop`, `open_collab_doc`, `close_doc`. `keep_editing` is blocked on Kid's Collabora pack
-  (walker-ref `blocked_until_collabora`).
+- **`open_collab_doc` (nc_browse → nc_collab):** class root → Collab → click `Grade5A-collab-notes.md` (row name link).
+  Success = Nextcloud Viewer `#viewer` (nextcloud/viewer stable31 NcModal) open, `.modal-header__name` equals the
+  file name, and the doc heading "Grade 5A collab notes" is rendered (Text app). Kid's placeholder doc (Collabora not
+  in pack), opened in Nextcloud's own viewer, so nothing is stubbed. Download instead of Viewer = loud-fail.
+- **`close_doc` (nc_collab → nc_browse):** Viewer `.header-close` (NcModal, aria-label "Close") → Viewer gone, same
+  `dir`, `openfile` dropped from the URL.
+- **Blocked (not registered, no stub):**
+  - `open_file_drop` / `after_upload` / `leave_file_drop`: the Kid fixture says the Drop Zone is a teacher-preloaded
+    **File request public link** ("often outside the walk"), but nothing provisions it. There is no link/token in
+    `CONTENT.live.json`, and the files_external mount defaults `enable_sharing=false`, so it can't be created through
+    the UI either. Opening Drop Zone as a normal folder would remap the upload-only screen. Owner Kid: provision the
+    file request and publish its URL.
+  - `keep_editing`: Kid's Collabora pack (`blocked_until_collabora`).

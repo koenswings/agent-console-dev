@@ -43,6 +43,8 @@ export const CONSOLE_INTENT_NAMES = [
   'share_to_class',
   'done_sharing',
   'back_to_console_from_share',
+  'open_collab_doc',
+  'close_doc',
   // Phase 5 — Kolibri content (Kid @0bca699 CONTENT.seeded.json)
   'open_video',
   'keep_watching',

@@ -9,6 +9,9 @@ import {
   runBrowseFolders,
   runShareToClass,
   runDoneSharing,
+  runOpenCollabDoc,
+  runCloseDoc,
+  ncOpenFileQuery,
   isGroupShareEntryText,
   ncGroupShareTitle,
   ncOcsFailure,
@@ -308,5 +311,135 @@ describe('runDoneSharing (nc_share → nc_browse)', () => {
   it('loud-fails when Close sidebar does not close it', async () => {
     const { page } = fakeShareState({ stuck: true });
     await expect(runDoneSharing(page)).rejects.toThrow(/still open/);
+  });
+});
+
+/** Fake NC Files + Viewer: folders keyed by dir, files open in #viewer. */
+function fakeCollab(o: {
+  tree: Record<string, string[]>;
+  files: string[];
+  start?: string;
+  viewer?: 'opens' | 'downloads';
+  title?: string;
+  content?: string;
+  stuckClose?: boolean;
+}) {
+  let url = o.start ?? filesUrl('/');
+  let viewer = o.start ? ncOpenFileQuery(o.start) : false;
+  const clicks: string[] = [];
+  const dir = () => ncFilesDir(url);
+  const rowName = (sel: string) => /data-cy-files-list-row-name="([^"]+)"/.exec(sel)?.[1];
+  const withQuery = (d: string, open: boolean) => `${filesUrl(d).split('?')[0]}?dir=${encodeURIComponent(d)}${open ? '&openfile=true' : ''}`;
+  const present = (sel: string): boolean => {
+    if (sel.startsWith('#viewer')) {
+      if (!viewer) return false;
+      return sel === '#viewer' || sel.endsWith('.modal-header__name') || sel.endsWith('.header-close');
+    }
+    if (sel === '[data-cy-files-content-breadcrumbs]' || sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
+    const name = rowName(sel);
+    if (name && dir() !== null) return (o.tree[dir()!] ?? []).includes(name);
+    return false;
+  };
+  const L = (sel: string): unknown => ({
+    first: () => L(sel),
+    count: async () => (present(sel) ? 1 : 0),
+    isVisible: async () => present(sel),
+    getAttribute: async (n: string) => (sel === 'head' && n === 'data-user' ? 'student01' : null),
+    innerText: async () => {
+      if (!present(sel)) throw new Error('detached');
+      if (sel.endsWith('.modal-header__name')) return o.title ?? 'Grade5A-collab-notes.md';
+      if (sel === '#viewer') return o.content ?? '# Grade 5A collab notes (placeholder)\nDuration-tests';
+      return '';
+    },
+    evaluateAll: async () => (dir() !== null ? (o.tree[dir()!] ?? []) : []),
+    click: async () => {
+      if (!present(sel)) throw new Error(`not present: ${sel}`);
+      clicks.push(sel);
+      if (sel.endsWith('.header-close')) {
+        if (!o.stuckClose) {
+          viewer = false;
+          url = withQuery(dir()!, false);
+        }
+        return;
+      }
+      if (sel.startsWith('[data-cy-files-content-breadcrumbs] a')) {
+        url = filesUrl('/');
+        return;
+      }
+      const name = rowName(sel)!;
+      if (o.files.includes(name)) {
+        if ((o.viewer ?? 'opens') === 'opens') {
+          viewer = true;
+          url = withQuery(dir()!, true);
+        }
+        return;
+      }
+      url = withQuery(`${dir() === '/' ? '' : dir()}/${name}`, false);
+    },
+  });
+  const page = {
+    url: () => url,
+    waitForTimeout: async (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+    },
+    locator: (sel: string) => L(sel),
+  };
+  return { page: page as unknown as Page, clicks, isViewerOpen: () => viewer };
+}
+
+describe('open_collab_doc / close_doc (Kid placeholder .md in the Viewer)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T14:40:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const tree = {
+    '/': ['Grade 5A Files'],
+    '/Grade 5A Files': ['Class Materials', 'Drop Zone', 'Collab'],
+    '/Grade 5A Files/Collab': ['Grade5A-collab-notes.md'],
+  };
+  const files = ['Grade5A-collab-notes.md'];
+
+  it('ncOpenFileQuery follows the Files openfile rule', () => {
+    expect(ncOpenFileQuery(`${ORIGIN}/apps/files/files/9?dir=/Collab&openfile=true`)).toBe(true);
+    expect(ncOpenFileQuery(`${ORIGIN}/apps/files/files/9?dir=/Collab&openfile`)).toBe(true);
+    expect(ncOpenFileQuery(`${ORIGIN}/apps/files/files/9?dir=/Collab&openfile=false`)).toBe(false);
+    expect(ncOpenFileQuery(`${ORIGIN}/apps/files/files/9?dir=/Collab`)).toBe(false);
+  });
+
+  it('opens Collab/Grade5A-collab-notes.md in the Viewer, then close_doc returns to Collab', async () => {
+    const f = fakeCollab({ tree, files });
+    expect(await runOpenCollabDoc(f.page)).toBe('/Grade 5A Files/Collab');
+    expect(f.isViewerOpen()).toBe(true);
+    expect(await runCloseDoc(f.page)).toBe('/Grade 5A Files/Collab');
+    expect(f.isViewerOpen()).toBe(false);
+    expect(ncOpenFileQuery(f.page.url())).toBe(false);
+  });
+
+  it('loud-fails when the file is downloaded instead of opening the Viewer', async () => {
+    const f = fakeCollab({ tree, files, viewer: 'downloads' });
+    await expect(runOpenCollabDoc(f.page)).rejects.toThrow(/did not open the Nextcloud Viewer/);
+  });
+
+  it('loud-fails when the Viewer shows another file or no doc content', async () => {
+    await expect(runOpenCollabDoc(fakeCollab({ tree, files, title: 'welcome.txt' }).page)).rejects.toThrow(
+      /Viewer opened "welcome.txt"/,
+    );
+    await expect(runOpenCollabDoc(fakeCollab({ tree, files, content: 'Loading…' }).page)).rejects.toThrow(
+      /never rendered the doc heading/,
+    );
+  });
+
+  it('loud-fails naming the rows when the placeholder doc is missing', async () => {
+    const f = fakeCollab({ tree: { ...tree, '/Grade 5A Files/Collab': ['old.md'] }, files });
+    await expect(runOpenCollabDoc(f.page)).rejects.toThrow(/"Grade5A-collab-notes.md" not listed in \/Grade 5A Files\/Collab \(rows: old.md\)/);
+  });
+
+  it('close_doc loud-fails when no Viewer is open, or Close does not close it', async () => {
+    await expect(runCloseDoc(fakeCollab({ tree, files }).page)).rejects.toThrow(/not in nc_collab/);
+    const stuck = fakeCollab({ tree, files, stuckClose: true });
+    await runOpenCollabDoc(stuck.page);
+    await expect(runCloseDoc(stuck.page)).rejects.toThrow(/Viewer is still open/);
   });
 });
