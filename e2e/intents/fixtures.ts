@@ -26,7 +26,7 @@
  * EmptyDiskPanel: duration-empty-001 (DURATION_EMPTY_DISK_ID).
  * RestorePanel Backup Disk: duration-empty-001 after make_backup_disk (DURATION_BACKUP_DISK_ID).
  *
- * keep_watching is registered (URL stay on video-grade5a-01). Other lesson chrome
+ * keep_watching is registered (URL stays on /topics/c/<video node id>). Other lesson chrome
  * (next_resource, exit_lesson, finish_exercise, next_video) stays unregistered —
  * Kid image has no lesson-chrome testids (`tests/duration-tests/LESSON_CHROME.md`).
  */
@@ -73,13 +73,19 @@ export const DURATION_FIXTURES = {
       teacher: { username: 'teacher', password: 'teacher' },
       learner: { username: 'learner01', password: 'learner01' },
     },
-    /** open_video → video-grade5a-01 (API: ?content_id=<raw>) */
+    /**
+     * open_video → video-grade5a-01. Learn URL is /topics/c/<nodeIdRaw> (Kolibri
+     * TOPICS_CONTENT keyed by ContentNode id); content_id is never in the URL.
+     * Parent topic + title per Kid (idea01 :18080, kind=video).
+     */
     video: {
       logicalId: 'video-grade5a-01',
       contentId: 'e60662de-b15c-52f9-b003-359f7d91f8fd',
       contentIdRaw: 'e60662deb15c52f9b003359f7d91f8fd',
       nodeId: '4a1a1b92-3f6d-59eb-a94c-3f91f0011dd5',
       nodeIdRaw: '4a1a1b923f6d59eba94c3f91f0011dd5',
+      title: 'Open video target',
+      parentTopicNodeIdRaw: '63427029c7eb5e86b62a731d9564aa50',
     },
     /** open_exercise → exercise-grade5a-01 */
     exercise: {
@@ -88,6 +94,8 @@ export const DURATION_FIXTURES = {
       contentIdRaw: '7eb9de4696eb53d0bcc12fb270b96f03',
       nodeId: '94a47ec7-f30d-5cd1-93f8-ad08c42b6c2a',
       nodeIdRaw: '94a47ec7f30d5cd193f8ad08c42b6c2a',
+      title: 'Open exercise target',
+      parentTopicNodeIdRaw: '63427029c7eb5e86b62a731d9564aa50',
     },
     /**
      * Live auth from Kid CONTENT.live.json @2313112 (idea01).

@@ -1,7 +1,7 @@
 /**
  * Intent registry keyed by Axle YAML / ACTIONS.md action names (idea#166).
  * Engine-owned keys (enter_infra_fleet_walk, infra_*) are intentionally absent.
- * keep_watching is registered (stay on pinned video URL — no chrome testids).
+ * keep_watching is registered (stay on /topics/c/<video node id> — no chrome testids).
  * Lesson chrome (next_resource / exit_lesson / finish_exercise / next_video)
  * and open_wikipedia_* stay unregistered until Kid App testids.
  */

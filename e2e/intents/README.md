@@ -81,6 +81,14 @@ bash tests/duration-tests/scripts/post-dock-restore-running.sh --mode sidecar
 
 Helpers: `resolveSidecarUrl` / `openAppInstance` in `sidecarUrls.ts` + `openApp.ts`.
 `open_video` / `open_exercise` use the same Path A→B open before content pins.
+
+**Prefer A content gate (`open_video` / `open_exercise` / `keep_watching`):** success only when the
+Kolibri Learn URL is `#/topics/c/<pinned ContentNode id>` (Kolibri `TOPICS_CONTENT`, optional device
+segment and query allowed). Kolibri never puts `content_id` in the URL, so the node id is the proof
+(video `4a1a1b923f6d59eba94c3f91f0011dd5`, exercise `94a47ec7f30d5cd193f8ad08c42b6c2a`). Topic folders
+(`/topics/t/…`), home, lesson-only URLs and the other pin fail. Navigation: card on the current page →
+parent topic `/topics/t/63427029c7eb5e86b62a731d9564aa50` and click the card (node href or title) →
+Kolibri deep link `/topics/c/<node>`. Each try gets 15s to reach the route, then a loud-fail listing what was tried.
 Fail loud if neither Path A card nor Path B HTTP is reachable.
 
 ## Deferred (not registered — Engine clear miss / skip)
@@ -88,7 +96,7 @@ Fail loud if neither Path A card nor Path B HTTP is reachable.
 | Key | Reason |
 |---|---|
 | `enter_infra_fleet_walk`, `infra_*` | Engine-owned |
-| `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. `keep_watching` is registered (stay on pinned video URL; no chrome testids). |
+| `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. `keep_watching` is registered (stay on `/topics/c/<video node id>`; no chrome testids). |
 | `open_wikipedia_as_teacher`, `open_wikipedia_as_learner` | Kiwix deferred (Kid) |
 
 ## Kid pins
@@ -160,7 +168,7 @@ hash navigation — **fail loud** if UI missing (never silent ok).
 Class/lesson Morango ids: `fixtures.ts` → `DURATION_FIXTURES.kolibri.live` (CONTENT.live.json).
 Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G5A→**18081**.
 
-**Not registered:** lesson-chrome player Intents (`next_resource`, `exit_lesson`, `finish_exercise`, `next_video`) — see LESSON_CHROME.md. `keep_watching` stays on the pinned video URL.
+**Not registered:** lesson-chrome player Intents (`next_resource`, `exit_lesson`, `finish_exercise`, `next_video`) — see LESSON_CHROME.md. `keep_watching` stays on `/topics/c/<video node id>`.
 
 ## Live duration — no bootDemo (`--live --ui`)
 
