@@ -31,6 +31,7 @@ const LOCKED = [
   'keep_watching',
   'next_resource',
   'finish_exercise',
+  'next_video',
   'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
@@ -99,7 +100,6 @@ const DEFERRED = [
   'open_wikipedia_as_teacher',
   'open_wikipedia_as_learner',
   'exit_lesson',
-  'next_video',
 ] as const;
 
 describe('Intent registry (idea#166 Phase 5 / #168)', () => {
@@ -145,7 +145,7 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('keep_watching')).toBe(true);
     expect(hasDurationIntent('next_resource')).toBe(true);
     expect(hasDurationIntent('finish_exercise')).toBe(true);
-    expect(hasDurationIntent('next_video')).toBe(false);
+    expect(hasDurationIntent('next_video')).toBe(true);
   });
 
   it('does not register deferred usage / Kiwix / lesson-chrome Intents', () => {

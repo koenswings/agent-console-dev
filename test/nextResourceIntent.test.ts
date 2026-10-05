@@ -152,3 +152,60 @@ describe('runNextResource (video → exercise via Kolibri resource panel)', () =
     );
   });
 });
+
+describe('runNextResource as next_video (exercise → video via the same panel)', () => {
+  const EX_URL = `${BASE}/topics/c/${exercise.nodeIdRaw}?prevName=TOPICS_TOPIC`;
+  const VIDEO_ROW = `.also-in-this-side-panel a[href*="/topics/c/${video.nodeIdRaw}"]`;
+  const BAR = '[data-test="bar_viewTopicResourcesButton"]';
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T12:30:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('clicks the resource-list button then the video row and lands on the video node', async () => {
+    const { page, clicks, gotos } = fakeContentPage({
+      start: EX_URL,
+      visible: [BAR],
+      onClick: {
+        [BAR]: { show: [VIDEO_ROW] },
+        [VIDEO_ROW]: { to: `/topics/c/${video.nodeIdRaw}?prevName=TOPICS_TOPIC` },
+      },
+    });
+    await runNextResource(page, exercise, video, 'next_video');
+    expect(clicks).toEqual([BAR, VIDEO_ROW]);
+    expect(gotos).toEqual([]);
+    expect(urlHasPinnedVideo(page.url(), video)).toBe(true);
+  });
+
+  it('clicks the video row by title when the href form is absent', async () => {
+    const titleRow = '.also-in-this-side-panel a:has-text("Open video target")';
+    const { page, clicks } = fakeContentPage({
+      start: EX_URL,
+      visible: [BAR],
+      onClick: { [BAR]: { show: [titleRow] }, [titleRow]: { to: `/topics/c/${video.nodeIdRaw}` } },
+    });
+    await runNextResource(page, exercise, video, 'next_video');
+    expect(clicks).toEqual([BAR, titleRow]);
+  });
+
+  it('loud-fails with the next_video tag when not starting on the exercise', async () => {
+    const { page, clicks } = fakeContentPage({ start: VIDEO_URL, visible: [BAR], onClick: {} });
+    await expect(runNextResource(page, exercise, video, 'next_video')).rejects.toThrow(
+      /next_video: expected to start on exercise-grade5a-01 .*Not re-opening it/,
+    );
+    expect(clicks).toEqual([]);
+  });
+
+  it('loud-fails when the click lands back on the exercise instead of the video', async () => {
+    const { page } = fakeContentPage({
+      start: EX_URL,
+      visible: [BAR],
+      onClick: { [BAR]: { show: [VIDEO_ROW] }, [VIDEO_ROW]: { to: `/topics/c/${exercise.nodeIdRaw}` } },
+    });
+    await expect(runNextResource(page, exercise, video, 'next_video')).rejects.toThrow(
+      /next_video: clicked video-grade5a-01 row .*did not reach \/topics\/c\/4a1a1b923f6d59eba94c3f91f0011dd5/,
+    );
+  });
+});

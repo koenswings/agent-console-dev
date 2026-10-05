@@ -28,8 +28,8 @@
  *
  * keep_watching is registered (URL stays on /topics/c/<video node id>). next_resource is
  * registered (video → exercise via Kolibri's resource panel). finish_exercise is
- * registered (answer "4", Check, completion, Learn home). Other lesson chrome
- * (exit_lesson, next_video) stays unregistered —
+ * registered (answer "4", Check, completion, Learn home). next_video is registered
+ * (exercise → video via the same panel). exit_lesson stays unregistered —
  * Kid image has no lesson-chrome testids (`tests/duration-tests/LESSON_CHROME.md`).
  */
 

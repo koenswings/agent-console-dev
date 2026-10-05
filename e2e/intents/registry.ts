@@ -4,7 +4,8 @@
  * keep_watching is registered (stay on /topics/c/<video node id> — no chrome testids).
  * next_resource is registered (Kolibri resource-list panel → exercise sibling).
  * finish_exercise is registered (Perseus Check → completion → Learn home).
- * Lesson chrome (exit_lesson / next_video) and
+ * next_video is registered (exercise → video via the resource panel).
+ * Lesson chrome (exit_lesson) and
  * open_wikipedia_* stay unregistered until Kid App testids.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
@@ -30,6 +31,7 @@ import {
   finish_exercise,
   keep_watching,
   next_resource,
+  next_video,
   open_exercise,
   open_video,
 } from './openKolibriContent';
@@ -105,6 +107,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   keep_watching,
   next_resource,
   finish_exercise,
+  next_video,
   open_exercise,
   open_disk_inventory,
   open_instance_controls,

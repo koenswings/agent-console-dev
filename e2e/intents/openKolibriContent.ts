@@ -368,13 +368,14 @@ export const runNextResource = async (
   app: Page,
   from: PinnedNode & { logicalId: string },
   next: PinnedNode & { logicalId: string; title?: string },
+  action: 'next_resource' | 'next_video' = 'next_resource',
 ): Promise<void> => {
-  const tag = 'idea#166 next_resource';
+  const tag = `idea#166 ${action}`;
   const startUrl = app.url();
   if (!urlHasPinnedVideo(startUrl, from)) {
     throw new Error(
       `${tag}: expected to start on ${from.logicalId} (/topics/c/${rawHex(from.nodeIdRaw)}) after ` +
-        `open_video/keep_watching, but URL is ${startUrl || '(empty)'}. Not re-opening the video.`,
+        `the previous step, but URL is ${startUrl || '(empty)'}. Not re-opening it.`,
     );
   }
 
@@ -430,6 +431,18 @@ export const next_resource: IntentFn = async ({ page, instanceId }) => {
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const app = await ensureKolibriAppPage(page, id);
   await runNextResource(app, DURATION_FIXTURES.kolibri.video, DURATION_FIXTURES.kolibri.exercise);
+};
+
+/**
+ * next_video: pinned exercise → the folder's video (kolibri_exercise →
+ * kolibri_watching). Same Kolibri resource-list panel as next_resource, reversed:
+ * must start on /topics/c/<exercise node>; success only on /topics/c/<video node>.
+ * Kid pack has one video, so "next video" re-opens video-grade5a-01 (walker-ref).
+ */
+export const next_video: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runNextResource(app, DURATION_FIXTURES.kolibri.exercise, DURATION_FIXTURES.kolibri.video, 'next_video');
 };
 
 /**
