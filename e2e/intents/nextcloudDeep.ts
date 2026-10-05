@@ -18,6 +18,8 @@ import { leaveAppToConsole } from './operatorDeepActions';
 
 const NC = DURATION_FIXTURES.nextcloud;
 const SETTLE_MS = 20_000;
+/** Kid 2026-10-05 Drop Zone public TTFB ~25s. */
+const FILE_DROP_GOTO_MS = 60_000;
 
 export const NC_SELECTORS = {
   loginForm: ['[data-login-form]', 'input#password'],
@@ -1001,7 +1003,7 @@ export const runOpenFileDrop = async (app: Page): Promise<Page> => {
   }
   const url = resolveFileRequestUrl(app.url());
   const drop = await app.context().newPage();
-  const resp = await drop.goto(url, { waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch((e: unknown) => {
+  const resp = await drop.goto(url, { waitUntil: 'domcontentloaded', timeout: FILE_DROP_GOTO_MS }).catch((e: unknown) => {
     throw new Error(`${tag}: file request ${url} unreachable (${e instanceof Error ? e.message : String(e)}).`);
   });
   if (resp && resp.status() >= 400) {
