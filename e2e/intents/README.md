@@ -474,6 +474,9 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   `Student01Grade5A!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
   password=username tried once if refused. Success only with a signed-in Files list (header Files link clicked if NC
   lands on Dashboard). Loud-fail names the refused account.
+  After leaving `/login` (or landing signed in on Dashboard), the header Files link is **polled up to 20s**
+  (`waitForLoadState('load')` + poll), never counted once. Axle smoke 2da863c-r1 failed on that one-shot count while the
+  dashboard header was still rendering. Missing after 20s = loud-fail with URL, title and header links.
 - **`browse_folders` (nc_browse dwell):** needs an open Nextcloud tab and an existing session (no role guessing; login
   page = loud-fail). Class folders are found at the Files root or inside the Files Disk mount folder
   (`shareName` "Grade 5A Files", from the `10-idea-files.sh` external storage). Opens Class Materials, Drop Zone and

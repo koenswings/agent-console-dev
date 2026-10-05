@@ -52,11 +52,19 @@ describe('Nextcloud URL helpers', () => {
 });
 
 /** Fake Nextcloud tab: login page + Files folders keyed by dir. */
-function fakeNextcloud(opts: { start: 'login' | 'files' | 'dashboard'; accept?: string[]; tree: Record<string, string[]>; uid?: string }) {
+function fakeNextcloud(opts: {
+  start: 'login' | 'files' | 'dashboard';
+  accept?: string[];
+  tree: Record<string, string[]>;
+  uid?: string;
+  /** Header Files link renders this long after landing signed in (race repro). */
+  navDelayMs?: number;
+}) {
   let url = opts.start === 'login' ? `${ORIGIN}/login` : opts.start === 'files' ? filesUrl('/') : `${ORIGIN}/apps/dashboard/`;
   const fields: Record<string, string> = {};
   const clicks: string[] = [];
   const submitted: string[] = [];
+  let signedInAt = opts.start === 'login' ? Number.POSITIVE_INFINITY : Date.now();
   const dir = () => ncFilesDir(url);
   const rowName = (sel: string) => /data-cy-files-list-row-name="([^"]+)"/.exec(sel)?.[1];
   const present = (sel: string): boolean => {
@@ -65,7 +73,7 @@ function fakeNextcloud(opts: { start: 'login' | 'files' | 'dashboard'; accept?: 
     if (sel === 'input#user' || sel === '[data-login-form-submit]') return onLogin;
     if (sel === '[data-cy-files-content-breadcrumbs]') return dir() !== null;
     if (sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
-    if (sel === 'nav.app-menu a[href$="/apps/files/"]') return !onLogin;
+    if (sel === 'nav.app-menu a[href$="/apps/files/"]') return !onLogin && Date.now() - signedInAt >= (opts.navDelayMs ?? 0);
     const name = rowName(sel);
     if (name && dir() !== null) return (opts.tree[dir()!] ?? []).includes(name);
     return false;
@@ -92,7 +100,10 @@ function fakeNextcloud(opts: { start: 'login' | 'files' | 'dashboard'; accept?: 
           if (sel === '[data-login-form-submit]') {
             const pw = fields['input#password'] ?? '';
             submitted.push(pw);
-            if ((opts.accept ?? []).includes(pw)) url = `${ORIGIN}/apps/dashboard/`;
+            if ((opts.accept ?? []).includes(pw)) {
+              url = `${ORIGIN}/apps/dashboard/`;
+              signedInAt = Date.now();
+            }
             return;
           }
           if (sel === 'nav.app-menu a[href$="/apps/files/"]') url = filesUrl('/');
@@ -127,6 +138,31 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
     await ensureNextcloudFiles(page, 't', NC.auth.teacher);
     expect(submitted).toEqual(['TeacherGrade5A!']);
     expect(ncFilesDir(page.url())).toBe('/');
+  });
+
+  it('race: waits for the dashboard header Files link after leaving /login (Axle 2da863c-r1)', async () => {
+    const { page, clicks } = fakeNextcloud({
+      start: 'login',
+      accept: ['TeacherGrade5A!'],
+      tree: { '/': ['Class Materials'] },
+      navDelayMs: 1_500,
+    });
+    await ensureNextcloudFiles(page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher);
+    expect(clicks).toContain('nav.app-menu a[href$="/apps/files/"]');
+    expect(ncFilesDir(page.url())).toBe('/');
+  });
+
+  it('race: same wait for an existing session landing on the dashboard (learner path)', async () => {
+    const { page } = fakeNextcloud({ start: 'dashboard', tree: { '/': [] }, navDelayMs: 3_000 });
+    await ensureNextcloudFiles(page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
+    expect(ncFilesDir(page.url())).toBe('/');
+  });
+
+  it('loud-fails with page state when the Files link never renders within SETTLE_MS', async () => {
+    const { page } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {}, navDelayMs: 60_000 });
+    await expect(ensureNextcloudFiles(page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher)).rejects.toThrow(
+      /signed in but no Files app link in the Nextcloud header within 20000ms on http:\/\/idea01:18280\/apps\/dashboard\/ \(title=.*header links: .*tried nav\.app-menu/,
+    );
   });
 
   it('falls back once to the legacy password=username', async () => {

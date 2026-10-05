@@ -146,11 +146,30 @@ export const ensureNextcloudFiles = async (
   }
 
   if (ncFilesDir(app.url()) === null) {
-    const nav = await firstPresent(app, NC_SELECTORS.filesNav);
-    if (!nav) {
-      throw new Error(`${tag}: signed in but no Files app link in the Nextcloud header on ${app.url()}.`);
+    // Race fix (Axle nextcloud-share-smoke-2da863c-r1): leaving /login does not mean the
+    // dashboard header has rendered. Poll for the Files link up to SETTLE_MS, never count once.
+    let nav: string | null = null;
+    await app.waitForLoadState?.('load', { timeout: SETTLE_MS }).catch(() => {});
+    const found = await waitFor(
+      async () => ncFilesDir(app.url()) !== null || (nav = await firstPresent(app, NC_SELECTORS.filesNav)) !== null,
+      app,
+      SETTLE_MS,
+    );
+    if (ncFilesDir(app.url()) === null) {
+      if (!found || !nav) {
+        const title = await app.title?.().catch(() => '') ?? '';
+        const hrefs = await app
+          .locator('header a[href]')
+          .evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? ''))
+          .catch(() => [] as string[]);
+        throw new Error(
+          `${tag}: signed in but no Files app link in the Nextcloud header within ${SETTLE_MS}ms on ${app.url()} ` +
+            `(title="${title}"; header links: ${hrefs.length ? hrefs.slice(0, 12).join(', ') : '(none)'}; ` +
+            `tried ${NC_SELECTORS.filesNav.join(' | ')}).`,
+        );
+      }
+      await app.locator(nav).first().click({ timeout: 8_000 });
     }
-    await app.locator(nav).first().click({ timeout: 8_000 });
   }
   const files = await waitFor(
     async () => ncFilesDir(app.url()) !== null && (await app.locator(NC_SELECTORS.breadcrumbs).count().catch(() => 0)) > 0,
