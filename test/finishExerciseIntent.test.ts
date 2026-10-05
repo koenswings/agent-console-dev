@@ -6,6 +6,7 @@ import {
   isLearnHomeUrl,
   learnHashRoute,
   learnHomeHopSelectors,
+  runExitLesson,
   runFinishExercise,
 } from '../e2e/intents/openKolibriContent';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
@@ -312,6 +313,67 @@ describe('runFinishExercise (exercise → completed → Learn home)', () => {
     });
     await expect(runFinishExercise(page, exercise)).rejects.toThrow(
       /did not reach #\/home after 5 hops .*final http:\/\/idea01:18080\/en\/learn\/#\/topics\/t\/63427029c7eb5e86b62a731d9564aa50\/search/,
+    );
+  });
+});
+
+describe('runExitLesson (video/exercise → Learn home via Kolibri chrome)', () => {
+  const VIDEO_URL = `${BASE}/topics/c/${video.nodeIdRaw}?prevName=TOPICS_TOPIC`;
+  const resources = [video, exercise];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T13:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('from the video: Go back → topic search Close → Library Home, waiting out the click-mask', async () => {
+    const { page, clicks, intercepted, gotos } = fakeExercisePage({
+      start: VIDEO_URL,
+      maskMs: 500,
+      visible: [BACK],
+      onClick: {
+        [BACK]: { to: SEARCH, hide: [BACK], show: [TOOLBAR_CLOSE] },
+        [TOOLBAR_CLOSE]: { to: '/library', hide: [TOOLBAR_CLOSE], afterMask: { show: [HOME] } },
+        [HOME]: { to: '/home' },
+      },
+    });
+    await runExitLesson(page, resources);
+    expect(clicks).toEqual([BACK, TOOLBAR_CLOSE, HOME]);
+    expect(intercepted).toEqual([]);
+    expect(gotos).toEqual([]);
+    expect(isLearnHomeUrl(page.url())).toBe(true);
+  });
+
+  it('from the exercise: Go back with last=HOME closes straight to home', async () => {
+    const { page, clicks } = fakeExercisePage({
+      start: EX_URL,
+      visible: [BACK],
+      onClick: {
+        [BACK]: { to: `${SEARCH}?last=HOME`, hide: [BACK], show: [TOOLBAR_CLOSE] },
+        [TOOLBAR_CLOSE]: { to: '/home' },
+      },
+    });
+    await runExitLesson(page, resources);
+    expect(clicks).toEqual([BACK, TOOLBAR_CLOSE]);
+  });
+
+  it('loud-fails when not on a lesson resource (no navigation attempted)', async () => {
+    const { page, clicks } = fakeExercisePage({ start: `${BASE}/home`, visible: [BACK], onClick: {} });
+    await expect(runExitLesson(page, resources)).rejects.toThrow(
+      /exit_lesson: expected to start on a lesson resource \(video-grade5a-01 .* or exercise-grade5a-01 .*\), but URL is/,
+    );
+    expect(clicks).toEqual([]);
+  });
+
+  it('loud-fails when stuck on the topic search page (no soft-pass)', async () => {
+    const { page } = fakeExercisePage({
+      start: VIDEO_URL,
+      visible: [BACK],
+      onClick: { [BACK]: { to: SEARCH, hide: [BACK] } },
+    });
+    await expect(runExitLesson(page, resources)).rejects.toThrow(
+      /exit_lesson: left video-grade5a-01 but no Learn nav control on .*\/search/,
     );
   });
 });

@@ -45,6 +45,7 @@ export const CONSOLE_INTENT_NAMES = [
   'next_resource',
   'finish_exercise',
   'next_video',
+  'exit_lesson',
   'open_exercise',
   // Phase 3 — thin operator deeper path
   'open_disk_inventory',

@@ -5,8 +5,8 @@
  * next_resource is registered (Kolibri resource-list panel → exercise sibling).
  * finish_exercise is registered (Perseus Check → completion → Learn home).
  * next_video is registered (exercise → video via the resource panel).
- * Lesson chrome (exit_lesson) and
- * open_wikipedia_* stay unregistered until Kid App testids.
+ * exit_lesson is registered (video/exercise → Learn home via Kolibri chrome).
+ * open_wikipedia_* stay unregistered.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
 import {
@@ -28,6 +28,7 @@ import {
 } from './openApp';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
 import {
+  exit_lesson,
   finish_exercise,
   keep_watching,
   next_resource,
@@ -108,6 +109,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   next_resource,
   finish_exercise,
   next_video,
+  exit_lesson,
   open_exercise,
   open_disk_inventory,
   open_instance_controls,

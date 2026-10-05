@@ -560,6 +560,68 @@ const FINISH_SETTLE_MS = 20_000;
 const FINISH_MAX_ITEMS = 4;
 
 /**
+ * Walk Kolibri Learn chrome to #/home, one page per hop (max 5): content page →
+ * bar "Go back"; topic/search page → ImmersiveToolbar "Close" (Library, or Home
+ * with last=HOME); pages with LearnTopNav → "Home". Each click must change the
+ * URL. Before every pick, wait out Kolibri's 500ms post-navigation click-mask
+ * and re-resolve controls on the page actually shown (no force / JS clicks).
+ * `context` prefixes loud-fail messages (e.g. "exercise completed (…)").
+ */
+export const walkLearnChromeHome = async (app: Page, tag: string, context: string): Promise<void> => {
+  const hops: string[] = [];
+  const maskStuck = (where: string) =>
+    new Error(
+      `${tag}: Kolibri click-mask (${CLICK_MASK_SELECTOR}) still covering ${where} after ` +
+        `${CLICK_MASK_BUDGET_MS}ms (hops: ${hops.join(' → ') || 'none'}).`,
+    );
+  for (let hop = 1; hop <= LEARN_HOME_MAX_HOPS && !isLearnHomeUrl(app.url()); hop++) {
+    const before = app.url();
+    let clicked: string | null = null;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3 && !clicked; attempt++) {
+      if (!(await waitForClickMaskGone(app))) throw maskStuck(before);
+      if (app.url() !== before) break; // route moved under us; re-plan next hop
+      const hit = await waitForFirstPresent(app, learnHomeHopSelectors(before), 10_000);
+      if (!hit) {
+        throw new Error(
+          `${tag}: ${context} but no Learn nav control on ` +
+            `${before || '(empty)'} to head home (hops: ${hops.join(' → ') || 'none'}; tried ` +
+            `${learnHomeHopSelectors(before).join(' | ')}).`,
+        );
+      }
+      try {
+        await app.locator(hit).first().click({ timeout: 3_000 });
+        clicked = hit;
+      } catch (e) {
+        lastErr = `${hit}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`;
+      }
+    }
+    if (!clicked && app.url() === before) {
+      throw new Error(
+        `${tag}: Learn nav click on ${before} failed 3 times (last ${lastErr}; hops: ` +
+          `${hops.join(' → ') || 'none'}).`,
+      );
+    }
+    hops.push(`${learnHashRoute(before) || before} [${clicked ?? 'route moved'}]`);
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && app.url() === before) {
+      await app.waitForTimeout(200);
+    }
+    if (app.url() === before) {
+      throw new Error(
+        `${tag}: clicked ${clicked} on ${before} but the URL did not change (hops: ${hops.join(' → ')}).`,
+      );
+    }
+  }
+  if (!isLearnHomeUrl(app.url())) {
+    throw new Error(
+      `${tag}: ${context} but Learn nav did not reach #/home after ` +
+        `${LEARN_HOME_MAX_HOPS} hops (hops: ${hops.join(' → ')}; final ${app.url() || '(empty)'}).`,
+    );
+  }
+};
+
+/**
  * From the pinned exercise (kolibri_exercise) to Learn home (kolibri_home).
  * 1. Must start on /topics/c/<exercise node> (loud-fail otherwise; no re-open).
  * 2. Pick the fixture's correct choice, click Check, wait for Next (correct).
@@ -641,61 +703,7 @@ export const runFinishExercise = async (
   const close = await firstPresent(app, S.modalClose);
   if (close) await app.locator(close).first().click({ timeout: 8_000 });
 
-  // Walk Learn chrome to #/home: content "Go back" → topic/search toolbar
-  // Close → Library top-nav "Home". Each hop must change the URL. Before every
-  // pick, wait out Kolibri's 500ms post-navigation click-mask and re-resolve
-  // controls on the page actually shown (no force / JS clicks).
-  const hops: string[] = [];
-  const maskStuck = (where: string) =>
-    new Error(
-      `${tag}: Kolibri click-mask (${CLICK_MASK_SELECTOR}) still covering ${where} after ` +
-        `${CLICK_MASK_BUDGET_MS}ms (hops: ${hops.join(' → ') || 'none'}).`,
-    );
-  for (let hop = 1; hop <= LEARN_HOME_MAX_HOPS && !isLearnHomeUrl(app.url()); hop++) {
-    const before = app.url();
-    let clicked: string | null = null;
-    let lastErr = '';
-    for (let attempt = 1; attempt <= 3 && !clicked; attempt++) {
-      if (!(await waitForClickMaskGone(app))) throw maskStuck(before);
-      if (app.url() !== before) break; // route moved under us; re-plan next hop
-      const hit = await waitForFirstPresent(app, learnHomeHopSelectors(before), 10_000);
-      if (!hit) {
-        throw new Error(
-          `${tag}: exercise completed (${trail.join(', ')}) but no Learn nav control on ` +
-            `${before || '(empty)'} to head home (hops: ${hops.join(' → ') || 'none'}; tried ` +
-            `${learnHomeHopSelectors(before).join(' | ')}).`,
-        );
-      }
-      try {
-        await app.locator(hit).first().click({ timeout: 3_000 });
-        clicked = hit;
-      } catch (e) {
-        lastErr = `${hit}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`;
-      }
-    }
-    if (!clicked && app.url() === before) {
-      throw new Error(
-        `${tag}: Learn nav click on ${before} failed 3 times (last ${lastErr}; hops: ` +
-          `${hops.join(' → ') || 'none'}).`,
-      );
-    }
-    hops.push(`${learnHashRoute(before) || before} [${clicked ?? 'route moved'}]`);
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline && app.url() === before) {
-      await app.waitForTimeout(200);
-    }
-    if (app.url() === before) {
-      throw new Error(
-        `${tag}: clicked ${clicked} on ${before} but the URL did not change (hops: ${hops.join(' → ')}).`,
-      );
-    }
-  }
-  if (!isLearnHomeUrl(app.url())) {
-    throw new Error(
-      `${tag}: exercise completed (${trail.join(', ')}) but Learn nav did not reach #/home after ` +
-        `${LEARN_HOME_MAX_HOPS} hops (hops: ${hops.join(' → ')}; final ${app.url() || '(empty)'}).`,
-    );
-  }
+  await walkLearnChromeHome(app, tag, `exercise completed (${trail.join(', ')})`);
 };
 
 /** finish_exercise: pinned exercise → completed → Learn home. */
@@ -703,6 +711,36 @@ export const finish_exercise: IntentFn = async ({ page, instanceId }) => {
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const app = await ensureKolibriAppPage(page, id);
   await runFinishExercise(app, DURATION_FIXTURES.kolibri.exercise);
+};
+
+/**
+ * exit_lesson: leave the open lesson resource for Learn home
+ * ([kolibri_watching, kolibri_exercise] → kolibri_home, Kid walker-ref "Exit
+ * lesson / back to Learn"). Must start on the pinned video OR exercise route
+ * (loud-fail otherwise). Walks Kolibri chrome home (walkLearnChromeHome); success
+ * only on Learn #/home. No hash goto.
+ */
+export const runExitLesson = async (
+  app: Page,
+  resources: (PinnedNode & { logicalId: string })[],
+): Promise<void> => {
+  const tag = 'idea#166 exit_lesson';
+  const startUrl = app.url();
+  const on = resources.find((r) => urlHasPinnedVideo(startUrl, r));
+  if (!on) {
+    throw new Error(
+      `${tag}: expected to start on a lesson resource (` +
+        resources.map((r) => `${r.logicalId} /topics/c/${rawHex(r.nodeIdRaw)}`).join(' or ') +
+        `), but URL is ${startUrl || '(empty)'}.`,
+    );
+  }
+  await walkLearnChromeHome(app, tag, `left ${on.logicalId}`);
+};
+
+export const exit_lesson: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runExitLesson(app, [DURATION_FIXTURES.kolibri.video, DURATION_FIXTURES.kolibri.exercise]);
 };
 
 /** Open pinned Grade 5A video (Kid CONTENT.seeded + live @2313112 → open_video). */
