@@ -287,16 +287,36 @@ export const ensureNextcloudFiles = async (
       }
       // The First-run wizard opens on first login and intercepts the click
       // (Axle smoke 198eb69-r1); it may also appear a moment after the header.
+      // r24 FAIL@21: a slow dashboard can expose the link before it is actionable, and the
+      // old loop bailed after one 5s click when no wizard was open. Wait visible+enabled,
+      // then retry the click with short backoff regardless of wizard state.
+      const link = app.locator(nav).first();
       let lastErr: unknown = null;
       let done = false;
       for (let attempt = 0; attempt < 3 && !done; attempt++) {
+        if (attempt > 0) await app.waitForTimeout(1_000 * attempt);
         await ncDismissFirstRunWizard(app, tag);
+        if (ncFilesDir(app.url()) !== null) {
+          done = true;
+          break;
+        }
+        await waitFor(
+          async () =>
+            ncFilesDir(app.url()) !== null ||
+            ((await link.isVisible().catch(() => false)) && (await link.isEnabled().catch(() => false))),
+          app,
+          attempt === 0 ? SETTLE_MS : 5_000,
+        );
+        if (ncFilesDir(app.url()) !== null) {
+          done = true;
+          break;
+        }
         try {
-          await app.locator(nav).first().click({ timeout: 5_000 });
+          await link.click({ timeout: 5_000 });
           done = true;
         } catch (e) {
           lastErr = e;
-          if (!(await wizardOpen(app))) break;
+          if (ncFilesDir(app.url()) !== null) done = true;
         }
       }
       if (!done) {
