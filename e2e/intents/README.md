@@ -460,3 +460,25 @@ Late `installApp` may auto-start the new instance (Starting / Operation in progr
 | Then | Click Start if still needed |
 | Loud-fail | Timeout still disabled / never Running — **no** soft-pass |
 | Callers | `start_instance`, `start_after_install`, `backup_instance`, open settle |
+
+
+## Nextcloud deep (Prefer A, `nextcloudDeep.ts`)
+
+Kid image `koenswings/nextcloud:1.0-31.0.1`. Selectors are Nextcloud upstream production markup, not Kid testids:
+login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; Files `[data-cy-files-content-breadcrumbs]`,
+`tr[data-cy-files-list-row-name="<name>"]`, `[data-cy-files-list-row-name-link]`; folder state from the URL
+`/apps/files/files[/<id>]?dir=/<path>`.
+
+- **`open_nextcloud_as_teacher` / `open_nextcloud_as_learner`:** now prove sign-in (previously the Kolibri-style
+  login helper returned ok without checking). Passwords: Kid `CONTENT.live.json` (`TeacherGrade5A!`,
+  `Student01Grade5A!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
+  password=username tried once if refused. Success only with a signed-in Files list (header Files link clicked if NC
+  lands on Dashboard). Loud-fail names the refused account.
+- **`browse_folders` (nc_browse dwell):** needs an open Nextcloud tab and an existing session (no role guessing; login
+  page = loud-fail). Class folders are found at the Files root or inside the Files Disk mount folder
+  (`shareName` "Grade 5A Files", from the `10-idea-files.sh` external storage). Opens Class Materials, Drop Zone and
+  Collab in turn by clicking their rows, each proven by `dir`, returning to the class root between them via the root
+  breadcrumb. Loud-fail includes the row names actually listed.
+- Still to do in later tips: `share_to_class`, `done_sharing`, `back_to_console_from_share`, `open_file_drop`,
+  `after_upload`, `leave_file_drop`, `open_collab_doc`, `close_doc`. `keep_editing` is blocked on Kid's Collabora pack
+  (walker-ref `blocked_until_collabora`).

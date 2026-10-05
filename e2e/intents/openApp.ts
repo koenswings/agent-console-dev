@@ -430,6 +430,7 @@ export const open_kolibri_as_learner: IntentFn = async ({ page, instanceId }) =>
   );
 };
 
+/** @deprecated Registry uses nextcloudDeep.open_nextcloud_as_teacher (verified sign-in). */
 export const open_nextcloud_as_teacher: IntentFn = async ({ page, instanceId }) => {
   await openAndLogin(
     page,
@@ -439,6 +440,7 @@ export const open_nextcloud_as_teacher: IntentFn = async ({ page, instanceId }) 
   );
 };
 
+/** @deprecated Registry uses nextcloudDeep.open_nextcloud_as_learner (verified sign-in). */
 export const open_nextcloud_as_learner: IntentFn = async ({ page, instanceId }) => {
   await openAndLogin(
     page,

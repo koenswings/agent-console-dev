@@ -158,10 +158,24 @@ export const DURATION_FIXTURES = {
     instanceId: 'nextcloud-grade5a-001',
     /** Path B default HTTP port (idea01+idea03). */
     sidecarHttpPort: 18280,
+    /**
+     * Kid CONTENT.live.json passwordHint (sidecar idea01/idea03). The legacy pack
+     * convention (password = username) is tried once if Nextcloud refuses these.
+     * Override: DURATION_NC_TEACHER_PASSWORD / DURATION_NC_LEARNER_PASSWORD.
+     */
     auth: {
-      teacher: { username: 'teacher', password: 'teacher' },
-      learner: { username: 'student01', password: 'student01' },
+      teacher: { username: 'teacher', password: process.env.DURATION_NC_TEACHER_PASSWORD || 'TeacherGrade5A!' },
+      learner: { username: 'student01', password: process.env.DURATION_NC_LEARNER_PASSWORD || 'Student01Grade5A!' },
     },
+    /** Kid CONTENT.yaml folders (Files Disk); may sit under the mount folder `shareName`. */
+    shareName: 'Grade 5A Files',
+    folders: {
+      materials: 'Class Materials',
+      drop: 'Drop Zone',
+      collab: 'Collab',
+    },
+    collabDoc: 'Grade5A-collab-notes.md',
+    group: 'Grade 5A',
   },
 } as const;
 

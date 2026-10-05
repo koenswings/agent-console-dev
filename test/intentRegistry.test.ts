@@ -33,6 +33,7 @@ const LOCKED = [
   'finish_exercise',
   'next_video',
   'exit_lesson',
+  'browse_folders',
   'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
@@ -147,6 +148,7 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('finish_exercise')).toBe(true);
     expect(hasDurationIntent('next_video')).toBe(true);
     expect(hasDurationIntent('exit_lesson')).toBe(true);
+    expect(hasDurationIntent('browse_folders')).toBe(true);
   });
 
   it('does not register deferred usage / Kiwix / lesson-chrome Intents', () => {

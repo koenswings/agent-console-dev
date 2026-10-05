@@ -6,7 +6,8 @@
  * finish_exercise is registered (Perseus Check → completion → Learn home).
  * next_video is registered (exercise → video via the resource panel).
  * exit_lesson is registered (video/exercise → Learn home via Kolibri chrome).
- * open_wikipedia_* stay unregistered.
+ * Nextcloud: open_nextcloud_as_* now prove a signed-in Files list; browse_folders
+ * registered (nextcloudDeep.ts). open_wikipedia_* stay unregistered.
  */
 import type { ConsoleIntentName, IntentFn } from './types';
 import {
@@ -23,9 +24,12 @@ import { return_to_start } from './returnToStart';
 import {
   open_kolibri_as_learner,
   open_kolibri_as_teacher,
+} from './openApp';
+import {
+  browse_folders,
   open_nextcloud_as_learner,
   open_nextcloud_as_teacher,
-} from './openApp';
+} from './nextcloudDeep';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
 import {
   exit_lesson,
@@ -104,6 +108,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_kolibri_as_learner,
   open_nextcloud_as_teacher,
   open_nextcloud_as_learner,
+  browse_folders,
   open_video,
   keep_watching,
   next_resource,
