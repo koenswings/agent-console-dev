@@ -139,7 +139,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `return_to_start` | Dismiss erase/eject/settings/account/Connect; assert overview/tree. Loud if dialog stuck. |
 | `open_disk_inventory` | Resolve visible `disk-*` (`DURATION_DISK_ID`); DiskView / EmptyDiskPanel must open. |
 | `open_instance_controls` | Resolve visible instance (`DURATION_INSTANCE_ID`); start/stop/open controls. |
-| `open_console_as_teacher` / `_learner` | Overview + `account-btn` required (no soft-catch). |
+| `open_console_as_teacher` / `_learner` | Prefer A r13: if still on **op-overview** (post infra + `return_to_start`), Account → `log-out` → close Account so AppBrowser `console-overview` shows; skip when already user-mode. Then overview + `account-btn` + catalog wait (no soft-catch). `return_to_start` still accepts op-overview for operator walks. |
 | `close_account` | `op-entry` must **hide** after toggle. |
 | `cancel_erase` | `erase-dialog` must hide after Cancel. |
 | `stop_instance` | Prefer A r38: status-driven Stopping→Stopped; wait while Stopping/in-progress; **re-click** Stop every `DURATION_STOP_RETRY_MS` (15s) if still Running/Open (SSH flap). Default settle **180s** (`DURATION_STOP_SETTLE_MS`); +60s grace while Stopping UI. Loud-fail includes last status/open/stopTitle/elapsed/stopClicks. |
