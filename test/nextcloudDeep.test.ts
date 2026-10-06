@@ -16,6 +16,9 @@ import {
   ncOpenFileQuery,
   runKeepEditing,
   keepEditingLine,
+  keepEditingBudget,
+  NC_KEEP_EDITING_BUDGET_MS,
+  NC_KEEP_EDITING_REOPENS,
   isGroupShareEntryText,
   ncGroupShareTitle,
   ncOcsFailure,
@@ -604,10 +607,40 @@ function fakeCollab(o: {
   echo?: boolean;
   /** The first N clicks on a file row are swallowed (Viewer not yet registered). */
   ignoreFileClicks?: number;
+  /** Text stays non-editable until the doc was (re)opened this many times (file click or page reload). */
+  editableAfterReopens?: number;
+  /** Text never becomes editable (sync keeps failing, no Text UI to act on). */
+  neverEditable?: boolean;
+  /** Sync HTTP 409: Text collision notice + "Use the saved version" until clicked ('sticky' = never clears). */
+  collision?: 'resolvable' | 'sticky';
+  /** DocumentStatus "Document could not be loaded…" + Reconnect until Reconnect is clicked. */
+  connectionIssue?: boolean;
 }) {
   let ignoreFile = o.ignoreFileClicks ?? 0;
+  /** Viewer opens so far (a doc that starts open counts once); reopens = opens - 1. */
+  let opens = 0;
+  let collisionOn = !!o.collision;
+  let connectionOn = !!o.connectionIssue;
+  const pushes: number[] = [];
+  const waiters: { pred: (r: unknown) => boolean; res: (r: unknown) => void; rej: (e: Error) => void }[] = [];
+  const pushResponse = (status: number) => {
+    const at = Date.now();
+    return {
+      url: () => `${ORIGIN}/apps/text/session/77/push`,
+      status: () => status,
+      request: () => ({ method: () => 'POST', timing: () => ({ startTime: at }) }),
+    };
+  };
+  /** Browser sends a Text push now; the first waiter whose predicate accepts it gets it. */
+  const emitPush = (status: number) => {
+    pushes.push(Date.now());
+    const r = pushResponse(status);
+    const i = waiters.findIndex((w) => w.pred(r));
+    if (i >= 0) waiters.splice(i, 1)[0]!.res(r);
+  };
   let url = o.start ?? filesUrl('/');
   let viewer = o.start ? ncOpenFileQuery(o.start) : false;
+  if (viewer) opens = 1;
   const clicks: string[] = [];
   let typed = '';
   const keys: string[] = [];
@@ -615,12 +648,18 @@ function fakeCollab(o: {
   const dir = () => ncFilesDir(url);
   const rowName = (sel: string) => /data-cy-files-list-row-name="([^"]+)"/.exec(sel)?.[1];
   const withQuery = (d: string, open: boolean) => `${filesUrl(d).split('?')[0]}?dir=${encodeURIComponent(d)}${open ? '&openfile=true' : ''}`;
+  const editableNow = () =>
+    text && !o.readonly && !o.neverEditable && !collisionOn && !connectionOn && opens - 1 >= (o.editableAfterReopens ?? 0);
   const present = (sel: string): boolean => {
     if (sel.startsWith('#viewer')) {
       if (!viewer) return false;
       if (sel.endsWith('[data-text-el="editor-container"]')) return text;
       if (sel.endsWith('[data-text-el="readonly-bar"]')) return text && !!o.readonly;
-      if (sel.endsWith('.ProseMirror[contenteditable="true"]') || sel.endsWith('[data-text-el="menubar"]')) return text && !o.readonly;
+      if (sel.endsWith('.ProseMirror[contenteditable="true"]') || sel.endsWith('[data-text-el="menubar"]')) return editableNow();
+      if (sel.endsWith('[data-text-el="editor-content-wrapper"] .ProseMirror')) return text;
+      if (sel.endsWith('#resolve-conflicts') || sel.endsWith('[data-cy="resolveServerVersion"]')) return text && collisionOn;
+      if (sel.endsWith('.document-status a.button')) return text && connectionOn;
+      if (sel.endsWith('.document-status')) return text && (collisionOn || connectionOn);
       return sel === '#viewer' || sel.endsWith('.modal-header__name') || sel.endsWith('.header-close');
     }
     if (sel === '[data-cy-files-content-breadcrumbs]' || sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
@@ -637,6 +676,12 @@ function fakeCollab(o: {
     innerText: async () => {
       if (!present(sel)) throw new Error('detached');
       if (sel.endsWith('.modal-header__name')) return o.title ?? 'Grade5A-collab-notes.md';
+      if (sel.endsWith('.document-status a.button')) return 'Reconnect';
+      if (sel.endsWith('.document-status')) {
+        return collisionOn
+          ? 'Document has been changed outside of the editor. The changes cannot be applied'
+          : 'Document could not be loaded. Please check your internet connection. Reconnect';
+      }
       const doc = (o.content ?? '# Grade 5A collab notes\nShared class notes') + typed;
       if (sel === '#viewer' || sel.endsWith('[data-text-el="editor-container"]') || sel.endsWith('.ProseMirror[contenteditable="true"]')) return doc;
       return '';
@@ -645,6 +690,16 @@ function fakeCollab(o: {
     click: async () => {
       if (!present(sel)) throw new Error(`not present: ${sel}`);
       clicks.push(sel);
+      if (sel.endsWith('[data-cy="resolveServerVersion"]')) {
+        // Text: setContent(outsideChange) + forceSave → a push BEFORE the walker types.
+        if (o.collision === 'resolvable') collisionOn = false;
+        emitPush(200);
+        return;
+      }
+      if (sel.endsWith('.document-status a.button')) {
+        connectionOn = false;
+        return;
+      }
       if (sel.endsWith('.header-close')) {
         if (!o.stuckClose) {
           viewer = false;
@@ -663,6 +718,7 @@ function fakeCollab(o: {
           return;
         }
         if ((o.viewer ?? 'opens') === 'opens') {
+          if (!viewer) opens++;
           viewer = true;
           url = withQuery(dir()!, true);
         }
@@ -677,24 +733,36 @@ function fakeCollab(o: {
       vi.setSystemTime(Date.now() + ms);
     },
     locator: (sel: string) => L(sel),
+    /** ?openfile reopens the Viewer (a fresh Text session) on reload. */
+    reload: async () => {
+      viewer = ncOpenFileQuery(url);
+      if (viewer) opens++;
+    },
     keyboard: {
       press: async (k: string) => {
         keys.push(k);
       },
       type: async (s: string) => {
         if (o.echo ?? true) typed += `\n${s}`;
+        if (typeof o.push === 'number') emitPush(o.push);
+        // No push for this edit: every pending waiter times out.
+        else waiters.splice(0).forEach((w) => w.rej(new Error('timeout')));
       },
     },
-    waitForResponse: async () => {
-      if (o.push === null || o.push === undefined) throw new Error('timeout');
-      return {
-        url: () => `${ORIGIN}/apps/text/session/77/push`,
-        status: () => o.push,
-        request: () => ({ method: () => 'POST' }),
-      };
-    },
+    waitForResponse: (pred: (r: unknown) => boolean) =>
+      new Promise((res, rej) => {
+        waiters.push({ pred, res, rej });
+      }),
   };
-  return { page: page as unknown as Page, clicks, keys, typed: () => typed, isViewerOpen: () => viewer };
+  return {
+    page: page as unknown as Page,
+    clicks,
+    keys,
+    typed: () => typed,
+    isViewerOpen: () => viewer,
+    reopens: () => Math.max(0, opens - 1),
+    pushes,
+  };
 }
 
 describe('open_collab_doc / close_doc (Nextcloud Text in the Viewer)', () => {
@@ -796,6 +864,154 @@ describe('keep_editing (Nextcloud Text, Kid Prefer A)', () => {
     await expect(runKeepEditing(fakeCollab({ tree, files, push: 200 }).page, at)).rejects.toThrow(/not in nc_collab/);
     await expect(runKeepEditing(opened({ title: 'welcome.txt' }).page, at)).rejects.toThrow(/Viewer shows "welcome.txt"/);
     await expect(runKeepEditing(opened({ text: false }).page, at)).rejects.toThrow(/not open in Nextcloud Text/);
+  });
+});
+
+describe('keep_editing editable wait (r37 FAIL@82: Text sync 409, editor never editable)', () => {
+  let log: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-06T08:11:42Z'));
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    log.mockRestore();
+    vi.useRealTimers();
+  });
+
+  /** Full class tree so a reopen goes through the real Files UI (close_doc + open_collab_doc). */
+  const tree = {
+    '/': ['Grade 5A Files'],
+    '/Grade 5A Files': ['Class Materials', 'Drop Zone', 'Collab'],
+    '/Grade 5A Files/Collab': ['Grade5A-collab-notes.md'],
+  };
+  const files = ['Grade5A-collab-notes.md'];
+  const opened = (o: Partial<Parameters<typeof fakeCollab>[0]> = {}) =>
+    fakeCollab({
+      tree,
+      files,
+      start: `${ORIGIN}/apps/files/files/9?dir=${encodeURIComponent('/Grade 5A Files/Collab')}&openfile=true`,
+      push: 200,
+      ...o,
+    });
+  const at = new Date('2026-10-06T08:11:42.000Z');
+  const knobs = { budgetMs: NC_KEEP_EDITING_BUDGET_MS, reopens: NC_KEEP_EDITING_REOPENS };
+  const recoveryEvents = () =>
+    log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('"event":"keep_editing_recovery"'));
+
+  it('editable on the first try: no reopen, no recovery, types once and needs the push', async () => {
+    const f = opened();
+    const t0 = Date.now();
+    expect(await runKeepEditing(f.page, at, knobs)).toBe('keep_editing 2026-10-06T08:11:42.000Z');
+    expect(f.reopens()).toBe(0);
+    expect(f.clicks.filter((c) => c.endsWith('.header-close'))).toEqual([]);
+    expect(f.keys).toEqual(['Control+End', 'Enter']);
+    expect(f.typed()).toBe(`\n${keepEditingLine(at)}`);
+    expect(recoveryEvents()).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(5_000);
+  });
+
+  it('editable after one reopen: closes and reopens the doc via the Files UI, then types and needs the push', async () => {
+    const f = opened({ editableAfterReopens: 1 });
+    expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
+    expect(f.reopens()).toBe(1);
+    // Real UI: Viewer Close, then the file row link in Collab.
+    expect(f.clicks.filter((c) => c.endsWith('.header-close'))).toHaveLength(1);
+    expect(f.clicks.filter((c) => c.includes('Grade5A-collab-notes.md'))).toHaveLength(1);
+    expect(f.keys).toEqual(['Control+End', 'Enter']);
+    const ev = recoveryEvents();
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatch(/reopened \\"Grade5A-collab-notes.md\\" via Files/);
+  });
+
+  it('page reload reopens the doc when the Viewer Close is stuck (fresh Text session via ?openfile)', async () => {
+    const f = opened({ editableAfterReopens: 2, stuckClose: true });
+    expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
+    expect(f.reopens()).toBeGreaterThanOrEqual(2);
+    expect(recoveryEvents()[0]).toMatch(/page reload \(reopen via Files failed\)/);
+    expect(f.keys).toEqual(['Control+End', 'Enter']);
+  });
+
+  it('reopen via Files that cannot find the doc FAILs loud with the reopen error, never types', async () => {
+    // Tree without the class root: open_collab_doc cannot navigate back to the doc after close_doc.
+    const f = fakeCollab({
+      tree: { '/': ['Collab'], '/Collab': files },
+      files,
+      start: `${ORIGIN}/apps/files/files/9?dir=%2FCollab&openfile=true`,
+      push: 200,
+      editableAfterReopens: 1,
+    });
+    await expect(runKeepEditing(f.page, at, { budgetMs: 90_000, reopens: 1 })).rejects.toThrow(
+      /1\/1 reopen\(s\); tried: reopen via Files failed\): Viewer closed and no reopen left\. Last state: viewer=closed.*url=http.*last error: reopen: idea#166 open_collab_doc: neither "Class Materials"/,
+    );
+    expect(f.keys).toEqual([]);
+  });
+
+  it('never editable: FAILs after the budget with the last observed state and URL, never types', async () => {
+    const f = opened({ neverEditable: true });
+    const t0 = Date.now();
+    const err = await runKeepEditing(f.page, at, knobs).then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err!.message).toMatch(/no editable Text content \(\[data-text-el="editor-content-wrapper"\] \.ProseMirror\[contenteditable="true"\]\) for "Grade5A-collab-notes.md"/);
+    expect(err!.message).toMatch(/budget 90000ms; 2\/2 reopen\(s\)/);
+    expect(err!.message).toMatch(/budget exhausted/);
+    expect(err!.message).toMatch(/viewer=open; editor-container=visible; \.ProseMirror=read-only; menubar=missing/);
+    expect(err!.message).toMatch(/url=http:\/\/idea01:18280\/apps\/files\/files\/\d+\?dir=.*Collab&openfile=true/);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(90_000);
+    expect(Date.now() - t0).toBeLessThan(150_000);
+    expect(f.reopens()).toBe(2);
+    expect(f.keys).toEqual([]);
+    expect(f.typed()).toBe('');
+  });
+
+  it('collision dialog dismissed by Text\'s "Use the saved version", then types and needs its own push', async () => {
+    const f = opened({ collision: 'resolvable' });
+    expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
+    expect(f.clicks).toContain('#viewer #resolve-conflicts [data-cy="resolveServerVersion"]');
+    expect(f.reopens()).toBe(0);
+    expect(f.pushes).toHaveLength(2); // resolve push + the edit push
+    expect(recoveryEvents()[0]).toMatch(/collision → \\"Use the saved version\\"/);
+  });
+
+  it('the collision-resolve push does not count as proof of the edit', async () => {
+    const f = opened({ collision: 'resolvable', push: null });
+    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(/never pushed the edit/);
+    expect(f.pushes).toHaveLength(1); // only the resolve push, sent before typing
+  });
+
+  it('a collision that never clears FAILs naming the dialog and the Text notice', async () => {
+    const f = opened({ collision: 'sticky' });
+    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(
+      /tried: collision → "Use the saved version".*collision-dialog=visible.*document-status="Document has been changed outside of the editor/,
+    );
+    expect(f.keys).toEqual([]);
+  });
+
+  it('Reconnect notice dismissed by its Reconnect button, then types', async () => {
+    const f = opened({ connectionIssue: true });
+    expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
+    expect(f.clicks).toContain('#viewer .document-status a.button');
+    expect(f.reopens()).toBe(0);
+  });
+
+  it('read-only (permission) stays an immediate loud-fail, no retries', async () => {
+    const f = opened({ readonly: true });
+    const t0 = Date.now();
+    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(/read-only .*collabProvisioned=false/);
+    expect(f.reopens()).toBe(0);
+    expect(Date.now() - t0).toBeLessThan(1_000);
+  });
+
+  it('keepEditingBudget: 90s / 2 reopens by default, env overrides, loud on garbage', () => {
+    expect(keepEditingBudget({})).toEqual({ budgetMs: 90_000, reopens: 2 });
+    expect(keepEditingBudget({ DURATION_KEEP_EDITING_BUDGET_MS: '120000', DURATION_KEEP_EDITING_REOPENS: '0' })).toEqual({
+      budgetMs: 120_000,
+      reopens: 0,
+    });
+    expect(() => keepEditingBudget({ DURATION_KEEP_EDITING_BUDGET_MS: 'soon' })).toThrow(/not a non-negative number/);
   });
 });
 

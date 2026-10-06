@@ -1267,12 +1267,239 @@ const TEXT_PUSH = /\/apps\/text\/(public\/)?session\/\d+\/push(\?|$)/;
 export const keepEditingLine = (now: Date = new Date()): string => `keep_editing ${now.toISOString()}`;
 
 /**
+ * Nextcloud Text 31.0.1 states that leave the doc rendered but NOT editable (r37 FAIL@82):
+ *   - DocumentStatus.vue `.document-status` NcNoteCard: "Document has been changed outside of
+ *     the editor. The changes cannot be applied" (sync HTTP 409 SAVE_COLLISSION), "Document
+ *     could not be loaded. Please check your internet connection." + Reconnect, "Document idle
+ *     for … minutes" + Reconnect, a 412 load error + Reload, "… locked by {user}".
+ *   - CollisionResolveDialog.vue `#resolve-conflicts`: NcButton data-cy="resolveThisVersion"
+ *     ("Use current version") / data-cy="resolveServerVersion" ("Use the saved version").
+ *   - Editor.vue onError/onChange: `$editor.setEditable(false)` while syncError or
+ *     hasConnectionIssue; the MenuBar renders only when `contentLoaded && !syncError`.
+ *   - SkeletonLoading.vue `.placeholder-main-text` while the session has not loaded.
+ */
+export const NC_TEXT_STATE_SELECTORS = {
+  proseMirror: '[data-text-el="editor-content-wrapper"] .ProseMirror',
+  status: '.document-status',
+  statusButton: '.document-status a.button',
+  collision: '#resolve-conflicts',
+  useSavedVersion: '#resolve-conflicts [data-cy="resolveServerVersion"]',
+  skeleton: '.placeholder-main-text',
+} as const;
+
+/** Total time keep_editing may spend getting an editable Text editor (env DURATION_KEEP_EDITING_BUDGET_MS). */
+export const NC_KEEP_EDITING_BUDGET_MS = 90_000;
+/** Close + reopen of the doc through the Files UI within that budget (env DURATION_KEEP_EDITING_REOPENS). */
+export const NC_KEEP_EDITING_REOPENS = 2;
+/** Each blocking-UI click (Reconnect / Use the saved version / Reload) is tried at most this often. */
+export const NC_KEEP_EDITING_UI_FIXES = 3;
+
+const envInt = (name: string, dflt: number, env: NodeJS.ProcessEnv = process.env): number => {
+  const raw = env[name];
+  if (raw === undefined || raw === '') return dflt;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${name}=${JSON.stringify(raw)} is not a non-negative number.`);
+  return Math.floor(n);
+};
+
+/** keep_editing editable-wait knobs from the environment (loud on garbage). */
+export function keepEditingBudget(env: NodeJS.ProcessEnv = process.env): { budgetMs: number; reopens: number } {
+  return {
+    budgetMs: envInt('DURATION_KEEP_EDITING_BUDGET_MS', NC_KEEP_EDITING_BUDGET_MS, env),
+    reopens: envInt('DURATION_KEEP_EDITING_REOPENS', NC_KEEP_EDITING_REOPENS, env),
+  };
+}
+
+/** What the Viewer's Text editor shows right now (never throws). */
+export type NcTextState = {
+  url: string;
+  viewer: boolean;
+  container: boolean;
+  /** `.ProseMirror` inside the content wrapper: contenteditable="true", present but not editable, or absent. */
+  proseMirror: 'editable' | 'read-only' | 'missing';
+  menubar: boolean;
+  readonlyBar: boolean;
+  skeleton: boolean;
+  /** Text of the DocumentStatus notes ('' when none). */
+  status: string;
+  /** Label of the DocumentStatus action link (Reconnect / Reload), if any. */
+  statusButton: string | null;
+  collision: boolean;
+};
+
+export const ncTextState = async (app: Page): Promise<NcTextState> => {
+  const v = NC_VIEWER_SELECTORS.viewer;
+  const S = NC_TEXT_STATE_SELECTORS;
+  const vis = (sel: string) => app.locator(`${v} ${sel}`).first().isVisible().catch(() => false);
+  const txt = async (sel: string) =>
+    ((await app.locator(`${v} ${sel}`).first().innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
+  const viewer = await viewerOpen(app);
+  const editable = await vis(TEXT.content);
+  const anyPm = editable || (await vis(S.proseMirror));
+  const statusButton = (await vis(S.statusButton)) ? (await txt(S.statusButton)) || '(unlabelled)' : null;
+  return {
+    url: app.url(),
+    viewer,
+    container: await vis(TEXT.editor),
+    proseMirror: editable ? 'editable' : anyPm ? 'read-only' : 'missing',
+    menubar: await vis(TEXT.menubarWhenEditable),
+    readonlyBar: await vis(TEXT.readonlyBarMustBeAbsent),
+    skeleton: await vis(S.skeleton),
+    status: (await vis(S.status)) ? (await txt(S.status)).slice(0, 200) : '',
+    statusButton,
+    collision: await vis(S.collision),
+  };
+};
+
+/** One-line diagnostic for a loud-fail. */
+export const describeNcTextState = (s: NcTextState): string =>
+  [
+    `viewer=${s.viewer ? 'open' : 'closed'}`,
+    `editor-container=${s.container ? 'visible' : 'missing'}`,
+    `.ProseMirror=${s.proseMirror}`,
+    `menubar=${s.menubar ? 'visible' : 'missing'}`,
+    s.readonlyBar ? 'readonly-bar=visible' : null,
+    s.skeleton ? 'loading-skeleton=visible' : null,
+    s.collision ? 'collision-dialog=visible (Use current version / Use the saved version)' : null,
+    s.status ? `document-status="${s.status}"` : null,
+    s.statusButton ? `status-button="${s.statusButton}"` : null,
+    `url=${s.url}`,
+  ]
+    .filter(Boolean)
+    .join('; ');
+
+/** Editable for real: contenteditable ProseMirror + MenuBar (no syncError) and no blocking note. */
+const textEditable = (s: NcTextState): boolean =>
+  s.viewer && s.proseMirror === 'editable' && s.menubar && !s.readonlyBar && !s.collision && s.statusButton === null;
+
+const isLockNote = (status: string): boolean => /locked by/i.test(status);
+const isIdleNote = (status: string): boolean => /idle for/i.test(status);
+
+/**
+ * Wait (bounded) until Nextcloud Text has the collab doc editable, clearing blocking Text UI
+ * through its own buttons and reopening the doc through the Files UI when it stays stuck.
+ * Returns the recovery actions taken ([] when it was editable straight away). Loud-fails
+ * with the last observed state. Never types, never fakes editability.
+ */
+export const ncAwaitEditableText = async (
+  app: Page,
+  tag: string,
+  name: string,
+  knobs: { budgetMs: number; reopens: number } = keepEditingBudget(),
+): Promise<string[]> => {
+  const started = Date.now();
+  const deadline = started + knobs.budgetMs;
+  // Time to wait for a stuck editor before the next reopen (each attempt gets a fair share).
+  const attemptMs = Math.max(10_000, Math.floor(knobs.budgetMs / (knobs.reopens + 1)));
+  const actions: string[] = [];
+  const fixes = { reconnect: 0, saved: 0, reload: 0 };
+  let reopens = 0;
+  let attemptStart = started;
+  let last = await ncTextState(app);
+  let lastError: string | null = null;
+
+  const fail = (why: string): never => {
+    throw new Error(
+      `${tag}: no editable Text content (${TEXT.content}) for "${name}" after ${Date.now() - started}ms ` +
+        `(budget ${knobs.budgetMs}ms; ${reopens}/${knobs.reopens} reopen(s)` +
+        `${actions.length ? `; tried: ${actions.join(' → ')}` : ''}): ${why}. ` +
+        `Last state: ${describeNcTextState(last)}${lastError ? `; last error: ${lastError}` : ''}.`,
+    );
+  };
+
+  const clickFix = async (sel: string, what: string, key: keyof typeof fixes): Promise<boolean> => {
+    if (fixes[key] >= NC_KEEP_EDITING_UI_FIXES) return false;
+    fixes[key]++;
+    const loc = app.locator(`${NC_VIEWER_SELECTORS.viewer} ${sel}`).first();
+    try {
+      if (!(await ncActionable(loc))) return false;
+      await loc.click({ timeout: 8_000 });
+      actions.push(what);
+      return true;
+    } catch (e) {
+      lastError = `${what}: ${errLine(e)}`;
+      return false;
+    }
+  };
+
+  const reopen = async (): Promise<void> => {
+    reopens++;
+    attemptStart = Date.now();
+    try {
+      await runCloseDoc(app);
+      await runOpenCollabDoc(app);
+      actions.push(`reopened "${name}" via Files (close + click)`);
+    } catch (e) {
+      lastError = `reopen: ${errLine(e)}`;
+      if (ncOpenFileQuery(app.url())) {
+        // Viewer Close not cooperating: a page reload reopens an ?openfile doc (fresh Text session).
+        await app.reload?.({ waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch(() => {});
+        await waitFor(() => viewerOpen(app), app, SETTLE_MS);
+        actions.push('page reload (reopen via Files failed)');
+      } else {
+        actions.push('reopen via Files failed');
+      }
+    }
+  };
+
+  for (;;) {
+    last = await ncTextState(app);
+    if (textEditable(last)) return actions;
+    if (last.readonlyBar && !isLockNote(last.status) && !isIdleNote(last.status)) {
+      // Permission read-only (not a lock/idle): deterministic, never retried.
+      throw new Error(
+        `${tag}: Nextcloud Text opened "${name}" read-only (${TEXT.readonlyBarMustBeAbsent} visible). ` +
+          `Kid collab apply pending (CONTENT.live.json collabProvisioned=false): ` +
+          `post-dock-restore-running.sh --mode sidecar --apps nextcloud. State: ${describeNcTextState(last)}.`,
+      );
+    }
+    if (Date.now() >= deadline) fail('budget exhausted');
+
+    let acted = false;
+    if (last.collision) {
+      // Sync HTTP 409: the file changed outside Text. The walker has typed nothing yet, so the
+      // file on disk is the version to keep: Text's own "Use the saved version" button.
+      acted = await clickFix(NC_TEXT_STATE_SELECTORS.useSavedVersion, 'collision → "Use the saved version"', 'saved');
+    } else if (last.statusButton && /reconnect/i.test(last.statusButton)) {
+      acted = await clickFix(NC_TEXT_STATE_SELECTORS.statusButton, `"${last.statusButton}" (${last.status.slice(0, 60)})`, 'reconnect');
+    } else if (last.statusButton && /reload/i.test(last.statusButton)) {
+      acted = await clickFix(NC_TEXT_STATE_SELECTORS.statusButton, `"${last.statusButton}" (load error)`, 'reload');
+      if (acted) await waitFor(() => viewerOpen(app), app, SETTLE_MS);
+    } else if (!last.viewer) {
+      if (reopens >= knobs.reopens) fail('Viewer closed and no reopen left');
+      await reopen();
+      continue;
+    }
+    if (acted) {
+      // Give Text one sync round to clear syncError / reconnect before judging again.
+      await waitFor(async () => textEditable(await ncTextState(app)), app, Math.min(10_000, Math.max(0, deadline - Date.now())));
+      continue;
+    }
+    if (Date.now() - attemptStart >= attemptMs) {
+      if (reopens < knobs.reopens) {
+        await reopen();
+        continue;
+      }
+    }
+    await app.waitForTimeout(500);
+  }
+};
+
+/**
  * keep_editing: type a new line at the end of Grade5A-collab-notes.md in
  * Nextcloud Text. Loud-fail when Text is read-only (Kid collab apply pending).
+ * r37 FAIL@82: every Text sync answered HTTP 409 (file touched outside Text), so the
+ * editor stayed non-editable behind the collision notice; ncAwaitEditableText now clears
+ * such Text UI by its own buttons / reopens the doc within a bounded budget, else fails
+ * loud with the last observed state.
  * Proof = the line is in the editor AND Text pushed the steps to the server
- * (POST /apps/text/session/<id>/push 2xx). Stays in nc_collab.
+ * (POST /apps/text/session/<id>/push 2xx, sent after typing began). Stays in nc_collab.
  */
-export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise<string> => {
+export const runKeepEditing = async (
+  app: Page,
+  now: Date = new Date(),
+  knobs: { budgetMs: number; reopens: number } = keepEditingBudget(),
+): Promise<string> => {
   const tag = 'idea#166 keep_editing';
   await ensureNextcloudFiles(app, tag, null);
   if (!(await viewerOpen(app))) {
@@ -1287,25 +1514,25 @@ export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise
   if (!(await waitFor(vis(TEXT.editor), app, SETTLE_MS))) {
     throw new Error(`${tag}: "${name}" is not open in Nextcloud Text (${TEXT.editor} missing).`);
   }
-  // Text mounts read-only bar / editable content a moment after the container: wait for either.
-  await waitFor(async () => (await vis(TEXT.content)()) || (await vis(TEXT.readonlyBarMustBeAbsent)()), app, SETTLE_MS);
-  if (await vis(TEXT.readonlyBarMustBeAbsent)()) {
-    throw new Error(
-      `${tag}: Nextcloud Text opened "${name}" read-only (${TEXT.readonlyBarMustBeAbsent} visible). ` +
-        `Kid collab apply pending (CONTENT.live.json collabProvisioned=false): ` +
-        `post-dock-restore-running.sh --mode sidecar --apps nextcloud.`,
-    );
+  const recovered = await ncAwaitEditableText(app, tag, name, knobs);
+  if (recovered.length) {
+    // Visible in the walk log: the step passed only after real Text/Files UI recovery.
+    console.log(JSON.stringify({ event: 'keep_editing_recovery', file: name, actions: recovered }));
   }
   const content = app.locator(`${scope} ${TEXT.content}`).first();
-  if (!(await waitFor(async () => content.isVisible().catch(() => false), app, SETTLE_MS))) {
-    throw new Error(`${tag}: no editable Text content (${TEXT.content}) for "${name}".`);
-  }
-  if (!(await waitFor(vis(TEXT.menubarWhenEditable), app, 8_000))) {
-    throw new Error(`${tag}: Text menubar (${TEXT.menubarWhenEditable}) missing: editor not in edit mode.`);
-  }
   const line = keepEditingLine(now);
+  // Only a push the browser sent after typing began proves this edit (a collision
+  // resolution or reconnect also pushes; those must not count).
+  let typingAt: number | null = null;
   const pushed = app
-    .waitForResponse((r) => TEXT_PUSH.test(r.url()) && r.request().method() === 'POST', { timeout: SETTLE_MS })
+    .waitForResponse(
+      (r) =>
+        TEXT_PUSH.test(r.url()) &&
+        r.request().method() === 'POST' &&
+        typingAt !== null &&
+        r.request().timing().startTime >= typingAt,
+      { timeout: SETTLE_MS },
+    )
     .catch(() => null);
   // Focus click: retried only while the click itself fails; typing is never repeated (no
   // duplicate lines). A reload (?openfile reopens the doc) only if all clicks failed.
@@ -1321,11 +1548,14 @@ export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise
     readyMs: 8_000,
   });
   if (!focus.ok) throw new Error(`${tag}: could not click into the Text editor for "${name}".${ncAttempts(focus)}`);
+  typingAt = Date.now();
   await app.keyboard.press('Control+End');
   await app.keyboard.press('Enter');
   await app.keyboard.type(line, { delay: 20 });
   if (!(await waitFor(async () => ((await content.innerText().catch(() => '')) ?? '').includes(line), app, 8_000))) {
-    throw new Error(`${tag}: typed "${line}" but it does not appear in the Text editor.`);
+    throw new Error(
+      `${tag}: typed "${line}" but it does not appear in the Text editor. State: ${describeNcTextState(await ncTextState(app))}.`,
+    );
   }
   const resp = await pushed;
   if (!resp) throw new Error(`${tag}: Text never pushed the edit to Nextcloud within ${SETTLE_MS}ms (no session push).`);

@@ -515,12 +515,22 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   file name, **Nextcloud Text** mounted (`[data-text-el="editor-container"]`, Kid App#11 Prefer A; Collabora = Prefer B,
   not shipped), and the doc heading "Grade 5A collab notes" rendered. Read-only is fine here. Download or non-Text
   viewer = loud-fail.
-- **`keep_editing` (nc_collab dwell):** same file in Text. Loud-fail if `[data-text-el="readonly-bar"]` is visible (Kid
-  collab apply pending, `collabProvisioned=false`), or if editable content
-  (`[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]`) or the menubar is missing. Clicks the
-  content, Ctrl+End, Enter, types `keep_editing <ISO time>`. Proof = the line is in the editor **and** Text's sync
-  `POST /apps/text/session/<id>/push` returned 2xx (nextcloud/text stable31 SessionApi). Selectors come from Kid
-  `CONTENT.live.json collab.selectors`.
+- **`keep_editing` (nc_collab dwell):** same file in Text. Loud-fail at once if `[data-text-el="readonly-bar"]` is
+  visible without a lock/idle note (Kid collab apply pending, `collabProvisioned=false`). Otherwise waits (bounded,
+  `DURATION_KEEP_EDITING_BUDGET_MS`, default **90s**) for editable content
+  (`[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]`) **and** the menubar, with no
+  Text DocumentStatus action and no collision dialog. r37 FAIL@82: every Text sync returned **HTTP 409** (the file
+  was `touch`ed outside Text), so Text kept the doc rendered but non-editable behind "Document has been changed
+  outside of the editor". Recovery is Text/Files UI only: collision → Text's **"Use the saved version"**
+  (`#resolve-conflicts [data-cy="resolveServerVersion"]`; the walker has typed nothing, the file on disk wins);
+  DocumentStatus **Reconnect** (connection issue / idle) or **Reload** (412); each at most 3×. Still stuck after a
+  fair share of the budget → close + reopen the doc through the Files UI (`close_doc` + `open_collab_doc`; page
+  reload if that fails), at most `DURATION_KEEP_EDITING_REOPENS` (default **2**) times. Recovery actions are logged
+  as `{"event":"keep_editing_recovery",…}`. Final failure names the last state (viewer, ProseMirror
+  editable/read-only/missing, menubar, readonly bar, skeleton, DocumentStatus text/button, collision dialog, URL).
+  Then clicks the content, Ctrl+End, Enter, types `keep_editing <ISO time>`. Proof = the line is in the editor **and**
+  a Text `POST /apps/text/session/<id>/push` **sent after typing began** returned 2xx (a resolve/reconnect push does
+  not count). Selectors come from Kid `CONTENT.live.json collab.selectors` and nextcloud/text v31.0.1.
 - **`close_doc` (nc_collab → nc_browse):** Viewer `.header-close` (NcModal, aria-label "Close") → Viewer gone, same
   `dir`, `openfile` dropped from the URL.
 - **File Drop trio** (Kid App#11 @2d9a052 `fileRequest`: token `grade5adropzone`, `/Drop Zone/inbox`, permissions 4).
