@@ -327,14 +327,14 @@ describe('RestorePanel restore on another Engine', () => {
     expect(screen.getByTestId(`restore-feedback-${KOLIBRI}-sent`).textContent).toContain('Sent to appdocker02');
     vi.advanceTimersByTime(10 * 60_000);
     noRed();
-    setStore(withOp(store(), { id: 'op-r', kind: 'restoreApp', status: 'Done', args: { instanceId: KOLIBRI } }));
+    setStore(withOp(store(), { id: 'op-r', kind: 'restoreApp', status: 'Done', args: { instanceId: KOLIBRI, targetDiskId: MOCK_IDS.DISK_2_ID } }));
     expect(screen.queryByTestId(`restore-feedback-${KOLIBRI}-sent`)).toBeNull();
     noRed();
   });
 
   it('a Failed restoreApp op turns red with the Engine\'s error', () => {
     const { store, setStore } = setup();
-    setStore(withOp(store(), { id: 'op-r', kind: 'restoreApp', status: 'Failed', args: { instanceId: KOLIBRI }, error: 'borg extract failed' }));
+    setStore(withOp(store(), { id: 'op-r', kind: 'restoreApp', status: 'Failed', args: { instanceId: KOLIBRI, targetDiskId: MOCK_IDS.DISK_2_ID }, error: 'borg extract failed' }));
     expect(screen.getByTestId(`restore-feedback-${KOLIBRI}-error`).textContent).toBe("Couldn't restore kolibri: borg extract failed");
   });
 
@@ -523,7 +523,7 @@ describe('App drag-and-drop copy/move', () => {
     vi.advanceTimersByTime(10 * 60_000);
     noRed();
     const src = store().instanceDB[NEXTCLOUD];
-    setStore({ ...store(), instanceDB: { ...store().instanceDB, 'nextcloud-copy': { ...src, id: 'nextcloud-copy', storedOn: MOCK_IDS.DISK_1_ID } } });
+    setStore({ ...store(), instanceDB: { ...store().instanceDB, 'nextcloud-copy': { ...src, id: 'nextcloud-copy', storedOn: MOCK_IDS.DISK_1_ID, created: Date.now() } } });
     expect(screen.queryByTestId('copy-move-feedback-sent')).toBeNull();
     noRed();
   });
@@ -533,7 +533,7 @@ describe('App drag-and-drop copy/move', () => {
     drag(ctl(), NEXTCLOUD, 'nextcloud', MOCK_IDS.DISK_2_ID, MOCK_IDS.DISK_1_ID);
     fireEvent.click(screen.getByTestId('copy-move-move'));
     expect(send).toHaveBeenCalledWith(E2, `moveApp nextcloud ${MOCK_IDS.DISK_2_ID} ${MOCK_IDS.DISK_1_ID}`);
-    setStore(withOp(store(), { id: 'mv', kind: 'moveApp', status: 'Failed', args: { instanceId: NEXTCLOUD }, error: 'rsync: connection refused' }));
+    setStore(withOp(store(), { id: 'mv', kind: 'moveApp', status: 'Failed', args: { instanceId: NEXTCLOUD, targetDiskId: MOCK_IDS.DISK_1_ID }, error: 'rsync: connection refused' }));
     expect(screen.getByTestId('copy-move-feedback-error').textContent).toBe("Couldn't move nextcloud: rsync: connection refused");
   });
 

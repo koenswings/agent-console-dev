@@ -354,7 +354,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     cmdResult.start(inst.name, () => startInstance(engine.id, inst.name, String(diskId)), {
       command: 'startInstance',
       engineId: engine.id,
-      remote: remoteWatchFor(storeAcc, engine.id, 'startInstance', confirmInstanceStatus(storeAcc, inst.id, ['Running'])),
+      remote: remoteWatchFor(storeAcc, engine.id, 'startInstance', confirmInstanceStatus(storeAcc, inst.id, ['Running'], 'startApp')),
     });
     setPendingWithTimeout('starting');
   };
@@ -367,7 +367,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     cmdResult.start(inst.name, () => stopInstance(engine.id, inst.name, String(diskId)), {
       command: 'stopInstance',
       engineId: engine.id,
-      remote: remoteWatchFor(storeAcc, engine.id, 'stopInstance', confirmInstanceStatus(storeAcc, inst.id, ['Stopped', 'Docked'])),
+      remote: remoteWatchFor(storeAcc, engine.id, 'stopInstance', confirmInstanceStatus(storeAcc, inst.id, ['Stopped', 'Docked'], 'stopApp')),
     });
     setPendingWithTimeout('stopping');
   };
@@ -379,7 +379,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       longRunning: true,
       engineId,
       remote: remoteWatchFor(storeAcc, engineId, 'backupApp',
-        confirmNewOperation(storeAcc, 'backupApp', instanceId, lastBackupAdvanced(storeAcc, instanceId))),
+        confirmNewOperation(storeAcc, 'backupApp', instanceId, {
+          engineId, args: { backupDiskId }, fallbackOk: lastBackupAdvanced(storeAcc, instanceId),
+        })),
     });
   };
 

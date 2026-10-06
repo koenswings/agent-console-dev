@@ -74,18 +74,26 @@ export const createDragCopyMove = (
     // Engine (8d98718 and Axle's fix); the disks go by ID.
     if (op === 'copy') {
       const instanceOf = s?.instanceDB[instanceId]?.instanceOf;
+      const instanceOfStr = instanceOf === undefined ? undefined : String(instanceOf);
       result.start(instanceName, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'copyApp',
         engineId,
-        remote: remoteWatchFor(store, engineId, 'copyApp', confirmNewOperation(store, 'copyApp', instanceId,
-          newInstanceOnDisk(store, targetDiskId, { instanceOf }))),
+        remote: remoteWatchFor(store, engineId, 'copyApp', confirmNewOperation(store, 'copyApp', instanceId, {
+          engineId,
+          args: { targetDiskId },
+          // copyApp keeps the app and the name; the copy gets a fresh id.
+          fallbackOk: newInstanceOnDisk(store, targetDiskId, { instanceOf: instanceOfStr, name: instanceName, engineId }),
+        })),
       });
     } else {
       result.start(instanceName, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'moveApp',
         engineId,
-        remote: remoteWatchFor(store, engineId, 'moveApp', confirmNewOperation(store, 'moveApp', instanceId,
-          instanceStoredOn(store, instanceId, targetDiskId))),
+        remote: remoteWatchFor(store, engineId, 'moveApp', confirmNewOperation(store, 'moveApp', instanceId, {
+          engineId,
+          args: { targetDiskId },
+          fallbackOk: instanceStoredOn(store, instanceId, targetDiskId),
+        })),
       });
     }
     setPendingMove(null);
