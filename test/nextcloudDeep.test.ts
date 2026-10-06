@@ -615,6 +615,8 @@ function fakeCollab(o: {
   collision?: 'resolvable' | 'sticky';
   /** DocumentStatus "Document could not be loaded…" + Reconnect until Reconnect is clicked. */
   connectionIssue?: boolean;
+  /** Text sends a push (awareness heartbeat) when the editor is clicked, i.e. BEFORE typing. */
+  pushOnFocus?: number;
 }) {
   let ignoreFile = o.ignoreFileClicks ?? 0;
   /** Viewer opens so far (a doc that starts open counts once); reopens = opens - 1. */
@@ -677,6 +679,7 @@ function fakeCollab(o: {
       if (!present(sel)) throw new Error('detached');
       if (sel.endsWith('.modal-header__name')) return o.title ?? 'Grade5A-collab-notes.md';
       if (sel.endsWith('.document-status a.button')) return 'Reconnect';
+      if (sel.endsWith('#resolve-conflicts')) return 'Use current version\n  Use the saved version';
       if (sel.endsWith('.document-status')) {
         return collisionOn
           ? 'Document has been changed outside of the editor. The changes cannot be applied'
@@ -690,14 +693,18 @@ function fakeCollab(o: {
     click: async () => {
       if (!present(sel)) throw new Error(`not present: ${sel}`);
       clicks.push(sel);
-      if (sel.endsWith('[data-cy="resolveServerVersion"]')) {
-        // Text: setContent(outsideChange) + forceSave → a push BEFORE the walker types.
+      if (sel.endsWith('[data-cy="resolveServerVersion"]') || sel.endsWith('[data-cy="resolveThisVersion"]')) {
+        // Text: setContent/forceSave → a push BEFORE the walker types (keep_editing must never do this).
         if (o.collision === 'resolvable') collisionOn = false;
         emitPush(200);
         return;
       }
       if (sel.endsWith('.document-status a.button')) {
         connectionOn = false;
+        return;
+      }
+      if (sel.endsWith('.ProseMirror[contenteditable="true"]')) {
+        if (typeof o.pushOnFocus === 'number') emitPush(o.pushOnFocus);
         return;
       }
       if (sel.endsWith('.header-close')) {
@@ -897,7 +904,10 @@ describe('keep_editing editable wait (r37 FAIL@82: Text sync 409, editor never e
   const at = new Date('2026-10-06T08:11:42.000Z');
   const knobs = { budgetMs: NC_KEEP_EDITING_BUDGET_MS, reopens: NC_KEEP_EDITING_REOPENS };
   const recoveryEvents = () =>
-    log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('"event":"keep_editing_recovery"'));
+    log.mock.calls
+      .map((c) => String(c[0]))
+      .filter((l) => l.includes('"event":"keep_editing_recovery"'))
+      .map((l) => JSON.parse(l) as { kind: string; attempt: number; n: number; reason: string; ok: boolean; file: string; url: string });
 
   it('editable on the first try: no reopen, no recovery, types once and needs the push', async () => {
     const f = opened();
@@ -921,14 +931,17 @@ describe('keep_editing editable wait (r37 FAIL@82: Text sync 409, editor never e
     expect(f.keys).toEqual(['Control+End', 'Enter']);
     const ev = recoveryEvents();
     expect(ev).toHaveLength(1);
-    expect(ev[0]).toMatch(/reopened \\"Grade5A-collab-notes.md\\" via Files/);
+    expect(ev[0]).toMatchObject({ kind: 'reopen_files', attempt: 1, n: 1, ok: true, file: 'Grade5A-collab-notes.md' });
+    expect(ev[0]!.reason).toMatch(/^not editable for \d+ms: viewer=open; .*\.ProseMirror=read-only/);
   });
 
   it('page reload reopens the doc when the Viewer Close is stuck (fresh Text session via ?openfile)', async () => {
     const f = opened({ editableAfterReopens: 2, stuckClose: true });
     expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
     expect(f.reopens()).toBeGreaterThanOrEqual(2);
-    expect(recoveryEvents()[0]).toMatch(/page reload \(reopen via Files failed\)/);
+    const ev = recoveryEvents();
+    expect(ev[0]).toMatchObject({ kind: 'reopen_page_reload', attempt: 1, n: 1, ok: true });
+    expect(ev[0]!.reason).toMatch(/Files reopen failed: .*Viewer is still open/);
     expect(f.keys).toEqual(['Control+End', 'Enter']);
   });
 
@@ -942,9 +955,12 @@ describe('keep_editing editable wait (r37 FAIL@82: Text sync 409, editor never e
       editableAfterReopens: 1,
     });
     await expect(runKeepEditing(f.page, at, { budgetMs: 90_000, reopens: 1 })).rejects.toThrow(
-      /1\/1 reopen\(s\); tried: reopen via Files failed\): Viewer closed and no reopen left\. Last state: viewer=closed.*url=http.*last error: reopen: idea#166 open_collab_doc: neither "Class Materials"/,
+      /1\/1 reopen\(s\); tried: reopen_files#1 \(failed\)\): Viewer closed and no reopen left\. Last state: viewer=closed.*url=http.*last error: reopen: idea#166 open_collab_doc: neither "Class Materials"/,
     );
     expect(f.keys).toEqual([]);
+    expect(recoveryEvents()).toEqual([
+      expect.objectContaining({ kind: 'reopen_files', attempt: 1, n: 1, ok: false }),
+    ]);
   });
 
   it('never editable: FAILs after the budget with the last observed state and URL, never types', async () => {
@@ -965,29 +981,58 @@ describe('keep_editing editable wait (r37 FAIL@82: Text sync 409, editor never e
     expect(f.reopens()).toBe(2);
     expect(f.keys).toEqual([]);
     expect(f.typed()).toBe('');
+    expect(recoveryEvents().map((e) => [e.kind, e.attempt, e.n, e.ok])).toEqual([
+      ['reopen_files', 1, 1, true],
+      ['reopen_files', 2, 2, true],
+    ]);
   });
 
-  it('collision dialog dismissed by Text\'s "Use the saved version", then types and needs its own push', async () => {
+  it('a Text conflict dialog FAILS at once, quoting Text word for word with state and URL; never clicked', async () => {
     const f = opened({ collision: 'resolvable' });
-    expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
-    expect(f.clicks).toContain('#viewer #resolve-conflicts [data-cy="resolveServerVersion"]');
-    expect(f.reopens()).toBe(0);
-    expect(f.pushes).toHaveLength(2); // resolve push + the edit push
-    expect(recoveryEvents()[0]).toMatch(/collision → \\"Use the saved version\\"/);
-  });
-
-  it('the collision-resolve push does not count as proof of the edit', async () => {
-    const f = opened({ collision: 'resolvable', push: null });
-    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(/never pushed the edit/);
-    expect(f.pushes).toHaveLength(1); // only the resolve push, sent before typing
-  });
-
-  it('a collision that never clears FAILs naming the dialog and the Text notice', async () => {
-    const f = opened({ collision: 'sticky' });
-    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(
-      /tried: collision → "Use the saved version".*collision-dialog=visible.*document-status="Document has been changed outside of the editor/,
+    const t0 = Date.now();
+    const err = await runKeepEditing(f.page, at, knobs).then(
+      () => null,
+      (e: Error) => e,
     );
+    expect(err).toBeInstanceOf(Error);
+    expect(err!.message).toContain(
+      'idea#166 keep_editing: Nextcloud Text conflict dialog for "Grade5A-collab-notes.md" (sync HTTP 409: file changed outside the editor). ' +
+        'Text says: "Document has been changed outside of the editor. The changes cannot be applied"; ' +
+        'dialog: "Use current version Use the saved version". Not resolved by the walker',
+    );
+    expect(err!.message).toMatch(/State: viewer=open; editor-container=visible; \.ProseMirror=read-only; menubar=missing; conflict-dialog=visible/);
+    expect(err!.message).toMatch(/url=http:\/\/idea01:18280\/apps\/files\/files\/\d+\?dir=.*Collab&openfile=true/);
+    // No "Use the saved version" / "Use current version" click, no reopen, nothing typed or pushed.
+    expect(f.clicks.filter((c) => /resolve(Server|This)Version|resolve-conflicts/.test(c))).toEqual([]);
+    expect(f.reopens()).toBe(0);
     expect(f.keys).toEqual([]);
+    expect(f.pushes).toEqual([]);
+    expect(recoveryEvents()).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(1_000);
+  });
+
+  it('a conflict that shows up after a reopen still FAILS (no resolve click), with the recovery logged', async () => {
+    // Stuck editor → reopen via Files → Text then reports the 409 conflict.
+    const f = opened({ neverEditable: true });
+    const page = f.page as unknown as { locator: (s: string) => unknown };
+    const base = page.locator.bind(page);
+    page.locator = (sel: string) => {
+      const l = base(sel) as Record<string, unknown>;
+      if (sel.endsWith('#resolve-conflicts') && f.reopens() >= 1) {
+        return { ...l, first: () => ({ ...l, isVisible: async () => true, innerText: async () => 'Use current version Use the saved version' }) };
+      }
+      return l;
+    };
+    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(/conflict dialog .*tried: reopen_files#1\./);
+    expect(f.clicks.filter((c) => /resolve/.test(c))).toEqual([]);
+    expect(recoveryEvents().map((e) => e.kind)).toEqual(['reopen_files']);
+  });
+
+  it('a push sent before typing (focus / heartbeat) does not count as proof of the edit', async () => {
+    const f = opened({ pushOnFocus: 200, push: null });
+    await expect(runKeepEditing(f.page, at, knobs)).rejects.toThrow(/never pushed the edit/);
+    expect(f.pushes).toHaveLength(1); // only the pre-typing push
+    expect(f.keys).toEqual(['Control+End', 'Enter']);
   });
 
   it('Reconnect notice dismissed by its Reconnect button, then types', async () => {
@@ -995,6 +1040,12 @@ describe('keep_editing editable wait (r37 FAIL@82: Text sync 409, editor never e
     expect(await runKeepEditing(f.page, at, knobs)).toBe(keepEditingLine(at));
     expect(f.clicks).toContain('#viewer .document-status a.button');
     expect(f.reopens()).toBe(0);
+    const ev = recoveryEvents();
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ kind: 'reconnect', attempt: 1, n: 1, ok: true });
+    expect(ev[0]!.reason).toBe(
+      'document-status "Document could not be loaded. Please check your internet connection. Reconnect" with button "Reconnect"',
+    );
   });
 
   it('read-only (permission) stays an immediate loud-fail, no retries', async () => {

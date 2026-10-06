@@ -516,21 +516,24 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
   not shipped), and the doc heading "Grade 5A collab notes" rendered. Read-only is fine here. Download or non-Text
   viewer = loud-fail.
 - **`keep_editing` (nc_collab dwell):** same file in Text. Loud-fail at once if `[data-text-el="readonly-bar"]` is
-  visible without a lock/idle note (Kid collab apply pending, `collabProvisioned=false`). Otherwise waits (bounded,
+  visible without a lock/idle note (Kid collab apply pending, `collabProvisioned=false`). **A Text conflict dialog
+  (`#resolve-conflicts`, sync HTTP 409 "Document has been changed outside of the editor") FAILS the step at once**,
+  quoting the Text note and dialog word for word with the state and URL; the walker never clicks "Use current
+  version" / "Use the saved version" (r37 FAIL@82: the 409s came from the test setup touching the file; in
+  production that dialog is a real bug that must surface). Otherwise waits (bounded,
   `DURATION_KEEP_EDITING_BUDGET_MS`, default **90s**) for editable content
   (`[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]`) **and** the menubar, with no
-  Text DocumentStatus action and no collision dialog. r37 FAIL@82: every Text sync returned **HTTP 409** (the file
-  was `touch`ed outside Text), so Text kept the doc rendered but non-editable behind "Document has been changed
-  outside of the editor". Recovery is Text/Files UI only: collision → Text's **"Use the saved version"**
-  (`#resolve-conflicts [data-cy="resolveServerVersion"]`; the walker has typed nothing, the file on disk wins);
-  DocumentStatus **Reconnect** (connection issue / idle) or **Reload** (412); each at most 3×. Still stuck after a
-  fair share of the budget → close + reopen the doc through the Files UI (`close_doc` + `open_collab_doc`; page
-  reload if that fails), at most `DURATION_KEEP_EDITING_REOPENS` (default **2**) times. Recovery actions are logged
-  as `{"event":"keep_editing_recovery",…}`. Final failure names the last state (viewer, ProseMirror
-  editable/read-only/missing, menubar, readonly bar, skeleton, DocumentStatus text/button, collision dialog, URL).
-  Then clicks the content, Ctrl+End, Enter, types `keep_editing <ISO time>`. Proof = the line is in the editor **and**
-  a Text `POST /apps/text/session/<id>/push` **sent after typing began** returned 2xx (a resolve/reconnect push does
-  not count). Selectors come from Kid `CONTENT.live.json collab.selectors` and nextcloud/text v31.0.1.
+  DocumentStatus action. Recovery is real UI only: DocumentStatus **Reconnect** (connection issue / idle) or
+  **Reload** (412), each at most 3×; a stuck editor after a fair share of the budget → close + reopen through the
+  Files UI (`close_doc` + `open_collab_doc`; page reload when the Viewer Close is stuck), at most
+  `DURATION_KEEP_EDITING_REOPENS` (default **2**). Each recovery is one stdout line
+  `{"event":"keep_editing_recovery","file",kind,attempt,n,reason,ok,error?,elapsedMs,url}` with `kind` ∈
+  `reconnect | reload | reopen_files | reopen_page_reload` (the harness counts them in the run summary). Final
+  failure names the last state (viewer, ProseMirror editable/read-only/missing, menubar, readonly bar, skeleton,
+  DocumentStatus text/button, conflict dialog, URL) and the recoveries tried. Then clicks the content, Ctrl+End,
+  Enter, types `keep_editing <ISO time>`. Proof = the line is in the editor **and** a Text
+  `POST /apps/text/session/<id>/push` **sent after typing began** returned 2xx. Selectors: Kid
+  `CONTENT.live.json collab.selectors` and nextcloud/text v31.0.1.
 - **`close_doc` (nc_collab → nc_browse):** Viewer `.header-close` (NcModal, aria-label "Close") → Viewer gone, same
   `dir`, `openfile` dropped from the URL.
 - **File Drop trio** (Kid App#11 @2d9a052 `fileRequest`: token `grade5adropzone`, `/Drop Zone/inbox`, permissions 4).

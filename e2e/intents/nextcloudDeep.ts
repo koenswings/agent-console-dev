@@ -1282,8 +1282,8 @@ export const NC_TEXT_STATE_SELECTORS = {
   proseMirror: '[data-text-el="editor-content-wrapper"] .ProseMirror',
   status: '.document-status',
   statusButton: '.document-status a.button',
+  /** Detected and quoted only: keep_editing never clicks its buttons (a conflict FAILS the step). */
   collision: '#resolve-conflicts',
-  useSavedVersion: '#resolve-conflicts [data-cy="resolveServerVersion"]',
   skeleton: '.placeholder-main-text',
 } as const;
 
@@ -1291,7 +1291,7 @@ export const NC_TEXT_STATE_SELECTORS = {
 export const NC_KEEP_EDITING_BUDGET_MS = 90_000;
 /** Close + reopen of the doc through the Files UI within that budget (env DURATION_KEEP_EDITING_REOPENS). */
 export const NC_KEEP_EDITING_REOPENS = 2;
-/** Each blocking-UI click (Reconnect / Use the saved version / Reload) is tried at most this often. */
+/** Each DocumentStatus click (Reconnect / Reload) is tried at most this often. */
 export const NC_KEEP_EDITING_UI_FIXES = 3;
 
 const envInt = (name: string, dflt: number, env: NodeJS.ProcessEnv = process.env): number => {
@@ -1320,11 +1320,13 @@ export type NcTextState = {
   menubar: boolean;
   readonlyBar: boolean;
   skeleton: boolean;
-  /** Text of the DocumentStatus notes ('' when none). */
+  /** Text of the DocumentStatus notes ('' when none), whitespace-collapsed, words verbatim. */
   status: string;
   /** Label of the DocumentStatus action link (Reconnect / Reload), if any. */
   statusButton: string | null;
   collision: boolean;
+  /** Text of the conflict dialog (#resolve-conflicts, its button labels) when visible. */
+  collisionText: string;
 };
 
 export const ncTextState = async (app: Page): Promise<NcTextState> => {
@@ -1337,6 +1339,7 @@ export const ncTextState = async (app: Page): Promise<NcTextState> => {
   const editable = await vis(TEXT.content);
   const anyPm = editable || (await vis(S.proseMirror));
   const statusButton = (await vis(S.statusButton)) ? (await txt(S.statusButton)) || '(unlabelled)' : null;
+  const collision = await vis(S.collision);
   return {
     url: app.url(),
     viewer,
@@ -1345,9 +1348,10 @@ export const ncTextState = async (app: Page): Promise<NcTextState> => {
     menubar: await vis(TEXT.menubarWhenEditable),
     readonlyBar: await vis(TEXT.readonlyBarMustBeAbsent),
     skeleton: await vis(S.skeleton),
-    status: (await vis(S.status)) ? (await txt(S.status)).slice(0, 200) : '',
+    status: (await vis(S.status)) ? (await txt(S.status)).slice(0, 500) : '',
     statusButton,
-    collision: await vis(S.collision),
+    collision,
+    collisionText: collision ? (await txt(S.collision)).slice(0, 300) : '',
   };
 };
 
@@ -1360,7 +1364,7 @@ export const describeNcTextState = (s: NcTextState): string =>
     `menubar=${s.menubar ? 'visible' : 'missing'}`,
     s.readonlyBar ? 'readonly-bar=visible' : null,
     s.skeleton ? 'loading-skeleton=visible' : null,
-    s.collision ? 'collision-dialog=visible (Use current version / Use the saved version)' : null,
+    s.collision ? `conflict-dialog=visible "${s.collisionText}"` : null,
     s.status ? `document-status="${s.status}"` : null,
     s.statusButton ? `status-button="${s.statusButton}"` : null,
     `url=${s.url}`,
@@ -1375,76 +1379,124 @@ const textEditable = (s: NcTextState): boolean =>
 const isLockNote = (status: string): boolean => /locked by/i.test(status);
 const isIdleNote = (status: string): boolean => /idle for/i.test(status);
 
+/** Recovery kinds keep_editing may log (stable keys: the harness counts them by kind). */
+export type KeepEditingRecoveryKind = 'reconnect' | 'reload' | 'reopen_files' | 'reopen_page_reload';
+
+/** One `{"event":"keep_editing_recovery",...}` line (stdout → walk run.log). */
+export type KeepEditingRecovery = {
+  kind: KeepEditingRecoveryKind;
+  /** Attempt number for this kind within the step (1-based). */
+  attempt: number;
+  /** Recovery number within the step across kinds (1-based). */
+  n: number;
+  /** What the walker saw that made it recover. */
+  reason: string;
+  /** The recovery action itself went through (click landed / Viewer back); not "editable yet". */
+  ok: boolean;
+  error?: string;
+  elapsedMs: number;
+  url: string;
+};
+
 /**
- * Wait (bounded) until Nextcloud Text has the collab doc editable, clearing blocking Text UI
- * through its own buttons and reopening the doc through the Files UI when it stays stuck.
- * Returns the recovery actions taken ([] when it was editable straight away). Loud-fails
- * with the last observed state. Never types, never fakes editability.
+ * Wait (bounded) until Nextcloud Text has the collab doc editable. Recovers only through real
+ * UI: DocumentStatus Reconnect / Reload, and close + reopen through the Files UI (page reload
+ * when the Viewer Close is stuck). A Text conflict dialog (sync HTTP 409) FAILS at once, quoted
+ * word for word: it is never resolved by the walker (a real conflict is a bug to surface).
+ * Each recovery is logged as `{"event":"keep_editing_recovery",kind,attempt,n,reason,...}`;
+ * returns them ([] when editable straight away). Never types, never fakes editability.
  */
 export const ncAwaitEditableText = async (
   app: Page,
   tag: string,
   name: string,
   knobs: { budgetMs: number; reopens: number } = keepEditingBudget(),
-): Promise<string[]> => {
+): Promise<KeepEditingRecovery[]> => {
   const started = Date.now();
   const deadline = started + knobs.budgetMs;
   // Time to wait for a stuck editor before the next reopen (each attempt gets a fair share).
   const attemptMs = Math.max(10_000, Math.floor(knobs.budgetMs / (knobs.reopens + 1)));
-  const actions: string[] = [];
-  const fixes = { reconnect: 0, saved: 0, reload: 0 };
+  const recoveries: KeepEditingRecovery[] = [];
+  const perKind: Record<KeepEditingRecoveryKind, number> = { reconnect: 0, reload: 0, reopen_files: 0, reopen_page_reload: 0 };
+  const fixes = { reconnect: 0, reload: 0 };
   let reopens = 0;
   let attemptStart = started;
   let last = await ncTextState(app);
   let lastError: string | null = null;
 
+  const record = (kind: KeepEditingRecoveryKind, reason: string, ok: boolean, error?: string): void => {
+    const r: KeepEditingRecovery = {
+      kind,
+      attempt: ++perKind[kind],
+      n: recoveries.length + 1,
+      reason,
+      ok,
+      ...(error ? { error } : {}),
+      elapsedMs: Date.now() - started,
+      url: app.url(),
+    };
+    recoveries.push(r);
+    console.log(JSON.stringify({ event: 'keep_editing_recovery', file: name, ...r }));
+  };
+  const tried = () =>
+    recoveries.length ? `; tried: ${recoveries.map((r) => `${r.kind}#${r.attempt}${r.ok ? '' : ' (failed)'}`).join(' → ')}` : '';
+
   const fail = (why: string): never => {
     throw new Error(
       `${tag}: no editable Text content (${TEXT.content}) for "${name}" after ${Date.now() - started}ms ` +
-        `(budget ${knobs.budgetMs}ms; ${reopens}/${knobs.reopens} reopen(s)` +
-        `${actions.length ? `; tried: ${actions.join(' → ')}` : ''}): ${why}. ` +
+        `(budget ${knobs.budgetMs}ms; ${reopens}/${knobs.reopens} reopen(s)${tried()}): ${why}. ` +
         `Last state: ${describeNcTextState(last)}${lastError ? `; last error: ${lastError}` : ''}.`,
     );
   };
 
-  const clickFix = async (sel: string, what: string, key: keyof typeof fixes): Promise<boolean> => {
+  const clickStatusButton = async (key: 'reconnect' | 'reload', reason: string): Promise<boolean> => {
     if (fixes[key] >= NC_KEEP_EDITING_UI_FIXES) return false;
     fixes[key]++;
-    const loc = app.locator(`${NC_VIEWER_SELECTORS.viewer} ${sel}`).first();
+    const loc = app.locator(`${NC_VIEWER_SELECTORS.viewer} ${NC_TEXT_STATE_SELECTORS.statusButton}`).first();
+    if (!(await ncActionable(loc))) return false;
     try {
-      if (!(await ncActionable(loc))) return false;
       await loc.click({ timeout: 8_000 });
-      actions.push(what);
+      record(key, reason, true);
       return true;
     } catch (e) {
-      lastError = `${what}: ${errLine(e)}`;
+      lastError = `${key}: ${errLine(e)}`;
+      record(key, reason, false, errLine(e));
       return false;
     }
   };
 
-  const reopen = async (): Promise<void> => {
+  const reopen = async (reason: string): Promise<void> => {
     reopens++;
     attemptStart = Date.now();
     try {
       await runCloseDoc(app);
       await runOpenCollabDoc(app);
-      actions.push(`reopened "${name}" via Files (close + click)`);
+      record('reopen_files', reason, true);
     } catch (e) {
       lastError = `reopen: ${errLine(e)}`;
       if (ncOpenFileQuery(app.url())) {
         // Viewer Close not cooperating: a page reload reopens an ?openfile doc (fresh Text session).
         await app.reload?.({ waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch(() => {});
-        await waitFor(() => viewerOpen(app), app, SETTLE_MS);
-        actions.push('page reload (reopen via Files failed)');
+        const back = await waitFor(() => viewerOpen(app), app, SETTLE_MS);
+        record('reopen_page_reload', `${reason}; Files reopen failed: ${errLine(e)}`, back, back ? undefined : 'Viewer did not reopen');
       } else {
-        actions.push('reopen via Files failed');
+        record('reopen_files', reason, false, errLine(e));
       }
     }
   };
 
   for (;;) {
     last = await ncTextState(app);
-    if (textEditable(last)) return actions;
+    if (textEditable(last)) return recoveries;
+    if (last.collision) {
+      // Sync HTTP 409 (SAVE_COLLISSION): never resolved by the walker. Quote Text verbatim.
+      throw new Error(
+        `${tag}: Nextcloud Text conflict dialog for "${name}" (sync HTTP 409: file changed outside the editor). ` +
+          `Text says: "${last.status || '(no status note)'}"; dialog: "${last.collisionText || '(no text)'}". ` +
+          `Not resolved by the walker (a real conflict must surface). ` +
+          `State: ${describeNcTextState(last)}${tried()}.`,
+      );
+    }
     if (last.readonlyBar && !isLockNote(last.status) && !isIdleNote(last.status)) {
       // Permission read-only (not a lock/idle): deterministic, never retried.
       throw new Error(
@@ -1456,28 +1508,25 @@ export const ncAwaitEditableText = async (
     if (Date.now() >= deadline) fail('budget exhausted');
 
     let acted = false;
-    if (last.collision) {
-      // Sync HTTP 409: the file changed outside Text. The walker has typed nothing yet, so the
-      // file on disk is the version to keep: Text's own "Use the saved version" button.
-      acted = await clickFix(NC_TEXT_STATE_SELECTORS.useSavedVersion, 'collision → "Use the saved version"', 'saved');
-    } else if (last.statusButton && /reconnect/i.test(last.statusButton)) {
-      acted = await clickFix(NC_TEXT_STATE_SELECTORS.statusButton, `"${last.statusButton}" (${last.status.slice(0, 60)})`, 'reconnect');
+    const statusReason = `document-status "${last.status}" with button "${last.statusButton}"`;
+    if (last.statusButton && /reconnect/i.test(last.statusButton)) {
+      acted = await clickStatusButton('reconnect', statusReason);
     } else if (last.statusButton && /reload/i.test(last.statusButton)) {
-      acted = await clickFix(NC_TEXT_STATE_SELECTORS.statusButton, `"${last.statusButton}" (load error)`, 'reload');
+      acted = await clickStatusButton('reload', statusReason);
       if (acted) await waitFor(() => viewerOpen(app), app, SETTLE_MS);
     } else if (!last.viewer) {
       if (reopens >= knobs.reopens) fail('Viewer closed and no reopen left');
-      await reopen();
+      await reopen(`Viewer closed (${last.url})`);
       continue;
     }
     if (acted) {
-      // Give Text one sync round to clear syncError / reconnect before judging again.
+      // Give Text one sync round to reconnect before judging again.
       await waitFor(async () => textEditable(await ncTextState(app)), app, Math.min(10_000, Math.max(0, deadline - Date.now())));
       continue;
     }
     if (Date.now() - attemptStart >= attemptMs) {
       if (reopens < knobs.reopens) {
-        await reopen();
+        await reopen(`not editable for ${Date.now() - attemptStart}ms: ${describeNcTextState(last)}`);
         continue;
       }
     }
@@ -1488,10 +1537,11 @@ export const ncAwaitEditableText = async (
 /**
  * keep_editing: type a new line at the end of Grade5A-collab-notes.md in
  * Nextcloud Text. Loud-fail when Text is read-only (Kid collab apply pending).
- * r37 FAIL@82: every Text sync answered HTTP 409 (file touched outside Text), so the
- * editor stayed non-editable behind the collision notice; ncAwaitEditableText now clears
- * such Text UI by its own buttons / reopens the doc within a bounded budget, else fails
- * loud with the last observed state.
+ * r37 FAIL@82: every Text sync answered HTTP 409 (file touched outside Text by the test
+ * setup), so the editor stayed non-editable behind the conflict notice. ncAwaitEditableText
+ * now FAILS on a conflict dialog (quoted), recovers Reconnect / Reload / a stuck editor by
+ * real UI within a bounded budget (each logged as keep_editing_recovery), else fails loud
+ * with the last observed state.
  * Proof = the line is in the editor AND Text pushed the steps to the server
  * (POST /apps/text/session/<id>/push 2xx, sent after typing began). Stays in nc_collab.
  */
@@ -1514,15 +1564,12 @@ export const runKeepEditing = async (
   if (!(await waitFor(vis(TEXT.editor), app, SETTLE_MS))) {
     throw new Error(`${tag}: "${name}" is not open in Nextcloud Text (${TEXT.editor} missing).`);
   }
-  const recovered = await ncAwaitEditableText(app, tag, name, knobs);
-  if (recovered.length) {
-    // Visible in the walk log: the step passed only after real Text/Files UI recovery.
-    console.log(JSON.stringify({ event: 'keep_editing_recovery', file: name, actions: recovered }));
-  }
+  // Each recovery is already logged as {"event":"keep_editing_recovery",...} (harness counts them).
+  await ncAwaitEditableText(app, tag, name, knobs);
   const content = app.locator(`${scope} ${TEXT.content}`).first();
   const line = keepEditingLine(now);
-  // Only a push the browser sent after typing began proves this edit (a collision
-  // resolution or reconnect also pushes; those must not count).
+  // Only a push the browser sent after typing began proves this edit (a reconnect or the
+  // Text awareness heartbeat before typing must not count).
   let typingAt: number | null = null;
   const pushed = app
     .waitForResponse(
