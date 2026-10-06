@@ -13,6 +13,8 @@ import { openAppInstance, resolveAppPage, APP_TAB_URL_RE } from './openApp';
 import { attemptAppLogin } from './appLogin';
 import { resolveSidecarUrl } from './sidecarUrls';
 
+import { assertKolibriPageOk, trackMainDocuments } from './kolibriPageGuard';
+
 const CLASS_NAME = DURATION_FIXTURES.kolibri.live.class.name; // Grade 5A
 const LESSON_TITLE = DURATION_FIXTURES.kolibri.live.lesson.title;
 
@@ -26,6 +28,7 @@ const ensureKolibriCoachPage = async (consolePage: Page): Promise<Page> => {
       'kolibri',
     );
   }
+  trackMainDocuments(app);
   // Best-effort teacher login if sign-in chrome visible
   await attemptAppLogin(app, DURATION_FIXTURES.kolibri.auth.teacher).catch(() => 'no_form');
   return app;
@@ -56,7 +59,12 @@ const kolibriOrigin = (app: Page, consolePage: Page): string => {
   return resolveSidecarUrl('kolibri', consolePage.url());
 };
 
-const gotoCoach = async (app: Page, origin: string, hashPath: string): Promise<void> => {
+const gotoCoach = async (
+  app: Page,
+  origin: string,
+  hashPath: string,
+  intent = 'Kolibri',
+): Promise<void> => {
   const path = hashPath.startsWith('#') ? hashPath : `#${hashPath.replace(/^#/, '')}`;
   // Prefer /en/coach/ locale path used by live 0.15.5
   const targets = [
@@ -66,10 +74,12 @@ const gotoCoach = async (app: Page, origin: string, hashPath: string): Promise<v
   let lastErr: unknown;
   for (const t of targets) {
     try {
-      await app.goto(t, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+      const resp = await app.goto(t, { waitUntil: 'domcontentloaded', timeout: 20_000 });
       await app.waitForTimeout(800);
+      await assertKolibriPageOk(app, `${intent} (coach ${path})`, resp);
       return;
     } catch (e) {
+      if (e instanceof Error && /Kolibri returned HTTP 5\d\d/.test(e.message)) throw e;
       lastErr = e;
     }
   }
@@ -78,16 +88,23 @@ const gotoCoach = async (app: Page, origin: string, hashPath: string): Promise<v
   );
 };
 
-const gotoFacility = async (app: Page, origin: string, hashPath: string): Promise<void> => {
+const gotoFacility = async (
+  app: Page,
+  origin: string,
+  hashPath: string,
+  intent = 'Kolibri',
+): Promise<void> => {
   const path = hashPath.startsWith('#') ? hashPath : `#${hashPath.replace(/^#/, '')}`;
   const targets = [`${origin}/en/facility/${path}`, `${origin}/facility/${path}`];
   let lastErr: unknown;
   for (const t of targets) {
     try {
-      await app.goto(t, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+      const resp = await app.goto(t, { waitUntil: 'domcontentloaded', timeout: 20_000 });
       await app.waitForTimeout(800);
+      await assertKolibriPageOk(app, `${intent} (facility ${path})`, resp);
       return;
     } catch (e) {
+      if (e instanceof Error && /Kolibri returned HTTP 5\d\d/.test(e.message)) throw e;
       lastErr = e;
     }
   }
@@ -212,7 +229,17 @@ const clickIntoClassTab = async (
 export const create_class: IntentFn = async ({ page }) => {
   const app = await ensureKolibriCoachPage(page);
   const origin = kolibriOrigin(app, page);
-  await gotoFacility(app, origin, '#/classes');
+  await gotoFacility(app, origin, '#/classes', 'create_class');
+
+  const newBtn = app.getByRole('button', { name: /new class/i })
+    .or(app.getByText(/^NEW CLASS$/i));
+  // r31: poll (was a single check ~800 ms after domcontentloaded) until the class
+  // or NEW CLASS renders; a sign-in bounce re-logs in once and reopens the list.
+  await settleCoachPage(
+    app,
+    async () => (await bodyHas(app, new RegExp(CLASS_NAME, 'i'))) || (await visibleCount(newBtn)) > 0,
+    () => gotoFacility(app, origin, '#/classes', 'create_class'),
+  );
 
   if (await bodyHas(app, new RegExp(CLASS_NAME, 'i'))) {
     // Already present — open it to prove interactivity
@@ -222,9 +249,9 @@ export const create_class: IntentFn = async ({ page }) => {
     return;
   }
 
-  const newBtn = app.getByRole('button', { name: /new class/i })
-    .or(app.getByText(/^NEW CLASS$/i));
   if (!(await newBtn.count())) {
+    // r31: a Kolibri 5xx must surface as such, not as a missing class/button.
+    await assertKolibriPageOk(app, 'create_class (facility classes)');
     throw new Error(
       `idea#168 create_class: Grade 5A not listed and NEW CLASS button missing on ${app.url()}`,
     );

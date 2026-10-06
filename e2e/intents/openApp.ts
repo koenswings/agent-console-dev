@@ -19,6 +19,11 @@ import {
 } from './operatorActions';
 import { attemptAppLogin } from './appLogin';
 import {
+  assertKolibriPageOk,
+  trackMainDocuments,
+  waitKolibriTeacherLanding,
+} from './kolibriPageGuard';
+import {
   APP_TAB_URL_RE,
   appKindForInstance,
   appKindForUrl,
@@ -409,27 +414,42 @@ const openAndLogin = async (
   await attemptAppLogin(appPage, creds).catch(() => 'no_form');
 };
 
+/**
+ * open_kolibri_as_teacher — open the Kolibri tab, sign in as the fixture teacher,
+ * land on Coach classes. r31: fails loud (URL + HTTP status) on any Kolibri 5xx
+ * main document, and when neither the login form nor a signed-in coach/facility
+ * view renders (a missing login form is no longer a silent pass).
+ */
 export const open_kolibri_as_teacher: IntentFn = async ({ page, instanceId }) => {
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
-  await openAndLogin(page, id, 'kolibri', DURATION_FIXTURES.kolibri.auth.teacher);
+  // Context-level listener first, so the App popup's first document status is recorded.
+  trackMainDocuments(page);
+  const app = await openAppInstance(page, id, 'kolibri');
+  trackMainDocuments(app);
+  await assertKolibriPageOk(app, 'open_kolibri_as_teacher (app tab)');
+  await attemptAppLogin(app, DURATION_FIXTURES.kolibri.auth.teacher).catch(() => 'no_form');
+  await assertKolibriPageOk(app, 'open_kolibri_as_teacher (after sign-in)');
+
   // Land on Coach classes (kolibri_manage entry) when App tab is Kolibri
-  const app = resolveAppPage(page);
+  let response: Awaited<ReturnType<Page['goto']>> = null;
   try {
     const url = app.url();
     if (APP_TAB_URL_RE.test(url) && !/nextcloud|18280/i.test(url)) {
       const origin = new URL(url).origin;
-      await app
+      response = await app
         .goto(`${origin}/en/coach/#/classes`, { waitUntil: 'domcontentloaded', timeout: 15_000 })
-        .catch(async () => {
-          await app.goto(`${origin}/coach/#/classes`, {
+        .catch(async () =>
+          app.goto(`${origin}/coach/#/classes`, {
             waitUntil: 'domcontentloaded',
             timeout: 15_000,
-          });
-        });
+          }),
+        );
     }
   } catch {
-    /* coaching Intents will re-nav / fail loud */
+    /* nav error: the landing wait below fails loud with URL + status */
   }
+  await assertKolibriPageOk(app, 'open_kolibri_as_teacher (coach classes)', response);
+  await waitKolibriTeacherLanding(app, 'open_kolibri_as_teacher');
 };
 
 export const open_kolibri_as_learner: IntentFn = async ({ page, instanceId }) => {
