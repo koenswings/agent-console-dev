@@ -229,17 +229,25 @@ a neutral "Sent to <engine>, waiting for confirmation" and resolve:
 
 | command | store confirmation (ok) | store failure (red) | timeout → red |
 |---|---|---|---|
-| startInstance | status Running | status → Error | 5 min |
-| stopInstance | status Stopped / Docked | status → Error | 5 min |
+| startInstance | status changed to Running after the send, or a new startApp op Done | status → Error, new startApp op Failed | 5 min |
+| stopInstance | status changed to Stopped / Docked after the send, or a new stopApp op Done | status → Error, new stopApp op Failed | 5 min |
 | backupApp | new backupApp op Done, or lastBackup advanced | new op Failed / Cancelled | 30 min |
 | restoreApp | new restoreApp op Done | new op Failed / Cancelled | 30 min |
-| copyApp | new copyApp op Done, or a new instance of the app on the target disk | new op Failed / Cancelled | 30 min |
-| moveApp | new moveApp op Done, or storedOn = target disk | new op Failed / Cancelled | 30 min |
-| installApp | new instance with that name on the disk | — | 20 min |
-| reboot | engine.lastBooted advanced | — | 10 min |
+| copyApp | new copyApp op Done, or a newly created instance (same app + name) on the target disk | new op Failed / Cancelled | 30 min |
+| moveApp | new moveApp op Done, or storedOn changed to the target disk | new op Failed / Cancelled | 30 min |
+| installApp | newly created instance of the app on the disk | — | 20 min |
+| reboot | engine.lastBooted changed | — | 10 min |
 | ejectDisk | disk gone / undocked / no device | — | 3 min |
 | cancelOperation | op no longer Pending / Running | — | 3 min |
 | createBackupDisk / createFilesDisk | disk gets the backup / files role | — | 10 min (default) |
+
+"New" / "newly created" means created after the send, never a record that already
+existed: the op / instance id was not in the store at send time (Engine ids are fresh
+uuids, so no clock is needed), plus matching attributes (op kind, `args.instanceId`,
+target / backup disk, cause `console-command` or `cross-engine-cmd`). Clock skew: an
+Engine timestamp (`op.startedAt`, `instance.created`) is never compared with the
+Console's clock (school Pis may have no RTC / NTP); as defence in depth it is only
+compared with the same Engine's `lastRun` seen at send, minus 5 min slack.
 
 ### `src/store/discovery.ts` — engine hostname discovery
 

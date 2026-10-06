@@ -184,7 +184,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     // Disk ID (storedOn), never the display name: names may contain spaces.
     sendTracked(inst, 'startInstance', () => startInstance(engine.id, inst.name, String(diskId)), {
       engineId: engine.id, argValue: inst.name,
-      confirm: confirmInstanceStatus(props.store, inst.id, ['Running']),
+      confirm: confirmInstanceStatus(props.store, inst.id, ['Running'], 'startApp'),
     });
     setPending(inst.id, 'starting');
   };
@@ -195,7 +195,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     if (!engine || !diskId) return;
     sendTracked(inst, 'stopInstance', () => stopInstance(engine.id, inst.name, String(diskId)), {
       engineId: engine.id, argValue: inst.name,
-      confirm: confirmInstanceStatus(props.store, inst.id, ['Stopped', 'Docked']),
+      confirm: confirmInstanceStatus(props.store, inst.id, ['Stopped', 'Docked'], 'stopApp'),
     });
     setPending(inst.id, 'stopping');
   };
@@ -207,7 +207,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     // Instance and backup disk by ID (see buildBackupAppCommand).
     sendTracked(inst, 'backupApp', () => backupApp(engine.id, inst.id, disks[0].id), {
       engineId: engine.id, argValue: inst.id, longRunning: true,
-      confirm: confirmNewOperation(props.store, 'backupApp', inst.id, lastBackupAdvanced(props.store, inst.id)),
+      confirm: confirmNewOperation(props.store, 'backupApp', inst.id, {
+        engineId: engine.id, args: { backupDiskId: disks[0].id }, fallbackOk: lastBackupAdvanced(props.store, inst.id),
+      }),
     });
   };
 
@@ -379,11 +381,13 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           onSend={(command, send, target) => {
             const i = inst();
             const fallback = command === 'copyApp'
-              ? newInstanceOnDisk(props.store, target.targetDiskId, { instanceOf: i.instanceOf })
+              ? newInstanceOnDisk(props.store, target.targetDiskId, { instanceOf: String(i.instanceOf), name: String(i.name), engineId: target.engineId })
               : instanceStoredOn(props.store, i.id, target.targetDiskId);
             sendTracked(i, command, send, {
               engineId: target.engineId, argValue: i.name, longRunning: true,
-              confirm: confirmNewOperation(props.store, command, i.id, fallback),
+              confirm: confirmNewOperation(props.store, command, i.id, {
+                engineId: target.engineId, args: { targetDiskId: target.targetDiskId }, fallbackOk: fallback,
+              }),
             });
           }}
         />

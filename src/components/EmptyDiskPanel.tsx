@@ -217,7 +217,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
       installResult.start(arg.arg, () =>
         installApp(engineId, appId, arg.arg, { name: lesson.instanceName }), {
         engineId,
-        remote: remoteWatchFor(props.store, engineId, 'installApp', confirmInstalled(props.store, disk.id, lesson.instanceName)),
+        remote: remoteWatchFor(props.store, engineId, 'installApp', confirmInstalled(props.store, disk.id, appId, engineId)),
       });
       return;
     }
@@ -231,7 +231,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     // Match the disk argument inside installApp's positional args blob (idea#122).
     installResult.start(arg.arg, () => installApp(engineId, appId, arg.arg, opts), {
       engineId,
-      remote: remoteWatchFor(props.store, engineId, 'installApp', confirmInstalled(props.store, disk.id)),
+      remote: remoteWatchFor(props.store, engineId, 'installApp', confirmInstalled(props.store, disk.id, appId, engineId)),
     });
   };
 
