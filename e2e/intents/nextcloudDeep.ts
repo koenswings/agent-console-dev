@@ -136,6 +136,106 @@ const rowNames = async (app: Page): Promise<string> => {
   return names.length ? names.join(', ') : '(no rows)';
 };
 
+/* ------------------------------------------------------------------------- */
+/* clickUntil: wait actionable → click (3× backoff) → poll result → reload once */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Retry knobs (r28 FAIL@22 share_to_class: one click + one 20s poll for the sidebar gave
+ * up after 20.7s, while r26 passed the same step in ~34s). Same pattern as 5aa6239 (Files
+ * link: visible+enabled, 3 clicks with backoff) and 73c37d0 (poll, reload once, poll, loud).
+ */
+/** Click attempts per round; one round before and one after the single page reload. */
+export const NC_CLICK_RETRIES = 3;
+/** Backoff before retry n (n ≥ 1): n × 1s. */
+export const NC_CLICK_BACKOFF_MS = 1_000;
+/** First poll for the click's result in a round. */
+export const NC_RESULT_POLL_MS = 30_000;
+/** Poll for the result on retries (the round's first attempt already waited NC_RESULT_POLL_MS). */
+export const NC_RETRY_POLL_MS = 10_000;
+/** Visible+enabled wait on retries (the round's first attempt waits SETTLE_MS). */
+export const NC_RETRY_READY_MS = 5_000;
+/** Poll after a click that itself threw (not actionable): short, then retry. */
+const NC_THREW_POLL_MS = 2_000;
+
+/** Deterministic Nextcloud state (permission, server rejection), not a timing race: never retried. */
+export class NcFatal extends Error {}
+
+export type ClickUntilResult = { ok: boolean; clicks: number; reloaded: boolean; lastError: string | null };
+
+const errLine = (e: unknown): string => (e instanceof Error ? e.message.split('\n')[0]! : String(e));
+
+/** Attempt info appended to a loud-fail message after clickUntil gave up. */
+export const ncAttempts = (r: ClickUntilResult): string =>
+  ` [${r.clicks} click attempt(s), ${r.reloaded ? '1 page reload' : 'no reload'}` +
+  `${r.lastError ? `; last click error: ${r.lastError}` : ''}]`;
+
+/** Playwright visible AND enabled, never throws. */
+export const ncActionable = async (loc: {
+  isVisible: () => Promise<boolean>;
+  isEnabled: () => Promise<boolean>;
+}): Promise<boolean> => {
+  try {
+    return (await loc.isVisible()) && (await loc.isEnabled());
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Wait for the target to be actionable (`ready`, visible+enabled), `click`, poll `done`.
+ * Not done → retry the click (up to NC_CLICK_RETRIES, n × 1s backoff). Still not done →
+ * reload the page once (unless `reload: false`), re-establish preconditions with
+ * `afterReload` (false = give up), and run the click/poll round once more. Returns the
+ * outcome; the caller throws its own loud message (+ ncAttempts) when !ok. NcFatal from
+ * `click` is rethrown at once. A result that is already true before the round's first
+ * click never counts (no soft-pass by reload): only a late landing of a previous click does.
+ */
+export const clickUntil = async (
+  app: Page,
+  o: {
+    click: () => Promise<unknown>;
+    done: () => Promise<boolean>;
+    ready?: () => Promise<boolean>;
+    reload?: false | (() => Promise<unknown>);
+    afterReload?: () => Promise<boolean>;
+    retries?: number;
+    readyMs?: number;
+    pollMs?: number;
+  },
+): Promise<ClickUntilResult> => {
+  const retries = o.retries ?? NC_CLICK_RETRIES;
+  const r: ClickUntilResult = { ok: false, clicks: 0, reloaded: false, lastError: null };
+  const rounds = o.reload === false ? 1 : 2;
+  for (let round = 0; round < rounds; round++) {
+    if (round === 1) {
+      r.reloaded = true;
+      if (typeof o.reload === 'function') await o.reload();
+      else await app.reload?.({ waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch(() => {});
+      if (o.afterReload && !(await o.afterReload())) return r;
+    }
+    for (let attempt = 0; attempt < retries; attempt++) {
+      if (attempt > 0) {
+        await app.waitForTimeout(NC_CLICK_BACKOFF_MS * attempt);
+        if (await o.done()) return { ...r, ok: true };
+      }
+      if (o.ready) await waitFor(o.ready, app, attempt === 0 ? (o.readyMs ?? SETTLE_MS) : NC_RETRY_READY_MS);
+      r.clicks++;
+      let threw = false;
+      try {
+        await o.click();
+      } catch (e) {
+        if (e instanceof NcFatal) throw e;
+        threw = true;
+        r.lastError = errLine(e);
+      }
+      const poll = threw ? NC_THREW_POLL_MS : attempt === 0 ? (o.pollMs ?? NC_RESULT_POLL_MS) : Math.min(o.pollMs ?? NC_RETRY_POLL_MS, NC_RETRY_POLL_MS);
+      if (await waitFor(o.done, app, poll)) return { ...r, ok: true };
+    }
+  }
+  return r;
+};
+
 /**
  * Prefer A logout via the real Nextcloud 31 user menu (AccountMenu), then wait for /login.
  * Loud-fail with page state if the menu or logout entry cannot be used.
@@ -189,13 +289,24 @@ export const ncLogout = async (app: Page, tag: string): Promise<void> => {
       }
     }
   }
+  let tries = '';
   if (logout && !logout.startsWith('__role_')) {
-    await app.locator(logout).first().click({ timeout: 5_000 });
+    // No reload: it would not log out and would close the user menu.
+    const entry = app.locator(logout).first();
+    const r = await clickUntil(app, {
+      ready: () => ncActionable(entry),
+      click: () => entry.click({ timeout: 5_000 }),
+      done: onLogin,
+      reload: false,
+      readyMs: 5_000,
+      pollMs: SETTLE_MS,
+    });
+    tries = ncAttempts(r);
   }
-  if (!(await waitFor(async () => onLogin(), app, SETTLE_MS))) {
+  if (!(await waitFor(async () => onLogin(), app, logout && !logout.startsWith('__role_') ? 0 : SETTLE_MS))) {
     throw new Error(
       `${tag}: Nextcloud logout clicked but login page did not appear within ${SETTLE_MS}ms ` +
-        `(still on ${app.url()}; uid=${(await ncSignedInUser(app)) ?? 'none'}).`,
+        `(still on ${app.url()}; uid=${(await ncSignedInUser(app)) ?? 'none'}).${tries}`,
     );
   }
 };
@@ -415,11 +526,18 @@ export const ncDismissFirstRunWizard = async (app: Page, tag: string): Promise<s
 /** Click the root breadcrumb until the Files dir is '/'. */
 export const ncGoRoot = async (app: Page, tag: string): Promise<void> => {
   if (ncFilesDir(app.url()) === '/') return;
-  const crumb = await firstPresent(app, NC_SELECTORS.breadcrumbRoot);
-  if (!crumb) throw new Error(`${tag}: no root breadcrumb on ${app.url()}.`);
-  await app.locator(crumb).first().click({ timeout: 8_000 });
-  if (!(await waitFor(() => ncFilesDir(app.url()) === '/', app, SETTLE_MS))) {
-    throw new Error(`${tag}: root breadcrumb did not return Files to / (${app.url()}).`);
+  let crumb: string | null = null;
+  const crumbUp = async () => (crumb = await firstPresent(app, NC_SELECTORS.breadcrumbRoot)) !== null;
+  if (!(await waitFor(crumbUp, app, SETTLE_MS))) throw new Error(`${tag}: no root breadcrumb on ${app.url()}.`);
+  const r = await clickUntil(app, {
+    ready: () => ncActionable(app.locator(crumb!).first()),
+    click: () => app.locator(crumb!).first().click({ timeout: 8_000 }),
+    done: async () => ncFilesDir(app.url()) === '/',
+    afterReload: () => waitFor(crumbUp, app, SETTLE_MS),
+    pollMs: SETTLE_MS,
+  });
+  if (!r.ok) {
+    throw new Error(`${tag}: root breadcrumb did not return Files to / (${app.url()}).${ncAttempts(r)}`);
   }
 };
 
@@ -432,9 +550,18 @@ export const ncOpenFolder = async (app: Page, tag: string, name: string): Promis
   if (!present) {
     throw new Error(`${tag}: folder "${name}" not listed in ${parent} on ${app.url()} (rows: ${await rowNames(app)}).`);
   }
-  await app.locator(link).first().click({ timeout: 8_000 });
-  if (!(await waitFor(() => ncFilesDir(app.url()) === want, app, SETTLE_MS))) {
-    throw new Error(`${tag}: clicked "${name}" but Files dir is ${ncFilesDir(app.url())} (want ${want}; ${app.url()}).`);
+  const row = app.locator(link).first();
+  const r = await clickUntil(app, {
+    ready: () => ncActionable(row),
+    click: () => row.click({ timeout: 8_000 }),
+    done: async () => ncFilesDir(app.url()) === want,
+    afterReload: () => waitFor(async () => (await app.locator(link).count().catch(() => 0)) > 0, app, SETTLE_MS),
+    pollMs: SETTLE_MS,
+  });
+  if (!r.ok) {
+    throw new Error(
+      `${tag}: clicked "${name}" but Files dir is ${ncFilesDir(app.url())} (want ${want}; ${app.url()}).${ncAttempts(r)}`,
+    );
   }
   return want;
 };
@@ -606,50 +733,85 @@ export const ncSignedInUser = async (app: Page): Promise<string | null> => {
 
 const SHARE_API = /\/ocs\/v[12]\.php\/apps\/files_sharing\/api\/v1\/shares(\/\d+)?(\?|$)/;
 
-/** Open the Files sidebar on the Sharing tab for a row (inline Share icon, else Actions → Details). */
-export const ncOpenSharingSidebar = async (app: Page, tag: string, name: string): Promise<string> => {
+/**
+ * Open the Files sidebar on the Sharing tab for a row (inline Share icon, else Actions → Details).
+ * r28 FAIL@22: one click + one SETTLE_MS poll gave up at 20.7s ("Files sidebar did not open").
+ * Now: row visible → share/actions control visible+enabled → click → poll the sidebar (for this
+ * row) NC_RESULT_POLL_MS; retry the click 3× with backoff; reload Files once, wait for the row,
+ * retry again; only then loud-fail. `reload: false` when the caller already reloaded.
+ */
+export const ncOpenSharingSidebar = async (
+  app: Page,
+  tag: string,
+  name: string,
+  opts: { reload?: boolean } = {},
+): Promise<string> => {
+  const allowReload = opts.reload !== false;
   const row = app.locator(ncRowSelector(name)).first();
-  if (!(await waitFor(async () => (await row.count().catch(() => 0)) > 0, app, SETTLE_MS))) {
+  const rowUp = async () => (await row.count().catch(() => 0)) > 0 && (await row.isVisible().catch(() => false));
+  if (!(await waitFor(rowUp, app, SETTLE_MS))) {
     throw new Error(`${tag}: "${name}" not listed in ${ncFilesDir(app.url())} (rows: ${await rowNames(app)}).`);
   }
   const inline = row.locator(NC_SHARE_SELECTORS.rowShareAction).first();
-  if ((await inline.count().catch(() => 0)) > 0 && (await inline.isVisible().catch(() => false))) {
-    await inline.click({ timeout: 8_000 });
-  } else {
-    const menu = row.locator(NC_SHARE_SELECTORS.rowActionsButton).first();
+  const menu = row.locator(NC_SHARE_SELECTORS.rowActionsButton).first();
+  const details = app.locator(`${NC_SHARE_SELECTORS.menuDetails} button, button${NC_SHARE_SELECTORS.menuDetails}`).last();
+  const openClick = async () => {
+    if (await ncActionable(inline)) {
+      await inline.click({ timeout: 8_000 });
+      return;
+    }
     if ((await menu.count().catch(() => 0)) === 0) {
       throw new Error(`${tag}: "${name}" row has neither a Share action nor an Actions menu (${app.url()}).`);
     }
-    await menu.click({ timeout: 8_000 });
-    const details = app.locator(`${NC_SHARE_SELECTORS.menuDetails} button, button${NC_SHARE_SELECTORS.menuDetails}`).last();
+    // A retry may find the menu still open from the previous attempt: don't toggle it shut.
+    if (!(await details.isVisible().catch(() => false))) await menu.click({ timeout: 8_000 });
     if (!(await waitFor(async () => details.isVisible().catch(() => false), app, 8_000))) {
       throw new Error(`${tag}: Actions menu for "${name}" has no "Details" entry (${app.url()}).`);
     }
     await details.click({ timeout: 8_000 });
-  }
+  };
   let sidebar: string | null = null;
-  if (!(await waitFor(async () => (sidebar = await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) !== null, app, SETTLE_MS))) {
-    throw new Error(`${tag}: Files sidebar did not open for "${name}" (${app.url()}).`);
+  const sidebarText = async () =>
+    sidebar ? ((await app.locator(sidebar).first().innerText().catch(() => '')) ?? '') : '';
+  // Done = a sidebar is visible AND it is this row's (a leftover sidebar for another file is not).
+  const openForName = async () =>
+    (sidebar = await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) !== null && (await sidebarText()).includes(name);
+  const open = (reload: boolean) =>
+    clickUntil(app, {
+      ready: async () => (await ncActionable(inline)) || (await ncActionable(menu)),
+      click: openClick,
+      done: openForName,
+      reload: reload ? undefined : false,
+      afterReload: () => waitFor(rowUp, app, SETTLE_MS),
+    });
+  const r = await open(allowReload);
+  if (!r.ok) {
+    if (sidebar !== null || (await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) !== null) {
+      throw new Error(`${tag}: sidebar opened but is not for "${name}" (${app.url()}).${ncAttempts(r)}`);
+    }
+    throw new Error(`${tag}: Files sidebar did not open for "${name}" (${app.url()}).${ncAttempts(r)}`);
   }
-  const side = app.locator(sidebar!).first();
-  if (!(await waitFor(async () => ((await side.innerText().catch(() => '')) ?? '').includes(name), app, 8_000))) {
-    throw new Error(`${tag}: sidebar opened but is not for "${name}" (${app.url()}).`);
-  }
-  const tab = side.locator(NC_SHARE_SELECTORS.sharingTab).first();
-  if ((await tab.count().catch(() => 0)) === 0) {
+  const side = () => app.locator(sidebar!).first();
+  const tab = () => side().locator(NC_SHARE_SELECTORS.sharingTab).first();
+  if (!(await waitFor(async () => (await tab().count().catch(() => 0)) > 0, app, 8_000))) {
     throw new Error(`${tag}: sidebar for "${name}" has no Sharing tab (files_sharing disabled?) (${app.url()}).`);
   }
-  if ((await tab.getAttribute('aria-selected').catch(() => null)) !== 'true') {
-    await tab.click({ timeout: 8_000 });
+  const ready = async () =>
+    (await side().locator(NC_SHARE_SELECTORS.search).count().catch(() => 0)) > 0 ||
+    (await side().locator(NC_SHARE_SELECTORS.entry).count().catch(() => 0)) > 0;
+  if ((await tab().getAttribute('aria-selected').catch(() => null)) === 'true' && (await waitFor(ready, app, SETTLE_MS))) {
+    return sidebar!;
   }
-  const ready = await waitFor(
-    async () =>
-      (await side.locator(NC_SHARE_SELECTORS.search).count().catch(() => 0)) > 0 ||
-      (await side.locator(NC_SHARE_SELECTORS.entry).count().catch(() => 0)) > 0,
-    app,
-    SETTLE_MS,
-  );
-  if (!ready) throw new Error(`${tag}: Sharing tab for "${name}" did not render (${app.url()}).`);
+  // Clicking an already-selected tab is harmless; after a reload, re-open the sidebar (no 2nd reload).
+  const t = await clickUntil(app, {
+    ready: () => ncActionable(tab()),
+    click: () => tab().click({ timeout: 8_000 }),
+    done: ready,
+    reload: allowReload ? undefined : false,
+    afterReload: async () => (await waitFor(rowUp, app, SETTLE_MS)) && (await open(false)).ok,
+    pollMs: SETTLE_MS,
+  });
+  if (!t.ok) throw new Error(`${tag}: Sharing tab for "${name}" did not render (${app.url()}).${ncAttempts(t)}`);
   return sidebar!;
 };
 
@@ -682,7 +844,6 @@ const entryTitles = async (app: Page, sidebar: string): Promise<string> => {
  */
 export const runShareToClass = async (app: Page): Promise<'created' | 'updated'> => {
   const tag = 'idea#166 share_to_class';
-  const group = NC.group;
   const folder = NC.folders.materials;
   await ensureNextcloudFiles(app, tag, null);
   const uid = await ncSignedInUser(app);
@@ -694,17 +855,49 @@ export const runShareToClass = async (app: Page): Promise<'created' | 'updated'>
   }
   await ncOpenClassRoot(app, tag);
   const sidebar = await ncOpenSharingSidebar(app, tag, folder);
+  try {
+    return await shareInSidebar(app, tag, sidebar, uid);
+  } catch (e) {
+    if (e instanceof NcFatal) throw e;
+    // Editor stage still failing after its click retries: reload Files once and redo the
+    // share from the sidebar (a share that did get created is then picked up as 'updated').
+    await app.reload?.({ waitUntil: 'domcontentloaded', timeout: SETTLE_MS }).catch(() => {});
+    try {
+      await ensureNextcloudFiles(app, tag, null);
+      await ncOpenClassRoot(app, tag);
+      const again = await ncOpenSharingSidebar(app, tag, folder, { reload: false });
+      return await shareInSidebar(app, tag, again, uid);
+    } catch (e2) {
+      if (e2 instanceof NcFatal) throw e2;
+      throw new Error(`${errLine(e2)} [share editor redone once after a page reload; first pass: ${errLine(e)}]`);
+    }
+  }
+};
+
+/** share_to_class editor stage, sidebar already open on the Sharing tab. Click steps retry (no reload here). */
+const shareInSidebar = async (app: Page, tag: string, sidebar: string, uid: string): Promise<'created' | 'updated'> => {
+  const group = NC.group;
+  const folder = NC.folders.materials;
   const side = app.locator(sidebar).first();
+  const details = side.locator(NC_SHARE_SELECTORS.details).first();
+  const editorOpen = async () => details.isVisible().catch(() => false);
 
   const existing = await groupEntry(app, sidebar, group);
   let mode: 'created' | 'updated';
+  let tries: ClickUntilResult;
   if (existing) {
     mode = 'updated';
     const btn = existing.locator(NC_SHARE_SELECTORS.entryDetails).first();
     if ((await btn.count().catch(() => 0)) === 0) {
       throw new Error(`${tag}: existing "${ncGroupShareTitle(group)}" share on "${folder}" is not editable by ${uid}.`);
     }
-    await btn.click({ timeout: 8_000 });
+    tries = await clickUntil(app, {
+      ready: () => ncActionable(btn),
+      click: () => btn.click({ timeout: 8_000 }),
+      done: editorOpen,
+      reload: false,
+      pollMs: SETTLE_MS,
+    });
   } else {
     mode = 'created';
     const search = side.locator(NC_SHARE_SELECTORS.search).first();
@@ -712,7 +905,7 @@ export const runShareToClass = async (app: Page): Promise<'created' | 'updated'>
       throw new Error(`${tag}: no sharee search on "${folder}" (shares: ${await entryTitles(app, sidebar)}).`);
     }
     if (await search.isDisabled().catch(() => false)) {
-      throw new Error(
+      throw new NcFatal(
         `${tag}: Nextcloud does not allow sharing "${folder}" (sharee search disabled; resharing not permitted). ` +
           `If it lives on the Files Disk mount "${NC.shareName}", the files_external mount needs enable_sharing (Kid fixture).`,
       );
@@ -726,37 +919,62 @@ export const runShareToClass = async (app: Page): Promise<'created' | 'updated'>
         `${tag}: group "${group}" not offered by sharee search (offered: ${offered.map((s) => s.replace(/\s+/g, ' ').trim()).join(' | ') || '(none)'}).`,
       );
     }
-    await option.click({ timeout: 8_000 });
+    tries = await clickUntil(app, {
+      ready: () => ncActionable(option),
+      click: () => option.click({ timeout: 8_000 }),
+      done: editorOpen,
+      reload: false,
+      pollMs: SETTLE_MS,
+    });
   }
 
-  const details = side.locator(NC_SHARE_SELECTORS.details).first();
-  if (!(await waitFor(async () => details.isVisible().catch(() => false), app, SETTLE_MS))) {
-    throw new Error(`${tag}: share details editor did not open for "${group}" (${mode}).`);
+  if (!tries.ok) {
+    throw new Error(`${tag}: share details editor did not open for "${group}" (${mode}).${ncAttempts(tries)}`);
   }
   const h1 = ((await side.locator(NC_SHARE_SELECTORS.detailsTitle).first().innerText().catch(() => '')) ?? '').trim();
   if (mode === 'created' && h1 !== 'Share with group') {
-    throw new Error(`${tag}: picked a non-group sharee for "${group}" (editor title "${h1}").`);
+    throw new NcFatal(`${tag}: picked a non-group sharee for "${group}" (editor title "${h1}").`);
   }
   const ro = side.locator(NC_SHARE_SELECTORS.readOnly).first();
-  if ((await ro.count().catch(() => 0)) === 0) {
+  if (!(await waitFor(async () => (await ro.count().catch(() => 0)) > 0, app, 8_000))) {
     throw new Error(`${tag}: share editor has no "View only" option (${NC_SHARE_SELECTORS.readOnly}).`);
   }
-  await ro.click({ timeout: 8_000 });
   const radio = ro.locator('input[type="radio"]').first();
-  if (!(await waitFor(async () => radio.isChecked().catch(() => false), app, 5_000))) {
-    throw new Error(`${tag}: clicked "View only" but the permission radio is not checked.`);
+  const roTries = await clickUntil(app, {
+    ready: () => ncActionable(ro),
+    click: () => ro.click({ timeout: 8_000 }),
+    done: async () => radio.isChecked().catch(() => false),
+    reload: false,
+    pollMs: 5_000,
+  });
+  if (!roTries.ok) {
+    throw new Error(`${tag}: clicked "View only" but the permission radio is not checked.${ncAttempts(roTries)}`);
   }
 
-  const saved = app
-    .waitForResponse((r) => SHARE_API.test(r.url()) && ['POST', 'PUT'].includes(r.request().method()), { timeout: SETTLE_MS })
-    .catch(() => null);
-  await side.locator(NC_SHARE_SELECTORS.save).first().click({ timeout: 8_000 });
-  const resp = await saved;
+  // Save: re-click only when the click itself failed (not actionable). A click that went
+  // through is never repeated, so a slow POST cannot turn into a duplicate share request.
+  const save = side.locator(NC_SHARE_SELECTORS.save).first();
+  let saved: Promise<Awaited<ReturnType<Page['waitForResponse']>> | null> = Promise.resolve(null);
+  let clicked = false;
+  const saveTries = await clickUntil(app, {
+    ready: () => ncActionable(save),
+    click: async () => {
+      saved = app
+        .waitForResponse((r) => SHARE_API.test(r.url()) && ['POST', 'PUT'].includes(r.request().method()), { timeout: SETTLE_MS })
+        .catch(() => null);
+      await save.click({ timeout: 8_000 });
+      clicked = true;
+    },
+    done: async () => clicked,
+    reload: false,
+    readyMs: 8_000,
+  });
+  const resp = saveTries.ok ? await saved : null;
   if (resp) {
     const failure = ncOcsFailure(resp.status(), await resp.json().catch(() => null));
-    if (failure) throw new Error(`${tag}: Nextcloud rejected the ${mode === 'created' ? 'new' : 'updated'} share of "${folder}" with "${group}" (${failure}).`);
+    if (failure) throw new NcFatal(`${tag}: Nextcloud rejected the ${mode === 'created' ? 'new' : 'updated'} share of "${folder}" with "${group}" (${failure}).`);
   } else if (mode === 'created') {
-    throw new Error(`${tag}: Save sent no share request to Nextcloud within ${SETTLE_MS}ms.`);
+    throw new Error(`${tag}: Save sent no share request to Nextcloud within ${SETTLE_MS}ms.${saveTries.ok ? '' : ncAttempts(saveTries)}`);
   }
 
   let label = '';
@@ -826,16 +1044,37 @@ export const runDoneSharing = async (app: Page): Promise<string> => {
   const dir = ncFilesDir(app.url());
   const side = app.locator(sidebar).first();
   let close: string | null = null;
-  for (const s of NC_SHARE_SELECTORS.sidebarClose) {
-    if (await side.locator(s).first().isVisible().catch(() => false)) {
-      close = s;
-      break;
+  const closeUp = async () => {
+    close = null;
+    for (const s of NC_SHARE_SELECTORS.sidebarClose) {
+      if (await ncActionable(side.locator(s).first())) {
+        close = s;
+        break;
+      }
     }
+    return close !== null;
+  };
+  if (!(await waitFor(closeUp, app, 8_000))) {
+    throw new Error(`${tag}: sharing sidebar has no "Close sidebar" button (${app.url()}).`);
   }
-  if (!close) throw new Error(`${tag}: sharing sidebar has no "Close sidebar" button (${app.url()}).`);
-  await side.locator(close).first().click({ timeout: 8_000 });
-  const closed = await waitFor(async () => (await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) === null, app, SETTLE_MS);
-  if (!closed) throw new Error(`${tag}: clicked "Close sidebar" but the Files sidebar is still open (${app.url()}).`);
+  const sidebarGone = async () => (await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) === null;
+  // After the one reload, only continue if the sidebar is open again (no soft-pass: a reload
+  // that drops the sidebar is not "Close sidebar" working).
+  const r = await clickUntil(app, {
+    ready: closeUp,
+    click: async () => {
+      if (!close && !(await closeUp())) throw new Error('no "Close sidebar" button');
+      await side.locator(close!).first().click({ timeout: 8_000 });
+    },
+    done: sidebarGone,
+    afterReload: async () =>
+      (await waitFor(async () => (await firstVisible(app, NC_SHARE_SELECTORS.sidebar)) !== null, app, SETTLE_MS)) &&
+      (await waitFor(closeUp, app, 8_000)),
+    pollMs: SETTLE_MS,
+  });
+  if (!r.ok) {
+    throw new Error(`${tag}: clicked "Close sidebar" but the Files sidebar is still open (${app.url()}).${ncAttempts(r)}`);
+  }
   const browse = await waitFor(
     async () => ncFilesDir(app.url()) === dir && (await app.locator(NC_SELECTORS.breadcrumbs).count().catch(() => 0)) > 0,
     app,
@@ -922,11 +1161,17 @@ export const runOpenCollabDoc = async (app: Page): Promise<string> => {
   if (!(await waitFor(async () => (await link.count().catch(() => 0)) > 0, app, SETTLE_MS))) {
     throw new Error(`${tag}: "${doc}" not listed in ${dir} (rows: ${await rowNames(app)}).`);
   }
-  await link.click({ timeout: 8_000 });
-  if (!(await waitFor(() => viewerOpen(app), app, SETTLE_MS))) {
+  const opened = await clickUntil(app, {
+    ready: () => ncActionable(link),
+    click: () => link.click({ timeout: 8_000 }),
+    done: () => viewerOpen(app),
+    afterReload: () => waitFor(async () => (await link.count().catch(() => 0)) > 0, app, SETTLE_MS),
+    pollMs: SETTLE_MS,
+  });
+  if (!opened.ok) {
     throw new Error(
       `${tag}: clicking "${doc}" did not open the Nextcloud Viewer (${NC_VIEWER_SELECTORS.viewer}); ` +
-        `Text/Viewer app disabled or file downloaded instead (${app.url()}).`,
+        `Text/Viewer app disabled or file downloaded instead (${app.url()}).${ncAttempts(opened)}`,
     );
   }
   let name = '';
@@ -967,16 +1212,32 @@ export const runCloseDoc = async (app: Page): Promise<string> => {
   }
   const dir = ncFilesDir(app.url());
   let close: string | null = null;
-  for (const s of NC_VIEWER_SELECTORS.close) {
-    if (await app.locator(s).first().isVisible().catch(() => false)) {
-      close = s;
-      break;
+  const closeUp = async () => {
+    close = null;
+    for (const s of NC_VIEWER_SELECTORS.close) {
+      if (await ncActionable(app.locator(s).first())) {
+        close = s;
+        break;
+      }
     }
+    return close !== null;
+  };
+  if (!(await waitFor(closeUp, app, 8_000))) {
+    throw new Error(`${tag}: Viewer has no Close button (${NC_VIEWER_SELECTORS.close.join(', ')}).`);
   }
-  if (!close) throw new Error(`${tag}: Viewer has no Close button (${NC_VIEWER_SELECTORS.close.join(', ')}).`);
-  await app.locator(close).first().click({ timeout: 8_000 });
-  if (!(await waitFor(async () => !(await viewerOpen(app)), app, SETTLE_MS))) {
-    throw new Error(`${tag}: clicked Close but the Viewer is still open (${app.url()}).`);
+  // ?openfile reopens the Viewer on reload; continue only if it did (no soft-pass by reload).
+  const r = await clickUntil(app, {
+    ready: closeUp,
+    click: async () => {
+      if (!close && !(await closeUp())) throw new Error('no Viewer Close button');
+      await app.locator(close!).first().click({ timeout: 8_000 });
+    },
+    done: async () => !(await viewerOpen(app)),
+    afterReload: async () => (await waitFor(() => viewerOpen(app), app, SETTLE_MS)) && (await waitFor(closeUp, app, 8_000)),
+    pollMs: SETTLE_MS,
+  });
+  if (!r.ok) {
+    throw new Error(`${tag}: clicked Close but the Viewer is still open (${app.url()}).${ncAttempts(r)}`);
   }
   const browse = await waitFor(
     async () =>
@@ -1022,10 +1283,13 @@ export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise
     throw new Error(`${tag}: Viewer shows "${name || '(no title)'}", not "${NC.collab.fileName}".`);
   }
   const scope = NC_VIEWER_SELECTORS.viewer;
-  if (!(await app.locator(`${scope} ${TEXT.editor}`).first().isVisible().catch(() => false))) {
+  const vis = (sel: string) => async () => app.locator(`${scope} ${sel}`).first().isVisible().catch(() => false);
+  if (!(await waitFor(vis(TEXT.editor), app, SETTLE_MS))) {
     throw new Error(`${tag}: "${name}" is not open in Nextcloud Text (${TEXT.editor} missing).`);
   }
-  if (await app.locator(`${scope} ${TEXT.readonlyBarMustBeAbsent}`).first().isVisible().catch(() => false)) {
+  // Text mounts read-only bar / editable content a moment after the container: wait for either.
+  await waitFor(async () => (await vis(TEXT.content)()) || (await vis(TEXT.readonlyBarMustBeAbsent)()), app, SETTLE_MS);
+  if (await vis(TEXT.readonlyBarMustBeAbsent)()) {
     throw new Error(
       `${tag}: Nextcloud Text opened "${name}" read-only (${TEXT.readonlyBarMustBeAbsent} visible). ` +
         `Kid collab apply pending (CONTENT.live.json collabProvisioned=false): ` +
@@ -1036,14 +1300,27 @@ export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise
   if (!(await waitFor(async () => content.isVisible().catch(() => false), app, SETTLE_MS))) {
     throw new Error(`${tag}: no editable Text content (${TEXT.content}) for "${name}".`);
   }
-  if (!(await app.locator(`${scope} ${TEXT.menubarWhenEditable}`).first().isVisible().catch(() => false))) {
+  if (!(await waitFor(vis(TEXT.menubarWhenEditable), app, 8_000))) {
     throw new Error(`${tag}: Text menubar (${TEXT.menubarWhenEditable}) missing: editor not in edit mode.`);
   }
   const line = keepEditingLine(now);
   const pushed = app
     .waitForResponse((r) => TEXT_PUSH.test(r.url()) && r.request().method() === 'POST', { timeout: SETTLE_MS })
     .catch(() => null);
-  await content.click({ timeout: 8_000 });
+  // Focus click: retried only while the click itself fails; typing is never repeated (no
+  // duplicate lines). A reload (?openfile reopens the doc) only if all clicks failed.
+  let focused = false;
+  const focus = await clickUntil(app, {
+    ready: () => ncActionable(content),
+    click: async () => {
+      await content.click({ timeout: 8_000 });
+      focused = true;
+    },
+    done: async () => focused,
+    afterReload: async () => (await waitFor(() => viewerOpen(app), app, SETTLE_MS)) && (await waitFor(vis(TEXT.content), app, SETTLE_MS)),
+    readyMs: 8_000,
+  });
+  if (!focus.ok) throw new Error(`${tag}: could not click into the Text editor for "${name}".${ncAttempts(focus)}`);
   await app.keyboard.press('Control+End');
   await app.keyboard.press('Enter');
   await app.keyboard.type(line, { delay: 20 });
@@ -1113,11 +1390,20 @@ export const ncDropPage = (page: Page, tag: string): Page => {
 /** Assert the upload-only file-drop UI for the Drop Zone. */
 export const ncAssertDropPage = async (drop: Page, tag: string): Promise<void> => {
   const ui = drop.locator(NC_DROP_SELECTORS.drop).first();
-  if (!(await waitFor(async () => ui.isVisible().catch(() => false), drop, SETTLE_MS))) {
+  const uiUp = async () => ui.isVisible().catch(() => false);
+  // Public share page can be up before the Vue File drop view mounts: poll, reload once, poll.
+  let reloaded = false;
+  if (!(await waitFor(uiUp, drop, SETTLE_MS)) && typeof drop.reload === 'function') {
+    reloaded = true;
+    await drop.reload({ waitUntil: 'domcontentloaded', timeout: FILE_DROP_GOTO_MS }).catch(() => {});
+    await waitFor(uiUp, drop, SETTLE_MS);
+  }
+  if (!(await uiUp())) {
     const body = ((await drop.locator('body').first().innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 160);
     throw new Error(
       `${tag}: ${drop.url()} is not a Nextcloud File drop page (${NC_DROP_SELECTORS.drop} missing; page: "${body}"). ` +
-        `Kid fileRequest not applied on this host, or token differs (set DURATION_NC_FILE_REQUEST_URL from hosts.<host>.fileRequestUrl).`,
+        `Kid fileRequest not applied on this host, or token differs (set DURATION_NC_FILE_REQUEST_URL from hosts.<host>.fileRequestUrl).` +
+        (reloaded ? ' [polled, reloaded once, polled again]' : ''),
     );
   }
   const text = ((await ui.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
@@ -1150,9 +1436,16 @@ export const runOpenFileDrop = async (app: Page): Promise<Page> => {
   }
   const url = resolveFileRequestUrl(app.url());
   const drop = await app.context().newPage();
-  const resp = await drop.goto(url, { waitUntil: 'domcontentloaded', timeout: FILE_DROP_GOTO_MS }).catch((e: unknown) => {
-    throw new Error(`${tag}: file request ${url} unreachable (${e instanceof Error ? e.message : String(e)}).`);
-  });
+  // Navigation error (timeout / reset) → one more goto; HTTP 4xx stays a loud-fail below.
+  const go = () => drop.goto(url, { waitUntil: 'domcontentloaded', timeout: FILE_DROP_GOTO_MS });
+  const resp = await go()
+    .catch(async () => {
+      await drop.waitForTimeout(NC_CLICK_BACKOFF_MS);
+      return go();
+    })
+    .catch((e: unknown) => {
+      throw new Error(`${tag}: file request ${url} unreachable (${e instanceof Error ? e.message : String(e)}) [2 goto attempts].`);
+    });
   if (resp && resp.status() >= 400) {
     throw new Error(
       `${tag}: file request ${url} returned HTTP ${resp.status()} (404 = old/wrong token; 400 = raw IP not in NC trusted_domains, use hostname).`,
@@ -1183,35 +1476,54 @@ export const runAfterUpload = async (page: Page, now: Date = new Date()): Promis
   const drop = ncDropPage(page, tag);
   await ncAssertDropPage(drop, tag);
   const file = dropUploadFile(now);
-  const put = drop
-    .waitForResponse(
-      (r) => r.request().method() === 'PUT' && /\/public\.php\/dav\/files\//.test(r.url()) && r.url().includes(encodeURIComponent(file.name)),
-      { timeout: SETTLE_MS },
-    )
-    .catch(() => null);
+  // Armed right before the files are set (the PUT cannot start earlier), so click retries
+  // never eat into the upload wait.
+  let put: Promise<Awaited<ReturnType<Page['waitForResponse']>> | null> = Promise.resolve(null);
+  const armPut = () => {
+    put = drop
+      .waitForResponse(
+        (r) => r.request().method() === 'PUT' && /\/public\.php\/dav\/files\//.test(r.url()) && r.url().includes(encodeURIComponent(file.name)),
+        { timeout: SETTLE_MS },
+      )
+      .catch(() => null);
+  };
 
   const ui = drop.locator(NC_DROP_SELECTORS.drop).first();
   const upload = ui.getByRole('button', { name: 'Upload' }).first();
   let chosen = false;
-  if (await upload.isVisible().catch(() => false)) {
-    const chooser = drop.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
-    await upload.click({ timeout: 8_000 });
-    const item = drop.getByRole('menuitem', { name: 'Upload files' }).first();
-    if (await waitFor(async () => item.isVisible().catch(() => false), drop, 3_000)) {
-      await item.click({ timeout: 8_000 });
-    }
-    const fc = await chooser;
-    if (fc) {
-      await fc.setFiles(file);
-      chosen = true;
-    }
+  if (await waitFor(() => ncActionable(upload), drop, 5_000)) {
+    // Upload → (menu "Upload files") → file chooser, retried 3× while no chooser opens; a reload
+    // of the public drop page is safe (nothing uploaded until a file is chosen).
+    const r = await clickUntil(drop, {
+      ready: () => ncActionable(upload),
+      click: async () => {
+        const chooser = drop.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
+        await upload.click({ timeout: 8_000 });
+        const item = drop.getByRole('menuitem', { name: 'Upload files' }).first();
+        if (await waitFor(async () => item.isVisible().catch(() => false), drop, 3_000)) {
+          await item.click({ timeout: 8_000 });
+        }
+        const fc = await chooser;
+        if (fc) {
+          armPut();
+          await fc.setFiles(file);
+          chosen = true;
+        }
+      },
+      done: async () => chosen,
+      afterReload: () => waitFor(() => ncActionable(upload), drop, SETTLE_MS),
+      readyMs: 5_000,
+      pollMs: 1_000,
+    });
+    chosen = r.ok;
   }
   if (!chosen) {
     // UploadPicker's own <input type=file> (same element the chooser drives).
     const input = drop.locator(NC_DROP_SELECTORS.fileInput).first();
-    if ((await input.count().catch(() => 0)) === 0) {
+    if (!(await waitFor(async () => (await input.count().catch(() => 0)) > 0, drop, 5_000))) {
       throw new Error(`${tag}: File drop page has no Upload button / file input (${drop.url()}).`);
     }
+    armPut();
     await input.setInputFiles(file);
   }
   const resp = await put;

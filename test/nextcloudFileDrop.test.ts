@@ -23,16 +23,23 @@ type DropOpts = {
   rows?: string[];
   putStatus?: number | null;
   chooser?: boolean;
+  /** File drop UI only mounts after one page reload. */
+  uiAfterReload?: boolean;
+  /** First N Upload clicks open no file chooser. */
+  chooserMisses?: number;
 };
 
 /** Fake Playwright page for the public File drop view. */
 function fakeDrop(o: DropOpts = {}) {
-  const state = { closed: false, uploaded: [] as string[], clicks: [] as string[], url: o.url ?? DROP_URL };
+  const state = { closed: false, uploaded: [] as string[], clicks: [] as string[], url: o.url ?? DROP_URL, reloads: 0 };
+  let misses = o.chooserMisses ?? 0;
+  const uiUp = () => (o.ui ?? true) && (!o.uiAfterReload || state.reloads > 0);
   const uiText = o.uiText ?? 'File drop Upload files to inbox. Upload';
   const L = (sel: string): unknown => ({
     first: () => L(sel),
-    count: async () => (sel.includes('data-cy-files-list-row') ? (o.rows ?? []).length : (o.ui ?? true) ? 1 : 0),
-    isVisible: async () => (sel.startsWith('role:') ? (o.chooser ?? true) : (o.ui ?? true)),
+    count: async () => (sel.includes('data-cy-files-list-row') ? (o.rows ?? []).length : uiUp() ? 1 : 0),
+    isVisible: async () => (sel.startsWith('role:') ? (o.chooser ?? true) : uiUp()),
+    isEnabled: async () => (sel.startsWith('role:') ? (o.chooser ?? true) : uiUp()),
     innerText: async () => (sel === 'body' ? (o.body ?? uiText) : uiText),
     evaluateAll: async () => o.rows ?? [],
     getByRole: (role: string, opt: { name: string }) => L(`role:${role}:${opt.name}`),
@@ -55,8 +62,15 @@ function fakeDrop(o: DropOpts = {}) {
     },
     locator: (sel: string) => L(sel),
     getByRole: (role: string, opt: { name: string }) => L(`role:${role}:${opt.name}`),
+    reload: async () => {
+      state.reloads++;
+    },
     waitForEvent: async () => {
       if (!(o.chooser ?? true)) throw new Error('timeout');
+      if (misses > 0) {
+        misses--;
+        throw new Error('timeout');
+      }
       return {
         setFiles: async (f: { name: string }) => {
           state.uploaded.push(`chooser:${f.name}`);
@@ -212,5 +226,31 @@ describe('open_file_drop / after_upload / leave_file_drop', () => {
     const consolePage = { url: () => 'http://idea01:8080/', isClosed: () => false };
     withContext([consolePage, fakeFiles('student01')]);
     expect(() => ncDropPage(consolePage as unknown as Page, 'idea#166 leave_file_drop')).toThrow(/not in nc_drop/);
+  });
+});
+
+describe('file drop retries (sweep with r28 share_to_class fix)', () => {
+  it('ncAssertDropPage: File drop UI missing after the poll → reloads once, then passes', async () => {
+    const d = fakeDrop({ uiAfterReload: true });
+    await expect(ncAssertDropPage(d.page, 't')).resolves.toBeUndefined();
+    expect(d.state.reloads).toBe(1);
+  });
+
+  it('ncAssertDropPage: still missing after the reload → same loud message + reload note', async () => {
+    const d = fakeDrop({ ui: false, body: 'Share not found' });
+    await expect(ncAssertDropPage(d.page, 't')).rejects.toThrow(
+      /not a Nextcloud File drop page.*Share not found.*\[polled, reloaded once, polled again\]/,
+    );
+    expect(d.state.reloads).toBe(1);
+  });
+
+  it('after_upload: Upload click that opens no file chooser is retried, upload goes through the chooser', async () => {
+    const consolePage = { url: () => 'http://idea01:8080/', isClosed: () => false };
+    const drop = fakeDrop({ chooserMisses: 2 });
+    withContext([consolePage, fakeFiles('student01'), drop.page as unknown as Record<string, unknown>]);
+    const name = await runAfterUpload(consolePage as unknown as Page, new Date('2026-10-05T13:00:00.000Z'));
+    expect(drop.state.uploaded).toEqual([`chooser:${name}`]);
+    expect(drop.state.clicks.filter((c) => c === 'role:button:Upload')).toHaveLength(3);
+    expect(drop.state.reloads).toBe(0);
   });
 });

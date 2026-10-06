@@ -20,6 +20,12 @@ import {
   ncGroupShareTitle,
   ncOcsFailure,
   ncQuickShareSelected,
+  clickUntil,
+  ncAttempts,
+  NcFatal,
+  ncOpenSharingSidebar,
+  NC_CLICK_RETRIES,
+  NC_RESULT_POLL_MS,
 } from '../e2e/intents/nextcloudDeep';
 import { DURATION_FIXTURES } from '../e2e/intents/fixtures';
 
@@ -72,6 +78,8 @@ function fakeNextcloud(opts: {
   loginFormDelayMs?: number;
   /** Login form fields never mount until the page is reloaded once. */
   loginFormNeedsReload?: boolean;
+  /** The first N folder-row clicks are swallowed (slow Files list, click lands before handlers). */
+  dropRowClicks?: number;
 }) {
   let url = opts.start === 'login' ? `${ORIGIN}/login` : opts.start === 'files' ? filesUrl('/') : `${ORIGIN}/apps/dashboard/`;
   const fields: Record<string, string> = {};
@@ -85,6 +93,7 @@ function fakeNextcloud(opts: {
   const wizardKeys: string[] = [];
   let loginAt = Date.now();
   let reloads = 0;
+  let rowDrops = opts.dropRowClicks ?? 0;
   const loginFieldsUp = () =>
     (!opts.loginFormNeedsReload || reloads > 0) && Date.now() - loginAt >= (opts.loginFormDelayMs ?? 0);
   const wizardUp = () =>
@@ -186,7 +195,8 @@ function fakeNextcloud(opts: {
           else if (sel.startsWith('[data-cy-files-content-breadcrumbs] a')) url = filesUrl('/');
           else {
             const name = rowName(sel);
-            if (name) url = filesUrl(`${dir() === '/' ? '' : dir()}/${name}`);
+            if (name && rowDrops > 0) rowDrops--;
+            else if (name) url = filesUrl(`${dir() === '/' ? '' : dir()}/${name}`);
           }
         },
       };
@@ -496,7 +506,8 @@ describe('runShareToClass guards', () => {
 });
 
 /** Fake NC tab in nc_share: Files dir + sidebar (Sharing tab / editor / close button). */
-function fakeShareState(o: { uid?: string; sidebar?: boolean; tab?: boolean; editor?: boolean; stuck?: boolean }) {
+function fakeShareState(o: { uid?: string; sidebar?: boolean; tab?: boolean; editor?: boolean; stuck?: boolean; ignoreCloseClicks?: number }) {
+  let ignore = o.ignoreCloseClicks ?? 0;
   const url = filesUrl('/Grade 5A Files');
   const s = { sidebar: o.sidebar ?? true, tab: o.tab ?? true, editor: o.editor ?? false };
   const clicks: string[] = [];
@@ -514,6 +525,7 @@ function fakeShareState(o: { uid?: string; sidebar?: boolean; tab?: boolean; edi
     locator: (sub: string) => L(`${sel} ${sub}`),
     count: async () => (visible(sel) ? 1 : 0),
     isVisible: async () => visible(sel),
+    isEnabled: async () => visible(sel),
     getAttribute: async (name: string) => {
       if (sel === 'head' && name === 'data-user') return o.uid ?? 'teacher';
       if (sel.endsWith('[aria-controls="tab-sharing"]') && name === 'aria-selected') return s.tab ? 'true' : 'false';
@@ -522,7 +534,8 @@ function fakeShareState(o: { uid?: string; sidebar?: boolean; tab?: boolean; edi
     click: async () => {
       if (!visible(sel)) throw new Error(`not visible: ${sel}`);
       clicks.push(sel);
-      if (sel.endsWith('.app-sidebar__close') && !o.stuck) s.sidebar = false;
+      if (sel.endsWith('.app-sidebar__close') && ignore > 0) ignore--;
+      else if (sel.endsWith('.app-sidebar__close') && !o.stuck) s.sidebar = false;
     },
   });
   const page = {
@@ -589,7 +602,10 @@ function fakeCollab(o: {
   readonly?: boolean;
   push?: number | null;
   echo?: boolean;
+  /** The first N clicks on a file row are swallowed (Viewer not yet registered). */
+  ignoreFileClicks?: number;
 }) {
+  let ignoreFile = o.ignoreFileClicks ?? 0;
   let url = o.start ?? filesUrl('/');
   let viewer = o.start ? ncOpenFileQuery(o.start) : false;
   const clicks: string[] = [];
@@ -616,6 +632,7 @@ function fakeCollab(o: {
     first: () => L(sel),
     count: async () => (present(sel) ? 1 : 0),
     isVisible: async () => present(sel),
+    isEnabled: async () => present(sel),
     getAttribute: async (n: string) => (sel === 'head' && n === 'data-user' ? 'student01' : null),
     innerText: async () => {
       if (!present(sel)) throw new Error('detached');
@@ -641,6 +658,10 @@ function fakeCollab(o: {
       }
       const name = rowName(sel)!;
       if (o.files.includes(name)) {
+        if (ignoreFile > 0) {
+          ignoreFile--;
+          return;
+        }
         if ((o.viewer ?? 'opens') === 'opens') {
           viewer = true;
           url = withQuery(dir()!, true);
@@ -775,5 +796,264 @@ describe('keep_editing (Nextcloud Text, Kid Prefer A)', () => {
     await expect(runKeepEditing(fakeCollab({ tree, files, push: 200 }).page, at)).rejects.toThrow(/not in nc_collab/);
     await expect(runKeepEditing(opened({ title: 'welcome.txt' }).page, at)).rejects.toThrow(/Viewer shows "welcome.txt"/);
     await expect(runKeepEditing(opened({ text: false }).page, at)).rejects.toThrow(/not open in Nextcloud Text/);
+  });
+});
+
+/* ------------------------------------------------------------------------- */
+/* clickUntil + call sites (r28 FAIL@22 share_to_class sidebar, sweep)         */
+/* ------------------------------------------------------------------------- */
+
+/** Minimal page for clickUntil: fake clock + reload counter. */
+function fakeClock() {
+  let reloads = 0;
+  const page = {
+    url: () => filesUrl('/'),
+    waitForTimeout: async (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+    },
+    reload: async () => {
+      reloads++;
+    },
+  };
+  return { page: page as unknown as Page, reloads: () => reloads };
+}
+
+describe('clickUntil (visible+enabled → click ×3 backoff → poll → reload once → loud)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-06T00:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('succeeds on a later click retry, without reloading', async () => {
+    const f = fakeClock();
+    let clicks = 0;
+    const r = await clickUntil(f.page, {
+      ready: async () => true,
+      click: async () => {
+        clicks++;
+      },
+      done: async () => clicks >= 3,
+    });
+    expect(r).toEqual({ ok: true, clicks: 3, reloaded: false, lastError: null });
+    expect(f.reloads()).toBe(0);
+  });
+
+  it('retries a click that throws (not actionable yet) and records the error', async () => {
+    const f = fakeClock();
+    let clicks = 0;
+    let landed = false;
+    const r = await clickUntil(f.page, {
+      click: async () => {
+        if (++clicks === 1) throw new Error('locator.click: Timeout 8000ms exceeded.\n  - element is not enabled');
+        landed = true;
+      },
+      done: async () => landed,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.clicks).toBe(2);
+    expect(r.lastError).toBe('locator.click: Timeout 8000ms exceeded.');
+  });
+
+  it('reloads once after 3 failed clicks, re-checks preconditions, then succeeds', async () => {
+    const f = fakeClock();
+    let clicks = 0;
+    let afterReload = 0;
+    const r = await clickUntil(f.page, {
+      click: async () => {
+        clicks++;
+      },
+      done: async () => f.reloads() > 0 && clicks > NC_CLICK_RETRIES,
+      afterReload: async () => {
+        afterReload++;
+        return true;
+      },
+    });
+    expect(r).toEqual({ ok: true, clicks: NC_CLICK_RETRIES + 1, reloaded: true, lastError: null });
+    expect(f.reloads()).toBe(1);
+    expect(afterReload).toBe(1);
+  });
+
+  it('gives up only after 3 clicks + 1 reload + 3 clicks; caller keeps its loud message + attempt info', async () => {
+    const f = fakeClock();
+    const t0 = Date.now();
+    const r = await clickUntil(f.page, {
+      click: async () => {
+        throw new Error('boom');
+      },
+      done: async () => false,
+    });
+    expect(r).toEqual({ ok: false, clicks: 2 * NC_CLICK_RETRIES, reloaded: true, lastError: 'boom' });
+    expect(f.reloads()).toBe(1);
+    expect(ncAttempts(r)).toBe(' [6 click attempt(s), 1 page reload; last click error: boom]');
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(2 * (1_000 + 2_000)); // backoff 1s + 2s per round
+  });
+
+  it('a result already true before the first click never soft-passes: it still clicks', async () => {
+    const f = fakeClock();
+    let clicks = 0;
+    const r = await clickUntil(f.page, { click: async () => void clicks++, done: async () => true });
+    expect(r.ok).toBe(true);
+    expect(clicks).toBe(1);
+  });
+
+  it('reload: false → 3 clicks only; afterReload false → no second round; NcFatal is rethrown at once', async () => {
+    const a = fakeClock();
+    expect(await clickUntil(a.page, { click: async () => {}, done: async () => false, reload: false })).toMatchObject({
+      ok: false,
+      clicks: 3,
+      reloaded: false,
+    });
+    expect(a.reloads()).toBe(0);
+
+    const b = fakeClock();
+    const rb = await clickUntil(b.page, { click: async () => {}, done: async () => false, afterReload: async () => false });
+    expect(rb).toMatchObject({ ok: false, clicks: 3, reloaded: true });
+
+    const c = fakeClock();
+    let clicks = 0;
+    await expect(
+      clickUntil(c.page, {
+        click: async () => {
+          clicks++;
+          throw new NcFatal('t: Nextcloud rejected the share (HTTP 403)');
+        },
+        done: async () => false,
+      }),
+    ).rejects.toThrow(/rejected the share \(HTTP 403\)/);
+    expect(clicks).toBe(1);
+    expect(c.reloads()).toBe(0);
+  });
+});
+
+/** Fake Files list with "Class Materials" + sharing sidebar that opens late / only after reload / never. */
+function fakeSidebar(o: { openAfterClicks?: number; openOnlyAfterReload?: boolean; never?: boolean }) {
+  const name = 'Class Materials';
+  const row = `tr[data-cy-files-list-row-name="${name}"]`;
+  const inline = `${row} [data-cy-files-list-row-action="sharing-status"]`;
+  let clicks = 0;
+  let reloads = 0;
+  let open = false;
+  const visible = (sel: string): boolean => {
+    if (sel === row || sel === inline) return true;
+    if (sel === '[data-cy-sidebar]') return open;
+    if (sel.startsWith('[data-cy-sidebar] ')) return open;
+    return false;
+  };
+  const L = (sel: string): unknown => ({
+    first: () => L(sel),
+    last: () => L(sel),
+    locator: (sub: string) => L(`${sel} ${sub}`),
+    count: async () => (visible(sel) ? 1 : 0),
+    isVisible: async () => visible(sel),
+    isEnabled: async () => visible(sel),
+    innerText: async () => (sel === '[data-cy-sidebar]' && open ? `${name}\nActivity Sharing` : ''),
+    getAttribute: async (n: string) => (sel.endsWith('[aria-controls="tab-sharing"]') && n === 'aria-selected' ? 'true' : null),
+    evaluateAll: async () => [name],
+    click: async () => {
+      if (!visible(sel)) throw new Error(`not visible: ${sel}`);
+      if (sel !== inline) return;
+      clicks++;
+      if (o.never) return;
+      if (o.openOnlyAfterReload ? reloads > 0 : clicks > (o.openAfterClicks ?? 0)) open = true;
+    },
+  });
+  const page = {
+    url: () => filesUrl('/'),
+    waitForTimeout: async (ms: number) => {
+      vi.setSystemTime(Date.now() + ms);
+    },
+    reload: async () => {
+      reloads++;
+      open = false;
+    },
+    locator: (sel: string) => L(sel),
+  };
+  return { page: page as unknown as Page, clicks: () => clicks, reloads: () => reloads };
+}
+
+describe('ncOpenSharingSidebar (r28 FAIL@22: share_to_class sidebar open)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-06T00:10:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+  const tag = 'idea#166 share_to_class';
+
+  it('first Share click lost → retries the click and opens the sidebar on the Sharing tab', async () => {
+    const f = fakeSidebar({ openAfterClicks: 1 });
+    expect(await ncOpenSharingSidebar(f.page, tag, 'Class Materials')).toBe('[data-cy-sidebar]');
+    expect(f.clicks()).toBe(2);
+    expect(f.reloads()).toBe(0);
+  });
+
+  it('sidebar only opens after a reload → reloads Files once, waits for the row, clicks again', async () => {
+    const f = fakeSidebar({ openOnlyAfterReload: true });
+    expect(await ncOpenSharingSidebar(f.page, tag, 'Class Materials')).toBe('[data-cy-sidebar]');
+    expect(f.clicks()).toBe(NC_CLICK_RETRIES + 1);
+    expect(f.reloads()).toBe(1);
+  });
+
+  it('never opens → same loud r28 message + attempt info, only after 3 clicks + reload + 3 clicks', async () => {
+    const f = fakeSidebar({ never: true });
+    const t0 = Date.now();
+    await expect(ncOpenSharingSidebar(f.page, tag, 'Class Materials')).rejects.toThrow(
+      'idea#166 share_to_class: Files sidebar did not open for "Class Materials" (http://idea01:18280/apps/files/files). ' +
+        '[6 click attempt(s), 1 page reload]',
+    );
+    expect(f.clicks()).toBe(6);
+    expect(f.reloads()).toBe(1);
+    // r28 gave up at 20.7s; now each round's first poll alone is NC_RESULT_POLL_MS.
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(2 * NC_RESULT_POLL_MS);
+  });
+
+  it('reload: false (caller already reloaded) → 3 clicks, no reload, then loud', async () => {
+    const f = fakeSidebar({ never: true });
+    await expect(ncOpenSharingSidebar(f.page, tag, 'Class Materials', { reload: false })).rejects.toThrow(
+      /Files sidebar did not open for "Class Materials" .*\[3 click attempt\(s\), no reload\]/,
+    );
+    expect(f.reloads()).toBe(0);
+  });
+});
+
+describe('sweep: other Nextcloud deep click sites retry', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-06T00:20:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('done_sharing: a lost "Close sidebar" click is retried', async () => {
+    const { page, clicks, s } = fakeShareState({ ignoreCloseClicks: 1 });
+    expect(await runDoneSharing(page)).toBe('/Grade 5A Files');
+    expect(s.sidebar).toBe(false);
+    expect(clicks).toEqual(['[data-cy-sidebar] .app-sidebar__close', '[data-cy-sidebar] .app-sidebar__close']);
+  });
+
+  it('done_sharing: stuck sidebar still loud-fails "still open", with attempt info', async () => {
+    const { page, clicks } = fakeShareState({ stuck: true });
+    await expect(runDoneSharing(page)).rejects.toThrow(/Files sidebar is still open .*\[6 click attempt\(s\), 1 page reload\]/);
+    expect(clicks).toHaveLength(6);
+  });
+
+  it('browse_folders (ncOpenFolder): a swallowed row click is retried', async () => {
+    const f = fakeNextcloud({ start: 'files', tree: { '/': ['Class Materials', 'Drop Zone', 'Collab'] }, dropRowClicks: 2 });
+    expect(await runBrowseFolders(f.page)).toEqual(['/Class Materials', '/Drop Zone', '/Collab']);
+    expect(f.reloads()).toBe(0);
+  });
+
+  it('open_collab_doc: Viewer opens on the second click on the doc', async () => {
+    const tree = { '/': ['Class Materials', 'Collab'], '/Collab': ['Grade5A-collab-notes.md'] };
+    const f = fakeCollab({ tree, files: ['Grade5A-collab-notes.md'], ignoreFileClicks: 1 });
+    expect(await runOpenCollabDoc(f.page)).toBe('/Collab');
+    expect(f.clicks.filter((c) => c.includes('Grade5A-collab-notes.md'))).toHaveLength(2);
+  });
+
+  it('open_collab_doc: Viewer never opens → original loud message + attempt info', async () => {
+    const tree = { '/': ['Class Materials', 'Collab'], '/Collab': ['Grade5A-collab-notes.md'] };
+    const f = fakeCollab({ tree, files: ['Grade5A-collab-notes.md'], viewer: 'downloads' });
+    await expect(runOpenCollabDoc(f.page)).rejects.toThrow(
+      /did not open the Nextcloud Viewer .*file downloaded instead .*\[6 click attempt\(s\), 1 page reload\]/,
+    );
   });
 });
