@@ -11,7 +11,16 @@
  *      Engines that log a refusal and close the trace as ok).
  *   4. Success: the trace is ok AND the caller's extra condition holds (for
  *      createFilesDisk: the disk's diskTypes includes 'files').
- *   5. Timeout after COMMAND_RESULT_TIMEOUT_MS.
+ *   5. Timeout after COMMAND_RESULT_TIMEOUT_MS. With `longRunning`, the
+ *      timeout only covers "no trace at all": once the Engine has opened a
+ *      matching trace (it accepted the command), we keep waiting for it to
+ *      close, so a restore or copy that runs for minutes is not reported as
+ *      "no response" (r29@97 forensics).
+ *
+ * Refusals the Engine records BEFORE running a command (unknown command,
+ * "Too many arguments", "Insufficient arguments") carry the raw tokens as a
+ * positional array, not named args (Engine commandUtils.ts recordErrorTrace),
+ * so `key` matching also accepts an exact token in a positional array.
  */
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { CommandLogState } from './commandLog';
@@ -24,7 +33,7 @@ export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
 /** Timeout message for the Files actions (files-disk.md §4). */
 export const FILES_TIMEOUT_MESSAGE = "The Engine didn't respond. It may not support Files Disks yet.";
 
-export type TraceArgKey = 'diskId' | 'targetId';
+export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId';
 
 export type TraceOutcome =
   | { kind: 'ok' }
@@ -33,16 +42,21 @@ export type TraceOutcome =
 const ANSI_RE = /\u001b\[[0-9;]*m/g;
 const clean = (s: string): string => s.replace(ANSI_RE, '').trim();
 
+/** Parsed trace args: an object (named), an array (positional) or null. */
+const parsedArgs = (trace: CommandTrace): unknown => {
+  try {
+    return typeof trace.args === 'string' ? JSON.parse(trace.args) : trace.args;
+  } catch {
+    return null; // malformed args: not ours
+  }
+};
+
 /** Reads a named argument of a trace (object args, or a JSON string). */
 export const traceArg = (trace: CommandTrace, key: string): string | null => {
-  try {
-    const args: unknown = typeof trace.args === 'string' ? JSON.parse(trace.args) : trace.args;
-    if (args && typeof args === 'object' && !Array.isArray(args)) {
-      const v = (args as Record<string, unknown>)[key];
-      return v != null ? String(v) : null;
-    }
-  } catch {
-    // malformed args: not ours
+  const args = parsedArgs(trace);
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    const v = (args as Record<string, unknown>)[key];
+    return v != null ? String(v) : null;
   }
   return null;
 };
@@ -62,15 +76,12 @@ const orderedTraces = (cls: CommandLogStore): CommandTrace[] => {
   return out;
 };
 
-/**
- * The outcome of the first new `command` trace whose `argKey` equals
- * `argValue`, or null while there is none or it is still running.
- */
 /** How to match the target argument on a new trace (idea#122). */
 export type ArgMatchMode = 'key' | 'includes';
 
 /**
- * True when this trace is the one we sent: exact named arg, or (includes)
+ * True when this trace is the one we sent: exact named arg, or an exact
+ * token of a positional args array (pre-execute refusals), or (includes)
  * the value appears anywhere in the serialized args — needed for installApp,
  * which records a single positional string rather than named diskId.
  */
@@ -80,24 +91,33 @@ export const traceMatchesArg = (
   argValue: string,
   mode: ArgMatchMode = 'key'
 ): boolean => {
-  if (mode === 'key') return traceArg(trace, argKey) === argValue;
+  if (mode === 'key') {
+    const args = parsedArgs(trace);
+    if (Array.isArray(args)) return args.some((a) => String(a) === argValue);
+    return traceArg(trace, argKey) === argValue;
+  }
   const raw = typeof trace.args === 'string' ? trace.args : JSON.stringify(trace.args ?? '');
   return raw.includes(argValue);
 };
 
-export const findCommandOutcome = (
+/** The first new `command` trace matching the argument (running or closed), or null. */
+export const findCommandTrace = (
   cls: CommandLogState,
   baseline: Set<string>,
   command: string,
   argKey: TraceArgKey,
   argValue: string,
   matchMode: ArgMatchMode = 'key'
-): TraceOutcome | null => {
+): CommandTrace | null => {
   if (!cls || 'error' in cls) return null;
-  const trace = orderedTraces(cls).find((t) =>
+  return orderedTraces(cls).find((t) =>
     !baseline.has(t.traceId) && t.command === command && traceMatchesArg(t, argKey, argValue, matchMode)
-  );
-  if (!trace || trace.status === 'running') return null;
+  ) ?? null;
+};
+
+/** Outcome of a closed trace (null while running). */
+export const traceOutcome = (trace: CommandTrace, command: string): TraceOutcome | null => {
+  if (trace.status === 'running') return null;
   const errorLogs = (trace.logs ?? []).filter((l) => l.level === 'error');
   const lastErrorLog = errorLogs.length > 0 ? clean(errorLogs[errorLogs.length - 1].message) : '';
   if (trace.status === 'error') {
@@ -107,6 +127,22 @@ export const findCommandOutcome = (
   return { kind: 'ok' };
 };
 
+/**
+ * The outcome of the first new `command` trace whose `argKey` equals
+ * `argValue`, or null while there is none or it is still running.
+ */
+export const findCommandOutcome = (
+  cls: CommandLogState,
+  baseline: Set<string>,
+  command: string,
+  argKey: TraceArgKey,
+  argValue: string,
+  matchMode: ArgMatchMode = 'key'
+): TraceOutcome | null => {
+  const trace = findCommandTrace(cls, baseline, command, argKey, argValue, matchMode);
+  return trace ? traceOutcome(trace, command) : null;
+};
+
 export type CommandResultState =
   | { kind: 'idle' }
   | { kind: 'pending' }
@@ -114,43 +150,72 @@ export type CommandResultState =
   | { kind: 'error'; message: string }
   | { kind: 'timeout' };
 
+/** Per-send overrides, so one result can follow different commands (start/stop/backup on a row). */
+export interface CommandResultTarget {
+  command?: string;
+  argKey?: TraceArgKey;
+  matchMode?: ArgMatchMode;
+  longRunning?: boolean;
+}
+
 export interface CommandResultOptions {
   commandLog: Accessor<CommandLogState>;
-  command: string;
-  argKey: TraceArgKey;
+  /** Default command; a `start` call can override it. */
+  command?: string;
+  argKey?: TraceArgKey;
   /** 'key' (default): args[argKey] === value. 'includes': value appears in args JSON. */
   matchMode?: ArgMatchMode;
   /** Extra success condition, checked once the trace is ok (e.g. the disk has 'files'). */
   isSuccess?: () => boolean;
   timeoutMs?: number;
+  /** Stop the timeout once a matching (running) trace appears; wait for it to close. */
+  longRunning?: boolean;
 }
 
 export interface CommandResult {
   state: Accessor<CommandResultState>;
+  /** The command the current state belongs to (set by the last `start`). */
+  command: Accessor<string | null>;
   /** Record the baseline, then call `send`, then wait for the answer. */
-  start: (argValue: string, send: () => void) => void;
+  start: (argValue: string, send: () => void, target?: CommandResultTarget) => void;
   reset: () => void;
 }
 
 /** Solid primitive around findCommandOutcome with the timeout. Call inside a component. */
 export function createCommandResult(opts: CommandResultOptions): CommandResult {
-  type Pending = { baseline: Set<string>; argValue: string };
+  type Pending = {
+    baseline: Set<string>;
+    argValue: string;
+    command: string;
+    argKey: TraceArgKey;
+    matchMode: ArgMatchMode;
+    longRunning: boolean;
+  };
   const [pending, setPending] = createSignal<Pending | null>(null);
   const [state, setState] = createSignal<CommandResultState>({ kind: 'idle' });
+  const [command, setCommand] = createSignal<string | null>(null);
   let timer: ReturnType<typeof setTimeout> | null = null;
   const clearTimer = () => { if (timer !== null) { clearTimeout(timer); timer = null; } };
   onCleanup(clearTimer);
 
   // Reads the command log only while waiting.
-  const outcome = createMemo(() => {
+  const found = createMemo(() => {
     const p = pending();
     if (!p) return null;
-    return findCommandOutcome(opts.commandLog(), p.baseline, opts.command, opts.argKey, p.argValue, opts.matchMode ?? 'key');
+    const trace = findCommandTrace(opts.commandLog(), p.baseline, p.command, p.argKey, p.argValue, p.matchMode);
+    if (!trace) return null;
+    return { accepted: true, outcome: traceOutcome(trace, p.command) };
   });
 
   createEffect(() => {
-    const o = outcome();
-    if (!o || !pending()) return;
+    const f = found();
+    const p = pending();
+    if (!f || !p) return;
+    // The Engine opened a trace: it received the command. Long operations
+    // (restore, backup, copy, move) are no longer at risk of "no response".
+    if (p.longRunning) clearTimer();
+    const o = f.outcome;
+    if (!o) return;
     if (o.kind === 'error') {
       clearTimer();
       setPending(null);
@@ -164,9 +229,18 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     }
   });
 
-  const start = (argValue: string, send: () => void) => {
+  const start = (argValue: string, send: () => void, target?: CommandResultTarget) => {
     clearTimer();
-    setPending({ baseline: traceIdSnapshot(opts.commandLog()), argValue });
+    const cmd = target?.command ?? opts.command ?? '';
+    setCommand(cmd);
+    setPending({
+      baseline: traceIdSnapshot(opts.commandLog()),
+      argValue,
+      command: cmd,
+      argKey: target?.argKey ?? opts.argKey ?? 'diskId',
+      matchMode: target?.matchMode ?? opts.matchMode ?? 'key',
+      longRunning: target?.longRunning ?? opts.longRunning ?? false,
+    });
     setState({ kind: 'pending' });
     timer = setTimeout(() => {
       timer = null;
@@ -182,7 +256,8 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     clearTimer();
     setPending(null);
     setState({ kind: 'idle' });
+    setCommand(null);
   };
 
-  return { state, start, reset };
+  return { state, command, start, reset };
 }

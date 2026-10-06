@@ -12,6 +12,8 @@ import type { Disk, Store, UnformattedDisk } from '../types/store';
 import { formatBytes } from '../store/diskRoles';
 import { canEject, unmountWarningDiskIds, unmountWarningText } from '../store/diskRoles';
 import EjectConfirm from './EjectConfirm';
+import CommandFeedback from './CommandFeedback';
+import { createCommandResult } from '../store/commandResult';
 import RoleBadges from './RoleBadges';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
@@ -115,6 +117,16 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
             { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) }
           );
 
+          // Engine answer to "reboot" (no arguments: any new reboot trace).
+          // A reboot that is under way keeps its trace running; only a
+          // refusal/failure or no trace at all is shown.
+          const rebootResult = createCommandResult({
+            commandLog: () => props.commandLogStore?.() ?? null,
+            command: 'reboot',
+            matchMode: 'includes',
+            longRunning: true,
+          });
+
           return (
             <Show when={engine()}>
               <div
@@ -149,7 +161,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     e.stopPropagation();
                     const eng = engine();
                     if (eng && confirm(`Reboot ${eng.hostname}?`)) {
-                      rebootEngine(eng.id);
+                      rebootResult.start('', () => rebootEngine(eng.id));
                     }
                   }}
                 >
@@ -161,6 +173,12 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   aria-label={online() ? 'Online' : 'Offline'}
                 />
               </div>
+
+              <CommandFeedback
+                result={rebootResult}
+                subject={() => String(engine()?.hostname ?? engineId)}
+                testId={`reboot-feedback-${engineId}`}
+              />
 
               {/* ── Stuck-unmount warnings (all disk types, idea#157) ── */}
               <For each={unmountIds()}>

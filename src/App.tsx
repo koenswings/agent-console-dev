@@ -14,6 +14,8 @@ import HistoryPanel from './components/HistoryPanel';
 import AppBrowser from './components/AppBrowser';
 import MobileLayout from './components/MobileLayout';
 import FirstTimeSetup from './components/FirstTimeSetup';
+import CommandFeedback from './components/CommandFeedback';
+import { createCommandResult } from './store/commandResult';
 import { setSendCommandFn, copyApp, moveApp } from './store/commands';
 import {
   currentUser,
@@ -111,6 +113,15 @@ const App: Component = () => {
     });
   };
 
+  // Engine answer for a drag-and-drop copy/move (the modal closes on choice,
+  // so the refusal/failure is shown above the right pane / in the mobile layout).
+  const copyMoveResult = createCommandResult({
+    commandLog: () => commandLogStore(),
+    argKey: 'instanceName',
+    longRunning: true,
+  });
+  const [copyMoveSubject, setCopyMoveSubject] = createSignal('');
+
   const handleCopyMoveChoice = (op: 'copy' | 'move') => {
     const pending = pendingMove();
     if (!pending) return;
@@ -119,10 +130,13 @@ const App: Component = () => {
     const sourceDisk = s?.diskDB[pending.data.sourceDiskId];
     if (!sourceDisk?.dockedTo) return;
     const engineId = String(sourceDisk.dockedTo);
+    const { instanceName, sourceDiskId } = pending.data;
+    const targetDiskId = pending.targetDiskId;
+    setCopyMoveSubject(instanceName);
     if (op === 'copy') {
-      copyApp(engineId, pending.data.instanceName, pending.data.sourceDiskId, pending.targetDiskId);
+      copyMoveResult.start(instanceName, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), { command: 'copyApp' });
     } else {
-      moveApp(engineId, pending.data.instanceName, pending.data.sourceDiskId, pending.targetDiskId);
+      copyMoveResult.start(instanceName, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), { command: 'moveApp' });
     }
     setPendingMove(null);
     setDragData(null);
@@ -573,6 +587,7 @@ const App: Component = () => {
                   commandLogStore={commandLogStore}
                 />
                 <div class="main-layout__right">
+                  <CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" />
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
                   <Switch>
                     <Match when={selection().type === 'unformatted' ? `${selection().engineId}:${selection().id}` : null} keyed>
@@ -665,6 +680,7 @@ const App: Component = () => {
               pendingMove={pendingMove}
               onCopyMoveChoice={handleCopyMoveChoice}
               onCancelMove={() => setPendingMove(null)}
+              copyMoveFeedback={<CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" />}
             />
           </Show>
         </Match>

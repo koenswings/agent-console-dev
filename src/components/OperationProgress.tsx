@@ -9,6 +9,8 @@ import type { Accessor } from 'solid-js';
 import type { Operation, OperationKind, Store } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import { cancelOperation } from '../store/commands';
+import { createCommandResult } from '../store/commandResult';
+import CommandFeedback from './CommandFeedback';
 import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 
@@ -195,9 +197,27 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
     return null;
   };
 
+  // Engine answer to cancelOperation (its refusal is an error log line, e.g.
+  // "Running but no cancellable process is registered"). The card is dismissed
+  // optimistically, so the message is shown above the list.
+  const cancelResult = createCommandResult({
+    commandLog: () => props.commandLogStore?.() ?? null,
+    command: 'cancelOperation',
+    argKey: 'operationId',
+  });
+  const [cancelSubject, setCancelSubject] = createSignal('');
+
   const cancel = (op: Operation) => {
     const engineId = engineIdForOp(op);
-    if (engineId) cancelOperation(engineId, op.id);
+    if (engineId) {
+      if (op.status === 'Done') {
+        // Dismissing a finished card: the Engine treats it as a no-op.
+        cancelOperation(engineId, op.id);
+      } else {
+        setCancelSubject(KIND_LABEL[op.kind] ?? op.kind);
+        cancelResult.start(op.id, () => cancelOperation(engineId, op.id));
+      }
+    }
     // Optimistically dismiss from view
     dismiss(op.id);
   };
@@ -222,6 +242,8 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
   });
 
   return (
+    <>
+    <CommandFeedback result={cancelResult} subject={cancelSubject} testId="cancel-operation" />
     <Show when={visibleOps().length > 0}>
       <div class="operation-progress" role="status" aria-label="Operation progress">
         <div class="operation-progress__header">Operations</div>
@@ -238,6 +260,7 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
         </For>
       </div>
     </Show>
+    </>
   );
 };
 

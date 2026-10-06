@@ -1,7 +1,9 @@
 import { createSignal, createEffect, createMemo, For, Show, onCleanup, type Accessor, type Component } from 'solid-js';
 import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
+import CommandFeedback from './CommandFeedback';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
+import { createCommandResult, type CommandResult } from '../store/commandResult';
 import { getActiveOpsForInstance } from '../store/operations';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
@@ -43,6 +45,12 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     }
   };
   onCleanup(() => { for (const t of pendingTimers.values()) clearTimeout(t); pendingTimers.clear(); });
+
+  // Per-card Engine answer (start / stop / backup / copy / move), keyed by
+  // instance ID. Each card creates its own result; the copy/move sheet sends
+  // through the card's result so a refusal shows on the card after the sheet
+  // closes.
+  const cardResults = new Map<string, CommandResult>();
 
   // Auto-clear pending start/stop when instance reaches expected status
   createEffect(() => {
@@ -138,17 +146,27 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     return inst.status;
   };
 
+  /** Send through the card's result (falls back to a plain send if the card is gone). */
+  const sendTracked = (inst: Instance, command: string, send: () => void, longRunning = false) => {
+    const r = cardResults.get(inst.id);
+    if (r) r.start(inst.name, send, { command, longRunning });
+    else send();
+  };
+
   const handleStart = (inst: Instance) => {
     const engine = resolveEngine(inst);
-    if (!engine || !inst.storedOn) return;
-    startInstance(engine.id, inst.name, inst.storedOn);
+    const diskId = inst.storedOn;
+    if (!engine || !diskId) return;
+    // Disk ID (storedOn), never the display name: names may contain spaces.
+    sendTracked(inst, 'startInstance', () => startInstance(engine.id, inst.name, String(diskId)));
     setPending(inst.id, 'starting');
   };
 
   const handleStop = (inst: Instance) => {
     const engine = resolveEngine(inst);
-    if (!engine || !inst.storedOn) return;
-    stopInstance(engine.id, inst.name, inst.storedOn);
+    const diskId = inst.storedOn;
+    if (!engine || !diskId) return;
+    sendTracked(inst, 'stopInstance', () => stopInstance(engine.id, inst.name, String(diskId)));
     setPending(inst.id, 'stopping');
   };
 
@@ -156,7 +174,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const engine = resolveEngine(inst);
     const disks = resolveBackupDisks(inst);
     if (!engine || disks.length === 0) return;
-    backupApp(engine.id, inst.name, disks[0].name);
+    // backupApp still takes the disk NAME on Engine 8d98718 (see buildBackupAppCommand).
+    sendTracked(inst, 'backupApp', () => backupApp(engine.id, inst.name, disks[0].name), true);
   };
 
   return (
@@ -202,6 +221,16 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
             return i ? resolveBackupDisks(i).length > 0 : false;
           };
           const pendingAction = () => pendingActions().get(id) ?? null;
+          const cmdResult = createCommandResult({
+            commandLog: () => props.commandLogStore?.() ?? null,
+            argKey: 'instanceName',
+          });
+          cardResults.set(id, cmdResult);
+          onCleanup(() => { if (cardResults.get(id) === cmdResult) cardResults.delete(id); });
+          createEffect(() => {
+            // A refused start/stop never reaches the instance: drop "Starting…".
+            if (cmdResult.state().kind === 'error') setPending(id, null);
+          });
 
           return (
             <Show when={inst()}>
@@ -220,6 +249,12 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               </div>
 
               <div class="mobile-app-card__status">{statusText(i())}</div>
+
+              <CommandFeedback
+                result={cmdResult}
+                subject={() => i().name}
+                testId={`mobile-instance-cmd-${id}`}
+              />
 
               {/* Backup progress bar */}
               <Show when={backupOp()}>
@@ -308,6 +343,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           instance={inst()}
           store={props.store}
           onClose={() => setCopyMoveInstance(null)}
+          onSend={(command, send) => sendTracked(inst(), command, send, true)}
         />
       )}
     </Show>

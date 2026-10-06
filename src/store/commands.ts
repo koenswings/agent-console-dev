@@ -83,17 +83,23 @@ export const diskArgFor = (
 
 /**
  * Build the "startInstance" command string (pure, no side effects).
- * Format: "startInstance <instanceName> <diskName>"
+ * Format: "startInstance <instanceName> <diskId>"
+ *
+ * Sends the disk ID (the instance's `storedOn`), never the display name. The
+ * Engine splits multi-argument commands on spaces (commandUtils.ts), so a
+ * name like "Duration Tests — Add Files App" is refused with "Too many
+ * arguments" (r29@97). Engine 8d98718's startInstance/stopInstance wrappers
+ * find the disk via `instance.storedOn` first, so the ID always works.
  */
-export const buildStartInstanceCommand = (instanceName: string, diskName: string): string =>
-  `startInstance ${instanceName} ${diskName}`;
+export const buildStartInstanceCommand = (instanceName: string, diskId: string): string =>
+  `startInstance ${instanceName} ${diskId}`;
 
 /**
  * Build the "stopInstance" command string (pure, no side effects).
- * Format: "stopInstance <instanceName> <diskName>"
+ * Format: "stopInstance <instanceName> <diskId>" — disk ID, see buildStartInstanceCommand.
  */
-export const buildStopInstanceCommand = (instanceName: string, diskName: string): string =>
-  `stopInstance ${instanceName} ${diskName}`;
+export const buildStopInstanceCommand = (instanceName: string, diskId: string): string =>
+  `stopInstance ${instanceName} ${diskId}`;
 
 /**
  * Build the "ejectDisk" command string (pure, no side effects).
@@ -111,22 +117,22 @@ export const buildEjectDiskCommand = (diskId: string): string =>
 // Dispatching commands
 // ---------------------------------------------------------------------------
 
-/** Start a named instance on a named disk, addressed to the given engine. */
+/** Start a named instance stored on disk `diskId` (its storedOn), addressed to the given engine. */
 export const startInstance = (
   engineId: string,
   instanceName: string,
-  diskName: string
+  diskId: string
 ): void => {
-  _sendCommand(engineId, buildStartInstanceCommand(instanceName, diskName));
+  _sendCommand(engineId, buildStartInstanceCommand(instanceName, diskId));
 };
 
-/** Stop a named instance on a named disk, addressed to the given engine. */
+/** Stop a named instance stored on disk `diskId` (its storedOn), addressed to the given engine. */
 export const stopInstance = (
   engineId: string,
   instanceName: string,
-  diskName: string
+  diskId: string
 ): void => {
-  _sendCommand(engineId, buildStopInstanceCommand(instanceName, diskName));
+  _sendCommand(engineId, buildStopInstanceCommand(instanceName, diskId));
 };
 
 /** Eject a disk (by disk ID) from the given engine. */
@@ -166,6 +172,11 @@ export const cancelOperation = (engineId: string, operationId: string): void => 
 /**
  * Build the "backupApp" command string (pure, no side effects).
  * Format: "backupApp <instanceName> <backupDiskName>"
+ *
+ * Still the disk NAME on purpose: Engine 8d98718's backupApp wrapper looks the
+ * backup disk up by name only. A name with spaces is refused by the Engine
+ * ("Too many arguments"); the panels show that refusal (CommandFeedback).
+ * Switch to the ID once the Engine accepts both (Axle's fix).
  */
 export const buildBackupAppCommand = (instanceName: string, backupDiskName: string): string =>
   `backupApp ${instanceName} ${backupDiskName}`;
@@ -351,6 +362,11 @@ export const installApp = (
 /**
  * Build the "restoreApp" command string (pure, no side effects).
  * Format: "restoreApp <instanceName> <targetDiskName>"
+ *
+ * Still the disk NAME on purpose: Engine 8d98718's restoreApp wrapper looks
+ * the target disk up by name only (an ID would be "not found"). A name with
+ * spaces is refused with "Too many arguments" (r29@97); RestorePanel shows
+ * that refusal. Switch to the ID once the Engine accepts both (Axle's fix).
  */
 export const buildRestoreAppCommand = (instanceName: string, targetDiskName: string): string =>
   `restoreApp ${instanceName} ${targetDiskName}`;

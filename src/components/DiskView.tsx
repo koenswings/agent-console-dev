@@ -12,6 +12,8 @@ import FilesSection from './FilesSection';
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import RoleBadges from './RoleBadges';
+import CommandFeedback from './CommandFeedback';
+import { createCommandResult } from '../store/commandResult';
 import {
   DEFAULT_SHARE_NAME,
   UPDATE_ENGINE_TOOLTIP,
@@ -101,6 +103,13 @@ const DiskView: Component<DiskViewProps> = (props) => {
     return kolibriLessonCatalogOk(app) ? '' : KOLIBRI_CATALOG_ERROR;
   });
   const [lessonClickError, setLessonClickError] = createSignal('');
+  // installApp records one positional string, so match the disk argument inside it (idea#122).
+  const lessonResult = createCommandResult({
+    commandLog: () => props.commandLogStore?.() ?? null,
+    command: 'installApp',
+    matchMode: 'includes',
+    longRunning: true,
+  });
 
   const installLesson = () => {
     const spec = lesson();
@@ -114,7 +123,8 @@ const DiskView: Component<DiskViewProps> = (props) => {
     const arg = diskArgFor(engine(), d, props.store()?.diskDB);
     if (!arg.ok) return;
     setLessonClickError('');
-    installApp(eng, KOLIBRI_LESSON_APP_ID, arg.arg, { name: spec.instanceName });
+    lessonResult.start(arg.arg, () =>
+      installApp(eng, KOLIBRI_LESSON_APP_ID, arg.arg, { name: spec.instanceName }));
   };
 
   const [addFilesOpen, setAddFilesOpen] = createSignal(false);
@@ -156,7 +166,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
         </Show>
 
         <Show when={showBackups()}>
-          <RestorePanel disk={disk} store={props.store} engineId={engineId} title="Backups" />
+          <RestorePanel disk={disk} store={props.store} engineId={engineId} title="Backups" commandLogStore={props.commandLogStore} />
         </Show>
 
         <Show when={showFiles()}>
@@ -180,6 +190,11 @@ const DiskView: Component<DiskViewProps> = (props) => {
             >
               Install Kolibri
             </button>
+            <CommandFeedback
+              result={lessonResult}
+              subject={() => lesson()?.instanceName ?? 'Kolibri'}
+              testId="install-lesson-engine"
+            />
           </section>
         </Show>
 

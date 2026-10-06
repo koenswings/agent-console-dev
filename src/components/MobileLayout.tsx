@@ -1,4 +1,4 @@
-import { createSignal, createMemo, For, Show, type Accessor, type Component } from 'solid-js';
+import { createSignal, createMemo, For, Show, type Accessor, type Component, type JSX } from 'solid-js';
 import NetworkTree from './NetworkTree';
 import OperationProgress from './OperationProgress';
 import HistoryPanel from './HistoryPanel';
@@ -25,6 +25,8 @@ interface MobileLayoutProps {
   pendingMove: Accessor<PendingMove | null>;
   onCopyMoveChoice: (op: 'copy' | 'move') => void;
   onCancelMove: () => void;
+  /** Engine answer to the last drag-and-drop copy/move (CommandFeedback). */
+  copyMoveFeedback?: JSX.Element;
 }
 
 type TabId = 'apps' | 'network' | 'activity' | 'history';
@@ -44,6 +46,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
     <div class="mobile-layout">
       {/* Tab content */}
       <div class="mobile-tab-content">
+        {props.copyMoveFeedback}
         <Show when={activeTab() === 'apps'}>
           <MobileAppList store={props.store} commandLogStore={props.commandLogStore} />
         </Show>
