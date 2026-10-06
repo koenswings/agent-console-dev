@@ -1,6 +1,10 @@
-import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import { restoreApp } from '../store/commands';
+import { createCommandResult, type CommandResult } from '../store/commandResult';
+import type { CommandLogState } from '../store/commandLog';
 import { isInstanceLocked } from '../store/operations';
+import CommandFeedback from './CommandFeedback';
+import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
 import type { Disk, Instance, Store } from '../types/store';
 
 interface RestorePanelProps {
@@ -10,6 +14,8 @@ interface RestorePanelProps {
   engineId: () => string | undefined;
   /** Header text override (the disk view shows this panel as its "Backups" section). */
   title?: string;
+  /** The Engine's command log: a refused or failed restoreApp is shown on its row. */
+  commandLogStore?: Accessor<CommandLogState>;
 }
 
 const BACKUP_MODE_LABELS: Record<string, string> = {
@@ -61,14 +67,21 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     setConfirmingId(instanceId);
   };
 
-  const handleConfirm = (inst: Instance) => {
+  const handleConfirm = (inst: Instance, result: CommandResult) => {
     const engineId = props.engineId();
     const s = props.store();
     const targetDiskId = targetSelections()[inst.id];
     if (!engineId || !targetDiskId || !s) return;
     const targetDisk = s.diskDB[targetDiskId];
     if (!targetDisk) return;
-    restoreApp(engineId, inst.name, targetDisk.name);
+    // Instance and disk by ID (names may contain spaces; two instances can
+    // share a name). The Engine's answer (e.g. "Too many arguments", "Target
+    // disk … not found") is shown on this row by CommandFeedback — never
+    // silent. On another Engine: "Sent to …" until the restore op is Done.
+    result.start(inst.id, () => restoreApp(engineId, inst.id, targetDisk.id), {
+      engineId,
+      remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id)),
+    });
     setConfirmingId(null);
     // Clear the target selection so the button re-disables
     setTargetSelections((prev) => {
@@ -118,6 +131,12 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                 const locked = () => isInstanceLocked(props.store(), inst.id);
                 const selectedDiskId = () => targetSelections()[inst.id] ?? '';
                 const isConfirming = () => confirmingId() === inst.id;
+                const result = createCommandResult({
+                  commandLog: () => props.commandLogStore?.() ?? null,
+                  command: 'restoreApp',
+                  argKey: 'instanceName',
+                  longRunning: true,
+                });
 
                 const selectedDiskName = () => {
                   const s = props.store();
@@ -174,12 +193,18 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                         </p>
                         <div class="restore-panel__confirm-actions">
                           <button class="btn" data-testid={`restore-cancel-${inst.id}`} onClick={handleCancel}>Cancel</button>
-                          <button class="btn btn--danger" data-testid={`restore-confirm-${inst.id}`} onClick={() => handleConfirm(inst)}>
+                          <button class="btn btn--danger" data-testid={`restore-confirm-${inst.id}`} onClick={() => handleConfirm(inst, result)}>
                             Confirm Restore
                           </button>
                         </div>
                       </div>
                     </Show>
+
+                    <CommandFeedback
+                      result={result}
+                      subject={() => inst.name}
+                      testId={`restore-feedback-${inst.id}`}
+                    />
                   </div>
                 );
               }}

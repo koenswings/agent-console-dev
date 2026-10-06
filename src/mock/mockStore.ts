@@ -21,6 +21,13 @@ export interface StoreConnection {
   commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
   /** Tear down any background connections/timers held by this connection. */
   dispose?: () => void;
+  /** Hostname the Console is connected to (tells the connected Engine apart, connectedEngine.ts). */
+  hostname?: string;
+  /**
+   * Approach (i) for cross-engine commands: another Engine's command log by its
+   * hostname, loaded through the same repo (null when unsupported).
+   */
+  commandLogFor?: (hostname: string) => Accessor<import('../store/commandLog').CommandLogState> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -516,7 +523,8 @@ export function createMockConnection(): StoreConnection {
 
   const [commandLogStore] = createSignal<CommandLogStore | null>(mockCommandLogData);
 
-  return { store, connected, sendCommand, changeDoc, commandLogStore };
+  // Demo: the Console is "connected" to ENGINE_1 (appdocker01).
+  return { store, connected, sendCommand, changeDoc, commandLogStore, hostname: engine1.hostname };
 }
 
 // ---------------------------------------------------------------------------

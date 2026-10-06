@@ -26,8 +26,10 @@
  * EmptyDiskPanel: duration-empty-001 (DURATION_EMPTY_DISK_ID).
  * RestorePanel Backup Disk: duration-empty-001 after make_backup_disk (DURATION_BACKUP_DISK_ID).
  *
- * keep_watching is registered (URL stays on /topics/c/<video node id>). Other lesson chrome
- * (next_resource, exit_lesson, finish_exercise, next_video) stays unregistered —
+ * keep_watching is registered (URL stays on /topics/c/<video node id>). next_resource is
+ * registered (video → exercise via Kolibri's resource panel). finish_exercise is
+ * registered (answer "4", Check, completion, Learn home). next_video is registered
+ * (exercise → video via the same panel). exit_lesson is registered (Learn home). —
  * Kid image has no lesson-chrome testids (`tests/duration-tests/LESSON_CHROME.md`).
  */
 
@@ -96,6 +98,12 @@ export const DURATION_FIXTURES = {
       nodeIdRaw: '94a47ec7f30d5cd193f8ad08c42b6c2a',
       title: 'Open exercise target',
       parentTopicNodeIdRaw: '63427029c7eb5e86b62a731d9564aa50',
+      /**
+       * Kid perseus exercise-grade5a-01 (randomize=false, m_of_n 1/1): both items
+       * are single-choice radios whose correct choice is "4" at index 1.
+       */
+      correctChoiceText: '4',
+      correctChoiceIndex: 1,
     },
     /**
      * Live auth from Kid CONTENT.live.json @2313112 (idea01).
@@ -150,10 +158,71 @@ export const DURATION_FIXTURES = {
     instanceId: 'nextcloud-grade5a-001',
     /** Path B default HTTP port (idea01+idea03). */
     sidecarHttpPort: 18280,
+    /**
+     * Kid CONTENT.live.json passwordHint (sidecar idea01/idea03). The legacy pack
+     * convention (password = username) is tried once if Nextcloud refuses these.
+     * Override: DURATION_NC_TEACHER_PASSWORD / DURATION_NC_LEARNER_PASSWORD.
+     */
     auth: {
-      teacher: { username: 'teacher', password: 'teacher' },
-      learner: { username: 'student01', password: 'student01' },
+      teacher: { username: 'teacher', password: process.env.DURATION_NC_TEACHER_PASSWORD || 'TeacherGrade5A!' },
+      learner: { username: 'student01', password: process.env.DURATION_NC_LEARNER_PASSWORD || 'Student01Grade5A!' },
     },
+    /** Kid CONTENT.yaml folders (Files Disk); may sit under the mount folder `shareName`. */
+    shareName: 'Grade 5A Files',
+    folders: {
+      materials: 'Class Materials',
+      drop: 'Drop Zone',
+      collab: 'Collab',
+    },
+    collabDoc: 'Grade5A-collab-notes.md',
+    group: 'Grade 5A',
+    /**
+     * Kid App#11 @2d9a052 nextcloud CONTENT.live.json `fileRequest` (teacher, shareType 3,
+     * permissions 4 = upload-only, on `/Drop Zone/inbox`). Token is [A-Za-z0-9] only: NC 31.0.1
+     * public DAV cuts hyphenated tokens (old /s/grade5a-drop-zone → 404). The path comes from
+     * `url`; the origin is the Nextcloud tab's (hostname idea01, not the Tailscale IP that NC
+     * answers HTTP 400 on). Full override: DURATION_NC_FILE_REQUEST_URL.
+     */
+    fileRequest: {
+      token: 'grade5adropzone',
+      url: 'http://idea01:18280/s/grade5adropzone',
+      path: '/Drop Zone/inbox',
+      /** ui.text: "Upload files to inbox." (folder = last path segment). */
+      uiFolder: 'inbox',
+      uiHeading: 'File drop',
+    },
+    /** Kid CONTENT.live.json `collab` (editor nextcloud-text, collabora false). */
+    collab: {
+      editor: 'nextcloud-text',
+      fileName: 'Grade5A-collab-notes.md',
+      /** First heading of Kid's Collab/Grade5A-collab-notes.md. */
+      heading: 'Grade 5A collab notes',
+      selectors: {
+        editor: '[data-text-el="editor-container"]',
+        content: '[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]',
+        menubarWhenEditable: '[data-text-el="menubar"]',
+        readonlyBarMustBeAbsent: '[data-text-el="readonly-bar"]',
+        sessionAvatars: '.text-editor__session-list .avatar-list',
+      },
+    },
+  },
+  /**
+   * Kid App#11 @a443398 kiwix CONTENT.live.json (stub ZIM, kiwix-serve 3.8.2, no login).
+   * `<host>` = Console host (Path B, like the other sidecars); override with
+   * DURATION_KIWIX_URL (full base) or DURATION_KIWIX_PORT.
+   */
+  kiwix: {
+    diskId: 'duration-kiwix-ideaa-001',
+    instanceId: 'kiwix-ideaa-001',
+    sidecarHttpPort: 18380,
+    bookName: 'duration_wikipedia_en_grade5a_stub_2026-10',
+    urls: {
+      library: 'http://<host>:18380/',
+      viewerHome: 'http://<host>:18380/viewer#duration_wikipedia_en_grade5a_stub_2026-10/Main_Page',
+    },
+    /** intentResolution */
+    homeTitle: 'Grade 5A Offline Wikipedia',
+    search: { term: 'fraction', resultPath: 'Fraction', expectTitle: 'Fraction', followLink: 'Numerator', expectResults: 'Results 1-4 of 4' },
   },
 } as const;
 

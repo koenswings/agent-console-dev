@@ -292,6 +292,457 @@ export const keep_watching: IntentFn = async ({ page, instanceId }) => {
   await app.locator('video').count().catch(() => 0);
 };
 
+/**
+ * Kolibri 0.15.5 LearningActivityBar "resource list" control (upstream markup,
+ * not Kid testids): KIconButton `data-test="bar_viewTopicResourcesButton"` /
+ * `bar_viewLessonPlanButton`, aria-label "View folder resources" / "View lesson
+ * resources". On narrow windows it moves into More options (`moreOptionsButton`
+ * → `menu_*`).
+ */
+export const RESOURCE_LIST_BAR_SELECTORS = [
+  '[data-test="bar_viewTopicResourcesButton"]',
+  '[data-test="bar_viewLessonPlanButton"]',
+  'button[aria-label="View folder resources"]',
+  'button[aria-label="View lesson resources"]',
+] as const;
+export const RESOURCE_LIST_MENU_SELECTORS = [
+  '[data-test="menu_viewTopicResourcesButton"]',
+  '[data-test="menu_viewLessonPlanButton"]',
+  '[role="menuitem"]:has-text("View folder resources")',
+  '[role="menuitem"]:has-text("View lesson resources")',
+] as const;
+export const MORE_OPTIONS_SELECTORS = [
+  '[data-test="moreOptionsButton"]',
+  'button[aria-label="More options"]',
+] as const;
+/** AlsoInThis side panel (`.also-in-this-side-panel`), router-link rows. */
+export const RESOURCE_PANEL_SELECTOR = '.also-in-this-side-panel';
+
+/** Selectors for the next resource's row inside the resource panel. */
+export function nextResourceRowSelectors(next: { nodeId: string; nodeIdRaw: string; title?: string }): string[] {
+  const out: string[] = [];
+  for (const id of idSpellings(next.nodeId, next.nodeIdRaw)) {
+    out.push(`${RESOURCE_PANEL_SELECTOR} a[href*="/topics/c/${id}"]`);
+  }
+  if (next.title) {
+    const q = next.title.replace(/"/g, '\\"');
+    out.push(`${RESOURCE_PANEL_SELECTOR} a:has-text("${q}")`);
+  }
+  // Panel wrapper class missing in some builds: fall back to any node link.
+  for (const id of idSpellings(next.nodeId, next.nodeIdRaw)) {
+    out.push(`a[href*="/topics/c/${id}"]`);
+  }
+  return out;
+}
+
+const firstPresent = async (app: Page, selectors: readonly string[]): Promise<string | null> => {
+  for (const s of selectors) {
+    if ((await app.locator(s).first().count().catch(() => 0)) > 0) return s;
+  }
+  return null;
+};
+
+const waitForFirstPresent = async (
+  app: Page,
+  selectors: readonly string[],
+  ms: number,
+): Promise<string | null> => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const hit = await firstPresent(app, selectors);
+    if (hit) return hit;
+    await app.waitForTimeout(250);
+  }
+  return firstPresent(app, selectors);
+};
+
+const NEXT_RESOURCE_SETTLE_MS = 15_000;
+
+/**
+ * From the pinned video (kolibri_watching) to the next resource in its folder,
+ * the pinned exercise (kolibri_exercise), through Kolibri's resource-list panel.
+ * Needs the video node route first (open_video / keep_watching). Success only
+ * when the URL is /topics/c/<exercise node id>. No deep-link fallback.
+ */
+export const runNextResource = async (
+  app: Page,
+  from: PinnedNode & { logicalId: string },
+  next: PinnedNode & { logicalId: string; title?: string },
+  action: 'next_resource' | 'next_video' = 'next_resource',
+): Promise<void> => {
+  const tag = `idea#166 ${action}`;
+  const startUrl = app.url();
+  if (!urlHasPinnedVideo(startUrl, from)) {
+    throw new Error(
+      `${tag}: expected to start on ${from.logicalId} (/topics/c/${rawHex(from.nodeIdRaw)}) after ` +
+        `the previous step, but URL is ${startUrl || '(empty)'}. Not re-opening it.`,
+    );
+  }
+
+  const rowSelectors = nextResourceRowSelectors(next);
+  let opened = 'bar';
+  const barHit = await waitForFirstPresent(app, RESOURCE_LIST_BAR_SELECTORS, NEXT_RESOURCE_SETTLE_MS);
+  if (barHit) {
+    await app.locator(barHit).first().click({ timeout: 8_000 });
+  } else {
+    opened = 'more-options menu';
+    const more = await firstPresent(app, MORE_OPTIONS_SELECTORS);
+    if (!more) {
+      throw new Error(
+        `${tag}: Kolibri resource-list control not found on ${startUrl} after ` +
+          `${NEXT_RESOURCE_SETTLE_MS}ms (tried ${[...RESOURCE_LIST_BAR_SELECTORS, ...MORE_OPTIONS_SELECTORS].join(' | ')}).`,
+      );
+    }
+    await app.locator(more).first().click({ timeout: 8_000 });
+    const item = await waitForFirstPresent(app, RESOURCE_LIST_MENU_SELECTORS, 5_000);
+    if (!item) {
+      throw new Error(
+        `${tag}: More options opened on ${startUrl} but no "View folder/lesson resources" item ` +
+          `(tried ${RESOURCE_LIST_MENU_SELECTORS.join(' | ')}).`,
+      );
+    }
+    await app.locator(item).first().click({ timeout: 8_000 });
+  }
+
+  const row = await waitForFirstPresent(app, rowSelectors, NEXT_RESOURCE_SETTLE_MS);
+  if (!row) {
+    throw new Error(
+      `${tag}: resource panel (opened via ${opened}) has no row for ${next.logicalId} ` +
+        `(/topics/c/${rawHex(next.nodeIdRaw)}${next.title ? `, "${next.title}"` : ''}) after ` +
+        `${NEXT_RESOURCE_SETTLE_MS}ms on ${app.url()}.`,
+    );
+  }
+  await app.locator(row).first().click({ timeout: 8_000 });
+
+  const deadline = Date.now() + NEXT_RESOURCE_SETTLE_MS;
+  while (Date.now() < deadline) {
+    if (urlHasPinnedVideo(app.url(), next)) return;
+    await app.waitForTimeout(200);
+  }
+  if (urlHasPinnedVideo(app.url(), next)) return;
+  throw new Error(
+    `${tag}: clicked ${next.logicalId} row (${row}) but URL did not reach ` +
+      `/topics/c/${rawHex(next.nodeIdRaw)} within ${NEXT_RESOURCE_SETTLE_MS}ms (final ${app.url() || '(empty)'}).`,
+  );
+};
+
+/** next_resource: pinned video → pinned exercise (next sibling in "Grade 5A Duration"). */
+export const next_resource: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runNextResource(app, DURATION_FIXTURES.kolibri.video, DURATION_FIXTURES.kolibri.exercise);
+};
+
+/**
+ * next_video: pinned exercise → the folder's video (kolibri_exercise →
+ * kolibri_watching). Same Kolibri resource-list panel as next_resource, reversed:
+ * must start on /topics/c/<exercise node>; success only on /topics/c/<video node>.
+ * Kid pack has one video, so "next video" re-opens video-grade5a-01 (walker-ref).
+ */
+export const next_video: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runNextResource(app, DURATION_FIXTURES.kolibri.exercise, DURATION_FIXTURES.kolibri.video, 'next_video');
+};
+
+/**
+ * True on Kolibri Learn home: hash route `/home` (query allowed). Topic
+ * folders, content pages and other routes fail.
+ */
+export function isLearnHomeUrl(url: string): boolean {
+  if (!url) return false;
+  const hashAt = url.indexOf('#');
+  if (hashAt < 0) return false;
+  const route = url.slice(hashAt + 1).split('?')[0];
+  return /^\/home\/?$/.test(route);
+}
+
+/**
+ * Kolibri 0.15.5 exercise UI (upstream markup, not Kid testids).
+ * AssessmentWrapper: KButton "Check" → "Next" once the item is answered correctly.
+ * OverallStatus: `.overall-status-text .completed` ("Completed") when mastered.
+ * CompletionModal (first completion only): role=dialog "Resource completed",
+ * close KIconButton aria "Close", section button "Stay here".
+ * LearningActivityBar back: aria "Go back". LearnTopNav: "Home" link.
+ */
+export const EXERCISE_SELECTORS = {
+  check: ['button:text-is("Check")', 'button:has-text("Check")'],
+  next: ['button:text-is("Next")'],
+  completed: [
+    '[role="dialog"]:has-text("Resource completed")',
+    '.overall-status-text .completed',
+  ],
+  modalClose: [
+    '[role="dialog"] button[aria-label="Close"]',
+    '[role="dialog"] button:has-text("Stay here")',
+  ],
+  back: ['button[aria-label="Go back"]'],
+  /** LearnTopNav NavbarLink (non-immersive pages only, e.g. #/library). */
+  homeLink: ['a[href$="#/home"]', 'a[href*="#/home"]', 'a:text-is("Home")'],
+  /**
+   * CoreBase ImmersiveToolbar on topic / search pages (no top nav there):
+   * router-link wrapping KIconButton aria "Close" (or "Go back"), to Library or
+   * Home (when query last=HOME).
+   */
+  // aria-current="page" = the link targets the route we are already on (stale
+  // toolbar left over during a route change, r8). Never click those.
+  toolbarExit: [
+    'a:not([aria-current="page"]):has(> button[aria-label="Close"])',
+    'a:not([aria-current="page"]):has(button[aria-label="Close"])',
+    'a:not([aria-current="page"]):has(button[aria-label="Go back"])',
+    'span > button[aria-label="Close"]',
+    'span > button[aria-label="Go back"]',
+  ],
+} as const;
+
+/**
+ * Kolibri 0.15.5 Learn `router.afterEach` → `blockDoubleClicks`: CoreBase /
+ * LearnImmersiveLayout render `div.click-mask` over the page for 500ms after
+ * every route change. Clicks during that window are intercepted (r8).
+ */
+export const CLICK_MASK_SELECTOR = '.click-mask';
+const CLICK_MASK_MIN_SETTLE_MS = 600;
+const CLICK_MASK_CLEAR_MS = 300;
+const CLICK_MASK_BUDGET_MS = 5_000;
+
+/**
+ * Wait until the post-navigation click-mask is gone: at least 600ms since the
+ * call and no `.click-mask` for 300ms straight. False if it never clears.
+ */
+export async function waitForClickMaskGone(app: Page, budgetMs = CLICK_MASK_BUDGET_MS): Promise<boolean> {
+  const start = Date.now();
+  let clearSince: number | null = null;
+  while (Date.now() - start < budgetMs) {
+    const masked = (await app.locator(CLICK_MASK_SELECTOR).count().catch(() => 0)) > 0;
+    const now = Date.now();
+    if (masked) clearSince = null;
+    else if (clearSince === null) clearSince = now;
+    if (clearSince !== null && now - start >= CLICK_MASK_MIN_SETTLE_MS && now - clearSince >= CLICK_MASK_CLEAR_MS) {
+      return true;
+    }
+    await app.waitForTimeout(100);
+  }
+  return false;
+}
+
+/** Learn hash route without query (e.g. `/topics/t/<id>/search`), or ''. */
+export function learnHashRoute(url: string): string {
+  const hashAt = url ? url.indexOf('#') : -1;
+  return hashAt < 0 ? '' : url.slice(hashAt + 1).split('?')[0];
+}
+
+/**
+ * Which Learn chrome to click next to head for #/home, in order.
+ * Content page (immersive, no top nav): bar "Go back".
+ * Other pages: top-nav Home if shown, else the immersive toolbar Close/Go back
+ * (topic & search pages → Library or Home).
+ */
+export function learnHomeHopSelectors(url: string): string[] {
+  const S = EXERCISE_SELECTORS;
+  if (kolibriContentRouteNodeId(url)) return [...S.homeLink, ...S.back];
+  return [...S.homeLink, ...S.toolbarExit];
+}
+
+const LEARN_HOME_MAX_HOPS = 5;
+
+/** Perseus radio choice selectors: exact answer text first, then fixture index. */
+export function exerciseChoiceSelectors(answer: { correctChoiceText: string; correctChoiceIndex: number }): string[] {
+  const q = answer.correctChoiceText.replace(/"/g, '\\"');
+  return [
+    `.perseus-widget-radio li:has-text("${q}")`,
+    `#perseus li:has-text("${q}")`,
+    `.perseus-widget-radio input[type="radio"] >> nth=${answer.correctChoiceIndex}`,
+    `#perseus input[type="radio"] >> nth=${answer.correctChoiceIndex}`,
+  ];
+}
+
+const FINISH_SETTLE_MS = 20_000;
+const FINISH_MAX_ITEMS = 4;
+
+/**
+ * Walk Kolibri Learn chrome to #/home, one page per hop (max 5): content page →
+ * bar "Go back"; topic/search page → ImmersiveToolbar "Close" (Library, or Home
+ * with last=HOME); pages with LearnTopNav → "Home". Each click must change the
+ * URL. Before every pick, wait out Kolibri's 500ms post-navigation click-mask
+ * and re-resolve controls on the page actually shown (no force / JS clicks).
+ * `context` prefixes loud-fail messages (e.g. "exercise completed (…)").
+ */
+export const walkLearnChromeHome = async (app: Page, tag: string, context: string): Promise<void> => {
+  const hops: string[] = [];
+  const maskStuck = (where: string) =>
+    new Error(
+      `${tag}: Kolibri click-mask (${CLICK_MASK_SELECTOR}) still covering ${where} after ` +
+        `${CLICK_MASK_BUDGET_MS}ms (hops: ${hops.join(' → ') || 'none'}).`,
+    );
+  for (let hop = 1; hop <= LEARN_HOME_MAX_HOPS && !isLearnHomeUrl(app.url()); hop++) {
+    const before = app.url();
+    let clicked: string | null = null;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3 && !clicked; attempt++) {
+      if (!(await waitForClickMaskGone(app))) throw maskStuck(before);
+      if (app.url() !== before) break; // route moved under us; re-plan next hop
+      const hit = await waitForFirstPresent(app, learnHomeHopSelectors(before), 10_000);
+      if (!hit) {
+        throw new Error(
+          `${tag}: ${context} but no Learn nav control on ` +
+            `${before || '(empty)'} to head home (hops: ${hops.join(' → ') || 'none'}; tried ` +
+            `${learnHomeHopSelectors(before).join(' | ')}).`,
+        );
+      }
+      try {
+        await app.locator(hit).first().click({ timeout: 3_000 });
+        clicked = hit;
+      } catch (e) {
+        lastErr = `${hit}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`;
+      }
+    }
+    if (!clicked && app.url() === before) {
+      throw new Error(
+        `${tag}: Learn nav click on ${before} failed 3 times (last ${lastErr}; hops: ` +
+          `${hops.join(' → ') || 'none'}).`,
+      );
+    }
+    hops.push(`${learnHashRoute(before) || before} [${clicked ?? 'route moved'}]`);
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && app.url() === before) {
+      await app.waitForTimeout(200);
+    }
+    if (app.url() === before) {
+      throw new Error(
+        `${tag}: clicked ${clicked} on ${before} but the URL did not change (hops: ${hops.join(' → ')}).`,
+      );
+    }
+  }
+  if (!isLearnHomeUrl(app.url())) {
+    throw new Error(
+      `${tag}: ${context} but Learn nav did not reach #/home after ` +
+        `${LEARN_HOME_MAX_HOPS} hops (hops: ${hops.join(' → ')}; final ${app.url() || '(empty)'}).`,
+    );
+  }
+};
+
+/**
+ * From the pinned exercise (kolibri_exercise) to Learn home (kolibri_home).
+ * 1. Must start on /topics/c/<exercise node> (loud-fail otherwise; no re-open).
+ * 2. Pick the fixture's correct choice, click Check, wait for Next (correct).
+ *    Repeat on the next item until completion shows (modal or "Completed").
+ * 3. Close the modal if shown, then walk Learn chrome home: content "Go back"
+ *    → topic/search toolbar "Close" → Library top-nav "Home" (no hash goto).
+ * Success only when completion was seen AND the URL is Learn #/home.
+ */
+export const runFinishExercise = async (
+  app: Page,
+  exercise: PinnedNode & {
+    logicalId: string;
+    correctChoiceText: string;
+    correctChoiceIndex: number;
+  },
+): Promise<void> => {
+  const tag = 'idea#166 finish_exercise';
+  const S = EXERCISE_SELECTORS;
+  const startUrl = app.url();
+  if (!urlHasPinnedVideo(startUrl, exercise)) {
+    throw new Error(
+      `${tag}: expected to start on ${exercise.logicalId} (/topics/c/${rawHex(exercise.nodeIdRaw)}) ` +
+        `after next_resource, but URL is ${startUrl || '(empty)'}. Not re-opening the exercise.`,
+    );
+  }
+
+  const choices = exerciseChoiceSelectors(exercise);
+  // Always answer at least one item, even if a prior run already mastered it.
+  let completed = false;
+  let attempts = 0;
+  const trail: string[] = [];
+
+  while (!completed && attempts < FINISH_MAX_ITEMS) {
+    attempts += 1;
+    const ready = await waitForFirstPresent(app, [...S.check, ...S.next], FINISH_SETTLE_MS);
+    if (!ready) {
+      throw new Error(
+        `${tag}: exercise controls (Check/Next) did not render on ${app.url()} within ` +
+          `${FINISH_SETTLE_MS}ms (item ${attempts}). Perseus may not have loaded.`,
+      );
+    }
+    if ((S.next as readonly string[]).includes(ready)) {
+      // Item already answered: move to a fresh one.
+      await app.locator(ready).first().click({ timeout: 8_000 });
+      trail.push(`item${attempts}:next(pre-answered)`);
+      continue;
+    }
+    const choice = await waitForFirstPresent(app, choices, FINISH_SETTLE_MS);
+    if (!choice) {
+      throw new Error(
+        `${tag}: no Perseus choice "${exercise.correctChoiceText}" on ${app.url()} (item ${attempts}; ` +
+          `tried ${choices.join(' | ')}).`,
+      );
+    }
+    await app.locator(choice).first().click({ timeout: 8_000, force: true });
+    await app.locator(ready).first().click({ timeout: 8_000 });
+    const correct = await waitForFirstPresent(app, [...S.next, ...S.completed], 10_000);
+    if (!correct) {
+      throw new Error(
+        `${tag}: Check on "${exercise.correctChoiceText}" (${choice}) did not mark item ${attempts} ` +
+          `correct (no Next / completion) on ${app.url()}.`,
+      );
+    }
+    trail.push(`item${attempts}:correct`);
+    completed = (await waitForFirstPresent(app, S.completed, 5_000)) !== null;
+    if (!completed) {
+      const nxt = await firstPresent(app, S.next);
+      if (nxt) await app.locator(nxt).first().click({ timeout: 8_000 });
+    }
+  }
+
+  if (!completed) {
+    throw new Error(
+      `${tag}: ${exercise.logicalId} answered ${attempts} item(s) (${trail.join(', ')}) but no completion ` +
+        `("Resource completed" modal or "Completed" status) on ${app.url()}.`,
+    );
+  }
+
+  const close = await firstPresent(app, S.modalClose);
+  if (close) await app.locator(close).first().click({ timeout: 8_000 });
+
+  await walkLearnChromeHome(app, tag, `exercise completed (${trail.join(', ')})`);
+};
+
+/** finish_exercise: pinned exercise → completed → Learn home. */
+export const finish_exercise: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runFinishExercise(app, DURATION_FIXTURES.kolibri.exercise);
+};
+
+/**
+ * exit_lesson: leave the open lesson resource for Learn home
+ * ([kolibri_watching, kolibri_exercise] → kolibri_home, Kid walker-ref "Exit
+ * lesson / back to Learn"). Must start on the pinned video OR exercise route
+ * (loud-fail otherwise). Walks Kolibri chrome home (walkLearnChromeHome); success
+ * only on Learn #/home. No hash goto.
+ */
+export const runExitLesson = async (
+  app: Page,
+  resources: (PinnedNode & { logicalId: string })[],
+): Promise<void> => {
+  const tag = 'idea#166 exit_lesson';
+  const startUrl = app.url();
+  const on = resources.find((r) => urlHasPinnedVideo(startUrl, r));
+  if (!on) {
+    throw new Error(
+      `${tag}: expected to start on a lesson resource (` +
+        resources.map((r) => `${r.logicalId} /topics/c/${rawHex(r.nodeIdRaw)}`).join(' or ') +
+        `), but URL is ${startUrl || '(empty)'}.`,
+    );
+  }
+  await walkLearnChromeHome(app, tag, `left ${on.logicalId}`);
+};
+
+export const exit_lesson: IntentFn = async ({ page, instanceId }) => {
+  const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
+  const app = await ensureKolibriAppPage(page, id);
+  await runExitLesson(app, [DURATION_FIXTURES.kolibri.video, DURATION_FIXTURES.kolibri.exercise]);
+};
+
 /** Open pinned Grade 5A video (Kid CONTENT.seeded + live @2313112 → open_video). */
 export const open_video: IntentFn = async ({ page, instanceId }) => {
   await runOpenContent(page, instanceId, DURATION_FIXTURES.kolibri.video, 'open_video');

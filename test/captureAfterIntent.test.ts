@@ -84,9 +84,9 @@ describe('captureAfterIntent (Axle soft-detect contract)', () => {
 
   it('runDurationIntent screenshotPath still captures for unregistered actions', async () => {
     const page = makePage();
-    const path = join(dir, 'step-0004-next_video.png');
+    const path = join(dir, 'step-0004-infra_dock_fixture.png');
     const result = await runDurationIntent({
-      action: 'next_video',
+      action: 'infra_dock_fixture',
       page,
       screenshotPath: path,
     });

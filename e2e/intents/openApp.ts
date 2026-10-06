@@ -19,8 +19,14 @@ import {
 } from './operatorActions';
 import { attemptAppLogin } from './appLogin';
 import {
+  assertKolibriPageOk,
+  trackMainDocuments,
+  waitKolibriTeacherLanding,
+} from './kolibriPageGuard';
+import {
   APP_TAB_URL_RE,
   appKindForInstance,
+  appKindForUrl,
   resolveSidecarUrl,
   sidecarReadyTimeoutMs,
   isSidecarHttpReadyStatus,
@@ -28,6 +34,7 @@ import {
 } from './sidecarUrls';
 
 export {
+  appKindForUrl,
   resolveSidecarUrl,
   sidecarPort,
   SIDECAR_DEFAULT_PORTS,
@@ -37,19 +44,31 @@ export {
 } from './sidecarUrls';
 
 /**
- * Prefer an already-open App tab matching Kolibri/Nextcloud sidecar URLs.
+ * Prefer an already-open App tab (newest first). With `kind`, only a tab of that
+ * App counts: a leftover Kolibri tab is never returned for Nextcloud (r9).
  */
-export const resolveAppPage = (consolePage: Page): Page => {
+export const resolveAppPage = (consolePage: Page, kind?: SidecarApp): Page => {
   const pages = consolePage.context().pages();
   for (let i = pages.length - 1; i >= 0; i--) {
     const p = pages[i]!;
     try {
-      if (APP_TAB_URL_RE.test(p.url())) return p;
+      if (p.isClosed?.()) continue;
+      const url = p.url();
+      if (kind ? p !== consolePage && appKindForUrl(url) === kind : APP_TAB_URL_RE.test(url)) return p;
     } catch {
       /* page may be closed */
     }
   }
   return consolePage;
+};
+
+/** True when `p` is a tab of App `kind` (never the Console tab). */
+export const isAppTabOfKind = (p: Page, consolePage: Page, kind: SidecarApp): boolean => {
+  try {
+    return p !== consolePage && appKindForUrl(p.url()) === kind;
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -60,6 +79,7 @@ export const resolveAppPage = (consolePage: Page): Page => {
 export const tryOpenInstancePathA = async (
   page: Page,
   instanceId: string,
+  kind?: SidecarApp,
 ): Promise<Page | null> => {
   const openBtn = page.locator(sel.openInstance(instanceId));
   const count = await openBtn.count();
@@ -79,7 +99,7 @@ export const tryOpenInstancePathA = async (
     return popup;
   }
   // Same-tab navigation or link handled without popup
-  return resolveAppPage(page);
+  return resolveAppPage(page, kind);
 };
 
 /**
@@ -342,37 +362,33 @@ export const openAppInstance = async (
   const preferred = resolveStartInstanceId(instanceId);
   const kind = app ?? appKindForInstance(preferred);
 
-  // Already on an App tab?
-  const existing = resolveAppPage(page);
-  if (APP_TAB_URL_RE.test(existing.url())) return existing;
+  // Already on a tab of THIS App? (kind-aware: a leftover Kolibri tab after a
+  // mid-walk Kolibri segment is not Nextcloud; cover-all-8c8fe30-r9 FAIL@21.)
+  const existing = resolveAppPage(page, kind);
+  if (isAppTabOfKind(existing, page, kind)) return existing;
+
+  const pick = (opened: Page | null): Page | null => {
+    if (!opened) return null;
+    if (isAppTabOfKind(opened, page, kind)) return opened;
+    const landed = resolveAppPage(page, kind);
+    return isAppTabOfKind(landed, page, kind) ? landed : null;
+  };
 
   // Path A only when Open visible
-  const earlyA = await tryOpenInstancePathA(page, preferred);
-  if (earlyA) {
-    const landed = resolveAppPage(page);
-    if (earlyA !== page && APP_TAB_URL_RE.test(earlyA.url())) return earlyA;
-    if (APP_TAB_URL_RE.test(landed.url())) return landed;
-  }
+  const earlyA = pick(await tryOpenInstancePathA(page, preferred, kind));
+  if (earlyA) return earlyA;
 
   if (await hasConsoleStartControl(page, preferred)) {
     const id = await ensureInstanceRunningForOpen(page, preferred, kind);
-    const pathA = await tryOpenInstancePathA(page, id);
-    if (pathA) {
-      const landed = resolveAppPage(page);
-      if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
-      if (APP_TAB_URL_RE.test(landed.url())) return landed;
-    }
+    const pathA = pick(await tryOpenInstancePathA(page, id, kind));
+    if (pathA) return pathA;
     // Open still missing — Path B only after sidecar HTTP ready
     return openInstancePathB(page, kind);
   }
 
   // Classroom / no Start control — Path B waits sidecar ready
-  const pathA = await tryOpenInstancePathA(page, preferred);
-  if (pathA) {
-    const landed = resolveAppPage(page);
-    if (pathA !== page && APP_TAB_URL_RE.test(pathA.url())) return pathA;
-    if (APP_TAB_URL_RE.test(landed.url())) return landed;
-  }
+  const pathA = pick(await tryOpenInstancePathA(page, preferred, kind));
+  if (pathA) return pathA;
   return openInstancePathB(page, kind);
 };
 
@@ -398,27 +414,42 @@ const openAndLogin = async (
   await attemptAppLogin(appPage, creds).catch(() => 'no_form');
 };
 
+/**
+ * open_kolibri_as_teacher — open the Kolibri tab, sign in as the fixture teacher,
+ * land on Coach classes. r31: fails loud (URL + HTTP status) on any Kolibri 5xx
+ * main document, and when neither the login form nor a signed-in coach/facility
+ * view renders (a missing login form is no longer a silent pass).
+ */
 export const open_kolibri_as_teacher: IntentFn = async ({ page, instanceId }) => {
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
-  await openAndLogin(page, id, 'kolibri', DURATION_FIXTURES.kolibri.auth.teacher);
+  // Context-level listener first, so the App popup's first document status is recorded.
+  trackMainDocuments(page);
+  const app = await openAppInstance(page, id, 'kolibri');
+  trackMainDocuments(app);
+  await assertKolibriPageOk(app, 'open_kolibri_as_teacher (app tab)');
+  await attemptAppLogin(app, DURATION_FIXTURES.kolibri.auth.teacher).catch(() => 'no_form');
+  await assertKolibriPageOk(app, 'open_kolibri_as_teacher (after sign-in)');
+
   // Land on Coach classes (kolibri_manage entry) when App tab is Kolibri
-  const app = resolveAppPage(page);
+  let response: Awaited<ReturnType<Page['goto']>> = null;
   try {
     const url = app.url();
     if (APP_TAB_URL_RE.test(url) && !/nextcloud|18280/i.test(url)) {
       const origin = new URL(url).origin;
-      await app
+      response = await app
         .goto(`${origin}/en/coach/#/classes`, { waitUntil: 'domcontentloaded', timeout: 15_000 })
-        .catch(async () => {
-          await app.goto(`${origin}/coach/#/classes`, {
+        .catch(async () =>
+          app.goto(`${origin}/coach/#/classes`, {
             waitUntil: 'domcontentloaded',
             timeout: 15_000,
-          });
-        });
+          }),
+        );
     }
   } catch {
-    /* coaching Intents will re-nav / fail loud */
+    /* nav error: the landing wait below fails loud with URL + status */
   }
+  await assertKolibriPageOk(app, 'open_kolibri_as_teacher (coach classes)', response);
+  await waitKolibriTeacherLanding(app, 'open_kolibri_as_teacher');
 };
 
 export const open_kolibri_as_learner: IntentFn = async ({ page, instanceId }) => {
@@ -430,6 +461,7 @@ export const open_kolibri_as_learner: IntentFn = async ({ page, instanceId }) =>
   );
 };
 
+/** @deprecated Registry uses nextcloudDeep.open_nextcloud_as_teacher (verified sign-in). */
 export const open_nextcloud_as_teacher: IntentFn = async ({ page, instanceId }) => {
   await openAndLogin(
     page,
@@ -439,6 +471,7 @@ export const open_nextcloud_as_teacher: IntentFn = async ({ page, instanceId }) 
   );
 };
 
+/** @deprecated Registry uses nextcloudDeep.open_nextcloud_as_learner (verified sign-in). */
 export const open_nextcloud_as_learner: IntentFn = async ({ page, instanceId }) => {
   await openAndLogin(
     page,

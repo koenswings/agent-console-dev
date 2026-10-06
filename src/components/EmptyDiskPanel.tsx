@@ -31,6 +31,7 @@ import {
 import {
   createCommandResult,
 } from '../store/commandResult';
+import { confirmInstalled, remoteWatchFor } from '../store/remoteConfirm';
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import type { CommandLogState } from '../store/commandLog';
@@ -188,7 +189,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const names = ids.map((id) => s?.instanceDB[id]?.name ?? id);
     // Match on disk.id (named args.diskId on 0b Engines); name-only Engines still
     // get a trace the operator can read in History if matching fails.
-    backupResult.start(arg.arg, () => createBackupDisk(engineId, arg.arg, backupMode(), names));
+    backupResult.start(arg.arg, () => createBackupDisk(engineId, arg.arg, backupMode(), names), {
+      engineId,
+      remote: remoteWatchFor(props.store, engineId, 'createBackupDisk',
+        () => ((props.store()?.diskDB[disk.id]?.diskTypes ?? []).includes('backup') ? 'ok' : null)),
+    });
   };
 
   const handleInstallApp = () => {
@@ -210,8 +215,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         return;
       }
       installResult.start(arg.arg, () =>
-        installApp(engineId, appId, arg.arg, { name: lesson.instanceName }),
-      );
+        installApp(engineId, appId, arg.arg, { name: lesson.instanceName }), {
+        engineId,
+        remote: remoteWatchFor(props.store, engineId, 'installApp', confirmInstalled(props.store, disk.id, lesson.instanceName)),
+      });
       return;
     }
 
@@ -222,7 +229,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const opts = source ? { source } : undefined;
 
     // Match the disk argument inside installApp's positional args blob (idea#122).
-    installResult.start(arg.arg, () => installApp(engineId, appId, arg.arg, opts));
+    installResult.start(arg.arg, () => installApp(engineId, appId, arg.arg, opts), {
+      engineId,
+      remote: remoteWatchFor(props.store, engineId, 'installApp', confirmInstalled(props.store, disk.id)),
+    });
   };
 
   const reset = () => {
@@ -236,8 +246,10 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     setSelectedAppId(null);
   };
 
-  const backupPending = () => backupResult.state().kind === 'pending';
-  const installPending = () => installResult.state().kind === 'pending';
+  // 'sent' = cross-engine, waiting for store confirmation (still busy).
+  const backupPending = () => ['pending', 'sent'].includes(backupResult.state().kind);
+  const installPending = () => ['pending', 'sent'].includes(installResult.state().kind);
+  const sentTo = (r: typeof backupResult) => { const s = r.state(); return s.kind === 'sent' ? s.engine : null; };
   const actionDone = () =>
     backupResult.state().kind === 'success' || installResult.state().kind === 'success';
 
@@ -409,8 +421,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             </Show>
 
             <Show when={error()}><p class="edp-form__error" data-testid="backup-form-error" role="alert">{error()}</p></Show>
-            <Show when={backupPending()}>
+            <Show when={backupResult.state().kind === 'pending'}>
               <p class="edp-form__hint" data-testid="backup-pending">Waiting for the Engine…</p>
+            </Show>
+            <Show when={sentTo(backupResult)}>
+              {(engine) => <p class="edp-form__hint" role="status" data-testid="backup-sent">Sent to {engine()}, waiting for confirmation…</p>}
             </Show>
             <Show when={(() => { const s = backupResult.state(); return s.kind === 'error' ? s.message : null; })()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
@@ -435,6 +450,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         {/* ── Files Disk form (idea#132) + erase-first (idea#136) ─────────── */}
         <Show when={!actionDone() && panel() === 'files' && !eraseDialog()}>
           <FilesRoleForm
+                store={props.store}
             disk={props.disk}
             engineId={props.engineId}
             commandLogStore={props.commandLogStore}
@@ -502,8 +518,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
             </Show>
             <Show when={error()}><p class="edp-form__error">{error()}</p></Show>
-            <Show when={installPending()}>
+            <Show when={installResult.state().kind === 'pending'}>
               <p class="edp-form__hint" data-testid="install-pending">Waiting for the Engine…</p>
+            </Show>
+            <Show when={sentTo(installResult)}>
+              {(engine) => <p class="edp-form__hint" role="status" data-testid="install-sent">Sent to {engine()}, waiting for confirmation…</p>}
             </Show>
             <Show when={(() => { const s = installResult.state(); return s.kind === 'error' ? s.message : null; })()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="install-error">{msg()}</p>}

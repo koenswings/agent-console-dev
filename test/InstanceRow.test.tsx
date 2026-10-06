@@ -301,7 +301,7 @@ describe('InstanceRow component', () => {
     fireEvent.click(getByRole('button', { name: /back up/i }));
     expect(container.querySelector('.backup-picker__dropdown')).toBeFalsy();
     expect(vi.mocked(commands.backupApp)).toHaveBeenCalledOnce();
-    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledWith('ENGINE_DISK001', 'kolibri', 'backup-disk');
+    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledWith('ENGINE_DISK001', 'inst-001', 'BACKUP001'); // instance id + disk id (r30 id contract)
   });
 
   it('multiple disks: clicking Backup opens disk picker', () => {
@@ -347,7 +347,7 @@ describe('InstanceRow component', () => {
     const options = container.querySelectorAll('.backup-picker__option');
     fireEvent.click(options[1]); // select weekly disk
     expect(vi.mocked(commands.backupApp)).toHaveBeenCalledOnce();
-    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledWith('ENGINE_DISK001', 'kolibri', 'backup-disk-weekly');
+    expect(vi.mocked(commands.backupApp)).toHaveBeenCalledWith('ENGINE_DISK001', 'inst-001', 'BACKUP002'); // instance id + disk id (r30 id contract)
     expect(container.querySelector('.backup-picker__dropdown')).toBeFalsy();
   });
 

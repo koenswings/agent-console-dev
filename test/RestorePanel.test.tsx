@@ -109,7 +109,8 @@ describe('RestorePanel', () => {
     expect(mock).toHaveBeenCalledOnce();
     const [engineId, cmd] = mock.mock.calls[0];
     expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
-    expect(cmd).toBe(`restoreApp kolibri ${option.textContent}`);
+    // Instance ID + target disk ID, never names (r30 id contract)
+    expect(cmd).toBe(`restoreApp ${MOCK_IDS.INST_KOLIBRI_ID} ${option.value}`);
   });
 
   it('after Confirm Restore, confirmation UI is dismissed', () => {

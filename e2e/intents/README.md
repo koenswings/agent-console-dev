@@ -96,7 +96,7 @@ Fail loud if neither Path A card nor Path B HTTP is reachable.
 | Key | Reason |
 |---|---|
 | `enter_infra_fleet_walk`, `infra_*` | Engine-owned |
-| `next_resource`, `exit_lesson`, `finish_exercise`, `next_video` | Lesson chrome — need Kid App-side testids (preferred list: App `tests/duration-tests/LESSON_CHROME.md`, not in image yet). Stay unregistered. `keep_watching` is registered (stay on `/topics/c/<video node id>`; no chrome testids). |
+| — | All lesson-chrome Intents are registered against Kolibri 0.15.5 upstream controls (no Kid testids): `keep_watching`, `next_resource`, `finish_exercise`, `next_video`, `exit_lesson` (see below). |
 | `open_wikipedia_as_teacher`, `open_wikipedia_as_learner` | Kiwix deferred (Kid) |
 
 ## Kid pins
@@ -134,12 +134,12 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 
 | Intent | Contract |
 |---|---|
-| `stay_on_teacher_overview` / `stay_on_learner_overview` / `open_console_as_teacher`/`_learner` | Prefer A r40: wait leave **Connecting…** + ≥1 `instance-*` (`DURATION_OVERVIEW_CATALOG_MS`, default **60s**; cold sync ~15s). Loud-fail with status + card count + elapsed. |
+| `stay_on_teacher_overview` / `stay_on_learner_overview` / `open_console_as_teacher`/`_learner` | Prefer A r40/r10: wait to leave **Connecting…** + ≥1 `instance-*` card **or** `open-instance-*` Open button (`DURATION_OVERVIEW_CATALOG_MS`, default **180s**; cold sync ~15s r40, ~127s cover-all-1dee371-r10 after redeploy + store_mode unique). Status reads capped at 1s each; one final ready check after the budget (same predicate). Empty catalog / still Connecting = loud-fail with status, card + Open counts, elapsed. |
 | `stay_on_overview` | Prefer A r40: leave Connecting… + ≥1 `disk-*` (`DURATION_OVERVIEW_CATALOG_MS`). |
 | `return_to_start` | Dismiss erase/eject/settings/account/Connect; assert overview/tree. Loud if dialog stuck. |
 | `open_disk_inventory` | Resolve visible `disk-*` (`DURATION_DISK_ID`); DiskView / EmptyDiskPanel must open. |
 | `open_instance_controls` | Resolve visible instance (`DURATION_INSTANCE_ID`); start/stop/open controls. |
-| `open_console_as_teacher` / `_learner` | Overview + `account-btn` required (no soft-catch). |
+| `open_console_as_teacher` / `_learner` | Prefer A r13: if still on **op-overview** (post infra + `return_to_start`), Account → `log-out` → close Account so AppBrowser `console-overview` shows; skip when already user-mode. Then overview + `account-btn` + catalog wait (no soft-catch). `return_to_start` still accepts op-overview for operator walks. |
 | `close_account` | `op-entry` must **hide** after toggle. |
 | `cancel_erase` | `erase-dialog` must hide after Cancel. |
 | `stop_instance` | Prefer A r38: status-driven Stopping→Stopped; wait while Stopping/in-progress; **re-click** Stop every `DURATION_STOP_RETRY_MS` (15s) if still Running/Open (SSH flap). Default settle **180s** (`DURATION_STOP_SETTLE_MS`); +60s grace while Stopping UI. Loud-fail includes last status/open/stopTitle/elapsed/stopClicks. |
@@ -147,7 +147,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `make_files_disk` | After submit, wait Files role / DiskView settle (still needs Engine empty dock). |
 | `stay_on_disk` / `stay_on_source_disk` | Resolve disk on tree; DiskView / EmptyDiskPanel visible. |
 
-**Still deferred / blocked (not this tip):** lesson chrome (`next_resource`, `exit_lesson`, `finish_exercise`, `next_video`) Kid testids; `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
+**Still deferred / blocked (not this tip):** `open_wikipedia_as_*` Kiwix; empty-disk Prefer A (`install_app` / `make_files_disk` / erase empty) until Engine redocks empty-002.
 
 ## Kolibri coaching (kolibri_manage)
 
@@ -170,7 +170,45 @@ Coach list settle (Prefer A): `build_lesson` / `create_quiz` / `read_reports` po
 Class/lesson Morango ids: `fixtures.ts` → `DURATION_FIXTURES.kolibri.live` (CONTENT.live.json).
 Ports: `DURATION_KOLIBRI_PORT` default **18080**; idea03/idea04 Form3→18080, G5A→**18081**.
 
-**Not registered:** lesson-chrome player Intents (`next_resource`, `exit_lesson`, `finish_exercise`, `next_video`) — see LESSON_CHROME.md. `keep_watching` stays on `/topics/c/<video node id>`.
+**Not registered:** none of the lesson-chrome Intents (all five registered). `keep_watching` stays on `/topics/c/<video node id>`.
+
+**`next_resource` (Prefer A, kolibri_watching → kolibri_exercise):** must start on the pinned video route
+`/topics/c/4a1a1b923f6d59eba94c3f91f0011dd5` (loud-fail otherwise; the video is not re-opened). Clicks Kolibri
+0.15.5's own LearningActivityBar resource-list button (upstream markup, not Kid testids):
+`[data-test="bar_viewTopicResourcesButton"]` / `bar_viewLessonPlanButton`, or aria-label "View folder resources" /
+"View lesson resources"; on narrow windows `moreOptionsButton` → `menu_*`. In the `.also-in-this-side-panel`
+list it clicks the exercise sibling (`a[href*="/topics/c/94a47ec7…"]`, else title "Open exercise target").
+Success only when the URL reaches `/topics/c/94a47ec7f30d5cd193f8ad08c42b6c2a` within 15s. No deep-link fallback.
+Engine must drop `next_resource` from `DEFERRED_UI_INTENTS` (Axle) before the walk calls this adapter.
+
+**`next_video` (Prefer A, kolibri_exercise → kolibri_watching):** `next_resource` in reverse, same Kolibri controls.
+Must start on the exercise route `/topics/c/94a47ec7f30d5cd193f8ad08c42b6c2a` (loud-fail otherwise; not re-opened).
+Resource-list button → `.also-in-this-side-panel` video row (`a[href*="/topics/c/4a1a1b92…"]`, else title "Open video
+target"). Success only when the URL reaches `/topics/c/4a1a1b923f6d59eba94c3f91f0011dd5` within 15s. Kid's pack has one
+video, so "next video" re-opens `video-grade5a-01` (walker-ref). No deep-link fallback. Engine must undefer
+`next_video` (Axle).
+
+**`exit_lesson` (Prefer A, [kolibri_watching, kolibri_exercise] → kolibri_home):** must start on the pinned video
+OR exercise route (loud-fail otherwise). Then `walkLearnChromeHome`, the same hop walk `finish_exercise` uses (content
+"Go back" → topic/search toolbar "Close" → Library "Home", click-mask settle, no `aria-current="page"` links, no hash
+goto). Success only on Learn `#/home`; loud-fail with the hop trail. Engine must undefer `exit_lesson` (Axle).
+
+**`finish_exercise` (Prefer A, kolibri_exercise → kolibri_home):** must start on the pinned exercise route
+`/topics/c/94a47ec7f30d5cd193f8ad08c42b6c2a` (loud-fail otherwise; the exercise is not re-opened). Kid's Perseus
+item set (randomize off, mastery 1 of 1) has two single-choice radios, both correct = "4" (index 1). Per item:
+click choice `.perseus-widget-radio li:has-text("4")` (else radio `nth=1`), click Kolibri's `Check` KButton, and
+require `Next` (correct). Always answers at least one item, even if a prior run mastered it. Completion =
+CompletionModal `[role="dialog"]` "Resource completed" (first completion) or OverallStatus
+`.overall-status-text .completed` (re-runs). Up to 4 items. Then close the modal (aria "Close" / "Stay here")
+and walk Learn chrome to home, one hop per page (each click must change the URL, max 5 hops): content page → bar
+"Go back"; topic / search page (immersive, no top nav; r7 landed on `#/topics/t/63427029…/search`) → ImmersiveToolbar
+"Close" link (to `#/library`, or `#/home` when `last=HOME`); any page with LearnTopNav → "Home" (`a[href*="#/home"]`).
+No hash goto. Before each pick it waits out Kolibri's post-navigation `div.click-mask` (Learn `router.afterEach` →
+`blockDoubleClicks`, 500ms; we wait ≥600ms and 300ms clear, max 5s, else loud-fail) and re-resolves controls on the page
+actually shown. Toolbar links with `aria-current="page"` (stale Close pointing at the current route, r8) are never
+clicked. No force / JS clicks; up to 3 click attempts per hop. Success only when completion was seen AND the URL is
+Learn `#/home`; otherwise loud-fail with the hop trail and final URL. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
+`finish_exercise` from deferred / add it to `PIXEL_REGISTERED_INTENTS` (Axle).
 
 ## Live duration — no bootDemo (`--live --ui`)
 
@@ -422,3 +460,94 @@ Late `installApp` may auto-start the new instance (Starting / Operation in progr
 | Then | Click Start if still needed |
 | Loud-fail | Timeout still disabled / never Running — **no** soft-pass |
 | Callers | `start_instance`, `start_after_install`, `backup_instance`, open settle |
+
+
+## Nextcloud deep (Prefer A, `nextcloudDeep.ts`)
+
+Kid image `koenswings/nextcloud:1.0-31.0.1`. Selectors are Nextcloud upstream production markup, not Kid testids:
+login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; Files `[data-cy-files-content-breadcrumbs]`,
+`tr[data-cy-files-list-row-name="<name>"]`, `[data-cy-files-list-row-name-link]`; folder state from the URL
+`/apps/files/files[/<id>]?dir=/<path>`.
+
+- **`open_nextcloud_as_teacher` / `open_nextcloud_as_learner`:** now prove sign-in (kind-aware App tab: a leftover Kolibri `:18080` tab after a mid-walk Kolibri segment is never treated as Nextcloud — cover-all-8c8fe30-r9) (previously the Kolibri-style
+  login helper returned ok without checking). Passwords: Kid `CONTENT.live.json` (`TeacherGrade5A!`,
+  `Student01Grade5A!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
+  password=username tried once if refused. Success only with a signed-in Files list (header Files link clicked if NC
+  lands on Dashboard) **and** `<head data-user>` matching the requested role. If the leftover tab is already signed
+  in as the other role (cover-all-aeef795-r12: teacher session after `leave_nextcloud_as_teacher` soft-passed
+  `open_nextcloud_as_learner`), Prefer A logs out via the real NC 31 user menu (`#user-menu` → `a[href*="logout"]`)
+  and signs in as the requested account before opening Files. Matching uid = no logout. Deep Intents (`creds=null`)
+  never switch sessions. Loud-fail names the refused account or a post-settle uid mismatch.
+  After leaving `/login` (or landing signed in on Dashboard), the header Files link is **polled up to 20s**
+  (`waitForLoadState('load')` + poll), never counted once. Axle smoke 2da863c-r1 failed on that one-shot count while the
+  dashboard header was still rendering. Missing after 20s = loud-fail with URL, title and header links.
+  **First-run wizard** (`#firstrunwizard`, nextcloud/firstrunwizard stable31) opens on a user's first login and intercepts
+  every click (Axle smoke 198eb69-r1). Before the Files click (and again once Files has rendered), it is dismissed with
+  its **Close** button (`#firstrunwizard button[aria-label="Close"]` on the slides, or Skip if a build has one), falling
+  back to **Escape** on the intro video, which has no button. It's retried until gone, and the Files click is retried if
+  the wizard opens late. Still up = loud-fail. Closing it also tells NC not to show it again for that user. Fixture
+  alternative: `occ app:disable firstrunwizard`.
+- **`browse_folders` (nc_browse dwell):** needs an open Nextcloud tab and an existing session (no role guessing; login
+  page = loud-fail). Class folders are found at the Files root or inside the Files Disk mount folder
+  (`shareName` "Grade 5A Files", from the `10-idea-files.sh` external storage). Opens Class Materials, Drop Zone and
+  Collab in turn by clicking their rows, each proven by `dir`, returning to the class root between them via the root
+  breadcrumb. Loud-fail includes the row names actually listed.
+- **`share_to_class` (nc_browse → nc_share, teacher):** loud-fail unless `<head data-user>` is the fixture teacher.
+  From the class root, opens the Class Materials row's inline Share action (`[data-cy-files-list-row-action="sharing-status"]`,
+  else Actions → Details) → sidebar `[data-cy-sidebar]` → Sharing tab `[aria-controls="tab-sharing"]`. New share: type
+  "Grade 5A" in `#sharing-search-input`, pick that `[role="option"]`, editor must read "Share with group". Repeat walk: the
+  existing "Grade 5A (group)" entry → `[data-cy-files-sharing-share-actions]`. Then
+  `[data-cy-files-sharing-share-permissions-bundle="read-only"]` (radio must be checked) →
+  `[data-cy-files-sharing-share-editor-action="save"]`. Success = the files_sharing OCS POST/PUT did not fail **and**
+  the group entry's quick-share select reads "View only". Ends with the sidebar still open on Sharing (nc_share).
+  Disabled sharee search = loud-fail. **Fixture note:** files_external mounts default `enable_sharing=false`
+  (NC 31 `StorageConfig`), so if Class Materials is on the "Grade 5A Files" mount, Kid's `10-idea-files.sh` must set
+  `enable_sharing true` or this Intent fails (by design).
+- **`done_sharing` (nc_share → nc_browse):** nc_share is asserted first: teacher uid, Files sidebar open with
+  `[aria-controls="tab-sharing"]` `aria-selected="true"`, share editor closed. Otherwise loud-fail. Clicks NcAppSidebar
+  `.app-sidebar__close` ("Close sidebar", @nextcloud/vue 8.23.1). Success = sidebar gone and Files still browsing the
+  same `dir`.
+- **`back_to_console_from_share` (nc_share → console_teacher):** same nc_share assertion, then the shared
+  `leaveAppToConsole` (close app tabs, prove `console-overview`) used by `leave_nextcloud_as_teacher`, and the
+  Nextcloud tab must be closed. (No App spec for this name; semantics from the action name + nc_share.)
+- **`open_collab_doc` (nc_browse → nc_collab):** class root → Collab → click `Grade5A-collab-notes.md` (row name link).
+  Success = Nextcloud Viewer `#viewer` open (nextcloud/viewer stable31 NcModal), `.modal-header__name` equals the
+  file name, **Nextcloud Text** mounted (`[data-text-el="editor-container"]`, Kid App#11 Prefer A; Collabora = Prefer B,
+  not shipped), and the doc heading "Grade 5A collab notes" rendered. Read-only is fine here. Download or non-Text
+  viewer = loud-fail.
+- **`keep_editing` (nc_collab dwell):** same file in Text. Loud-fail if `[data-text-el="readonly-bar"]` is visible (Kid
+  collab apply pending, `collabProvisioned=false`), or if editable content
+  (`[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]`) or the menubar is missing. Clicks the
+  content, Ctrl+End, Enter, types `keep_editing <ISO time>`. Proof = the line is in the editor **and** Text's sync
+  `POST /apps/text/session/<id>/push` returned 2xx (nextcloud/text stable31 SessionApi). Selectors come from Kid
+  `CONTENT.live.json collab.selectors`.
+- **`close_doc` (nc_collab → nc_browse):** Viewer `.header-close` (NcModal, aria-label "Close") → Viewer gone, same
+  `dir`, `openfile` dropped from the URL.
+- **File Drop trio** (Kid App#11 @2d9a052 `fileRequest`: token `grade5adropzone`, `/Drop Zone/inbox`, permissions 4).
+  The token is [A-Za-z0-9] only because NC 31.0.1 public DAV cuts hyphenated tokens, so the old `/s/grade5a-drop-zone`
+  now 404s. The URL path comes from `fileRequest.url` and the origin from the Nextcloud tab, so it stays on hostname
+  `idea01` (NC answers HTTP 400 on the raw Tailscale IP). Override with `DURATION_NC_FILE_REQUEST_URL`.
+  - **`open_file_drop` (nc_browse → nc_drop, learner):** loud-fail unless `<head data-user>` is the fixture learner.
+    Opens the link in a new tab. Success = `[data-cy-files-sharing-file-drop]` reads "Upload files to inbox.", no file
+    rows, no "This directory is unavailable". HTTP 404/400 = loud-fail with the reason.
+  - **`after_upload` (nc_drop → nc_browse):** File drop **Upload** button → "Upload files" → file chooser with a unique
+    `drop-<ISO>.txt` (falls back to the picker's own `input[type=file]`). Proof = `PUT /public.php/dav/files/<token>/<name>`
+    2xx. Then closes the drop tab and re-proves the signed-in Files tab.
+  - **`leave_file_drop` (nc_drop → console_learner):** needs the `/s/<token>` tab, then `leaveAppToConsole`; the drop
+    tab must be closed.
+
+## Wikipedia / Kiwix (Prefer A, `wikipedia.ts`)
+
+Kid App#11 @a443398 stub ZIM `duration_wikipedia_en_grade5a_stub_2026-10` on kiwix-serve 3.8.2 (`kiwix-ideaa-001`,
+port 18380, no login). Markup checked locally against Kid's ZIM with the official kiwix-tools 3.8.2 binary, and all five
+Intents pass end to end there (Path A via library tile and Path B).
+
+- **`open_wikipedia_as_teacher` / `_learner` (console_* → wiki_browse):** Path A = Console `open-instance-kiwix-ideaa-001`
+  → new tab (if it lands on the library, click `a.book__link` for the book). Path B = Kid `urls.viewerHome` with `<host>` =
+  Console host (`DURATION_KIWIX_URL` / `DURATION_KIWIX_PORT`), after an HTTP readiness poll. Success = viewer hash
+  `#<book>/Main_Page` and `iframe#content_iframe h1#firstHeading` = "Grade 5A Offline Wikipedia".
+- **`search_browse_wikipedia` (wiki_browse dwell):** `#kiwixsearchbox` ← "fraction" + Enter → iframe shows
+  "Results 1-4 of 4" → click the `Fraction` result (hash + heading "Fraction") → follow the `Numerator` link (hash +
+  heading "Numerator").
+- **`leave_wikipedia_as_teacher` / `_learner` (wiki_browse → console_*):** needs an open Kiwix tab, then the shared
+  `leaveAppToConsole` (now also closes :18380 / `/viewer#` tabs); the Kiwix tab must be closed.

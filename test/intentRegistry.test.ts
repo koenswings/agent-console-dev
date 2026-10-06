@@ -29,6 +29,25 @@ const LOCKED = [
   'open_nextcloud_as_learner',
   'open_video',
   'keep_watching',
+  'next_resource',
+  'finish_exercise',
+  'next_video',
+  'exit_lesson',
+  'browse_folders',
+  'share_to_class',
+  'done_sharing',
+  'back_to_console_from_share',
+  'open_collab_doc',
+  'close_doc',
+  'keep_editing',
+  'open_file_drop',
+  'after_upload',
+  'leave_file_drop',
+  'open_wikipedia_as_teacher',
+  'open_wikipedia_as_learner',
+  'search_browse_wikipedia',
+  'leave_wikipedia_as_teacher',
+  'leave_wikipedia_as_learner',
   'open_exercise',
   'open_disk_inventory',
   'open_instance_controls',
@@ -93,14 +112,7 @@ const ENGINE_OWNED = [
   'infra_reboot_engine',
 ] as const;
 
-const DEFERRED = [
-  'open_wikipedia_as_teacher',
-  'open_wikipedia_as_learner',
-  'next_resource',
-  'exit_lesson',
-  'finish_exercise',
-  'next_video',
-] as const;
+const DEFERRED = [] as const;
 
 describe('Intent registry (idea#166 Phase 5 / #168)', () => {
   it('registers Hub + dwell + Phase 3–5 + operator deep Intents', () => {
@@ -143,11 +155,28 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('browse_classes')).toBe(true);
     expect(hasDurationIntent('infra_dock_fixture')).toBe(false);
     expect(hasDurationIntent('keep_watching')).toBe(true);
-    expect(hasDurationIntent('finish_exercise')).toBe(false);
-    expect(hasDurationIntent('next_video')).toBe(false);
+    expect(hasDurationIntent('next_resource')).toBe(true);
+    expect(hasDurationIntent('finish_exercise')).toBe(true);
+    expect(hasDurationIntent('next_video')).toBe(true);
+    expect(hasDurationIntent('exit_lesson')).toBe(true);
+    expect(hasDurationIntent('browse_folders')).toBe(true);
+    expect(hasDurationIntent('share_to_class')).toBe(true);
+    expect(hasDurationIntent('done_sharing')).toBe(true);
+    expect(hasDurationIntent('back_to_console_from_share')).toBe(true);
+    expect(hasDurationIntent('open_collab_doc')).toBe(true);
+    expect(hasDurationIntent('close_doc')).toBe(true);
+    expect(hasDurationIntent('keep_editing')).toBe(true);
+    expect(hasDurationIntent('open_file_drop')).toBe(true);
+    expect(hasDurationIntent('after_upload')).toBe(true);
+    expect(hasDurationIntent('leave_file_drop')).toBe(true);
+    expect(hasDurationIntent('open_wikipedia_as_teacher')).toBe(true);
+    expect(hasDurationIntent('open_wikipedia_as_learner')).toBe(true);
+    expect(hasDurationIntent('search_browse_wikipedia')).toBe(true);
+    expect(hasDurationIntent('leave_wikipedia_as_teacher')).toBe(true);
+    expect(hasDurationIntent('leave_wikipedia_as_learner')).toBe(true);
   });
 
-  it('does not register deferred usage / Kiwix / lesson-chrome Intents', () => {
+  it('has no deferred Console Intents left', () => {
     for (const name of DEFERRED) {
       expect(getIntent(name)).toBeUndefined();
     }

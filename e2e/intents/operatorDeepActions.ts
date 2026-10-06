@@ -1620,14 +1620,14 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
  * Back to Console / Leave Kolibri / Leave Nextcloud —
  * Close App tab if present; assert Console overview (teacher/learner) or op_overview.
  */
-const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise<void> => {
+export const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise<void> => {
   const pages = page.context().pages();
   for (const p of pages) {
     try {
       const url = p.url();
       if (
         p !== page &&
-        /kolibri|nextcloud|18080|18081|18280|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files/i.test(
+        /kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
           url,
         )
       ) {

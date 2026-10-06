@@ -208,6 +208,39 @@ Automerge document. The commands module:
 
 Command string format: `"<commandName> <arg1> <arg2>"` — mirrors Engine's `commandUtils.ts`.
 
+Argument contract (r30): disks always go by **id** (names may contain spaces / em-dashes,
+which the Engine's space-split breaks). `backupApp` / `restoreApp` also send the **instance
+id** (`backupApp <instanceId> <backupDiskId>`, `restoreApp <instanceId> <targetDiskId>`);
+they need the Engine fix that resolves both id-first (`resolveInstanceArg` / `resolveDiskArg`,
+idea#168). `startInstance` / `stopInstance` / `copyApp` / `moveApp` keep the instance
+**name**, because no Engine resolves an instance id for them yet.
+
+### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
+
+Panels follow each command's trace in the connected Engine's command log: red
+(`edp-form__error`, `role=alert`) on an error trace, a neutral "No response" hint after
+15 s without any trace. Commands to **another** Engine (`connectedEngine.ts` decides; an
+unknown connected Engine counts as remote) can't be followed in our own log, so they show
+a neutral "Sent to <engine>, waiting for confirmation" and resolve:
+
+1. from the target Engine's command log when the Console could load it (approach i,
+   `StoreConnection.commandLogFor` / `remoteCommandLogs.ts`; red on its error trace), else
+2. from the store change that proves the command worked (approach ii).
+
+| command | store confirmation (ok) | store failure (red) | timeout → red |
+|---|---|---|---|
+| startInstance | status Running | status → Error | 5 min |
+| stopInstance | status Stopped / Docked | status → Error | 5 min |
+| backupApp | new backupApp op Done, or lastBackup advanced | new op Failed / Cancelled | 30 min |
+| restoreApp | new restoreApp op Done | new op Failed / Cancelled | 30 min |
+| copyApp | new copyApp op Done, or a new instance of the app on the target disk | new op Failed / Cancelled | 30 min |
+| moveApp | new moveApp op Done, or storedOn = target disk | new op Failed / Cancelled | 30 min |
+| installApp | new instance with that name on the disk | — | 20 min |
+| reboot | engine.lastBooted advanced | — | 10 min |
+| ejectDisk | disk gone / undocked / no device | — | 3 min |
+| cancelOperation | op no longer Pending / Running | — | 3 min |
+| createBackupDisk / createFilesDisk | disk gets the backup / files role | — | 10 min (default) |
+
 ### `src/store/discovery.ts` — engine hostname discovery
 
 Probes a list of candidate hostnames (`appdocker01`, `idea01`, `engine01`, `appdocker02`, …)

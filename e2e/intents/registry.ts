@@ -2,8 +2,15 @@
  * Intent registry keyed by Axle YAML / ACTIONS.md action names (idea#166).
  * Engine-owned keys (enter_infra_fleet_walk, infra_*) are intentionally absent.
  * keep_watching is registered (stay on /topics/c/<video node id> — no chrome testids).
- * Lesson chrome (next_resource / exit_lesson / finish_exercise / next_video)
- * and open_wikipedia_* stay unregistered until Kid App testids.
+ * next_resource is registered (Kolibri resource-list panel → exercise sibling).
+ * finish_exercise is registered (Perseus Check → completion → Learn home).
+ * next_video is registered (exercise → video via the resource panel).
+ * exit_lesson is registered (video/exercise → Learn home via Kolibri chrome).
+ * Nextcloud: open_nextcloud_as_* now prove a signed-in Files list; browse_folders
+ * registered; share_to_class registered (sharing sidebar → group Grade 5A, View only);
+ * done_sharing / back_to_console_from_share leave nc_share; open_collab_doc / close_doc /
+ * keep_editing on Nextcloud Text (Kid Prefer A). Wikipedia open/search/leave on the Kiwix
+ * stub (wikipedia.ts). File Drop trio on Kid fileRequest /s/grade5adropzone (/Drop Zone/inbox).
  */
 import type { ConsoleIntentName, IntentFn } from './types';
 import {
@@ -20,11 +27,38 @@ import { return_to_start } from './returnToStart';
 import {
   open_kolibri_as_learner,
   open_kolibri_as_teacher,
+} from './openApp';
+import {
+  browse_folders,
   open_nextcloud_as_learner,
   open_nextcloud_as_teacher,
-} from './openApp';
+  share_to_class,
+  done_sharing,
+  back_to_console_from_share,
+  open_collab_doc,
+  close_doc,
+  keep_editing,
+  open_file_drop,
+  after_upload,
+  leave_file_drop,
+} from './nextcloudDeep';
+import {
+  open_wikipedia_as_teacher,
+  open_wikipedia_as_learner,
+  search_browse_wikipedia,
+  leave_wikipedia_as_teacher,
+  leave_wikipedia_as_learner,
+} from './wikipedia';
 import { open_disk_inventory, open_instance_controls } from './openDisk';
-import { keep_watching, open_exercise, open_video } from './openKolibriContent';
+import {
+  exit_lesson,
+  finish_exercise,
+  keep_watching,
+  next_resource,
+  next_video,
+  open_exercise,
+  open_video,
+} from './openKolibriContent';
 import {
   add_files_role,
   cancel_eject,
@@ -93,8 +127,27 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   open_kolibri_as_learner,
   open_nextcloud_as_teacher,
   open_nextcloud_as_learner,
+  browse_folders,
+  share_to_class,
+  done_sharing,
+  back_to_console_from_share,
+  open_collab_doc,
+  close_doc,
+  keep_editing,
+  open_file_drop,
+  after_upload,
+  leave_file_drop,
+  open_wikipedia_as_teacher,
+  open_wikipedia_as_learner,
+  search_browse_wikipedia,
+  leave_wikipedia_as_teacher,
+  leave_wikipedia_as_learner,
   open_video,
   keep_watching,
+  next_resource,
+  finish_exercise,
+  next_video,
+  exit_lesson,
   open_exercise,
   open_disk_inventory,
   open_instance_controls,
