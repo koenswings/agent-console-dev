@@ -98,4 +98,25 @@ describe('OperationProgress', () => {
     expect(screen.getByText('Copy app')).toBeInTheDocument();
     expect(screen.getByText('Move app')).toBeInTheDocument();
   });
+
+  it('exposes data-testid / data-op-* for Intent waiters (r42 backup_instance)', () => {
+    const op = makeOp({
+      id: 'op-backup-1',
+      kind: 'backupApp',
+      status: 'Running',
+      args: { instanceId: 'kolibri-grade5a-001', backupDiskId: 'DISK_BACKUP' },
+      subject: { type: 'instance', id: 'kolibri-grade5a-001' },
+    });
+    const { container } = render(() => (
+      <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />
+    ));
+    const card = container.querySelector('[data-testid="operation-card-op-backup-1"]') as HTMLElement;
+    expect(card).toBeTruthy();
+    expect(card.getAttribute('data-op-kind')).toBe('backupApp');
+    expect(card.getAttribute('data-op-status')).toBe('Running');
+    expect(card.getAttribute('data-op-instance')).toBe('kolibri-grade5a-001');
+    expect(container.querySelector('[data-testid="operation-progress"]')).toBeTruthy();
+    expect(screen.getByText('Back up')).toBeInTheDocument();
+  });
+
 });

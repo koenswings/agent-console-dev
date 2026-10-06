@@ -435,10 +435,13 @@ Move Confirm → kolibri Exited 143 / docker-missing while store Running.
 | Running | `ensureInstanceRunningForOpen` + `waitForSidecarStable` for `pair.instanceId` |
 | Loud-fail | idea#168 citing r22 docker-missing — **no** soft-pass / no demo remap |
 
-## backup_instance ensure Running (r23 FAIL@83)
+## backup_instance ensure Running (r23 FAIL@83) + wait for Operation (r42 FAIL@112)
 
 Product: `isBackupDisabled` → Backup **only** when status === `Running` (Stopped disables).
 Do **not** change product. r23: `stop` then `backup` left Backup disabled.
+r42: Intent must **not** return ok on the Back up click alone — Automerge can lag a few
+seconds before `backupApp` appears in `operationDB` / OperationProgress; the harness then
+saw "Intent ok" with no op (cover-all-989400c-r42).
 
 | Step | Contract |
 |---|---|
@@ -446,7 +449,11 @@ Do **not** change product. r23: `stop` then `backup` left Backup disabled.
 | Missing btn | Loud-fail — need linked Backup Disk (`hasBackupDisks`) |
 | Not Running / disabled | `runStartInstance` then wait Backup enabled (`DURATION_BACKUP_SETTLE_MS` ≥90s) |
 | Still disabled | Loud-fail distinguishing Stopped vs locked vs missing Backup Disk |
-| Prefer A | backup-before-stop in walk; Intent also starts if Stopped — **no** soft-pass |
+| Click Back up | Send `backupApp` (1 linked disk) or open picker (≥2) |
+| Picker (≥2 disks) | Select first `[data-testid^=backup-to-disk-]`; never leave picker open and report ok |
+| Wait for Operation | `waitForBackupAppOperation` until OperationProgress shows a `backupApp` card for the instance (`data-op-kind` / `data-op-instance`) — Pending / Running / Done = ok; Failed / CommandFeedback error / timeout = loud-fail |
+| Appear budget | `DURATION_BACKUP_OP_START_MS` default **30s** (not Done — harness still verifies archive) |
+| Prefer A | backup-before-stop in walk; Intent also starts if Stopped — **no** soft-pass / no click-only ok |
 
 ## runStartInstance wait while Starting (r32 FAIL@86)
 

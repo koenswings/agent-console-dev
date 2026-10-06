@@ -108,7 +108,13 @@ const OpCard: Component<OpCardProps> = (props) => {
   }
 
   return (
-    <div class={`operation-card ${isFailed() ? 'operation-card--failed' : ''} ${isDone() ? 'operation-card--done' : ''}`}>
+    <div
+      class={`operation-card ${isFailed() ? 'operation-card--failed' : ''} ${isDone() ? 'operation-card--done' : ''}`}
+      data-testid={`operation-card-${props.op.id}`}
+      data-op-kind={props.op.kind}
+      data-op-status={props.op.status}
+      data-op-instance={String(props.op.args?.instanceId ?? props.op.subject?.id ?? '')}
+    >
       <div class="operation-card__top">
         <span class="operation-card__kind">{KIND_LABEL[props.op.kind] ?? props.op.kind}</span>
         <div class="operation-card__top-right">
@@ -249,7 +255,7 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
     <>
     <CommandFeedback result={cancelResult} subject={cancelSubject} testId="cancel-operation" />
     <Show when={visibleOps().length > 0}>
-      <div class="operation-progress" role="status" aria-label="Operation progress">
+      <div class="operation-progress" role="status" aria-label="Operation progress" data-testid="operation-progress">
         <div class="operation-progress__header">Operations</div>
         <For each={visibleOps()}>
           {(op) => (

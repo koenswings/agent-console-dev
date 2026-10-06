@@ -347,8 +347,92 @@ export function backupSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): num
 }
 
 /**
+ * How long after the Back up click to wait for a backupApp Operation to appear
+ * in OperationProgress (or a CommandFeedback error). cover-all r42 FAIL@112:
+ * the Intent used to return ok on click alone while Automerge replication of
+ * the Operation lagged a few seconds — harness then saw "Intent ok" with no op.
+ * Override with DURATION_BACKUP_OP_START_MS (ms). Default 30s.
+ */
+export function backupOpAppearTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_BACKUP_OP_START_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 30_000;
+}
+
+/**
+ * After Back up is clicked: if the multi-disk picker opened (§2+ linked Backup
+ * Disks), pick the first option. Prefer A: never leave the picker open and
+ * report ok (latent Intent hole called out in BACKUP-112-DIAG).
+ */
+export async function confirmBackupPickerIfOpen(page: Page, instanceId: string): Promise<void> {
+  const dropdown = page.locator(sel.backupPickerDropdown);
+  // Brief window: single-disk path never opens the picker.
+  const opened = await dropdown.isVisible().catch(() => false)
+    || await dropdown.waitFor({ state: 'visible', timeout: 400 }).then(() => true).catch(() => false);
+  if (!opened) return;
+  const opts = page.locator(sel.backupPickerOption);
+  const n = await opts.count();
+  if (n === 0) {
+    throw new Error(
+      `idea#168 backup_instance: Back up opened the disk picker for ${instanceId} ` +
+        `but no [data-testid^=backup-to-disk-] options are visible. No soft-pass.`,
+    );
+  }
+  await opts.first().click();
+  await dropdown.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+}
+
+/**
+ * Wait until a backupApp Operation for `instanceId` appears in OperationProgress
+ * (Pending / Running / Done), or fail loud on Failed / CommandFeedback error /
+ * timeout. Appearance = success for the Intent: the Engine accepted backupApp
+ * and wrote an Operation; the harness still verifies archive/Done separately.
+ */
+export async function waitForBackupAppOperation(
+  page: Page,
+  instanceId: string,
+  budgetMs: number = backupOpAppearTimeoutMs(),
+): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  const card = page.locator(sel.backupAppOpForInstance(instanceId));
+  const feedbackErr = page.locator(sel.instanceCmdError(instanceId));
+
+  while (Date.now() < deadline) {
+    if (await feedbackErr.isVisible().catch(() => false)) {
+      const msg = ((await feedbackErr.first().textContent()) ?? '').trim();
+      throw new Error(
+        `idea#168 backup_instance: Engine refused / failed backup for ${instanceId} ` +
+          `(CommandFeedback: ${msg || 'error'}). No soft-pass.`,
+      );
+    }
+    const n = await card.count();
+    if (n > 0) {
+      const status = ((await card.first().getAttribute('data-op-status')) ?? '').trim();
+      if (status === 'Failed') {
+        const err = ((await card.first().locator('.operation-card__error').textContent().catch(() => '')) ?? '').trim();
+        throw new Error(
+          `idea#168 backup_instance: backupApp Operation Failed for ${instanceId}` +
+            `${err ? `: ${err}` : ''}. No soft-pass.`,
+        );
+      }
+      // Pending / Running / Done (Done may auto-dismiss in 3s — catching it counts)
+      return;
+    }
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(
+    `idea#168 backup_instance: no backupApp Operation for ${instanceId} within ${budgetMs}ms ` +
+      `after Back up click (OperationProgress empty / no matching card). ` +
+      `r42 FAIL@112: Intent must not return ok on click alone. No soft-pass.`,
+  );
+}
+
+/**
  * Backup instance — requires linked Backup Disk; product enables Backup only when Running.
  * Prefer A r23: stop→backup left Backup disabled — start if Stopped, wait enable, loud-fail.
+ * Prefer A r42 FAIL@112: after click, wait until a backupApp Operation appears (or
+ * CommandFeedback / Failed op) before returning ok — not just the click.
  * Do NOT change product isBackupDisabled (Stopped stays disabled).
  */
 export const backup_instance: IntentFn = async ({ page, instanceId }) => {
@@ -441,6 +525,10 @@ export const backup_instance: IntentFn = async ({ page, instanceId }) => {
   }
 
   await btn.click();
+  // ≥2 linked Backup Disks: picker opens instead of sending — pick one or fail loud.
+  await confirmBackupPickerIfOpen(page, id);
+  // r42 FAIL@112: do not return ok until the backupApp Operation is visible (or fails).
+  await waitForBackupAppOperation(page, id, backupOpAppearTimeoutMs());
 };
 
 /** Back to disk — select parent disk row (ctx.diskId) → DiskView / EmptyDiskPanel. */
