@@ -11,6 +11,7 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import { cancelOperation } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
+import { confirmCancelled, remoteWatchFor } from '../store/remoteConfirm';
 import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 
@@ -215,7 +216,10 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
         cancelOperation(engineId, op.id);
       } else {
         setCancelSubject(KIND_LABEL[op.kind] ?? op.kind);
-        cancelResult.start(op.id, () => cancelOperation(engineId, op.id));
+        cancelResult.start(op.id, () => cancelOperation(engineId, op.id), {
+          engineId,
+          remote: remoteWatchFor(props.store, engineId, 'cancelOperation', confirmCancelled(props.store, op.id)),
+        });
       }
     }
     // Optimistically dismiss from view

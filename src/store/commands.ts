@@ -171,15 +171,17 @@ export const cancelOperation = (engineId: string, operationId: string): void => 
 
 /**
  * Build the "backupApp" command string (pure, no side effects).
- * Format: "backupApp <instanceName> <backupDiskName>"
+ * Format: "backupApp <instanceId> <backupDiskId>"
  *
- * Still the disk NAME on purpose: Engine 8d98718's backupApp wrapper looks the
- * backup disk up by name only. A name with spaces is refused by the Engine
- * ("Too many arguments"); the panels show that refusal (CommandFeedback).
- * Switch to the ID once the Engine accepts both (Axle's fix).
+ * IDs, never display names (r29@97): names may contain spaces, which the
+ * Engine's space-split refuses, and two instances can share a name
+ * ("kolibri"). Axle's Engine fix resolves both arguments id-first
+ * (resolveInstanceArg / resolveDiskArg). Fleet Engine 8d98718 matches the
+ * instance and disk by NAME only and refuses this form until the fix is
+ * deployed; the panels show that refusal (CommandFeedback).
  */
-export const buildBackupAppCommand = (instanceName: string, backupDiskName: string): string =>
-  `backupApp ${instanceName} ${backupDiskName}`;
+export const buildBackupAppCommand = (instanceId: string, backupDiskId: string): string =>
+  `backupApp ${instanceId} ${backupDiskId}`;
 
 /**
  * Build the "createBackupDisk" command string (pure, no side effects).
@@ -192,13 +194,13 @@ export const buildCreateBackupDiskCommand = (
   instanceNames: string[]
 ): string => `createBackupDisk ${diskArg} ${mode} ${instanceNames.join(' ')}`;
 
-/** Trigger an on-demand backup of an instance to a named backup disk. */
+/** Trigger an on-demand backup of an instance (by ID) to a backup disk (by ID). */
 export const backupApp = (
   engineId: string,
-  instanceName: string,
-  backupDiskName: string
+  instanceId: string,
+  backupDiskId: string
 ): void => {
-  _sendCommand(engineId, buildBackupAppCommand(instanceName, backupDiskName));
+  _sendCommand(engineId, buildBackupAppCommand(instanceId, backupDiskId));
 };
 
 /**
@@ -361,21 +363,20 @@ export const installApp = (
 
 /**
  * Build the "restoreApp" command string (pure, no side effects).
- * Format: "restoreApp <instanceName> <targetDiskName>"
+ * Format: "restoreApp <instanceId> <targetDiskId>"
  *
- * Still the disk NAME on purpose: Engine 8d98718's restoreApp wrapper looks
- * the target disk up by name only (an ID would be "not found"). A name with
- * spaces is refused with "Too many arguments" (r29@97); RestorePanel shows
- * that refusal. Switch to the ID once the Engine accepts both (Axle's fix).
+ * IDs, never display names — see buildBackupAppCommand. A disk name with
+ * spaces was refused with "Too many arguments" (r29@97). Needs Axle's Engine
+ * fix (resolveInstanceArg / resolveDiskArg); fleet Engine 8d98718 refuses it.
  */
-export const buildRestoreAppCommand = (instanceName: string, targetDiskName: string): string =>
-  `restoreApp ${instanceName} ${targetDiskName}`;
+export const buildRestoreAppCommand = (instanceId: string, targetDiskId: string): string =>
+  `restoreApp ${instanceId} ${targetDiskId}`;
 
-/** Restore a backed-up instance onto a target disk. */
+/** Restore a backed-up instance (by ID) onto a target disk (by ID). */
 export const restoreApp = (
   engineId: string,
-  instanceName: string,
-  targetDiskName: string
+  instanceId: string,
+  targetDiskId: string
 ): void => {
-  _sendCommand(engineId, buildRestoreAppCommand(instanceName, targetDiskName));
+  _sendCommand(engineId, buildRestoreAppCommand(instanceId, targetDiskId));
 };

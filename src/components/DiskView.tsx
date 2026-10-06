@@ -14,6 +14,7 @@ import EraseDialog, { type EraseMode } from './EraseDialog';
 import RoleBadges from './RoleBadges';
 import CommandFeedback from './CommandFeedback';
 import { createCommandResult } from '../store/commandResult';
+import { confirmInstalled, remoteWatchFor } from '../store/remoteConfirm';
 import {
   DEFAULT_SHARE_NAME,
   UPDATE_ENGINE_TOOLTIP,
@@ -124,7 +125,10 @@ const DiskView: Component<DiskViewProps> = (props) => {
     if (!arg.ok) return;
     setLessonClickError('');
     lessonResult.start(arg.arg, () =>
-      installApp(eng, KOLIBRI_LESSON_APP_ID, arg.arg, { name: spec.instanceName }));
+      installApp(eng, KOLIBRI_LESSON_APP_ID, arg.arg, { name: spec.instanceName }), {
+      engineId: eng,
+      remote: remoteWatchFor(props.store, eng, 'installApp', confirmInstalled(props.store, d.id, spec.instanceName)),
+    });
   };
 
   const [addFilesOpen, setAddFilesOpen] = createSignal(false);
@@ -215,6 +219,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
             >
               <h3 class="disk-section__title">Add Files to this disk</h3>
               <FilesRoleForm
+                store={props.store}
                 disk={disk}
                 engineId={engineId}
                 commandLogStore={props.commandLogStore}

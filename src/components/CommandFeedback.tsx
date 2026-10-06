@@ -5,6 +5,10 @@
  * Disk results: an `edp-form__error` alert with the Engine's error trace
  * message, or an `edp-form__hint` status when the Engine never answered.
  * Pending and success render nothing; the panel's own progress UI covers them.
+ *
+ * Cross-engine commands (remoteConfirm.ts) show a neutral `edp-form__hint`
+ * "Sent to <engine>, waiting for confirmation" until the store or the target's
+ * log confirms, and turn red only on a real error or after the long timeout.
  */
 import { Show, type Accessor, type Component } from 'solid-js';
 import type { CommandResult } from '../store/commandResult';
@@ -39,8 +43,24 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
     const s = props.result.state();
     return s.kind === 'error' ? s.message : null;
   };
+  const sentTo = () => {
+    const s = props.result.state();
+    return s.kind === 'sent' ? s.engine : null;
+  };
   return (
     <>
+      <Show when={sentTo()}>
+        {(engine) => (
+          <p
+            class="edp-form__hint command-feedback--sent"
+            role="status"
+            data-testid={`${props.testId}-sent`}
+            data-command={props.result.command() ?? ''}
+          >
+            Sent to {engine()}, waiting for confirmation…
+          </p>
+        )}
+      </Show>
       <Show when={errorMessage()}>
         {(msg) => (
           <p

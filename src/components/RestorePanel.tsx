@@ -4,6 +4,7 @@ import { createCommandResult, type CommandResult } from '../store/commandResult'
 import type { CommandLogState } from '../store/commandLog';
 import { isInstanceLocked } from '../store/operations';
 import CommandFeedback from './CommandFeedback';
+import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
 import type { Disk, Instance, Store } from '../types/store';
 
 interface RestorePanelProps {
@@ -73,9 +74,14 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     if (!engineId || !targetDiskId || !s) return;
     const targetDisk = s.diskDB[targetDiskId];
     if (!targetDisk) return;
-    // The Engine's answer (e.g. "Too many arguments", "Target disk … not
-    // found") is shown on this row by CommandFeedback — never silent.
-    result.start(inst.name, () => restoreApp(engineId, inst.name, targetDisk.name));
+    // Instance and disk by ID (names may contain spaces; two instances can
+    // share a name). The Engine's answer (e.g. "Too many arguments", "Target
+    // disk … not found") is shown on this row by CommandFeedback — never
+    // silent. On another Engine: "Sent to …" until the restore op is Done.
+    result.start(inst.id, () => restoreApp(engineId, inst.id, targetDisk.id), {
+      engineId,
+      remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id)),
+    });
     setConfirmingId(null);
     // Clear the target selection so the button re-disables
     setTargetSelections((prev) => {

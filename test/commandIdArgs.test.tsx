@@ -5,8 +5,9 @@
  *
  *  - startInstance / stopInstance send the disk ID (the instance's storedOn);
  *    the Engine finds the disk via storedOn first, so the ID always works.
- *  - restoreApp / backupApp still send the disk NAME (Engine 8d98718 looks
- *    those disks up by name only). Locked in here until Axle's Engine fix.
+ *  - restoreApp / backupApp send the instance ID and the disk ID (r30 id
+ *    contract; Axle's Engine fix resolves both id-first). start/stop/copy/move
+ *    keep the instance NAME: no Engine resolves an instance id for them.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library';
@@ -118,18 +119,18 @@ describe('MobileAppList sends the disk ID, never a spaced disk name', () => {
   });
 });
 
-describe('restoreApp / backupApp still send the disk NAME (Engine 8d98718 resolves by name only)', () => {
-  it('buildRestoreAppCommand uses the name as given', () => {
-    expect(buildRestoreAppCommand('kolibri', 'kolibri-disk')).toBe('restoreApp kolibri kolibri-disk');
-    expect(buildRestoreAppCommand('kolibri', SPACED_NAME)).toBe(`restoreApp kolibri ${SPACED_NAME}`);
+describe('restoreApp / backupApp send instance ID + disk ID (r30 id contract)', () => {
+  const INST_ID = MOCK_IDS.INST_KOLIBRI_ID;
+
+  it('buildRestoreAppCommand → "restoreApp <instanceId> <diskId>"', () => {
+    expect(buildRestoreAppCommand(INST_ID, DISK_ID)).toBe(`restoreApp ${INST_ID} ${DISK_ID}`);
   });
 
-  it('buildBackupAppCommand uses the name as given', () => {
-    expect(buildBackupAppCommand('kolibri', 'backup-disk')).toBe('backupApp kolibri backup-disk');
-    expect(buildBackupAppCommand('kolibri', SPACED_NAME)).toBe(`backupApp kolibri ${SPACED_NAME}`);
+  it('buildBackupAppCommand → "backupApp <instanceId> <diskId>"', () => {
+    expect(buildBackupAppCommand(INST_ID, MOCK_IDS.DISK_4_ID)).toBe(`backupApp ${INST_ID} ${MOCK_IDS.DISK_4_ID}`);
   });
 
-  it('RestorePanel sends the target disk name, not its ID', () => {
+  it('RestorePanel sends the instance ID and the target disk ID, never the spaced name', () => {
     const send = vi.fn();
     setSendCommandFn(send);
     const store = spacedStore('Running');
@@ -143,25 +144,64 @@ describe('restoreApp / backupApp still send the disk NAME (Engine 8d98718 resolv
     fireEvent.change(screen.getByRole('combobox'), { target: { value: DISK_ID } });
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
-    expect(send).toHaveBeenCalledWith(MOCK_IDS.ENGINE_1_ID, `restoreApp kolibri ${SPACED_NAME}`);
+    expect(send).toHaveBeenCalledOnce();
+    const cmd = send.mock.calls[0][1] as string;
+    expect(cmd).toBe(`restoreApp ${INST_ID} ${DISK_ID}`);
+    expectNoDiskName(cmd);
+    expect(cmd.split(' ')[1]).not.toBe('kolibri'); // instance by id (two instances can be named kolibri)
   });
 
-  it('InstanceRow Back up sends the backup disk name', () => {
-    const send = vi.fn();
-    setSendCommandFn(send);
-    const store = spacedStore('Running');
-    const inst = store.instanceDB[MOCK_IDS.INST_KOLIBRI_ID];
-    render(() => (
+  const renderBackupRow = (store: Store, backupDisk: Disk) => {
+    const inst = store.instanceDB[INST_ID];
+    return render(() => (
       <InstanceRow
         instanceId={inst.id}
         instance={() => store.instanceDB[inst.id]}
         app={() => store.appDB[inst.instanceOf]}
         engine={() => store.engineDB[MOCK_IDS.ENGINE_1_ID]}
         store={() => store}
-        backupDisks={() => [store.diskDB[MOCK_IDS.DISK_4_ID]]}
+        backupDisks={() => [backupDisk]}
       />
     ));
-    fireEvent.click(screen.getByTestId(`backup-instance-${inst.id}`));
-    expect(send).toHaveBeenCalledWith(MOCK_IDS.ENGINE_1_ID, 'backupApp kolibri backup-disk');
+  };
+
+  it('InstanceRow Back up sends the instance ID and the backup disk ID (spaced em-dash name never sent)', () => {
+    const send = vi.fn();
+    setSendCommandFn(send);
+    const base = spacedStore('Running');
+    const backupDisk: Disk = { ...base.diskDB[MOCK_IDS.DISK_4_ID], name: 'Weekly Backups — Grade 5' };
+    const store: Store = { ...base, diskDB: { ...base.diskDB, [backupDisk.id]: backupDisk } };
+    renderBackupRow(store, backupDisk);
+    fireEvent.click(screen.getByTestId(`backup-instance-${INST_ID}`));
+    expect(send).toHaveBeenCalledOnce();
+    const cmd = send.mock.calls[0][1] as string;
+    expect(cmd).toBe(`backupApp ${INST_ID} ${backupDisk.id}`);
+    expect(cmd).not.toContain('—');
+    expect(cmd).not.toContain('Weekly');
+    expect(cmd.split(' ')).toHaveLength(3);
+  });
+
+  it('MobileAppList Back up sends the instance ID and the backup disk ID', () => {
+    const send = vi.fn();
+    setSendCommandFn(send);
+    const base = spacedStore('Running');
+    const backupDisk: Disk = { ...base.diskDB[MOCK_IDS.DISK_4_ID], name: 'Weekly Backups — Grade 5' };
+    const store: Store = { ...base, operationDB: {}, diskDB: { ...base.diskDB, [backupDisk.id]: backupDisk } };
+    render(() => <MobileAppList store={() => store} />);
+    const card = screen.getByText('kolibri').closest('.mobile-app-card') as HTMLElement;
+    fireEvent.click(card.querySelector('.btn--backup')!);
+    expect(send).toHaveBeenCalledWith(MOCK_IDS.ENGINE_1_ID, `backupApp ${INST_ID} ${backupDisk.id}`);
+  });
+});
+
+describe('instance argument: name where no Engine resolves an id (locked in)', () => {
+  it('start / stop / copy / move keep the instance NAME; restore / backup use the ID', async () => {
+    const c = await import('../src/store/commands');
+    expect(c.buildStartInstanceCommand('kolibri', DISK_ID).split(' ')[1]).toBe('kolibri');
+    expect(c.buildStopInstanceCommand('kolibri', DISK_ID).split(' ')[1]).toBe('kolibri');
+    expect(c.buildCopyAppCommand('kolibri', DISK_ID, 'DISK002')).toBe(`copyApp kolibri ${DISK_ID} DISK002`);
+    expect(c.buildMoveAppCommand('kolibri', DISK_ID, 'DISK002')).toBe(`moveApp kolibri ${DISK_ID} DISK002`);
+    expect(c.buildRestoreAppCommand(MOCK_IDS.INST_KOLIBRI_ID, DISK_ID).split(' ')[1]).toBe(MOCK_IDS.INST_KOLIBRI_ID);
+    expect(c.buildBackupAppCommand(MOCK_IDS.INST_KOLIBRI_ID, DISK_ID).split(' ')[1]).toBe(MOCK_IDS.INST_KOLIBRI_ID);
   });
 });

@@ -14,6 +14,7 @@ import { canEject, unmountWarningDiskIds, unmountWarningText } from '../store/di
 import EjectConfirm from './EjectConfirm';
 import CommandFeedback from './CommandFeedback';
 import { createCommandResult } from '../store/commandResult';
+import { confirmEjected, confirmRebooted, formatWait, remoteWatchFor, type RemoteWatch } from '../store/remoteConfirm';
 import RoleBadges from './RoleBadges';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
@@ -30,6 +31,8 @@ export { canEject };
 type EjectState =
   | { kind: 'idle' }
   | { kind: 'pending'; baseline: Set<string> }
+  /** Cross-engine eject: neutral until the store (or the target's log) confirms. */
+  | { kind: 'sent'; baseline: Set<string>; watch: RemoteWatch; remoteBaseline: Set<string> }
   | { kind: 'error'; message: string }
   | { kind: 'timeout' };
 
@@ -161,7 +164,10 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     e.stopPropagation();
                     const eng = engine();
                     if (eng && confirm(`Reboot ${eng.hostname}?`)) {
-                      rebootResult.start('', () => rebootEngine(eng.id));
+                      rebootResult.start('', () => rebootEngine(eng.id), {
+                        engineId: eng.id,
+                        remote: remoteWatchFor(props.store, eng.id, 'reboot', confirmRebooted(props.store, eng.id)),
+                      });
                     }
                   }}
                 >
@@ -247,8 +253,15 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   // Reads the command log only while an eject is pending.
                   const ejectOutcome = createMemo(() => {
                     const s = ejectState();
-                    if (s.kind !== 'pending') return null;
-                    return findEjectOutcome(props.commandLogStore?.() ?? null, s.baseline, diskId);
+                    if (s.kind !== 'pending' && s.kind !== 'sent') return null;
+                    const own = findEjectOutcome(props.commandLogStore?.() ?? null, s.baseline, diskId);
+                    if (own || s.kind !== 'sent') return own;
+                    // Cross-engine: the target's own log (if loaded at send), then the store.
+                    const remote = s.watch.log ? findEjectOutcome(s.watch.log(), s.remoteBaseline, diskId) : null;
+                    if (remote) return remote;
+                    const c = s.watch.check();
+                    if (c === 'ok') return { kind: 'ok' as const };
+                    return c ? { kind: 'error' as const, message: c.error } : null;
                   });
                   createEffect(() => {
                     const outcome = ejectOutcome();
@@ -264,14 +277,26 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
 
                   const startEject = (engineId: string) => {
                     clearEjectTimer();
-                    setEjectState({
-                      kind: 'pending',
-                      baseline: traceIdSnapshot(props.commandLogStore?.() ?? null),
-                    });
-                    ejectTimer = setTimeout(() => {
-                      ejectTimer = null;
-                      if (ejectState().kind === 'pending') setEjectState({ kind: 'timeout' });
-                    }, EJECT_TIMEOUT_MS);
+                    const baseline = traceIdSnapshot(props.commandLogStore?.() ?? null);
+                    const watch = remoteWatchFor(props.store, engineId, 'ejectDisk', confirmEjected(props.store, diskId));
+                    if (watch) {
+                      setEjectState({ kind: 'sent', baseline, watch, remoteBaseline: watch.log ? traceIdSnapshot(watch.log()) : new Set() });
+                      ejectTimer = setTimeout(() => {
+                        ejectTimer = null;
+                        if (ejectState().kind === 'sent') {
+                          setEjectState({
+                            kind: 'error',
+                            message: `No confirmation from ${watch.engineLabel} after ${formatWait(watch.timeoutMs)}. Check History on ${watch.engineLabel}.`,
+                          });
+                        }
+                      }, watch.timeoutMs);
+                    } else {
+                      setEjectState({ kind: 'pending', baseline });
+                      ejectTimer = setTimeout(() => {
+                        ejectTimer = null;
+                        if (ejectState().kind === 'pending') setEjectState({ kind: 'timeout' });
+                      }, EJECT_TIMEOUT_MS);
+                    }
                     ejectDisk(engineId, diskId);
                   };
 
@@ -280,6 +305,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     const name = disk()?.name ?? diskId;
                     if (s.kind === 'error') return { tone: 'error', text: `Couldn't eject ${name}: ${s.message}` };
                     if (s.kind === 'timeout') return { tone: 'info', text: `No response from the Engine for ejecting ${name}. Check History for details.` };
+                    if (s.kind === 'sent') return { tone: 'info', text: `Sent to ${s.watch.engineLabel}, waiting for confirmation…` };
                     return null;
                   });
 
@@ -367,6 +393,8 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                         {(notice) => (
                           <div
                             class={`tree-item__eject-notice tree-item__eject-notice--${notice().tone}`}
+                            data-testid={`eject-notice-${diskId}`}
+                            data-eject-state={ejectState().kind}
                             role={notice().tone === 'error' ? 'alert' : 'status'}
                             title="Click to dismiss"
                             onClick={() => setEjectState({ kind: 'idle' })}

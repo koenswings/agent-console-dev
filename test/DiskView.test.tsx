@@ -14,6 +14,10 @@ import { MOCK_FILES_STORE, FILES_IDS as I } from '../src/mock/filesFixtures';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
 import type { Disk, Engine, Store } from '../src/types/store';
+import { noteConnectedEngine } from '../src/store/connectedEngine';
+
+// These tests exercise the connected-Engine path (cross-engine: commandFeedback tests).
+beforeEach(() => noteConnectedEngine(I.ENGINE_A));
 
 const TOOLTIP = 'Update this Engine to manage this disk';
 

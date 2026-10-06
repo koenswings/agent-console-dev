@@ -26,6 +26,8 @@ import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from
 import type { CommandLogState } from './commandLog';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import { traceIdSnapshot } from './ejectResult';
+import { noteConnectedEngine } from './connectedEngine';
+import { formatWait, type RemoteWatch } from './remoteConfirm';
 
 /** How long to wait for the Engine's answer. */
 export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
@@ -148,7 +150,9 @@ export type CommandResultState =
   | { kind: 'pending' }
   | { kind: 'success' }
   | { kind: 'error'; message: string }
-  | { kind: 'timeout' };
+  | { kind: 'timeout' }
+  /** Cross-engine: sent to another Engine, waiting for confirmation (neutral, not red). */
+  | { kind: 'sent'; engine: string };
 
 /** Per-send overrides, so one result can follow different commands (start/stop/backup on a row). */
 export interface CommandResultTarget {
@@ -156,6 +160,14 @@ export interface CommandResultTarget {
   argKey?: TraceArgKey;
   matchMode?: ArgMatchMode;
   longRunning?: boolean;
+  /** Target Engine: a trace in our own log proves it is the connected one. */
+  engineId?: string;
+  /**
+   * Cross-engine watch (remoteWatchFor), null/absent when the target is the
+   * connected Engine. Shows 'sent' instead of timing out after 15 s, resolves
+   * from the target's log (if loaded) or the store, red after its timeout.
+   */
+  remote?: RemoteWatch | null;
 }
 
 export interface CommandResultOptions {
@@ -190,6 +202,9 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     argKey: TraceArgKey;
     matchMode: ArgMatchMode;
     longRunning: boolean;
+    engineId: string | null;
+    remote: RemoteWatch | null;
+    remoteBaseline: Set<string>;
   };
   const [pending, setPending] = createSignal<Pending | null>(null);
   const [state, setState] = createSignal<CommandResultState>({ kind: 'idle' });
@@ -207,15 +222,22 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     return { accepted: true, outcome: traceOutcome(trace, p.command) };
   });
 
-  createEffect(() => {
-    const f = found();
+  // Cross-engine: the target's own log (approach i) and the store check (ii).
+  const remoteFound = createMemo((): TraceOutcome | null => {
     const p = pending();
-    if (!f || !p) return;
-    // The Engine opened a trace: it received the command. Long operations
-    // (restore, backup, copy, move) are no longer at risk of "no response".
-    if (p.longRunning) clearTimer();
-    const o = f.outcome;
-    if (!o) return;
+    if (!p?.remote) return null;
+    if (p.remote.log) {
+      const t = findCommandTrace(p.remote.log(), p.remoteBaseline, p.command, p.argKey, p.argValue, p.matchMode);
+      const o = t ? traceOutcome(t, p.command) : null;
+      if (o) return o;
+    }
+    const c = p.remote.check();
+    if (c === 'ok') return { kind: 'ok' };
+    if (c) return { kind: 'error', message: c.error };
+    return null;
+  });
+
+  const finish = (o: TraceOutcome) => {
     if (o.kind === 'error') {
       clearTimer();
       setPending(null);
@@ -227,12 +249,31 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
       setPending(null);
       setState({ kind: 'success' });
     }
+  };
+
+  createEffect(() => {
+    const f = found();
+    const p = pending();
+    if (!f || !p) return;
+    // A trace in our own log: the target is the connected Engine after all.
+    if (p.engineId) noteConnectedEngine(p.engineId);
+    // The Engine opened a trace: it received the command. Long operations
+    // (restore, backup, copy, move) are no longer at risk of "no response".
+    if (p.longRunning && !p.remote) clearTimer();
+    if (f.outcome) finish(f.outcome);
+  });
+
+  createEffect(() => {
+    const o = remoteFound();
+    if (!o || !pending()) return;
+    finish(o);
   });
 
   const start = (argValue: string, send: () => void, target?: CommandResultTarget) => {
     clearTimer();
     const cmd = target?.command ?? opts.command ?? '';
     setCommand(cmd);
+    const remote = target?.remote ?? null;
     setPending({
       baseline: traceIdSnapshot(opts.commandLog()),
       argValue,
@@ -240,15 +281,33 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
       argKey: target?.argKey ?? opts.argKey ?? 'diskId',
       matchMode: target?.matchMode ?? opts.matchMode ?? 'key',
       longRunning: target?.longRunning ?? opts.longRunning ?? false,
+      engineId: target?.engineId ?? null,
+      remote,
+      remoteBaseline: remote?.log ? traceIdSnapshot(remote.log()) : new Set(),
     });
-    setState({ kind: 'pending' });
-    timer = setTimeout(() => {
-      timer = null;
-      if (pending()) {
-        setPending(null);
-        setState({ kind: 'timeout' });
-      }
-    }, opts.timeoutMs ?? COMMAND_RESULT_TIMEOUT_MS);
+    if (remote) {
+      // Neutral until confirmed; red only on a real error or the long timeout.
+      setState({ kind: 'sent', engine: remote.engineLabel });
+      timer = setTimeout(() => {
+        timer = null;
+        if (pending()) {
+          setPending(null);
+          setState({
+            kind: 'error',
+            message: `No confirmation from ${remote.engineLabel} after ${formatWait(remote.timeoutMs)}. Check History on ${remote.engineLabel}.`,
+          });
+        }
+      }, remote.timeoutMs);
+    } else {
+      setState({ kind: 'pending' });
+      timer = setTimeout(() => {
+        timer = null;
+        if (pending()) {
+          setPending(null);
+          setState({ kind: 'timeout' });
+        }
+      }, opts.timeoutMs ?? COMMAND_RESULT_TIMEOUT_MS);
+    }
     send();
   };
 

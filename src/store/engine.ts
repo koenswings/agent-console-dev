@@ -9,11 +9,11 @@
  * Returns a StoreConnection whose store() Accessor updates reactively as
  * Automerge syncs changes from the Engine.
  */
-import { createSignal } from 'solid-js';
+import { createSignal, type Accessor } from 'solid-js';
 import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
-import type { CommandLogError } from './commandLog';
+import type { CommandLogError, CommandLogState } from './commandLog';
 import { STORAGE_KEY_PORT, formatHostPort, parsePort } from './storage';
 
 /** Fallback WS port when the Engine does not advertise `wsPort` on /api/store-url. */
@@ -271,7 +271,29 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       handle.change(fn);
     };
 
-    return { store, connected, sendCommand, changeDoc, commandLogStore, dispose };
+    // Approach (i) for cross-engine commands (remoteCommandLogs.ts): another
+    // Engine's command log, fetched from its own HTTP API (same port as ours)
+    // and synced through this repo (the connected Engine relays to its peers).
+    // Opportunistic: on any failure the accessor stays loading/error and the
+    // Console falls back to store confirmation.
+    const remoteLogs = new Map<string, Accessor<CommandLogState>>();
+    const ownPort = parsePort(httpHost.includes(':') ? httpHost.split(':').pop() : undefined);
+    const commandLogFor = (otherHost: string): Accessor<CommandLogState> | null => {
+      const key = otherHost.trim().toLowerCase();
+      if (!key || disposed) return null;
+      const cached = remoteLogs.get(key);
+      if (cached) return cached;
+      // The inner accessor (a live signal) arrives once the URL is fetched.
+      const [inner, setInner] = createSignal<Accessor<CommandLogState> | null>(null);
+      const log: Accessor<CommandLogState> = () => inner()?.() ?? null;
+      remoteLogs.set(key, log);
+      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo)
+        .then((acc) => setInner(() => acc))
+        .catch(() => setInner(() => () => ({ error: true, url: otherHost, status: null })));
+      return log;
+    };
+
+    return { store, connected, sendCommand, changeDoc, commandLogStore, dispose, hostname, commandLogFor };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // 'Document ... is unavailable' means the peer hasn't synced the doc yet.

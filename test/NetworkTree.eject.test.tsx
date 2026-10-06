@@ -11,6 +11,10 @@ import { MOCK_STORE } from '../src/mock/mockStore';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
 import type { Disk, Store } from '../src/types/store';
+import { noteConnectedEngine } from '../src/store/connectedEngine';
+
+// These tests exercise the connected-Engine path (cross-engine: commandFeedback tests).
+beforeEach(() => noteConnectedEngine(ENGINE_ID));
 
 // ── Fixture: idea03 "system-boot" case ──────────────────────────────────────
 // Two records share the name `system-boot`: a stale undocked one (listed

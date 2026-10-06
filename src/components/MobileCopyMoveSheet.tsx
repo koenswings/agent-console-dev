@@ -24,7 +24,11 @@ interface MobileCopyMoveSheetProps {
    * refusal or failure is shown after this sheet closes (MobileAppList card).
    * Without it the command is sent directly.
    */
-  onSend?: (command: 'copyApp' | 'moveApp', send: () => void) => void;
+  onSend?: (
+    command: 'copyApp' | 'moveApp',
+    send: () => void,
+    target: { engineId: string; targetDiskId: string },
+  ) => void;
 }
 
 const MobileCopyMoveSheet: Component<MobileCopyMoveSheetProps> = (props) => {
@@ -77,7 +81,7 @@ const MobileCopyMoveSheet: Component<MobileCopyMoveSheetProps> = (props) => {
     if (!src) return;
     const name = props.instance.name;
     const sendVia = (command: 'copyApp' | 'moveApp', send: () => void) =>
-      props.onSend ? props.onSend(command, send) : send();
+      props.onSend ? props.onSend(command, send, { engineId, targetDiskId: diskId }) : send();
     if (operation === 'copy') {
       sendVia('copyApp', () => copyApp(engineId, name, String(src.id), diskId));
     } else if (operation === 'move') {

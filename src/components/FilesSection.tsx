@@ -8,6 +8,7 @@ import { For, Show, createMemo, createSignal, type Accessor, type Component } fr
 import EjectConfirm from './EjectConfirm';
 import { ejectDisk } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
+import { confirmEjected, remoteWatchFor } from '../store/remoteConfirm';
 import { isDiskLocked } from '../store/operations';
 import {
   canEject,
@@ -74,7 +75,10 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
     const d = props.disk();
     if (!d?.dockedTo || ejectLocked()) return;
     const engineId = String(d.dockedTo);
-    eject.start(d.id, () => ejectDisk(engineId, d.id));
+    eject.start(d.id, () => ejectDisk(engineId, d.id), {
+      engineId,
+      remote: remoteWatchFor(props.store, engineId, 'ejectDisk', confirmEjected(props.store, d.id)),
+    });
   };
 
   return (
@@ -115,7 +119,7 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
         <div class="files-section__actions">
           <button
             class="btn files-section__eject"
-            disabled={ejectLocked() || eject.state().kind === 'pending'}
+            disabled={ejectLocked() || eject.state().kind === 'pending' || eject.state().kind === 'sent'}
             title={ejectLocked() ? 'Operation in progress — cannot eject' : `Eject ${props.disk()?.name}`}
             onClick={onEjectClick}
           >
@@ -126,6 +130,9 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
           </Show>
           <Show when={(() => { const s = eject.state(); return s.kind === 'error' ? s.message : null; })()}>
             {(msg) => <p class="edp-form__error" role="alert">Couldn't eject {props.disk()?.name}: {msg()}</p>}
+          </Show>
+          <Show when={(() => { const s = eject.state(); return s.kind === 'sent' ? s.engine : null; })()}>
+            {(engine) => <p class="edp-form__hint" role="status" data-testid="files-eject-sent">Sent to {engine()}, waiting for confirmation…</p>}
           </Show>
           <Show when={eject.state().kind === 'timeout'}>
             <p class="edp-form__hint" role="status">No response from the Engine for ejecting {props.disk()?.name}. Check History for details.</p>

@@ -10,6 +10,12 @@ import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
+import {
+  confirmInstanceStatus,
+  confirmNewOperation,
+  lastBackupAdvanced,
+  remoteWatchFor,
+} from '../store/remoteConfirm';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
 import { buildAppUrl, currentAppHostContext } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
@@ -334,6 +340,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     // A refused start/stop never reaches the instance: drop the spinner.
     if (cmdResult.state().kind === 'error') setPendingWithTimeout(null);
   });
+  const storeAcc = () => props.store?.() ?? null;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -343,7 +350,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const diskId = inst?.storedOn;
     if (!engine || !inst || !diskId) return;
     // Disk ID (storedOn), never the display name: names may contain spaces.
-    cmdResult.start(inst.name, () => startInstance(engine.id, inst.name, String(diskId)), { command: 'startInstance' });
+    // Instance by NAME: no Engine (8d98718 nor Axle's fix) resolves an id here.
+    cmdResult.start(inst.name, () => startInstance(engine.id, inst.name, String(diskId)), {
+      command: 'startInstance',
+      engineId: engine.id,
+      remote: remoteWatchFor(storeAcc, engine.id, 'startInstance', confirmInstanceStatus(storeAcc, inst.id, ['Running'])),
+    });
     setPendingWithTimeout('starting');
   };
 
@@ -352,15 +364,22 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const inst = props.instance();
     const diskId = inst?.storedOn;
     if (!engine || !inst || !diskId) return;
-    cmdResult.start(inst.name, () => stopInstance(engine.id, inst.name, String(diskId)), { command: 'stopInstance' });
+    cmdResult.start(inst.name, () => stopInstance(engine.id, inst.name, String(diskId)), {
+      command: 'stopInstance',
+      engineId: engine.id,
+      remote: remoteWatchFor(storeAcc, engine.id, 'stopInstance', confirmInstanceStatus(storeAcc, inst.id, ['Stopped', 'Docked'])),
+    });
     setPendingWithTimeout('stopping');
   };
 
-  const sendBackup = (engineId: string, instanceName: string, backupDiskName: string) => {
-    // backupApp still takes the disk NAME on Engine 8d98718 (see buildBackupAppCommand).
-    cmdResult.start(instanceName, () => backupApp(engineId, instanceName, backupDiskName), {
+  const sendBackup = (engineId: string, instanceId: string, backupDiskId: string) => {
+    // Instance and backup disk by ID (see buildBackupAppCommand).
+    cmdResult.start(instanceId, () => backupApp(engineId, instanceId, backupDiskId), {
       command: 'backupApp',
       longRunning: true,
+      engineId,
+      remote: remoteWatchFor(storeAcc, engineId, 'backupApp',
+        confirmNewOperation(storeAcc, 'backupApp', instanceId, lastBackupAdvanced(storeAcc, instanceId))),
     });
   };
 
@@ -371,7 +390,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       const engine = props.engine();
       const inst = props.instance();
       if (!engine || !inst) return;
-      sendBackup(engine.id, inst.name, disks[0].name);
+      sendBackup(engine.id, inst.id, disks[0].id);
     } else {
       setPickerOpen((v) => !v);
     }
@@ -381,7 +400,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const engine = props.engine();
     const inst = props.instance();
     if (!engine || !inst) return;
-    sendBackup(engine.id, inst.name, disk.name);
+    sendBackup(engine.id, inst.id, disk.id);
     setPickerOpen(false);
   };
 

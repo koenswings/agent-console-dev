@@ -15,8 +15,11 @@ import AppBrowser from './components/AppBrowser';
 import MobileLayout from './components/MobileLayout';
 import FirstTimeSetup from './components/FirstTimeSetup';
 import CommandFeedback from './components/CommandFeedback';
-import { createCommandResult } from './store/commandResult';
-import { setSendCommandFn, copyApp, moveApp } from './store/commands';
+import CopyMoveModal from './components/CopyMoveModal';
+import { createDragCopyMove } from './store/dragCopyMove';
+import { connectedEngineId, setConnectedEngineHost } from './store/connectedEngine';
+import { remoteCommandLog, setRemoteCommandLogFn } from './store/remoteCommandLogs';
+import { setSendCommandFn } from './store/commands';
 import {
   currentUser,
   isOperator,
@@ -41,7 +44,6 @@ import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 import type { CommandLogState } from './store/commandLog';
-import type { DragAppData } from './types/drag';
 
 // ---------------------------------------------------------------------------
 // App
@@ -89,58 +91,33 @@ const App: Component = () => {
   });
 
   // ── Drag-and-drop state (lifted here so NetworkTree and InstanceList share it)
-  const [dragData, setDragData] = createSignal<DragAppData | null>(null);
+  // and the Copy-or-Move choice (store/dragCopyMove.ts; component-tested there).
+  const dragCopyMove = createDragCopyMove(store, () => commandLogStore());
+  const { dragData, setDragData, pendingMove, handleDrop } = dragCopyMove;
+  const copyMoveResult = dragCopyMove.result;
+  const copyMoveSubject = dragCopyMove.subject;
+  const handleCopyMoveChoice = dragCopyMove.choose;
 
-  interface PendingMove {
-    data: DragAppData;
-    targetDiskId: string;
-    targetDiskName: string;
-    targetEngineHostname: string;
-  }
-  const [pendingMove, setPendingMove] = createSignal<PendingMove | null>(null);
-
-  const handleDrop = (data: DragAppData, targetDiskId: string) => {
-    const s = store();
-    if (!s) return;
-    const targetDisk = s.diskDB[targetDiskId];
-    if (!targetDisk?.dockedTo) return;
-    const targetEngine = s.engineDB[String(targetDisk.dockedTo)];
-    setPendingMove({
-      data,
-      targetDiskId,
-      targetDiskName: String(targetDisk.name),
-      targetEngineHostname: targetEngine ? String(targetEngine.hostname) : String(targetDisk.dockedTo),
+  // ── Cross-engine feedback: which Engine we talk to, other Engines' logs ────
+  // Only re-runs when the connection object changes (not on store changes).
+  createEffect(() => {
+    const conn = connection();
+    setConnectedEngineHost(conn?.hostname ?? null);
+    setRemoteCommandLogFn((engineId) => {
+      const host = store()?.engineDB[engineId]?.hostname;
+      return host && conn?.commandLogFor ? conn.commandLogFor(String(host)) : null;
     });
-  };
-
-  // Engine answer for a drag-and-drop copy/move (the modal closes on choice,
-  // so the refusal/failure is shown above the right pane / in the mobile layout).
-  const copyMoveResult = createCommandResult({
-    commandLog: () => commandLogStore(),
-    argKey: 'instanceName',
-    longRunning: true,
   });
-  const [copyMoveSubject, setCopyMoveSubject] = createSignal('');
-
-  const handleCopyMoveChoice = (op: 'copy' | 'move') => {
-    const pending = pendingMove();
-    if (!pending) return;
+  // Start loading the other Engines' command logs early, so a later
+  // cross-engine command has a real baseline (approach i, opportunistic).
+  createEffect(() => {
     const s = store();
-    // Command must go to the SOURCE engine — it is the one running rsync
-    const sourceDisk = s?.diskDB[pending.data.sourceDiskId];
-    if (!sourceDisk?.dockedTo) return;
-    const engineId = String(sourceDisk.dockedTo);
-    const { instanceName, sourceDiskId } = pending.data;
-    const targetDiskId = pending.targetDiskId;
-    setCopyMoveSubject(instanceName);
-    if (op === 'copy') {
-      copyMoveResult.start(instanceName, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), { command: 'copyApp' });
-    } else {
-      copyMoveResult.start(instanceName, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), { command: 'moveApp' });
+    if (!s || !connection()?.commandLogFor) return;
+    const own = connectedEngineId(s);
+    for (const id of Object.keys(s.engineDB ?? {})) {
+      if (id !== own) remoteCommandLog(id);
     }
-    setPendingMove(null);
-    setDragData(null);
-  };
+  });
 
   // ── Reactive sync from connection → store / connected signals ─────────────
   createEffect(() => {
@@ -650,23 +627,7 @@ const App: Component = () => {
                 </div>
 
                 {/* Copy/Move modal — shown when an app is dropped onto a disk */}
-                <Show when={pendingMove()}>
-                  {(pm) => (
-                    <div class="copy-move-modal-overlay" role="dialog" aria-modal="true" aria-label="Copy or Move" data-testid="copy-move-modal">
-                      <div class="copy-move-modal">
-                        <div class="copy-move-modal__title">Copy or Move?</div>
-                        <p class="copy-move-modal__desc">
-                          <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em> on <em>{pm().targetEngineHostname}</em>
-                        </p>
-                        <div class="copy-move-modal__actions">
-                          <button class="btn" data-testid="copy-move-cancel" onClick={() => setPendingMove(null)}>Cancel</button>
-                          <button class="btn" data-testid="copy-move-move" onClick={() => handleCopyMoveChoice('move')}>Move</button>
-                          <button class="btn btn--primary" data-testid="copy-move-copy" onClick={() => handleCopyMoveChoice('copy')}>Copy</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Show>
+                <CopyMoveModal ctl={dragCopyMove} />
               </div>
             }
           >
@@ -679,7 +640,7 @@ const App: Component = () => {
               onDrop={handleDrop}
               pendingMove={pendingMove}
               onCopyMoveChoice={handleCopyMoveChoice}
-              onCancelMove={() => setPendingMove(null)}
+              onCancelMove={dragCopyMove.cancel}
               copyMoveFeedback={<CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" />}
             />
           </Show>

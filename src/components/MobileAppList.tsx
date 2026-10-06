@@ -4,6 +4,15 @@ import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import CommandFeedback from './CommandFeedback';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult, type CommandResult } from '../store/commandResult';
+import {
+  confirmInstanceStatus,
+  confirmNewOperation,
+  instanceStoredOn,
+  lastBackupAdvanced,
+  newInstanceOnDisk,
+  remoteWatchFor,
+  type RemoteCheck,
+} from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
@@ -146,11 +155,26 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     return inst.status;
   };
 
-  /** Send through the card's result (falls back to a plain send if the card is gone). */
-  const sendTracked = (inst: Instance, command: string, send: () => void, longRunning = false) => {
+  /**
+   * Send through the card's result (falls back to a plain send if the card is
+   * gone). `argValue` is what the command carries for the instance (name for
+   * start/stop/copy/move, id for backup). `confirm` is the store confirmation
+   * used when `engineId` is not the connected Engine.
+   */
+  const sendTracked = (
+    inst: Instance,
+    command: string,
+    send: () => void,
+    o: { engineId: string; argValue: string; longRunning?: boolean; confirm: () => RemoteCheck },
+  ) => {
     const r = cardResults.get(inst.id);
-    if (r) r.start(inst.name, send, { command, longRunning });
-    else send();
+    if (!r) { send(); return; }
+    r.start(o.argValue, send, {
+      command,
+      longRunning: o.longRunning ?? false,
+      engineId: o.engineId,
+      remote: remoteWatchFor(props.store, o.engineId, command, o.confirm),
+    });
   };
 
   const handleStart = (inst: Instance) => {
@@ -158,7 +182,10 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const diskId = inst.storedOn;
     if (!engine || !diskId) return;
     // Disk ID (storedOn), never the display name: names may contain spaces.
-    sendTracked(inst, 'startInstance', () => startInstance(engine.id, inst.name, String(diskId)));
+    sendTracked(inst, 'startInstance', () => startInstance(engine.id, inst.name, String(diskId)), {
+      engineId: engine.id, argValue: inst.name,
+      confirm: confirmInstanceStatus(props.store, inst.id, ['Running']),
+    });
     setPending(inst.id, 'starting');
   };
 
@@ -166,7 +193,10 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const engine = resolveEngine(inst);
     const diskId = inst.storedOn;
     if (!engine || !diskId) return;
-    sendTracked(inst, 'stopInstance', () => stopInstance(engine.id, inst.name, String(diskId)));
+    sendTracked(inst, 'stopInstance', () => stopInstance(engine.id, inst.name, String(diskId)), {
+      engineId: engine.id, argValue: inst.name,
+      confirm: confirmInstanceStatus(props.store, inst.id, ['Stopped', 'Docked']),
+    });
     setPending(inst.id, 'stopping');
   };
 
@@ -174,8 +204,11 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const engine = resolveEngine(inst);
     const disks = resolveBackupDisks(inst);
     if (!engine || disks.length === 0) return;
-    // backupApp still takes the disk NAME on Engine 8d98718 (see buildBackupAppCommand).
-    sendTracked(inst, 'backupApp', () => backupApp(engine.id, inst.name, disks[0].name), true);
+    // Instance and backup disk by ID (see buildBackupAppCommand).
+    sendTracked(inst, 'backupApp', () => backupApp(engine.id, inst.id, disks[0].id), {
+      engineId: engine.id, argValue: inst.id, longRunning: true,
+      confirm: confirmNewOperation(props.store, 'backupApp', inst.id, lastBackupAdvanced(props.store, inst.id)),
+    });
   };
 
   return (
@@ -343,7 +376,16 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           instance={inst()}
           store={props.store}
           onClose={() => setCopyMoveInstance(null)}
-          onSend={(command, send) => sendTracked(inst(), command, send, true)}
+          onSend={(command, send, target) => {
+            const i = inst();
+            const fallback = command === 'copyApp'
+              ? newInstanceOnDisk(props.store, target.targetDiskId, { instanceOf: i.instanceOf })
+              : instanceStoredOn(props.store, i.id, target.targetDiskId);
+            sendTracked(i, command, send, {
+              engineId: target.engineId, argValue: i.name, longRunning: true,
+              confirm: confirmNewOperation(props.store, command, i.id, fallback),
+            });
+          }}
         />
       )}
     </Show>

@@ -11,6 +11,8 @@
 import { Show, createMemo, createSignal, type Accessor, type Component, type JSX } from 'solid-js';
 import { DEFAULT_SHARE_NAME, createFilesDisk, validateShareName } from '../store/commands';
 import { FILES_TIMEOUT_MESSAGE, createCommandResult } from '../store/commandResult';
+import { remoteWatchFor } from '../store/remoteConfirm';
+import type { Store } from '../types/store';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk } from '../types/store';
 
@@ -22,6 +24,8 @@ export interface FilesRoleFormFooterArgs {
 }
 
 interface FilesRoleFormProps {
+  /** Store, to tell a cross-engine send apart and confirm it (remoteConfirm.ts). */
+  store?: () => Store | null;
   disk: () => Disk | undefined;
   /** Engine the disk is docked to (the command goes there). */
   engineId: () => string | undefined;
@@ -46,7 +50,8 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
     isSuccess: () => (props.disk()?.diskTypes ?? []).includes('files'),
   });
 
-  const pending = () => result.state().kind === 'pending';
+  // 'sent' = cross-engine, waiting for store confirmation (still busy).
+  const pending = () => result.state().kind === 'pending' || result.state().kind === 'sent';
   const blocked = () => props.blockedReason?.();
 
   const submit = () => {
@@ -54,7 +59,11 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
     const engineId = props.engineId();
     const name = shareName();
     if (!disk || !engineId || blocked() || validateShareName(name)) return;
-    result.start(disk.id, () => createFilesDisk(engineId, disk.id, name));
+    result.start(disk.id, () => createFilesDisk(engineId, disk.id, name), {
+      engineId,
+      remote: remoteWatchFor(() => props.store?.() ?? null, engineId, 'createFilesDisk',
+        () => ((props.disk()?.diskTypes ?? []).includes('files') ? 'ok' : null)),
+    });
   };
 
   return (
@@ -78,6 +87,9 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
 
       <Show when={result.state().kind === 'pending'}>
         <p class="edp-form__hint files-form__status">Waiting for the Engine…</p>
+      </Show>
+      <Show when={(() => { const s = result.state(); return s.kind === 'sent' ? s.engine : null; })()}>
+        {(engine) => <p class="edp-form__hint files-form__status" role="status">Sent to {engine()}, waiting for confirmation…</p>}
       </Show>
       <Show when={(() => { const s = result.state(); return s.kind === 'error' ? s.message : null; })()}>
         {(msg) => <p class="edp-form__error files-form__result" role="alert">{msg()}</p>}

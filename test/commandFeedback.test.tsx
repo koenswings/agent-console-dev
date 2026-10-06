@@ -144,7 +144,12 @@ describe('RestorePanel shows the Engine error trace', () => {
     // Old (baseline) error traces are not shown
     expect(screen.queryByTestId(`restore-feedback-${KOLIBRI}-error`)).not.toBeInTheDocument();
     const before = cls() as CommandLogStore;
-    setCls(log(...Object.values(before.traces), tooManyArgsTrace()));
+    // r30 id contract: restoreApp now names the instance by id, so its trace carries the id
+    setCls(log(...Object.values(before.traces), trace('refused', {
+      args: JSON.stringify([KOLIBRI, ...SPACED_NAME.split(' ')]),
+      status: 'error',
+      errorMessage: 'Error: Too many arguments',
+    })));
     const alert = screen.getByTestId(`restore-feedback-${KOLIBRI}-error`);
     expect(alert).toHaveAttribute('role', 'alert');
     expect(alert).toHaveClass('edp-form__error');
@@ -155,6 +160,7 @@ describe('RestorePanel shows the Engine error trace', () => {
   it('"Target disk … not found" (named args) is shown', () => {
     const { setCls } = setup(storeWith('Running'));
     setCls(log(trace('t', {
+      args: { instanceName: KOLIBRI, backupDiskId: MOCK_IDS.DISK_1_ID },
       status: 'error',
       errorMessage: "Target disk 'kolibri-disk' not found or not docked.",
     })));
@@ -172,7 +178,7 @@ describe('RestorePanel shows the Engine error trace', () => {
 
   it('a successful restore shows no error', () => {
     const { setCls } = setup(storeWith('Running'));
-    setCls(log(trace('t', { status: 'ok' })));
+    setCls(log(trace('t', { status: 'ok', args: { instanceName: KOLIBRI, backupDiskId: MOCK_IDS.DISK_1_ID } })));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
@@ -231,7 +237,7 @@ describe('InstanceRow shows the Engine error trace', () => {
     fireEvent.click(screen.getByTestId(`backup-instance-${KOLIBRI}`));
     setCls(log(trace('t', {
       command: 'backupApp',
-      args: { instanceName: 'kolibri', backupDiskId: 'backup-disk' },
+      args: { instanceName: KOLIBRI, backupDiskId: 'BACKUP001' }, // r30: instance id + disk id
       status: 'error',
       errorMessage: "No docked Backup Disk found named 'backup-disk'.",
     })));
