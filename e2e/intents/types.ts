@@ -13,6 +13,19 @@ export interface IntentContext {
   engineId?: string;
   /** Instance id (defaults to Kid kolibri/nextcloud grade5a-001 per Intent). */
   instanceId?: string;
+  /**
+   * Duration harness only (Stage 2 r64): read-only store wait for the Operation an Intent confirmed.
+   * copy/move/restore Intents wait for it to end before their single post-op Start. Optional.
+   */
+  waitOperation?: (q: { kind: WaitOperationKind; instanceId?: string; sinceMs: number }) => Promise<WaitOperationResult>;
+}
+
+export type WaitOperationKind = 'copyApp' | 'moveApp' | 'restoreApp' | 'backupApp';
+export interface WaitOperationResult {
+  status: 'Done' | 'Error' | 'Timeout' | 'NotSeen';
+  detail: string;
+  opId?: string;
+  elapsedMs: number;
 }
 
 /** One Intent: named click sequence matching a YAML `action:` key. */

@@ -4,6 +4,7 @@
  *
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
+import { awaitOperationIfWired } from './operationWait';
 import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -767,7 +768,7 @@ export async function settleAfterRestoreConfirm(
  * pick target disk → Restore → Confirm → settle Running+sidecar.
  * Prefer A: no soft-skip / no Grade5A remap.
  */
-export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }) => {
+export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId, waitOperation }) => {
   await ensureBackupDiskPanel(page, { diskId }, 'restore_from_backup');
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const row = page.locator(sel.restoreInstance(id));
@@ -800,7 +801,14 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }
   }
   await select.selectOption(chosen);
   await page.locator(sel.restoreBtn(linkedId)).click();
+  const restoreSince = Date.now();
   await page.locator(sel.restoreConfirm(linkedId)).click();
+  // r64: wait for the restoreApp Operation to end (harness store hook) before the post-restore Start/settle.
+  await awaitOperationIfWired(
+    { page, instanceId, diskId, waitOperation },
+    { kind: 'restoreApp', instanceId: linkedId, sinceMs: restoreSince },
+    'restore_from_backup',
+  );
   await settleAfterRestoreConfirm(page, linkedId);
 };
 
