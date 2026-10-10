@@ -4,6 +4,7 @@
  *
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
+import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
@@ -1715,9 +1716,11 @@ export const leaveAppToConsole = async (page: import('@playwright/test').Page): 
       const url = p.url();
       if (
         p !== page &&
-        /kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
+        (/kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
           url,
-        )
+        ) ||
+          // r57: App tabs on store ports / any engine host form (e.g. Kiwix library idea03.local:18480/)
+          appKindForUrl(url) !== null)
       ) {
         await p.close().catch(() => {});
       }

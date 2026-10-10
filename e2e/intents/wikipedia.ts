@@ -18,7 +18,7 @@ import type { FrameLocator, Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
-import { resolveSidecarUrl, sidecarReadyTimeoutMs, isSidecarHttpReadyStatus } from './sidecarUrls';
+import { resolveSidecarUrl, sidecarReadyTimeoutMs, isSidecarHttpReadyStatus, isSidecarUrlFor } from './sidecarUrls';
 import { leaveAppToConsole } from './operatorDeepActions';
 
 const KW = DURATION_FIXTURES.kiwix;
@@ -52,12 +52,15 @@ export function kiwixViewerPath(url: string, book: string = KW.bookName): string
 }
 
 /** True for a Kiwix tab on this base (library or viewer). */
-export function isKiwixTabUrl(url: string, base: string): boolean {
+export function isKiwixTabUrl(url: string, base: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  // r57 FAIL@35: the Console Open tab is idea03.local:18480 while the base is idea03:18480 — match the
+  // port plus any host form of the Kiwix engine (isSidecarUrlFor), not the exact origin.
   try {
-    return new URL(url).origin === new URL(base).origin;
+    if (new URL(url).origin === new URL(base).origin) return true;
   } catch {
     return false;
   }
+  return isSidecarUrlFor('kiwix', url, env);
 }
 
 const waitFor = async (pred: () => Promise<boolean> | boolean, p: Page, ms: number): Promise<boolean> => {

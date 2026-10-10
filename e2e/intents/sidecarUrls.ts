@@ -24,6 +24,17 @@ const ENV_URL: Record<SidecarApp, string> = {
   kiwix: 'DURATION_KIWIX_URL',
 };
 
+/**
+ * Every host form of the engine that serves the App (comma list: bare name, `<name>.local`, LAN IP,
+ * Tailscale IP). Set by the harness next to DURATION_<APP>_URL. The Console Open may use any of them
+ * (page host for its own engine, `.local`, or `engine.lanAddress` after Console #139).
+ */
+const ENV_HOSTS: Record<SidecarApp, string> = {
+  kolibri: 'DURATION_KOLIBRI_HOSTS',
+  nextcloud: 'DURATION_NEXTCLOUD_HOSTS',
+  kiwix: 'DURATION_KIWIX_HOSTS',
+};
+
 const ENV_PORT: Record<SidecarApp, string> = {
   kolibri: 'DURATION_KOLIBRI_PORT',
   nextcloud: 'DURATION_NEXTCLOUD_PORT',
@@ -93,8 +104,7 @@ export const appKindForUrl = (url: string, env: NodeJS.ProcessEnv = process.env)
   }
   if (!/^https?:$/.test(u.protocol)) return null;
   for (const app of ['kolibri', 'nextcloud', 'kiwix'] as const) {
-    const o = originOf(env[ENV_URL[app]]);
-    if (o && o === u.origin) return app;
+    if (isSidecarUrlFor(app, url, env)) return app;
   }
   const port = Number(u.port || (u.protocol === 'https:' ? 443 : 80));
   for (const app of ['kolibri', 'nextcloud', 'kiwix'] as const) {
@@ -127,3 +137,52 @@ export function sidecarReadyTimeoutMs(env: NodeJS.ProcessEnv = process.env): num
 export function isSidecarHttpReadyStatus(status: number): boolean {
   return status >= 200 && status < 400;
 }
+
+const portOfUrl = (u: URL): number => Number(u.port || (u.protocol === 'https:' ? 443 : 80));
+
+/** Lower-cased host forms that address the App's engine: DURATION_<APP>_URL host + DURATION_<APP>_HOSTS. */
+export const sidecarHostForms = (app: SidecarApp, env: NodeJS.ProcessEnv = process.env): string[] => {
+  const out = new Set<string>();
+  const full = env[ENV_URL[app]]?.trim();
+  if (full) {
+    try {
+      out.add(new URL(full).hostname.toLowerCase());
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const h of (env[ENV_HOSTS[app]] ?? '').split(',')) {
+    const t = h.trim().toLowerCase().replace(/^\[|\]$/g, '');
+    if (t) out.add(t);
+  }
+  return [...out];
+};
+
+/**
+ * True when `url` is this App's sidecar: same port as DURATION_<APP>_URL (else DURATION_<APP>_PORT /
+ * default) AND a host form of its engine. With no URL pin and no host list, the port alone decides
+ * (any host the Console Open picks). Never an exact-origin match: the Open may use bare, `.local`,
+ * LAN IP or Tailscale IP for the same engine (r57 FAIL@35: tab idea03.local:18480 vs pin idea03:18480).
+ */
+export const isSidecarUrlFor = (app: SidecarApp, url: string, env: NodeJS.ProcessEnv = process.env): boolean => {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (!/^https?:$/.test(u.protocol)) return false;
+  let port = sidecarPort(app, env);
+  const full = env[ENV_URL[app]]?.trim();
+  if (full) {
+    try {
+      port = portOfUrl(new URL(full));
+    } catch {
+      /* keep env/default port */
+    }
+  }
+  if (portOfUrl(u) !== port) return false;
+  const forms = sidecarHostForms(app, env);
+  if (!forms.length) return !full;
+  return forms.includes(u.hostname.toLowerCase().replace(/^\[|\]$/g, ''));
+};
