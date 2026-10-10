@@ -1,16 +1,16 @@
 /**
  * appUrl.ts — build the link used to open an App instance.
  *
- * `.local` names only resolve via mDNS on the Engine's own LAN, so a
- * `http://<engine>.local:<port>` link fails when the Console is reached
- * remotely (e.g. over Tailscale at `http://idea02:8080`). Rules:
+ * `.local` names only resolve via mDNS, which many learner devices (Android
+ * phones/tablets, some networks) cannot do, and never remotely. Host order:
  *
- *   - App on the engine the Console is connected to, in production web mode:
- *     use the host the Console page was opened with (`window.location.hostname`),
- *     so `idea02.local` in a school and `idea02` / a Tailscale IP remotely.
- *   - App on any other engine, or dev / extension mode (where the page host is
- *     localhost or an extension origin, not the engine): `<hostname>.local`
- *     via `ensureLocal()`.
+ *   1. App on the engine the Console page was loaded from, in production web
+ *      mode: the host the page was opened with (`window.location.hostname`) —
+ *      whatever already worked for this device (IP, name or Tailscale).
+ *   2. Any other engine that publishes its LAN address in the store
+ *      (`engine.lanAddress`): that IP.
+ *   3. Otherwise `<hostname>.local` via `ensureLocal()` — a fallback only,
+ *      never used when an IP is available.
  *
  * The connected engine is the one named by the page host, the same host
  * App.tsx uses as the connection hostname in production web mode.
@@ -72,13 +72,26 @@ export function isConnectedEngine(engineHostname: string, ctx: AppHostContext): 
   return shortName(engineHostname) === shortName(ctx.pageHostname);
 }
 
+/** What appUrl needs from a store Engine record (or just its hostname). */
+export type AppEngine = string | { hostname: string; lanAddress?: string | null };
+
+/** The Engine's published LAN address, if it is a usable IP literal. */
+export function engineLanAddress(engine: AppEngine): string | null {
+  if (typeof engine === 'string') return null;
+  const a = String(engine.lanAddress ?? '').trim();
+  return a && isIpLiteral(a) ? a : null;
+}
+
 /** Host (no scheme, no port) to use in an App link for an engine. */
-export function resolveAppHost(engineHostname: string, ctx: AppHostContext): string {
-  if (isConnectedEngine(engineHostname, ctx)) return urlHost(ctx.pageHostname);
-  return ensureLocal(engineHostname);
+export function resolveAppHost(engine: AppEngine, ctx: AppHostContext): string {
+  const hostname = typeof engine === 'string' ? engine : String(engine.hostname ?? '');
+  if (isConnectedEngine(hostname, ctx)) return urlHost(ctx.pageHostname);
+  const ip = engineLanAddress(engine);
+  if (ip) return urlHost(ip);
+  return ensureLocal(hostname);
 }
 
 /** Full App link: `http://<host>:<port>`. */
-export function buildAppUrl(engineHostname: string, port: number, ctx: AppHostContext): string {
-  return `http://${resolveAppHost(engineHostname, ctx)}:${port}`;
+export function buildAppUrl(engine: AppEngine, port: number, ctx: AppHostContext): string {
+  return `http://${resolveAppHost(engine, ctx)}:${port}`;
 }

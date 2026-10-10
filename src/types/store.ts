@@ -45,6 +45,14 @@ export interface Engine {
   lastHalted: Timestamp | null;
   commands: Command[];
   /**
+   * This Engine's address on the school LAN (IPv4, e.g. from eth0/wlan0),
+   * published by the Engine so learner devices that cannot resolve mDNS
+   * `.local` names can still open its apps (Console App links, issue: Open
+   * on another Pi). Absent on Engines that do not publish it yet: the
+   * Console then falls back to `<hostname>.local`.
+   */
+  lanAddress?: string | null;
+  /**
    * Feature flags, rewritten as a whole list at every Engine startup
    * (idea#128/#129). Absent on Engines older than Files Disk step 0b.
    */
