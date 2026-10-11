@@ -1142,6 +1142,29 @@ export function ncOpenFileQuery(url: string): boolean {
 const viewerOpen = async (app: Page): Promise<boolean> =>
   app.locator(NC_VIEWER_SELECTORS.viewer).first().isVisible().catch(() => false);
 
+/** Text's banner when the file changed under an existing Text session (steps vs saved file). */
+export const TEXT_CONFLICT_RE = /changed outside of the editor/i;
+
+/**
+ * True when Nextcloud Text shows its collision UI for the open doc: the file on disk no
+ * longer matches the stored Text session steps (e.g. the file was restored from the seed
+ * while an old session's steps remained). Text then renders two read-only panes, so no
+ * edit is possible until someone resolves it. Not resolved by the walker (no soft-pass).
+ */
+export const textConflictShown = async (app: Page): Promise<boolean> => {
+  const scope = NC_VIEWER_SELECTORS.viewer;
+  if (await app.locator(`${scope} ${TEXT.conflictMustBeAbsent}`).first().isVisible().catch(() => false)) return true;
+  const txt = (await app.locator(scope).first().innerText().catch(() => '')) ?? '';
+  return TEXT_CONFLICT_RE.test(txt);
+};
+
+const textConflictError = (tag: string, doc: string): Error =>
+  new Error(
+    `${tag}: Nextcloud Text shows "Document has been changed outside of the editor" for "${doc}" ` +
+      `(stale Text session steps vs the saved file; HTTP 409 on session sync). Fixture reset needed, ` +
+      `not a walker fix: on the NC host run occ text:reset --force <fileId> for the collab doc after restoring it.`,
+  );
+
 /**
  * open_collab_doc (nc_browse → nc_collab): Files → class root → Collab → click
  * Grade5A-collab-notes.md. Success = Viewer open titled with the file name, the
@@ -1196,6 +1219,8 @@ export const runOpenCollabDoc = async (app: Page): Promise<string> => {
   if (!content) {
     throw new Error(`${tag}: Text editor for "${doc}" never rendered the doc heading "${NC_COLLAB_DOC_MARKER}" (empty/failed load).`);
   }
+  // Loud here (r77 FAIL@82): a Text collision makes the doc uneditable for the whole walk.
+  if (await textConflictShown(app)) throw textConflictError(tag, doc);
   return dir;
 };
 
@@ -1297,7 +1322,9 @@ export const runKeepEditing = async (app: Page, now: Date = new Date()): Promise
     );
   }
   const content = app.locator(`${scope} ${TEXT.content}`).first();
+  if (await textConflictShown(app)) throw textConflictError(tag, name);
   if (!(await waitFor(async () => content.isVisible().catch(() => false), app, SETTLE_MS))) {
+    if (await textConflictShown(app)) throw textConflictError(tag, name);
     throw new Error(`${tag}: no editable Text content (${TEXT.content}) for "${name}".`);
   }
   if (!(await waitFor(vis(TEXT.menubarWhenEditable), app, 8_000))) {
