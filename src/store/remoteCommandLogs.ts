@@ -25,3 +25,24 @@ export const remoteCommandLog = (engineId: string): Accessor<CommandLogState> | 
 
 /** True when the log is loaded (a document, not loading/error). */
 export const isLoadedLog = (cls: CommandLogState): boolean => !!cls && !('error' in cls);
+
+/**
+ * idea#168 r86i FAIL@105: one view over the connected Engine's command log and the target
+ * Engine's own log. A command sent to another Engine (EmptyDiskPanel erase of a disk docked on
+ * idea03 while the Console talks to idea01) leaves its trace only in the target's log. Waiting on
+ * our own log alone timed out with "The Engine didn't respond" although idea03 had answered
+ * summariseDisk within a second. Trace ids are unique, so a union is safe. When neither log is
+ * loaded, the first input is returned unchanged (null / error), so callers keep their old behaviour.
+ */
+export const mergeCommandLogs = (...logs: CommandLogState[]): CommandLogState => {
+  const loaded = logs.filter(isLoadedLog) as Exclude<CommandLogState, null | { error: true }>[];
+  if (loaded.length === 0) return logs[0] ?? null;
+  if (loaded.length === 1) return loaded[0];
+  const traces: Record<string, unknown> = {};
+  const recent: string[] = [];
+  for (const l of loaded) {
+    Object.assign(traces, l.traces ?? {});
+    for (const id of l.recentTraceIds ?? []) if (!recent.includes(id)) recent.push(id);
+  }
+  return { ...loaded[0], traces, recentTraceIds: recent } as CommandLogState;
+};
