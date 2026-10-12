@@ -44,10 +44,15 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
   const targetDisks = createMemo((): Disk[] => {
     const s = props.store();
     const disk = props.disk();
-    if (!s) return [];
+    // restoreApp runs on the Engine that holds this Backup Disk and only accepts a target disk
+    // docked to that same Engine ("Disk … is not docked to this engine."), so never offer a disk
+    // on another Pi (idea#168 Stage 2 r85 FAIL@100).
+    const owner = props.engineId() ?? disk?.dockedTo ?? null;
+    if (!s || !owner) return [];
     return Object.values(s.diskDB).filter(
       (d) =>
         d.device !== null &&
+        d.dockedTo === owner &&
         d.id !== disk?.id &&
         (d.diskTypes.includes('app') || d.diskTypes.includes('empty'))
     );

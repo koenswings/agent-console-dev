@@ -97,3 +97,54 @@ describe('buildAppUrl — dev / extension mode falls back to current behaviour',
     expect(resolveAppHost('idea02', dev('idea02'))).toBe('idea02.local');
   });
 });
+
+// ---------------------------------------------------------------------------
+// LAN address from the store (learner devices without mDNS)
+// ---------------------------------------------------------------------------
+describe('LAN address: never .local only when an IP is available', () => {
+  const other = { hostname: 'idea03', lanAddress: '192.0.2.13' };
+
+  it('same Pi: uses the host the Console was loaded from, even when the Engine has an IP', () => {
+    expect(buildAppUrl({ hostname: 'idea01', lanAddress: '192.0.2.11' }, 8080, prod('idea01.local')))
+      .toBe('http://idea01.local:8080');
+    expect(buildAppUrl({ hostname: 'idea01', lanAddress: '192.0.2.11' }, 8080, prod('192.0.2.11', 1)))
+      .toBe('http://192.0.2.11:8080');
+  });
+
+  it('another Pi: uses its LAN IP from the store', () => {
+    expect(buildAppUrl(other, 8081, prod('idea01.local'))).toBe('http://192.0.2.13:8081');
+    expect(resolveAppHost(other, prod('idea01'))).toBe('192.0.2.13');
+  });
+
+  it('another Pi, Console opened by IP with several engines: still its LAN IP', () => {
+    expect(buildAppUrl(other, 8081, prod('192.0.2.11', 3))).toBe('http://192.0.2.13:8081');
+  });
+
+  it('dev / extension mode: LAN IP still beats .local', () => {
+    const dev: AppHostContext = { pageHostname: 'localhost', productionWebMode: false, engineCount: 2 };
+    expect(buildAppUrl(other, 8081, dev)).toBe('http://192.0.2.13:8081');
+  });
+
+  it('IPv6 LAN address is bracketed', () => {
+    expect(buildAppUrl({ hostname: 'idea03', lanAddress: 'fd00::13' }, 8081, prod('idea01')))
+      .toBe('http://[fd00::13]:8081');
+  });
+
+  it('no IP in the store (absent, null, empty, not an IP): falls back to .local', () => {
+    for (const lanAddress of [undefined, null, '', '  ', 'idea03.lan']) {
+      expect(buildAppUrl({ hostname: 'idea03', lanAddress }, 8081, prod('idea01.local')))
+        .toBe('http://idea03.local:8081');
+    }
+    expect(buildAppUrl('idea03', 8081, prod('idea01.local'))).toBe('http://idea03.local:8081');
+  });
+
+  it('never .local when an IP is available (sweep of page hosts and modes)', () => {
+    for (const page of ['idea01.local', 'idea01', '192.0.2.11', 'localhost']) {
+      for (const productionWebMode of [true, false]) {
+        const url = buildAppUrl(other, 8081, { pageHostname: page, productionWebMode, engineCount: 3 });
+        expect(url).not.toContain('.local');
+        expect(url).toBe('http://192.0.2.13:8081');
+      }
+    }
+  });
+});

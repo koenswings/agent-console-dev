@@ -415,7 +415,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     if (!inst || inst.status !== 'Running' || !eng) return null;
     const port = inst.port;
     if (!port) return null;
-    return buildAppUrl(eng.hostname, port, currentAppHostContext(engineCount()));
+    return buildAppUrl(eng, port, currentAppHostContext(engineCount()));
   };
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
