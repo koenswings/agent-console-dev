@@ -13,6 +13,7 @@ import {
 } from '../store/commands';
 import { createCommandResult, FILES_TIMEOUT_MESSAGE } from '../store/commandResult';
 import { traceIdSnapshot } from '../store/ejectResult';
+import { mergeCommandLogs, remoteCommandLog } from '../store/remoteCommandLogs';
 import {
   DISK_REMOVED_MESSAGE,
   ERASE_NO_RESPONSE_MESSAGE,
@@ -72,6 +73,9 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   const [slow, setSlow] = createSignal(false);
   const [makingFiles, setMakingFiles] = createSignal(false);
 
+  // r86i: the target Engine's own log as well as ours (cross-engine erase; see mergeCommandLogs).
+  const cls = () => mergeCommandLogs(props.commandLogStore?.() ?? null, remoteCommandLog(props.engineId)?.() ?? null);
+
   const tick = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => clearInterval(tick));
 
@@ -87,7 +91,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     clearSummariseTimer();
     setPhase({ kind: 'summarising' });
     setConfirmName('');
-    summariseBaseline = traceIdSnapshot(props.commandLogStore?.() ?? null);
+    summariseBaseline = traceIdSnapshot(cls());
     summariseDisk(props.engineId, props.targetId);
     summariseTimer = setTimeout(() => {
       summariseTimer = null;
@@ -101,8 +105,8 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
 
   createEffect(() => {
     if (phase().kind !== 'summarising') return;
-    const cls = props.commandLogStore?.() ?? null;
-    const trace = findTargetTrace(cls, summariseBaseline, 'summariseDisk', props.targetId);
+    const log = cls();
+    const trace = findTargetTrace(log, summariseBaseline, 'summariseDisk', props.targetId);
     if (!trace || trace.status === 'running') return;
     clearSummariseTimer();
     if (trace.status === 'error') {
@@ -156,7 +160,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     if (p.kind !== 'summary' || stale() || !labelMatches()) return;
     clearEraseTimers();
     setSlow(false);
-    eraseBaseline = traceIdSnapshot(props.commandLogStore?.() ?? null);
+    eraseBaseline = traceIdSnapshot(cls());
     const startedAt = Date.now();
     setPhase({ kind: 'erasing', summary: p.summary, startedAt });
     eraseDisk(props.engineId, props.targetId, p.traceId, p.summary.label);
@@ -166,7 +170,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       if (cur.kind !== 'erasing') return;
       const eng = props.store()?.engineDB[props.engineId];
       const progress = eng?.eraseInProgress && String(eng.eraseInProgress.targetId) === props.targetId;
-      const trace = findTargetTrace(props.commandLogStore?.() ?? null, eraseBaseline, 'eraseDisk', props.targetId);
+      const trace = findTargetTrace(cls(), eraseBaseline, 'eraseDisk', props.targetId);
       if (!progress && !trace) setPhase({ kind: 'error', message: ERASE_NO_RESPONSE_MESSAGE });
     }, ERASE_NO_RESPONSE_MS);
     eraseSlowTimer = setTimeout(() => {
@@ -178,8 +182,8 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   createEffect(() => {
     const p = phase();
     if (p.kind !== 'erasing') return;
-    const cls = props.commandLogStore?.() ?? null;
-    const trace = findTargetTrace(cls, eraseBaseline, 'eraseDisk', props.targetId);
+    const log = cls();
+    const trace = findTargetTrace(log, eraseBaseline, 'eraseDisk', props.targetId);
     if (!trace || trace.status === 'running') return;
     clearEraseTimers();
     if (trace.status === 'error') {
@@ -196,7 +200,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
 
   // After erase ok: wait for empty disk, then maybe createFilesDisk
   const filesResult = createCommandResult({
-    commandLog: () => props.commandLogStore?.() ?? null,
+    commandLog: cls,
     command: 'createFilesDisk',
     argKey: 'diskId',
     isSuccess: () => (props.store()?.diskDB[props.targetId]?.diskTypes ?? []).includes('files'),
