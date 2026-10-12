@@ -135,4 +135,14 @@ describe('RestorePanel', () => {
     expect(screen.getByText('kolibri')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^restore$/i })).toBeInTheDocument();
   });
+
+  it('offers only target disks docked to the Backup Disk\'s Engine (r85 FAIL@100)', () => {
+    renderPanel();
+    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value).filter(Boolean);
+    expect(values.length).toBeGreaterThan(0);
+    for (const v of values) expect(MOCK_STORE.diskDB[v].dockedTo).toBe(MOCK_IDS.ENGINE_1_ID);
+    expect(values).not.toContain(MOCK_IDS.DISK_2_ID);
+    expect(values).not.toContain(MOCK_IDS.DISK_3_ID);
+  });
 });
