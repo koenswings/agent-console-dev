@@ -38,6 +38,8 @@ export interface RunDurationIntentOptions {
    * (success or fail) via captureAfterIntent. Engine soft-detects the file.
    */
   screenshotPath?: string;
+  /** Duration harness: store Operation wait (copy/move/restore Intents). */
+  waitOperation?: IntentContext['waitOperation'];
 }
 
 /**
@@ -48,7 +50,7 @@ export interface RunDurationIntentOptions {
 export async function runDurationIntent(
   opts: RunDurationIntentOptions,
 ): Promise<DurationIntentResult> {
-  const { action, page, diskId, engineId, instanceId, screenshotPath } = opts;
+  const { action, page, diskId, engineId, instanceId, screenshotPath, waitOperation } = opts;
   const fn = getIntent(action);
   if (!fn) {
     const miss: DurationIntentResult = {
@@ -68,7 +70,7 @@ export async function runDurationIntent(
     }
     return miss;
   }
-  const ctx: IntentContext = { page, diskId, engineId, instanceId };
+  const ctx: IntentContext = { page, diskId, engineId, instanceId, ...(waitOperation ? { waitOperation } : {}) };
   let result: DurationIntentResult;
   try {
     await fn(ctx);

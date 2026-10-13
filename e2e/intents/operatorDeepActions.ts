@@ -4,6 +4,8 @@
  *
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
+import { awaitOperationIfWired } from './operationWait';
+import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
@@ -766,7 +768,7 @@ export async function settleAfterRestoreConfirm(
  * pick target disk → Restore → Confirm → settle Running+sidecar.
  * Prefer A: no soft-skip / no Grade5A remap.
  */
-export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }) => {
+export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId, waitOperation }) => {
   await ensureBackupDiskPanel(page, { diskId }, 'restore_from_backup');
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const row = page.locator(sel.restoreInstance(id));
@@ -799,7 +801,14 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }
   }
   await select.selectOption(chosen);
   await page.locator(sel.restoreBtn(linkedId)).click();
+  const restoreSince = Date.now();
   await page.locator(sel.restoreConfirm(linkedId)).click();
+  // r64: wait for the restoreApp Operation to end (harness store hook) before the post-restore Start/settle.
+  await awaitOperationIfWired(
+    { page, instanceId, diskId, waitOperation },
+    { kind: 'restoreApp', instanceId: linkedId, sinceMs: restoreSince },
+    'restore_from_backup',
+  );
   await settleAfterRestoreConfirm(page, linkedId);
 };
 
@@ -1268,7 +1277,6 @@ export async function resolveSwitchEngineHostCandidates(
 
   push('idea03');
   push('idea04');
-  push('appdocker01');
 
   return orderSwitchEngineHosts(out);
 }
@@ -1327,7 +1335,7 @@ async function clickDiscoveredEngine(
       return false;
     }
     // Target is IP: Prefer A — click idea01-ish hostname Connect if listed, else IP row
-    for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+    for (const name of ['idea01', 'idea03', 'idea04']) {
       const btn = page.locator(sel.connectEngine(name));
       if (await btn.count()) {
         await btn.click();
@@ -1348,7 +1356,7 @@ async function clickDiscoveredEngine(
     }
     return false;
   }
-  for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+  for (const name of ['idea01', 'idea03', 'idea04']) {
     const btn = page.locator(sel.connectEngine(name));
     if (await btn.count()) {
       await btn.click();
@@ -1513,6 +1521,79 @@ async function connectEngineWithRetries(
 }
 
 /**
+ * idea#168 r86s FAIL@128: switch_engine returned as soon as ConnectionManagement
+ * closed, but Connect re-creates the Automerge repo (App initConnection sets the
+ * store to null) and a fresh full sync takes ~3–4 s on the pool. reboot_engine then
+ * read an empty Network tree (visible=[none]) although engineDB held all three
+ * Engines. Intents must wait for the reconnect to finish before reading the tree.
+ */
+export function switchEngineLoadTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.DURATION_SWITCH_ENGINE_LOAD_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return 60_000;
+  return Math.max(5_000, raw);
+}
+
+/** Poll `probe` until it returns a non-null value or the budget runs out (then null). */
+export async function pollUntil<T>(
+  probe: () => Promise<T | null>,
+  budgetMs: number,
+  intervalMs = 250,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  now: () => number = Date.now,
+): Promise<T | null> {
+  const deadline = now() + budgetMs;
+  for (;;) {
+    const v = await probe();
+    if (v !== null) return v;
+    if (now() >= deadline) return null;
+    await sleep(intervalMs);
+  }
+}
+
+/** Decide from a UI snapshot whether the Console's store view is loaded. */
+export function consoleStoreLoaded(s: {
+  connectedDot: boolean;
+  treeVisible: boolean;
+  engineRows: number;
+}): boolean {
+  if (!s.connectedDot) return false;
+  return !s.treeVisible || s.engineRows > 0;
+}
+
+async function consoleStoreSnapshot(page: import('@playwright/test').Page) {
+  const connectedDot = await page
+    .locator('.status-bar__dot--connected')
+    .count()
+    .then((n) => n > 0)
+    .catch(() => false);
+  const treeVisible = await page.locator(sel.networkTree).isVisible().catch(() => false);
+  const engineRows = treeVisible
+    ? await page.locator(`${sel.networkTree} .tree-item--engine`).count().catch(() => 0)
+    : 0;
+  return { connectedDot, treeVisible, engineRows };
+}
+
+/** Loud-fail unless the Console is connected and (if shown) the tree lists Engines. */
+export async function waitForConsoleStoreLoaded(
+  page: import('@playwright/test').Page,
+  context: string,
+  budgetMs = switchEngineLoadTimeoutMs(),
+): Promise<void> {
+  let last = { connectedDot: false, treeVisible: false, engineRows: 0 };
+  const ok = await pollUntil(async () => {
+    last = await consoleStoreSnapshot(page);
+    return consoleStoreLoaded(last) ? true : null;
+  }, budgetMs);
+  if (!ok) {
+    throw new Error(
+      `idea#168 ${context}: Console store not loaded within ${budgetMs}ms after reconnect ` +
+        `(connected=${last.connectedDot} treeVisible=${last.treeVisible} engineRows=${last.engineRows}). ` +
+        'Prefer A — no soft-pass.',
+    );
+  }
+}
+
+/**
  * Switch Engine — Prefer A r44: if status-bar hostname already matches
  * DURATION_SWITCH_ENGINE_HOST, PASS after ConnectionManagement opens
  * (discovery "No engine found" is N/A — do not manual-Connect retry).
@@ -1563,6 +1644,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
           `but after dismiss status=${JSON.stringify(after)}. Prefer A loud-fail.`,
       );
     }
+    await waitForConsoleStoreLoaded(page, 'switch_engine');
     return;
   }
 
@@ -1573,6 +1655,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
   const statusAfterScan = await readConnectedStatusHostname(page);
   if (hostEnv && switchHostsMatch(statusAfterScan, hostEnv)) {
     await dismissConnectionManagement(page);
+    await waitForConsoleStoreLoaded(page, 'switch_engine');
     return;
   }
   if (settle === 'empty' && hostEnv && !switchHostsMatch(statusAfterScan, hostEnv)) {
@@ -1589,6 +1672,8 @@ export const switch_engine: IntentFn = async ({ page }) => {
   }
 
   await connectEngineWithRetries(page, candidates);
+  // r86s FAIL@128: Connect reloads the store from scratch — wait until it is back.
+  await waitForConsoleStoreLoaded(page, 'switch_engine');
 };
 
 /**
@@ -1669,6 +1754,8 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
     if (await cm.count()) await cm.click().catch(() => {});
   }
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
+  // r86s FAIL@128: tree can be visible with zero Engine rows while the store reloads.
+  await waitForConsoleStoreLoaded(page, 'reboot_engine');
   const btn = await resolveRebootButton(page, engineId);
   let dialogSeen = false;
   page.once('dialog', async (d) => {
@@ -1715,9 +1802,11 @@ export const leaveAppToConsole = async (page: import('@playwright/test').Page): 
       const url = p.url();
       if (
         p !== page &&
-        /kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
+        (/kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
           url,
-        )
+        ) ||
+          // r57: App tabs on store ports / any engine host form (e.g. Kiwix library idea03.local:18480/)
+          appKindForUrl(url) !== null)
       ) {
         await p.close().catch(() => {});
       }

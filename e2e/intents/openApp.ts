@@ -434,7 +434,7 @@ export const open_kolibri_as_teacher: IntentFn = async ({ page, instanceId }) =>
   let response: Awaited<ReturnType<Page['goto']>> = null;
   try {
     const url = app.url();
-    if (APP_TAB_URL_RE.test(url) && !/nextcloud|18280/i.test(url)) {
+    if ((APP_TAB_URL_RE.test(url) || appKindForUrl(url) === 'kolibri') && appKindForUrl(url) !== 'nextcloud' && !/nextcloud|18280/i.test(url)) {
       const origin = new URL(url).origin;
       response = await app
         .goto(`${origin}/en/coach/#/classes`, { waitUntil: 'domcontentloaded', timeout: 15_000 })
