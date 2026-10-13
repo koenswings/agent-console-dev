@@ -47,12 +47,6 @@ export function defaultEnginePort(): number {
 // Configuration
 // ---------------------------------------------------------------------------
 
-/** Hostname prefixes to probe. Add new fleet naming schemes here. */
-export const DISCOVERY_PREFIXES = ['appdocker', 'idea', 'engine'];
-
-/** Probe hostnames from 01 up to and including this number. */
-export const DISCOVERY_MAX_NUMBER = 10;
-
 /** Per-host probe timeout in milliseconds. */
 export const DISCOVERY_TIMEOUT_MS = 5000;
 
@@ -60,23 +54,45 @@ export const DISCOVERY_TIMEOUT_MS = 5000;
 export const DISCOVERY_REFRESH_INTERVAL_MS = 10_000;
 
 // ---------------------------------------------------------------------------
-// Candidate list
+// Bootstrap candidates (idea#184)
 // ---------------------------------------------------------------------------
+//
+// Pis have free, unique sticker names (e.g. `brave-otter`); there is no
+// number scheme to guess and no shared alias. A browser cannot browse mDNS,
+// so the Console bootstraps from ONE known host:
+//   1. the host this page was served from (the operator typed the sticker
+//      name, `http://<name>.local:<port>`), and
+//   2. Engines the operator connected to before (history),
+// and then lists every Engine from the network database (engineDB), see
+// enginesFromStore().
 
-/** All hostnames to probe: bare names + .local variants. */
-export function buildCandidates(
-  prefixes = DISCOVERY_PREFIXES,
-  maxNumber = DISCOVERY_MAX_NUMBER,
+const isLoopback = (h: string) => h === '' || h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]';
+
+/**
+ * Hosts to probe on first load: the page host (when the page was served by
+ * a real host, not loopback or an extension) and previously used Engines.
+ * A name is probed as given and with `.local` added; IPs as given.
+ * Never generates names.
+ */
+export function bootstrapCandidates(
+  loc: Pick<Location, 'protocol' | 'hostname'> | null | undefined,
+  history: string[] = [],
 ): string[] {
-  const candidates: string[] = [];
-  for (const prefix of prefixes) {
-    for (let n = 1; n <= maxNumber; n++) {
-      const name = `${prefix}${String(n).padStart(2, '0')}`;
-      candidates.push(name);
-      candidates.push(`${name}.local`);
-    }
+  const seeds: string[] = [];
+  if (loc && (loc.protocol === 'http:' || loc.protocol === 'https:') && !isLoopback(loc.hostname)) {
+    seeds.push(loc.hostname);
   }
-  return candidates;
+  seeds.push(...history);
+  const out: string[] = [];
+  for (const raw of seeds) {
+    const h = raw.trim();
+    if (!h) continue;
+    if (/^[\d.]+$/.test(h) || h.includes(':')) { out.push(h); continue; }
+    const bare = h.replace(/\.local\.?$/i, '');
+    if (bare.includes('.')) { out.push(h); continue; } // FQDN (e.g. MagicDNS): as given
+    out.push(bare, `${bare}.local`);
+  }
+  return [...new Set(out)];
 }
 
 // ---------------------------------------------------------------------------
@@ -141,11 +157,23 @@ export function dedupeEngines(results: DiscoveryResult[]): DiscoveryResult[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Probe all candidate hostnames in parallel. Returns ALL successful results
- * in candidate order, one per Engine (deduped by engine id / bare hostname). Caller decides: 0 = form, 1 = auto-connect, 2+ = picker.
+ * Probe the bootstrap candidates (page host + history) in parallel. Returns
+ * the Engines that answered, one per Engine. The full Engine list comes from
+ * the network database once connected (enginesFromStore). Caller decides:
+ * 0 = form, 1 = auto-connect, 2+ = picker.
  */
-export async function discoverAllEngines(): Promise<DiscoveryResult[]> {
-  const candidates = buildCandidates();
+export async function discoverAllEngines(history?: string[]): Promise<DiscoveryResult[]> {
+  let hist = history;
+  if (!hist) {
+    try {
+      const { readEngineHistory } = await import('./storage');
+      hist = await readEngineHistory();
+    } catch {
+      hist = [];
+    }
+  }
+  const loc = typeof window === 'undefined' ? null : window.location;
+  const candidates = bootstrapCandidates(loc, hist);
   const port = defaultEnginePort();
   const results = await Promise.all(candidates.map((c) => probeHost(c, port)));
   return dedupeEngines(results.filter((r): r is DiscoveryResult => r !== null));
@@ -153,74 +181,59 @@ export async function discoverAllEngines(): Promise<DiscoveryResult[]> {
 
 /**
  * Convenience: probe and return the single best result, or null.
- * Only use when you're certain at most one engine will respond.
  */
 export async function discoverEngine(): Promise<DiscoveryResult | null> {
   const results = await discoverAllEngines();
   return results[0] ?? null;
 }
 
-/**
- * Returns the candidate list — useful for displaying "scanning…" UI feedback
- * or for tests.
- */
-export function getDiscoveryCandidates(): string[] {
-  return buildCandidates();
-}
-
 // ---------------------------------------------------------------------------
-// Manual hostname helpers
+// Engine list from the network database (idea#184)
 // ---------------------------------------------------------------------------
 
-export interface HostnameBase {
-  /** The bare prefix, e.g. "idea" from "idea01" or "idea01.local" */
-  prefix: string;
-  /** Whether the original input had a .local suffix */
-  hasDotLocal: boolean;
+interface StoreEngineLike {
+  id?: string;
+  hostname?: string;
+  lanAddress?: string | null;
 }
 
-/**
- * Extract the base prefix from a manually entered hostname.
- * Returns null for IP addresses or hostnames with no trailing number.
- *
- * Examples:
- *   "idea01"       → { prefix: "idea", hasDotLocal: false }
- *   "idea01.local" → { prefix: "idea", hasDotLocal: true }
- *   "appdocker03"  → { prefix: "appdocker", hasDotLocal: false }
- *   "100.115.60.6" → null  (IP address)
- *   "appdocker"    → null  (no number to strip)
- */
-export function extractHostnameBase(input: string): HostnameBase | null {
-  const h = input.trim();
-  // IP address — don't try to scan a fleet
-  if (/^[\d.]+$/.test(h)) return null;
-  const hasDotLocal = /\.local$/i.test(h);
-  const bare = h.replace(/\.local$/i, '');
-  // Must end with one or more digits
-  const match = bare.match(/^(.*?)(\d+)$/);
-  if (!match || !match[1]) return null;
-  return { prefix: match[1], hasDotLocal };
-}
-
-/**
- * Probe all candidate hostnames for a given prefix.
- * Used after manual hostname entry to find sibling engines.
- */
-export async function discoverEnginesByPrefix(
-  prefix: string,
-  hasDotLocal: boolean,
-  maxNumber = DISCOVERY_MAX_NUMBER,
-  port: number = defaultEnginePort(),
-): Promise<DiscoveryResult[]> {
-  const candidates: string[] = [];
-  for (let n = 1; n <= maxNumber; n++) {
-    const bare = `${prefix}${String(n).padStart(2, '0')}`;
-    // Probe both bare and .local regardless of input — cover both cases
-    candidates.push(bare);
-    candidates.push(`${bare}.local`);
+/** True when this page was opened by an IPv4 address. */
+export function pageHostIsIp(): boolean {
+  try {
+    return typeof window !== 'undefined' && /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+  } catch {
+    return false;
   }
-  // Deduplicate in case hasDotLocal already covered one form
-  const unique = [...new Set(candidates)];
-  const results = await Promise.all(unique.map((c) => probeHost(c, port)));
-  return dedupeEngines(results.filter((r): r is DiscoveryResult => r !== null));
+}
+
+/**
+ * Every Engine in the network database as a connectable entry:
+ * `<hostname>.local` on the given port, keyed by Engine id, sorted by name.
+ * Engines without a hostname are skipped. No name pattern is assumed.
+ */
+export function enginesFromStore(
+  store: { engineDB?: Record<string, StoreEngineLike> } | null | undefined,
+  storeUrl: string,
+  port: number = defaultEnginePort(),
+  preferLanAddress: boolean = pageHostIsIp(),
+): DiscoveryResult[] {
+  const out: DiscoveryResult[] = [];
+  for (const [key, e] of Object.entries(store?.engineDB ?? {})) {
+    const name = e?.hostname?.trim();
+    if (!name) continue;
+    // mDNS (.local) does not cross subnets: when the Console itself was opened
+    // by IP (e.g. a classroom PC on a Wi-Fi subnet), use the Engine's
+    // published LAN address when it has one.
+    const lan = e.lanAddress?.trim();
+    const host = preferLanAddress && lan ? lan
+      : /\.local\.?$/i.test(name) || name.includes('.') ? name : `${name}.local`;
+    out.push({
+      hostname: host,
+      storeUrl,
+      ...(port !== 80 ? { port } : {}),
+      engineId: e.id ?? key,
+    });
+  }
+  out.sort((a, b) => a.hostname.localeCompare(b.hostname));
+  return dedupeEngines(out);
 }
