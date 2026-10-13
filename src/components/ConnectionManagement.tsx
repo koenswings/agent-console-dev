@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, Show, For, type Component } from '
 import {
   discoverAllEngines,
   discoverEnginesByPrefix,
+  dedupeEngines,
   extractHostnameBase,
   defaultEnginePort,
   DISCOVERY_REFRESH_INTERVAL_MS,
@@ -59,16 +60,10 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   const [manualConnecting, setManualConnecting] = createSignal(false);
   const [manualError, setManualError] = createSignal<string | null>(null);
 
-  // Merge results: keep existing order, append new hostnames
+  // Merge results: keep existing order, append new Engines (one row per
+  // Engine: deduped by engine id / bare hostname, so idea01 and idea01.local are one entry)
   const mergeResults = (fresh: DiscoveryResult[]) => {
-    setResults((prev) => {
-      const known = new Set(prev.map((r) => r.hostname));
-      const merged = [...prev];
-      for (const r of fresh) {
-        if (!known.has(r.hostname)) merged.push(r);
-      }
-      return merged;
-    });
+    setResults((prev) => dedupeEngines([...prev, ...fresh]));
   };
 
   // Initial scan on mount
@@ -152,7 +147,10 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
         const normalised = normaliseHostname(rawHost);
 
         const enteredResult = siblings.find(
-          (r) => r.hostname === normalised || r.hostname === rawHost
+          (r) =>
+            r.hostname === normalised ||
+            r.hostname === rawHost ||
+            r.hostname.replace(/\.local$/i, '') === rawHost.replace(/\.local$/i, '')
         );
 
         if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {
