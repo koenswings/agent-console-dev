@@ -31,6 +31,7 @@
 import type { Accessor } from 'solid-js';
 import type { OperationKind, Status, Store } from '../types/store';
 import { isRemoteEngine } from './connectedEngine';
+import { engineClockOf, live } from './live';
 import { isLoadedLog, remoteCommandLog } from './remoteCommandLogs';
 import type { CommandLogState } from './commandLog';
 
@@ -129,17 +130,17 @@ const COMMAND_CAUSES = new Set(['console-command', 'cross-engine-cmd']);
 export interface SendSnapshot {
   opIds: Set<string>;
   instanceIds: Set<string>;
-  /** engineDB[engineId].lastRun at send (that Engine's clock), or null. */
+  /** That Engine's clock at send: from its live hb (live.ts), else its stored lastRun, else null. */
   engineClock: number | null;
 }
 
 export const snapshotAtSend = (store: Accessor<Store | null>, engineId?: string | null): SendSnapshot => {
   const s = store();
-  const lastRun = engineId ? Number(s?.engineDB?.[engineId]?.lastRun) : NaN;
+  const clock = engineClockOf(engineId, live(), engineId ? s?.engineDB?.[engineId]?.lastRun : null, Date.now());
   return {
     opIds: new Set(Object.keys(s?.operationDB ?? {})),
     instanceIds: new Set(Object.keys(s?.instanceDB ?? {})),
-    engineClock: Number.isFinite(lastRun) && lastRun > 0 ? lastRun : null,
+    engineClock: clock,
   };
 };
 

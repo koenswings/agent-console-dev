@@ -10,6 +10,7 @@
  * Automerge syncs changes from the Engine.
  */
 import { createSignal, type Accessor } from 'solid-js';
+import { receiveEphemeral, resetLive } from './live';
 import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
@@ -242,6 +243,15 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       setConnected(true);
       console.info('[engine] Document already ready on connect');
     }
+
+    // Live liveness + metrics (store-design 2026-10-13): Engines broadcast
+    // ephemeral 'idea/hb' and 'idea/metrics' messages on the store handle and
+    // relay them across peers; they are never stored. See live.ts.
+    resetLive();
+    handle.addListener?.('ephemeral-message', ({ message }: { message: unknown }) => {
+      if (disposed) return;
+      receiveEphemeral(message);
+    });
 
     // Subscribe to document changes — fires whenever Automerge syncs new data.
     handle.addListener?.('change', ({ doc: d }: { doc: unknown }) => {
