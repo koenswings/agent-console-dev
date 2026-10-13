@@ -3,17 +3,22 @@ import {
   discoverAllEngines,
   discoverEnginesByPrefix,
   extractHostnameBase,
+  defaultEnginePort,
   DISCOVERY_REFRESH_INTERVAL_MS,
   type DiscoveryResult,
 } from '../store/discovery';
 
 /**
  * Parse an optional :port suffix from user input.
- * Returns { host, port } where port defaults to 80.
+ * Returns { host, port } where port defaults to the port this Console page
+ * was served from (see defaultEnginePort), or 80 when it has none.
  */
-export function parseHostPort(input: string): { host: string; port: number } {
+export function parseHostPort(
+  input: string,
+  fallbackPort: number = defaultEnginePort(),
+): { host: string; port: number } {
   const m = input.trim().match(/:([0-9]+)$/);
-  const port = m ? parseInt(m[1], 10) : 80;
+  const port = m ? parseInt(m[1], 10) : fallbackPort;
   const host = m ? input.trim().slice(0, -m[0].length) : input.trim();
   return { host, port };
 }
@@ -143,7 +148,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
       const portProp = port !== 80 ? { port } : {};
 
       if (base) {
-        const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal);
+        const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal, undefined, port);
         const normalised = normaliseHostname(rawHost);
 
         const enteredResult = siblings.find(
