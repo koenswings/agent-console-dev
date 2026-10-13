@@ -1277,7 +1277,6 @@ export async function resolveSwitchEngineHostCandidates(
 
   push('idea03');
   push('idea04');
-  push('appdocker01');
 
   return orderSwitchEngineHosts(out);
 }
@@ -1336,7 +1335,7 @@ async function clickDiscoveredEngine(
       return false;
     }
     // Target is IP: Prefer A — click idea01-ish hostname Connect if listed, else IP row
-    for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+    for (const name of ['idea01', 'idea03', 'idea04']) {
       const btn = page.locator(sel.connectEngine(name));
       if (await btn.count()) {
         await btn.click();
@@ -1357,7 +1356,7 @@ async function clickDiscoveredEngine(
     }
     return false;
   }
-  for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+  for (const name of ['idea01', 'idea03', 'idea04']) {
     const btn = page.locator(sel.connectEngine(name));
     if (await btn.count()) {
       await btn.click();
