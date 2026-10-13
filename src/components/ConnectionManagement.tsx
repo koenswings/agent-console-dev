@@ -2,18 +2,24 @@ import { createSignal, createEffect, onMount, Show, For, type Component } from '
 import {
   discoverAllEngines,
   discoverEnginesByPrefix,
+  dedupeEngines,
   extractHostnameBase,
+  defaultEnginePort,
   DISCOVERY_REFRESH_INTERVAL_MS,
   type DiscoveryResult,
 } from '../store/discovery';
 
 /**
  * Parse an optional :port suffix from user input.
- * Returns { host, port } where port defaults to 80.
+ * Returns { host, port } where port defaults to the port this Console page
+ * was served from (see defaultEnginePort), or 80 when it has none.
  */
-export function parseHostPort(input: string): { host: string; port: number } {
+export function parseHostPort(
+  input: string,
+  fallbackPort: number = defaultEnginePort(),
+): { host: string; port: number } {
   const m = input.trim().match(/:([0-9]+)$/);
-  const port = m ? parseInt(m[1], 10) : 80;
+  const port = m ? parseInt(m[1], 10) : fallbackPort;
   const host = m ? input.trim().slice(0, -m[0].length) : input.trim();
   return { host, port };
 }
@@ -54,16 +60,10 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   const [manualConnecting, setManualConnecting] = createSignal(false);
   const [manualError, setManualError] = createSignal<string | null>(null);
 
-  // Merge results: keep existing order, append new hostnames
+  // Merge results: keep existing order, append new Engines (one row per
+  // Engine: deduped by engine id / bare hostname, so idea01 and idea01.local are one entry)
   const mergeResults = (fresh: DiscoveryResult[]) => {
-    setResults((prev) => {
-      const known = new Set(prev.map((r) => r.hostname));
-      const merged = [...prev];
-      for (const r of fresh) {
-        if (!known.has(r.hostname)) merged.push(r);
-      }
-      return merged;
-    });
+    setResults((prev) => dedupeEngines([...prev, ...fresh]));
   };
 
   // Initial scan on mount
@@ -143,11 +143,14 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
       const portProp = port !== 80 ? { port } : {};
 
       if (base) {
-        const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal);
+        const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal, undefined, port);
         const normalised = normaliseHostname(rawHost);
 
         const enteredResult = siblings.find(
-          (r) => r.hostname === normalised || r.hostname === rawHost
+          (r) =>
+            r.hostname === normalised ||
+            r.hostname === rawHost ||
+            r.hostname.replace(/\.local$/i, '') === rawHost.replace(/\.local$/i, '')
         );
 
         if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {

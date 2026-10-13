@@ -10,6 +10,7 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { DURATION_FIXTURES, uuidForms } from './fixtures';
 import { openAppInstance, resolveAppPage, APP_TAB_URL_RE } from './openApp';
+import { appKindForUrl } from './sidecarUrls';
 import { attemptAppLogin } from './appLogin';
 import { resolveSidecarUrl } from './sidecarUrls';
 
@@ -21,7 +22,8 @@ const LESSON_TITLE = DURATION_FIXTURES.kolibri.live.lesson.title;
 /** Resolve Kolibri app tab; ensure teacher session when possible. */
 const ensureKolibriCoachPage = async (consolePage: Page): Promise<Page> => {
   let app = resolveAppPage(consolePage, 'kolibri');
-  if (app === consolePage || !APP_TAB_URL_RE.test(app.url()) || /nextcloud|18280/i.test(app.url())) {
+  // r57: a Kolibri tab on a store port (moved copy on idea04, copies) via any host form counts too.
+  if (app === consolePage || appKindForUrl(app.url()) !== 'kolibri') {
     app = await openAppInstance(
       consolePage,
       DURATION_FIXTURES.kolibri.instanceId,
@@ -50,7 +52,7 @@ const lessonIds = (): string[] => {
 const kolibriOrigin = (app: Page, consolePage: Page): string => {
   try {
     const u = app.url();
-    if (u && u !== 'about:blank' && APP_TAB_URL_RE.test(u)) {
+    if (u && u !== 'about:blank' && (APP_TAB_URL_RE.test(u) || appKindForUrl(u) === 'kolibri')) {
       return new URL(u).origin;
     }
   } catch {
