@@ -17,6 +17,8 @@ export interface DiscoveryResult {
   storeUrl: string;
   /** HTTP port the Engine answered on, when it is not 80. Absent = port 80. */
   port?: number;
+  /** Engine id, when /api/store-url reports one (newer Engines). */
+  engineId?: string;
 }
 
 /**
@@ -93,10 +95,45 @@ export async function probeHost(
     const json = await res.json();
     const storeUrl = json?.url as string | undefined;
     if (!storeUrl || !storeUrl.startsWith('automerge:')) return null;
-    return port !== 80 ? { hostname, storeUrl, port } : { hostname, storeUrl };
+    const engineId = typeof json?.engineId === 'string' && json.engineId ? json.engineId : undefined;
+    return {
+      hostname,
+      storeUrl,
+      ...(port !== 80 ? { port } : {}),
+      ...(engineId ? { engineId } : {}),
+    };
   } catch {
     return null;
   }
+}
+
+/**
+ * Identity of the Engine behind a result. The store URL is NOT an identity:
+ * every Engine in a fleet serves the same fleet store URL. Use the Engine id
+ * when the Engine reports one; otherwise the hostname without `.local`
+ * (lower-cased), since discovery probes `name` and `name.local`, which are
+ * the same machine. This is also the key of the `connect-engine-<name>` id.
+ */
+export function engineKey(r: DiscoveryResult): string {
+  if (r.engineId) return `id:${r.engineId}`;
+  return `host:${r.hostname.trim().replace(/\.local\.?$/i, '').toLowerCase()}`;
+}
+
+/**
+ * Collapse results that are the same Engine (e.g. `idea01` and
+ * `idea01.local`). Keeps the first per Engine; candidate order puts the bare
+ * name before `.local`, so the picker shows one row per Engine.
+ */
+export function dedupeEngines(results: DiscoveryResult[]): DiscoveryResult[] {
+  const seen = new Set<string>();
+  const out: DiscoveryResult[] = [];
+  for (const r of results) {
+    const key = engineKey(r);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,13 +142,13 @@ export async function probeHost(
 
 /**
  * Probe all candidate hostnames in parallel. Returns ALL successful results
- * in candidate order. Caller decides: 0 = form, 1 = auto-connect, 2+ = picker.
+ * in candidate order, one per Engine (deduped by engine id / bare hostname). Caller decides: 0 = form, 1 = auto-connect, 2+ = picker.
  */
 export async function discoverAllEngines(): Promise<DiscoveryResult[]> {
   const candidates = buildCandidates();
   const port = defaultEnginePort();
   const results = await Promise.all(candidates.map((c) => probeHost(c, port)));
-  return results.filter((r): r is DiscoveryResult => r !== null);
+  return dedupeEngines(results.filter((r): r is DiscoveryResult => r !== null));
 }
 
 /**
@@ -185,5 +222,5 @@ export async function discoverEnginesByPrefix(
   // Deduplicate in case hasDotLocal already covered one form
   const unique = [...new Set(candidates)];
   const results = await Promise.all(unique.map((c) => probeHost(c, port)));
-  return results.filter((r): r is DiscoveryResult => r !== null);
+  return dedupeEngines(results.filter((r): r is DiscoveryResult => r !== null));
 }
