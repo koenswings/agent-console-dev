@@ -11,20 +11,19 @@ import type {
   Disk,
   EngineID,
 } from '../types/store';
+import { isOnline, live, type LiveState } from './live';
 
 // ---------------------------------------------------------------------------
 // Pure helpers — safe to call in any context, including unit tests
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true when the engine has been seen within the last 90 seconds.
- * The Engine heartbeats every 30 s; 90 s (3×) gives tolerance for jitter.
- * Pass `now` (e.g. from a reactive clock signal) so the comparison is reactive.
+ * Online badge. Engines with live heartbeats (ephemeral 'idea/hb' every 10 s):
+ * online while one arrived within 30 s (Console clock). Old Engines: the stored
+ * lastRun within 90 s. See live.ts. Pass `now` so the comparison is reactive.
  */
-export const isEngineOnline = (engine: Engine, now: number = Date.now()): boolean => {
-  const ninetySecondsAgo = now - 90 * 1000;
-  return engine.lastRun > ninetySecondsAgo;
-};
+export const isEngineOnline = (engine: Engine, now: number = Date.now(), liveState: LiveState = live()): boolean =>
+  isOnline(engine, liveState, now);
 
 export interface EngineTreeNode {
   engine: Engine;
