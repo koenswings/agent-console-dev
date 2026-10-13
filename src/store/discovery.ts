@@ -10,11 +10,35 @@
  * resolves.
  */
 
+import { formatHostPort, parsePort } from './storage';
+
 export interface DiscoveryResult {
   hostname: string;
   storeUrl: string;
-  /** HTTP port when the user entered `host:port` manually. Absent = default port. */
+  /** HTTP port the Engine answered on, when it is not 80. Absent = port 80. */
   port?: number;
+}
+
+/**
+ * Default HTTP port for Engine probes: the port this Console page was served
+ * from (Engines serve the Console and /api/store-url on the same port, e.g.
+ * :8080 on the Pi pool), falling back to 80 when the page has no explicit
+ * port (port 80/443, extension pages, tests without a location).
+ */
+export function enginePortFromLocation(
+  loc: Pick<Location, 'protocol' | 'port'> | null | undefined,
+): number {
+  if (!loc) return 80;
+  if (loc.protocol !== 'http:' && loc.protocol !== 'https:') return 80;
+  return parsePort(loc.port) ?? 80;
+}
+
+export function defaultEnginePort(): number {
+  try {
+    return enginePortFromLocation(typeof window === 'undefined' ? null : window.location);
+  } catch {
+    return 80;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -57,16 +81,19 @@ export function buildCandidates(
 // Core probe
 // ---------------------------------------------------------------------------
 
-async function probeHost(hostname: string): Promise<DiscoveryResult | null> {
+export async function probeHost(
+  hostname: string,
+  port: number = defaultEnginePort(),
+): Promise<DiscoveryResult | null> {
   try {
-    const res = await fetch(`http://${hostname}/api/store-url`, {
+    const res = await fetch(`http://${formatHostPort(hostname, port)}/api/store-url`, {
       signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = await res.json();
     const storeUrl = json?.url as string | undefined;
     if (!storeUrl || !storeUrl.startsWith('automerge:')) return null;
-    return { hostname, storeUrl };
+    return port !== 80 ? { hostname, storeUrl, port } : { hostname, storeUrl };
   } catch {
     return null;
   }
@@ -82,7 +109,8 @@ async function probeHost(hostname: string): Promise<DiscoveryResult | null> {
  */
 export async function discoverAllEngines(): Promise<DiscoveryResult[]> {
   const candidates = buildCandidates();
-  const results = await Promise.all(candidates.map(probeHost));
+  const port = defaultEnginePort();
+  const results = await Promise.all(candidates.map((c) => probeHost(c, port)));
   return results.filter((r): r is DiscoveryResult => r !== null);
 }
 
@@ -145,6 +173,7 @@ export async function discoverEnginesByPrefix(
   prefix: string,
   hasDotLocal: boolean,
   maxNumber = DISCOVERY_MAX_NUMBER,
+  port: number = defaultEnginePort(),
 ): Promise<DiscoveryResult[]> {
   const candidates: string[] = [];
   for (let n = 1; n <= maxNumber; n++) {
@@ -155,6 +184,6 @@ export async function discoverEnginesByPrefix(
   }
   // Deduplicate in case hasDotLocal already covered one form
   const unique = [...new Set(candidates)];
-  const results = await Promise.all(unique.map(probeHost));
+  const results = await Promise.all(unique.map((c) => probeHost(c, port)));
   return results.filter((r): r is DiscoveryResult => r !== null);
 }
