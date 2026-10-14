@@ -603,6 +603,8 @@ function fakeCollab(o: {
   stuckClose?: boolean;
   text?: boolean;
   readonly?: boolean;
+  /** Text collision UI ("changed outside of the editor"): read-only panes, no editable content. */
+  conflict?: 'dialog' | 'banner';
   push?: number | null;
   echo?: boolean;
   /** The first N clicks on a file row are swallowed (Viewer not yet registered). */
@@ -657,11 +659,12 @@ function fakeCollab(o: {
       if (!viewer) return false;
       if (sel.endsWith('[data-text-el="editor-container"]')) return text;
       if (sel.endsWith('[data-text-el="readonly-bar"]')) return text && !!o.readonly;
-      if (sel.endsWith('.ProseMirror[contenteditable="true"]') || sel.endsWith('[data-text-el="menubar"]')) return editableNow();
+      if (sel.endsWith('.collision-resolve-dialog, #resolve-conflicts')) return text && (o.conflict === 'dialog' || collisionOn);
+      if (sel.endsWith('.ProseMirror[contenteditable="true"]') || sel.endsWith('[data-text-el="menubar"]')) return editableNow() && !o.conflict;
       if (sel.endsWith('[data-text-el="editor-content-wrapper"] .ProseMirror')) return text;
       if (sel.endsWith('#resolve-conflicts') || sel.endsWith('[data-cy="resolveServerVersion"]')) return text && collisionOn;
       if (sel.endsWith('.document-status a.button')) return text && connectionOn;
-      if (sel.endsWith('.document-status')) return text && (collisionOn || connectionOn);
+      if (sel.endsWith('.document-status')) return text && (collisionOn || connectionOn || !!o.conflict);
       return sel === '#viewer' || sel.endsWith('.modal-header__name') || sel.endsWith('.header-close');
     }
     if (sel === '[data-cy-files-content-breadcrumbs]' || sel.startsWith('[data-cy-files-content-breadcrumbs] a')) return dir() !== null;
@@ -681,11 +684,12 @@ function fakeCollab(o: {
       if (sel.endsWith('.document-status a.button')) return 'Reconnect';
       if (sel.endsWith('#resolve-conflicts')) return 'Use current version\n  Use the saved version';
       if (sel.endsWith('.document-status')) {
-        return collisionOn
+        return collisionOn || o.conflict
           ? 'Document has been changed outside of the editor. The changes cannot be applied'
           : 'Document could not be loaded. Please check your internet connection. Reconnect';
       }
-      const doc = (o.content ?? '# Grade 5A collab notes\nShared class notes') + typed;
+      const banner = o.conflict ? 'Document has been changed outside of the editor. The changes cannot be applied\n' : '';
+      const doc = banner + (o.content ?? '# Grade 5A collab notes\nShared class notes') + typed;
       if (sel === '#viewer' || sel.endsWith('[data-text-el="editor-container"]') || sel.endsWith('.ProseMirror[contenteditable="true"]')) return doc;
       return '';
     },
@@ -861,6 +865,20 @@ describe('keep_editing (Nextcloud Text, Kid Prefer A)', () => {
   it('loud-fails when the edit is not pushed or is rejected', async () => {
     await expect(runKeepEditing(opened({ push: null }).page, at)).rejects.toThrow(/never pushed the edit/);
     await expect(runKeepEditing(opened({ push: 403 }).page, at)).rejects.toThrow(/push rejected \(HTTP 403\)/);
+  });
+
+  it('names the Text collision (r77 FAIL@82) for dialog and banner-only, without typing', async () => {
+    for (const conflict of ['dialog', 'banner'] as const) {
+      const f = opened({ conflict });
+      await expect(runKeepEditing(f.page, at)).rejects.toThrow(/changed outside of the editor.*occ text:reset/);
+      expect(f.keys).toEqual([]);
+    }
+  });
+
+  it('open_collab_doc loud-fails on a Text collision instead of passing read-only', async () => {
+    const t = { '/': ['Grade 5A Files'], '/Grade 5A Files': ['Collab'], '/Grade 5A Files/Collab': files };
+    const f = fakeCollab({ tree: t, files, push: 200, conflict: 'banner' });
+    await expect(runOpenCollabDoc(f.page)).rejects.toThrow(/open_collab_doc: Nextcloud Text shows "Document has been changed outside/);
   });
 
   it('loud-fails when the typed line never shows in the editor', async () => {

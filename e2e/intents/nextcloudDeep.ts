@@ -1142,6 +1142,29 @@ export function ncOpenFileQuery(url: string): boolean {
 const viewerOpen = async (app: Page): Promise<boolean> =>
   app.locator(NC_VIEWER_SELECTORS.viewer).first().isVisible().catch(() => false);
 
+/** Text's banner when the file changed under an existing Text session (steps vs saved file). */
+export const TEXT_CONFLICT_RE = /changed outside of the editor/i;
+
+/**
+ * True when Nextcloud Text shows its collision UI for the open doc: the file on disk no
+ * longer matches the stored Text session steps (e.g. the file was restored from the seed
+ * while an old session's steps remained). Text then renders two read-only panes, so no
+ * edit is possible until someone resolves it. Not resolved by the walker (no soft-pass).
+ */
+export const textConflictShown = async (app: Page): Promise<boolean> => {
+  const scope = NC_VIEWER_SELECTORS.viewer;
+  if (await app.locator(`${scope} ${TEXT.conflictMustBeAbsent}`).first().isVisible().catch(() => false)) return true;
+  const txt = (await app.locator(scope).first().innerText().catch(() => '')) ?? '';
+  return TEXT_CONFLICT_RE.test(txt);
+};
+
+const textConflictError = (tag: string, doc: string): Error =>
+  new Error(
+    `${tag}: Nextcloud Text shows "Document has been changed outside of the editor" for "${doc}" ` +
+      `(stale Text session steps vs the saved file; HTTP 409 on session sync). Fixture reset needed, ` +
+      `not a walker fix: on the NC host run occ text:reset --force <fileId> for the collab doc after restoring it.`,
+  );
+
 /**
  * open_collab_doc (nc_browse → nc_collab): Files → class root → Collab → click
  * Grade5A-collab-notes.md. Success = Viewer open titled with the file name, the
@@ -1196,6 +1219,8 @@ export const runOpenCollabDoc = async (app: Page): Promise<string> => {
   if (!content) {
     throw new Error(`${tag}: Text editor for "${doc}" never rendered the doc heading "${NC_COLLAB_DOC_MARKER}" (empty/failed load).`);
   }
+  // Loud here (r77 FAIL@82): a Text collision makes the doc uneditable for the whole walk.
+  if (await textConflictShown(app)) throw textConflictError(tag, doc);
   return dir;
 };
 
@@ -1473,6 +1498,12 @@ export const ncAwaitEditableText = async (
       await runOpenCollabDoc(app);
       record('reopen_files', reason, true);
     } catch (e) {
+      // open_collab_doc fails loud on a Text conflict (main 49cf908): the doc did reopen, so let
+      // the loop below report the conflict (quoted) instead of retrying it away by page reload.
+      if (await textConflictShown(app)) {
+        record('reopen_files', reason, true);
+        return;
+      }
       lastError = `reopen: ${errLine(e)}`;
       if (ncOpenFileQuery(app.url())) {
         // Viewer Close not cooperating: a page reload reopens an ?openfile doc (fresh Text session).
@@ -1496,6 +1527,10 @@ export const ncAwaitEditableText = async (
           `Not resolved by the walker (a real conflict must surface). ` +
           `State: ${describeNcTextState(last)}${tried()}.`,
       );
+    }
+    if (TEXT_CONFLICT_RE.test(last.status)) {
+      // Banner-only collision (no dialog): same loud fail as open_collab_doc (main 49cf908).
+      throw new Error(`${textConflictError(tag, name).message} State: ${describeNcTextState(last)}${tried()}.`);
     }
     if (last.readonlyBar && !isLockNote(last.status) && !isIdleNote(last.status)) {
       // Permission read-only (not a lock/idle): deterministic, never retried.
@@ -1566,6 +1601,9 @@ export const runKeepEditing = async (
   }
   // Each recovery is already logged as {"event":"keep_editing_recovery",...} (harness counts them).
   await ncAwaitEditableText(app, tag, name, knobs);
+  // main 49cf908: a Text collision ("changed outside of the editor") FAILS loud, never recovered.
+  // ncAwaitEditableText already fails on the conflict dialog (quoted); this also catches the banner-only form.
+  if (await textConflictShown(app)) throw textConflictError(tag, name);
   const content = app.locator(`${scope} ${TEXT.content}`).first();
   const line = keepEditingLine(now);
   // Only a push the browser sent after typing began proves this edit (a reconnect or the

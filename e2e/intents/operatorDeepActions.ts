@@ -4,6 +4,8 @@
  *
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
+import { awaitOperationIfWired } from './operationWait';
+import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
@@ -347,8 +349,92 @@ export function backupSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): num
 }
 
 /**
+ * How long after the Back up click to wait for a backupApp Operation to appear
+ * in OperationProgress (or a CommandFeedback error). cover-all r42 FAIL@112:
+ * the Intent used to return ok on click alone while Automerge replication of
+ * the Operation lagged a few seconds — harness then saw "Intent ok" with no op.
+ * Override with DURATION_BACKUP_OP_START_MS (ms). Default 30s.
+ */
+export function backupOpAppearTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.DURATION_BACKUP_OP_START_MS?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(5_000, Number(raw));
+  return 30_000;
+}
+
+/**
+ * After Back up is clicked: if the multi-disk picker opened (§2+ linked Backup
+ * Disks), pick the first option. Prefer A: never leave the picker open and
+ * report ok (latent Intent hole called out in BACKUP-112-DIAG).
+ */
+export async function confirmBackupPickerIfOpen(page: Page, instanceId: string): Promise<void> {
+  const dropdown = page.locator(sel.backupPickerDropdown);
+  // Brief window: single-disk path never opens the picker.
+  const opened = await dropdown.isVisible().catch(() => false)
+    || await dropdown.waitFor({ state: 'visible', timeout: 400 }).then(() => true).catch(() => false);
+  if (!opened) return;
+  const opts = page.locator(sel.backupPickerOption);
+  const n = await opts.count();
+  if (n === 0) {
+    throw new Error(
+      `idea#168 backup_instance: Back up opened the disk picker for ${instanceId} ` +
+        `but no [data-testid^=backup-to-disk-] options are visible. No soft-pass.`,
+    );
+  }
+  await opts.first().click();
+  await dropdown.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+}
+
+/**
+ * Wait until a backupApp Operation for `instanceId` appears in OperationProgress
+ * (Pending / Running / Done), or fail loud on Failed / CommandFeedback error /
+ * timeout. Appearance = success for the Intent: the Engine accepted backupApp
+ * and wrote an Operation; the harness still verifies archive/Done separately.
+ */
+export async function waitForBackupAppOperation(
+  page: Page,
+  instanceId: string,
+  budgetMs: number = backupOpAppearTimeoutMs(),
+): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  const card = page.locator(sel.backupAppOpForInstance(instanceId));
+  const feedbackErr = page.locator(sel.instanceCmdError(instanceId));
+
+  while (Date.now() < deadline) {
+    if (await feedbackErr.isVisible().catch(() => false)) {
+      const msg = ((await feedbackErr.first().textContent()) ?? '').trim();
+      throw new Error(
+        `idea#168 backup_instance: Engine refused / failed backup for ${instanceId} ` +
+          `(CommandFeedback: ${msg || 'error'}). No soft-pass.`,
+      );
+    }
+    const n = await card.count();
+    if (n > 0) {
+      const status = ((await card.first().getAttribute('data-op-status')) ?? '').trim();
+      if (status === 'Failed') {
+        const err = ((await card.first().locator('.operation-card__error').textContent().catch(() => '')) ?? '').trim();
+        throw new Error(
+          `idea#168 backup_instance: backupApp Operation Failed for ${instanceId}` +
+            `${err ? `: ${err}` : ''}. No soft-pass.`,
+        );
+      }
+      // Pending / Running / Done (Done may auto-dismiss in 3s — catching it counts)
+      return;
+    }
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(
+    `idea#168 backup_instance: no backupApp Operation for ${instanceId} within ${budgetMs}ms ` +
+      `after Back up click (OperationProgress empty / no matching card). ` +
+      `r42 FAIL@112: Intent must not return ok on click alone. No soft-pass.`,
+  );
+}
+
+/**
  * Backup instance — requires linked Backup Disk; product enables Backup only when Running.
  * Prefer A r23: stop→backup left Backup disabled — start if Stopped, wait enable, loud-fail.
+ * Prefer A r42 FAIL@112: after click, wait until a backupApp Operation appears (or
+ * CommandFeedback / Failed op) before returning ok — not just the click.
  * Do NOT change product isBackupDisabled (Stopped stays disabled).
  */
 export const backup_instance: IntentFn = async ({ page, instanceId }) => {
@@ -441,6 +527,10 @@ export const backup_instance: IntentFn = async ({ page, instanceId }) => {
   }
 
   await btn.click();
+  // ≥2 linked Backup Disks: picker opens instead of sending — pick one or fail loud.
+  await confirmBackupPickerIfOpen(page, id);
+  // r42 FAIL@112: do not return ok until the backupApp Operation is visible (or fails).
+  await waitForBackupAppOperation(page, id, backupOpAppearTimeoutMs());
 };
 
 /** Back to disk — select parent disk row (ctx.diskId) → DiskView / EmptyDiskPanel. */
@@ -678,7 +768,7 @@ export async function settleAfterRestoreConfirm(
  * pick target disk → Restore → Confirm → settle Running+sidecar.
  * Prefer A: no soft-skip / no Grade5A remap.
  */
-export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }) => {
+export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId, waitOperation }) => {
   await ensureBackupDiskPanel(page, { diskId }, 'restore_from_backup');
   const id = instanceId ?? DURATION_FIXTURES.kolibri.instanceId;
   const row = page.locator(sel.restoreInstance(id));
@@ -711,7 +801,14 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId }
   }
   await select.selectOption(chosen);
   await page.locator(sel.restoreBtn(linkedId)).click();
+  const restoreSince = Date.now();
   await page.locator(sel.restoreConfirm(linkedId)).click();
+  // r64: wait for the restoreApp Operation to end (harness store hook) before the post-restore Start/settle.
+  await awaitOperationIfWired(
+    { page, instanceId, diskId, waitOperation },
+    { kind: 'restoreApp', instanceId: linkedId, sinceMs: restoreSince },
+    'restore_from_backup',
+  );
   await settleAfterRestoreConfirm(page, linkedId);
 };
 
@@ -1180,7 +1277,6 @@ export async function resolveSwitchEngineHostCandidates(
 
   push('idea03');
   push('idea04');
-  push('appdocker01');
 
   return orderSwitchEngineHosts(out);
 }
@@ -1239,7 +1335,7 @@ async function clickDiscoveredEngine(
       return false;
     }
     // Target is IP: Prefer A — click idea01-ish hostname Connect if listed, else IP row
-    for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+    for (const name of ['idea01', 'idea03', 'idea04']) {
       const btn = page.locator(sel.connectEngine(name));
       if (await btn.count()) {
         await btn.click();
@@ -1260,7 +1356,7 @@ async function clickDiscoveredEngine(
     }
     return false;
   }
-  for (const name of ['idea01', 'idea03', 'idea04', 'appdocker01']) {
+  for (const name of ['idea01', 'idea03', 'idea04']) {
     const btn = page.locator(sel.connectEngine(name));
     if (await btn.count()) {
       await btn.click();
@@ -1425,6 +1521,79 @@ async function connectEngineWithRetries(
 }
 
 /**
+ * idea#168 r86s FAIL@128: switch_engine returned as soon as ConnectionManagement
+ * closed, but Connect re-creates the Automerge repo (App initConnection sets the
+ * store to null) and a fresh full sync takes ~3–4 s on the pool. reboot_engine then
+ * read an empty Network tree (visible=[none]) although engineDB held all three
+ * Engines. Intents must wait for the reconnect to finish before reading the tree.
+ */
+export function switchEngineLoadTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.DURATION_SWITCH_ENGINE_LOAD_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return 60_000;
+  return Math.max(5_000, raw);
+}
+
+/** Poll `probe` until it returns a non-null value or the budget runs out (then null). */
+export async function pollUntil<T>(
+  probe: () => Promise<T | null>,
+  budgetMs: number,
+  intervalMs = 250,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  now: () => number = Date.now,
+): Promise<T | null> {
+  const deadline = now() + budgetMs;
+  for (;;) {
+    const v = await probe();
+    if (v !== null) return v;
+    if (now() >= deadline) return null;
+    await sleep(intervalMs);
+  }
+}
+
+/** Decide from a UI snapshot whether the Console's store view is loaded. */
+export function consoleStoreLoaded(s: {
+  connectedDot: boolean;
+  treeVisible: boolean;
+  engineRows: number;
+}): boolean {
+  if (!s.connectedDot) return false;
+  return !s.treeVisible || s.engineRows > 0;
+}
+
+async function consoleStoreSnapshot(page: import('@playwright/test').Page) {
+  const connectedDot = await page
+    .locator('.status-bar__dot--connected')
+    .count()
+    .then((n) => n > 0)
+    .catch(() => false);
+  const treeVisible = await page.locator(sel.networkTree).isVisible().catch(() => false);
+  const engineRows = treeVisible
+    ? await page.locator(`${sel.networkTree} .tree-item--engine`).count().catch(() => 0)
+    : 0;
+  return { connectedDot, treeVisible, engineRows };
+}
+
+/** Loud-fail unless the Console is connected and (if shown) the tree lists Engines. */
+export async function waitForConsoleStoreLoaded(
+  page: import('@playwright/test').Page,
+  context: string,
+  budgetMs = switchEngineLoadTimeoutMs(),
+): Promise<void> {
+  let last = { connectedDot: false, treeVisible: false, engineRows: 0 };
+  const ok = await pollUntil(async () => {
+    last = await consoleStoreSnapshot(page);
+    return consoleStoreLoaded(last) ? true : null;
+  }, budgetMs);
+  if (!ok) {
+    throw new Error(
+      `idea#168 ${context}: Console store not loaded within ${budgetMs}ms after reconnect ` +
+        `(connected=${last.connectedDot} treeVisible=${last.treeVisible} engineRows=${last.engineRows}). ` +
+        'Prefer A — no soft-pass.',
+    );
+  }
+}
+
+/**
  * Switch Engine — Prefer A r44: if status-bar hostname already matches
  * DURATION_SWITCH_ENGINE_HOST, PASS after ConnectionManagement opens
  * (discovery "No engine found" is N/A — do not manual-Connect retry).
@@ -1475,6 +1644,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
           `but after dismiss status=${JSON.stringify(after)}. Prefer A loud-fail.`,
       );
     }
+    await waitForConsoleStoreLoaded(page, 'switch_engine');
     return;
   }
 
@@ -1485,6 +1655,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
   const statusAfterScan = await readConnectedStatusHostname(page);
   if (hostEnv && switchHostsMatch(statusAfterScan, hostEnv)) {
     await dismissConnectionManagement(page);
+    await waitForConsoleStoreLoaded(page, 'switch_engine');
     return;
   }
   if (settle === 'empty' && hostEnv && !switchHostsMatch(statusAfterScan, hostEnv)) {
@@ -1501,6 +1672,8 @@ export const switch_engine: IntentFn = async ({ page }) => {
   }
 
   await connectEngineWithRetries(page, candidates);
+  // r86s FAIL@128: Connect reloads the store from scratch — wait until it is back.
+  await waitForConsoleStoreLoaded(page, 'switch_engine');
 };
 
 /**
@@ -1581,6 +1754,8 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
     if (await cm.count()) await cm.click().catch(() => {});
   }
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
+  // r86s FAIL@128: tree can be visible with zero Engine rows while the store reloads.
+  await waitForConsoleStoreLoaded(page, 'reboot_engine');
   const btn = await resolveRebootButton(page, engineId);
   let dialogSeen = false;
   page.once('dialog', async (d) => {
@@ -1627,9 +1802,11 @@ export const leaveAppToConsole = async (page: import('@playwright/test').Page): 
       const url = p.url();
       if (
         p !== page &&
-        /kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
+        (/kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
           url,
-        )
+        ) ||
+          // r57: App tabs on store ports / any engine host form (e.g. Kiwix library idea03.local:18480/)
+          appKindForUrl(url) !== null)
       ) {
         await p.close().catch(() => {});
       }

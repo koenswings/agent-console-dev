@@ -70,6 +70,17 @@ export const sel = {
   startInstance: (id: string) => `[data-testid="start-instance-${id}"]`,
   stopInstance: (id: string) => `[data-testid="stop-instance-${id}"]`,
   backupInstance: (id: string) => `[data-testid="backup-instance-${id}"]`,
+  /** Multi-disk Back up picker option (InstanceRow). */
+  backupToDisk: (diskId: string) => `[data-testid="backup-to-disk-${diskId}"]`,
+  backupPickerOption: '[data-testid^="backup-to-disk-"]',
+  backupPickerDropdown: '.backup-picker__dropdown',
+  /** OperationProgress card (r42 FAIL@112: backup_instance waits for backupApp op). */
+  operationProgress: '[data-testid="operation-progress"]',
+  operationCard: (opId: string) => `[data-testid="operation-card-${opId}"]`,
+  backupAppOpForInstance: (instanceId: string) =>
+    `[data-testid^="operation-card-"][data-op-kind="backupApp"][data-op-instance="${instanceId}"]`,
+  instanceCmdError: (id: string) =>
+    `[data-testid="instance-cmd-${id}-error"], [data-testid="mobile-instance-cmd-${id}-error"]`,
   backupToDisk: (diskId: string) => `[data-testid="backup-to-disk-${diskId}"]`,
   installAppItem: (appId: string) => `[data-testid="install-app-item-${appId}"]`,
   restoreInstance: (id: string) => `[data-testid="restore-instance-${id}"]`,

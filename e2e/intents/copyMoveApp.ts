@@ -8,6 +8,7 @@
  * - Source disk has copyable instance card (kolibri-grade5a-001 or nextcloud-…)
  * - Target disk accepts drop (different diskId in NetworkTree)
  */
+import { awaitOperationIfWired, isOperationLockMessage } from './operationWait';
 import type { Page } from '@playwright/test';
 import type { IntentContext, IntentFn } from './types';
 import { sel } from './selectors';
@@ -152,6 +153,8 @@ export function copyMoveSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): n
 export async function settleAfterCopyMoveConfirm(
   page: Page,
   pair: CopyMovePair,
+  /** r64: re-wait for the confirmed Operation if Start still reports its lock (bounded by the harness). */
+  rewaitOperation?: () => Promise<unknown>,
 ): Promise<void> {
   const intent = pair.op === 'copy' ? 'copy_app' : 'move_app';
   const budget = copyMoveSettleTimeoutMs();
@@ -195,6 +198,15 @@ export async function settleAfterCopyMoveConfirm(
   try {
     await settleOnce();
   } catch (err) {
+    const m0 = err instanceof Error ? err.message : String(err);
+    if (rewaitOperation && isOperationLockMessage(m0)) {
+      // The Operation lock is still on after the harness saw it end (store lag): wait for it again
+      // (bounded by the harness budget, logged there), then one more settle. Not a blind retry.
+      console.log(`[intent ${intent}] Start still "Operation in progress" for ${pair.instanceId}; re-waiting the Operation`);
+      await rewaitOperation();
+      await settleOnce();
+      return;
+    }
     if (Date.now() >= deadline) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(
@@ -327,6 +339,7 @@ const runCopyOrMove = async (ctx: IntentContext, op: 'copy' | 'move'): Promise<v
 
   const confirmBtn =
     op === 'copy' ? page.locator(sel.copyMoveCopy) : page.locator(sel.copyMoveMove);
+  const confirmedSince = Date.now();
   await confirmBtn.click();
   try {
     await modal.waitFor({ state: 'hidden', timeout: 20_000 });
@@ -335,7 +348,15 @@ const runCopyOrMove = async (ctx: IntentContext, op: 'copy' | 'move'): Promise<v
       `idea#168 ${intent}: copy-move-modal still visible after Confirm. No soft-pass.`,
     );
   }
-  await settleAfterCopyMoveConfirm(page, pair);
+  // r64 (Stage 2 r63 FAIL@43): wait for the copyApp/moveApp Operation to END before the single post-op
+  // Start/settle — a 498 MB image rsync holds the instance lock far longer than the settle budget.
+  const opQuery = { kind: op === 'copy' ? 'copyApp' as const : 'moveApp' as const, instanceId: pair.instanceId, sinceMs: confirmedSince };
+  const waited = await awaitOperationIfWired(ctx, opQuery, intent);
+  await settleAfterCopyMoveConfirm(
+    page,
+    pair,
+    waited ? () => awaitOperationIfWired(ctx, opQuery, intent) : undefined,
+  );
 };
 
 export const copy_app: IntentFn = async (ctx) => runCopyOrMove(ctx, 'copy');

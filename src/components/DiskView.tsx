@@ -127,7 +127,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
     lessonResult.start(arg.arg, () =>
       installApp(eng, KOLIBRI_LESSON_APP_ID, arg.arg, { name: spec.instanceName }), {
       engineId: eng,
-      remote: remoteWatchFor(props.store, eng, 'installApp', confirmInstalled(props.store, d.id, spec.instanceName)),
+      remote: remoteWatchFor(props.store, eng, 'installApp', confirmInstalled(props.store, d.id, KOLIBRI_LESSON_APP_ID, eng)),
     });
   };
 

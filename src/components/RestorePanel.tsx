@@ -44,10 +44,15 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
   const targetDisks = createMemo((): Disk[] => {
     const s = props.store();
     const disk = props.disk();
-    if (!s) return [];
+    // restoreApp runs on the Engine that holds this Backup Disk and only accepts a target disk
+    // docked to that same Engine ("Disk … is not docked to this engine."), so never offer a disk
+    // on another Pi (idea#168 Stage 2 r85 FAIL@100).
+    const owner = props.engineId() ?? disk?.dockedTo ?? null;
+    if (!s || !owner) return [];
     return Object.values(s.diskDB).filter(
       (d) =>
         d.device !== null &&
+        d.dockedTo === owner &&
         d.id !== disk?.id &&
         (d.diskTypes.includes('app') || d.diskTypes.includes('empty'))
     );
@@ -80,7 +85,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     // silent. On another Engine: "Sent to …" until the restore op is Done.
     result.start(inst.id, () => restoreApp(engineId, inst.id, targetDisk.id), {
       engineId,
-      remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id)),
+      remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id, { engineId, args: { targetDiskId: targetDisk.id } })),
     });
     setConfirmingId(null);
     // Clear the target selection so the button re-disables

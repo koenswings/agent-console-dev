@@ -24,7 +24,7 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
     if (!disk?.dockedTo) return 'localhost';
     const engine = store.engineDB[disk.dockedTo];
     if (!engine) return 'localhost';
-    return resolveAppHost(engine.hostname, currentAppHostContext(engineCount()));
+    return resolveAppHost(engine, currentAppHostContext(engineCount()));
   };
 
   // ID list of all instances (Running and non-Running alike).
