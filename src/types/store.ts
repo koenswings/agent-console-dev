@@ -70,6 +70,12 @@ export interface Engine {
    */
   unformattedDisks?: UnformattedDisk[];
   /**
+   * FAT/exFAT USB sticks mounted read-only by this Engine (idea#193 §3.3).
+   * Absent on Engines that do not publish sticks yet. A stick also stays in
+   * `unformattedDisks` (same `device`) so it can still be erased.
+   */
+  usbSticks?: UsbStickPublic[];
+  /**
    * At most one erase in progress on this Engine (idea#136). Cleared when
    * eraseDisk finishes; used for progress while the Disk record is gone.
    */
@@ -108,6 +114,25 @@ export interface FilesConfig {
 
 
 /** Unformatted (non-ext4) whole disk published by the Engine (idea#136). */
+/** A read-only USB stick on an Engine (idea#193 §3.3). Never an IDEA disk. */
+export interface UsbStickPublic {
+  /** 'usb-' + filesystem UUID, stable per stick. */
+  stickId: string;
+  /** Kernel device, e.g. 'sdb1'. */
+  device: string;
+  /** Filesystem label, or model, or 'USB stick'. */
+  label: string;
+  /** 'USB: MARY-STICK' (unique per Engine). */
+  displayName: string;
+  fsType: 'vfat' | 'exfat';
+  sizeBytes: number;
+  usedBytes: number;
+  mountedAt: Timestamp;
+  readOnly: true;
+  /** Top-level `kolibri` folder on the stick (idea#193 §8.2a). Absent = unknown/false. */
+  hasKolibriFolder?: boolean;
+}
+
 export interface UnformattedDisk {
   candidateId: string;
   device: string;

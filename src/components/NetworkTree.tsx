@@ -16,6 +16,8 @@ import CommandFeedback from './CommandFeedback';
 import { createCommandResult } from '../store/commandResult';
 import { confirmEjected, confirmRebooted, formatWait, remoteWatchFor, type RemoteWatch } from '../store/remoteConfirm';
 import RoleBadges from './RoleBadges';
+import UsbStickRow from './UsbStickRow';
+import { candidateForStick, stickForCandidate } from '../store/usbSticks';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 
@@ -206,6 +208,20 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   return (
                     <Show when={cand()}>
                       {(u) => (
+                        <Show
+                          when={!stickForCandidate(engine(), u())}
+                          fallback={
+                            <UsbStickRow
+                              engineId={engineId}
+                              engine={engine()!}
+                              stick={stickForCandidate(engine(), u())!}
+                              store={props.store}
+                              candidateId={candidateId}
+                              selected={isSelected('unformatted', candidateId) && props.selection.engineId === engineId}
+                              onSelect={() => props.onSelect({ type: 'unformatted', id: candidateId, engineId })}
+                            />
+                          }
+                        >
                         <div
                           data-testid={`candidate-${candidateId}`}
                           data-candidate-id={candidateId}
@@ -229,6 +245,21 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           </span>
                           <span class="tree-item__badge-unformatted">unformatted</span>
                         </div>
+                        </Show>
+                      )}
+                    </Show>
+                  );
+                }}
+              </For>
+
+              {/* ── USB sticks the Engine did not also list for erase (idea#193) ── */}
+              <For each={(engine()?.usbSticks ?? []).filter((s) => !candidateForStick(engine(), s)).map((s) => s.stickId)}>
+                {(stickId) => {
+                  const stick = () => engine()?.usbSticks?.find((s) => s.stickId === stickId);
+                  return (
+                    <Show when={stick()}>
+                      {(st) => (
+                        <UsbStickRow engineId={engineId} engine={engine()!} stick={st()} store={props.store} selected={false} />
                       )}
                     </Show>
                   );

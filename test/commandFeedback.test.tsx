@@ -264,7 +264,7 @@ describe('MobileAppList shows the Engine error trace on the card', () => {
     fireEvent.click(document.querySelector('.mobile-sheet__disk-row') as HTMLElement);
     fireEvent.click(document.querySelector('.mobile-sheet__confirm') as HTMLElement);
     expect(send).toHaveBeenCalledOnce();
-    expect(send.mock.calls[0][1]).toMatch(/^copyApp kolibri DISK001 DISK00[23]$/);
+    expect(send.mock.calls[0][1]).toMatch(/^copyApp kolibri DISK001 DISK00[236]$/);
     expect(document.querySelector('.mobile-sheet')).toBeNull();
     // Engine 8d98718 copyApp logs its refusal with console.error and closes ok
     setCls(log(trace('t', {

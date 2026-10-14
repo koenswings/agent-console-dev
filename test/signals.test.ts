@@ -79,8 +79,9 @@ describe('getEngineTree', () => {
     expect(node1).toBeDefined();
     expect(node2).toBeDefined();
 
-    // Engine 1 has 3 disks (kolibri-disk + backup-disk + empty-disk)
-    expect(node1!.disks).toHaveLength(3);
+    // Engine 1 has 4 disks (kolibri-disk + backup-disk + empty-disk + channel-builder-disk, idea#193)
+    expect(node1!.disks).toHaveLength(4);
+    expect(node1!.disks.map((d) => d.id)).toContain(MOCK_IDS.DISK_6_ID);
     const engine1DiskIds = node1!.disks.map((d) => d.id);
     expect(engine1DiskIds).toContain(MOCK_IDS.DISK_1_ID);
     expect(engine1DiskIds).toContain(MOCK_IDS.DISK_4_ID);
