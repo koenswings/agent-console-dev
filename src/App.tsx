@@ -189,6 +189,10 @@ const App: Component = () => {
   // starts before the previous resolves, the stale one can be abandoned.
   let currentInitId = 0;
 
+  // Issue #150: the Engine picked in Connection Management. It drives the connection
+  // (also when served from a Pi); null = default (page host / saved host).
+  let pickedTarget: { hostname: string; port?: number | null } | null = null;
+
   const initConnection = async () => {
     // Dispose the old connection before starting a new one to stop stale WS
     // retries (BrowserWebSocketClientAdapter retries every 5 s indefinitely).
@@ -221,7 +225,7 @@ const App: Component = () => {
 
     const conn = isDemo
       ? createMockConnection()
-      : await (await import('./store/engine')).createEngineConnection();
+      : await (await import('./store/engine')).createEngineConnection(3, { target: pickedTarget });
 
     if (myId !== currentInitId) {
       // Superseded — clean up immediately so we don't leak a WS connection
@@ -257,6 +261,8 @@ const App: Component = () => {
 
   const handleDiscoverySelect = async (result: DiscoveryResult) => {
     await saveHostnameAndStoreUrl(result.hostname, result.storeUrl, result.port);
+    pickedTarget = { hostname: result.hostname, port: result.port ?? null };
+    // Status bar = the host the connection is actually made to (issue #150).
     setHostname(result.hostname);
     setDiscoveryResults([]);
     setShowConnectionMgmt(false);
@@ -264,6 +270,7 @@ const App: Component = () => {
   };
 
   const handleConnectionFailure = async () => {
+    pickedTarget = null;
     setHostname('');
     localStorage.removeItem('engineHostname');
     localStorage.removeItem(STORAGE_KEY_PORT);
