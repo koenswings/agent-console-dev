@@ -17,6 +17,7 @@ import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { DURATION_FIXTURES, uuidForms } from './fixtures';
 import { openAppInstance, APP_TAB_URL_RE } from './openApp';
+import { appKindForUrl } from './sidecarUrls';
 
 const APP_URL_RE = APP_TAB_URL_RE;
 
@@ -185,7 +186,7 @@ export const openContentByIds = async (
   let origin: string | null = null;
   try {
     const url = app.url();
-    if (url && url !== 'about:blank' && APP_URL_RE.test(url)) {
+    if (url && url !== 'about:blank' && (APP_URL_RE.test(url) || appKindForUrl(url) === 'kolibri')) {
       origin = new URL(url).origin;
     }
   } catch {

@@ -202,6 +202,8 @@ export const DURATION_FIXTURES = {
         content: '[data-text-el="editor-content-wrapper"] .ProseMirror[contenteditable="true"]',
         menubarWhenEditable: '[data-text-el="menubar"]',
         readonlyBarMustBeAbsent: '[data-text-el="readonly-bar"]',
+        /** Text 5 collision UI ("Document has been changed outside of the editor"): two read-only panes. */
+        conflictMustBeAbsent: '.collision-resolve-dialog, #resolve-conflicts',
         sessionAvatars: '.text-editor__session-list .avatar-list',
       },
     },
