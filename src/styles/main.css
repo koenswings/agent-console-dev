@@ -3663,3 +3663,10 @@ body {
   margin: 0.75rem 0 1rem;
   font-size: 0.9rem;
 }
+
+/* Network tree: store not loaded yet (issue #151) */
+.network-tree__loading {
+  padding: 0.5rem 0.75rem;
+  font-style: italic;
+  opacity: 0.75;
+}
