@@ -1,7 +1,7 @@
 /**
  * Client cards adapter (idea#201 §10.2). The ONE place that knows the Engine's
  * store fields and command strings for client cards, Flash and Initialise.
- * Built against Axle's Engine API contract DRAFT v1 (2026-10-15); adapting to
+ * Built against Axle's Engine API contract v2 (2026-10-15); adapting to
  * a changed contract should only touch this file.
  *
  * Commands are space-split by the Engine: ids only, never names. An id with
@@ -79,6 +79,14 @@ export const flashableImages = (engine: Engine | undefined): ClientImage[] => {
 
 export const currentImageVersion = (engine: Engine | undefined): string | null => clientImagesOf(engine)?.current ?? null;
 
+/**
+ * Contract v2 (one id space): a non-ext4 new disk is listed in newDisks AND in
+ * unformattedDisks under the same candidateId. It must be erased before
+ * initialiseDisk (which otherwise refuses with NOT_EXT4).
+ */
+export const needsErase = (engine: Engine | undefined, candidateId: string): boolean =>
+  (engine?.unformattedDisks ?? []).some((u) => u?.candidateId === candidateId);
+
 /** The Operation for a flash/initialise on this candidate (newest first). */
 export const findDiskOperation = (
   store: Store | null,
@@ -134,6 +142,7 @@ export const ERROR_TEXT: Record<string, string> = {
   IMAGE_TOO_LARGE: 'The image does not fit on this card. Use a bigger card.',
   WRITE_FAILED: 'Writing to the card failed. The card may be faulty; try another card.',
   VERIFY_FAILED: 'The check after writing failed. The card may be faulty; try another card.',
+  NOT_EXT4: 'This disk is not formatted for IDEA yet. Erase it first, then initialise it.',
   POWER_OFF_FAILED: 'The card was written, but could not be switched off. Eject it before removing it.',
   INTERRUPTED: 'The Pi restarted during the operation. Flash the card again.',
   CANCELLED: 'Flash cancelled. The card is now wiped; flash it again before use.',
@@ -143,7 +152,7 @@ export const ERROR_TEXT: Record<string, string> = {
 /** "CODE: text" → { code, text }. Unknown codes keep the Engine's text (never hidden). */
 export const parseEngineError = (raw: string | null | undefined): { code: string | null; text: string } => {
   const msg = String(raw ?? '').trim();
-  const m = /^([A-Z][A-Z_]+):\s*(.*)$/s.exec(msg);
+  const m = /^([A-Z][A-Z0-9_]+):\s*(.*)$/s.exec(msg);
   if (!m) return { code: null, text: msg || 'The Engine reported an error without a message.' };
   const code = m[1];
   return { code, text: ERROR_TEXT[code] ?? `${m[2] || code} (${code})` };

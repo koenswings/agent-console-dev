@@ -126,7 +126,7 @@ export interface FilesConfig {
 /** Unformatted (non-ext4) whole disk published by the Engine (idea#136). */
 // ---------------------------------------------------------------------------
 // idea#201 §10: new (unknown) disks, card readers, client cards, client images.
-// Mirrors Axle's Engine API contract DRAFT v1 (2026-10-15). All optional: older
+// Mirrors Axle's Engine API contract v2 (2026-10-15). All optional: older
 // Engines do not publish them (the Console gates on Engine.capabilities).
 // ---------------------------------------------------------------------------
 export type CandidateID = string;
@@ -382,8 +382,8 @@ export interface User {
 // Operation — mirrors agent-engine-dev/src/data/Operation.ts
 // Progress tracking for long-running engine operations written to operationDB.
 // ---------------------------------------------------------------------------
-/** 'Cancelled': idea#201 §10 contract (cancelFlash). */
-export type OperationStatus = 'Pending' | 'Running' | 'Done' | 'Failed' | 'Cancelled';
+/** idea#201 contract v2: a cancel ends Failed with error 'CANCELLED: ...' (no Cancelled status). */
+export type OperationStatus = 'Pending' | 'Running' | 'Done' | 'Failed';
 export type OperationKind =
   | 'copyApp'
   | 'moveApp'
@@ -393,7 +393,7 @@ export type OperationKind =
   | 'upgradeEngine'
   | 'startApp'
   | 'stopApp'
-  // idea#201 §10 (Engine API contract DRAFT v1)
+  // idea#201 §10 (Engine API contract v2)
   | 'flashCard'
   | 'initialiseDisk';
 
@@ -436,6 +436,11 @@ export interface Operation {
   startedAt: Timestamp;
   completedAt: Timestamp | null;
   error: string | null;
+  /**
+   * idea#201 contract v2 (flashCard): set together with Done. true = card powered
+   * off, safe to pull; false = eject first (POWER_OFF_FAILED). Absent on other kinds.
+   */
+  safeToRemove?: boolean;
 }
 
 // ---------------------------------------------------------------------------

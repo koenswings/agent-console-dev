@@ -7,6 +7,8 @@
 import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import CommandFeedback from './CommandFeedback';
 import FlashDialog from './FlashDialog';
+import EraseDialog from './EraseDialog';
+import { engineHasCapability } from '../store/commands';
 import { createCommandResult, type CommandResult } from '../store/commandResult';
 import { mergeCommandLogs, remoteCommandLog } from '../store/remoteCommandLogs';
 import { formatBytes } from '../store/diskRoles';
@@ -24,6 +26,7 @@ import {
   hasCap,
   initialisableDisks,
   initialiseDisk,
+  needsErase,
   readerForCard,
   type InitialiseType,
 } from '../store/clientCards';
@@ -90,9 +93,14 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
 
   const NewDiskLine = (p: { disk: NewDisk }) => {
     const [type, setType] = createSignal<InitialiseType>('empty');
-    const raw = createCommandResult({ commandLog: cls, command: TRACE.initialise, argKey: 'diskId', matchMode: 'includes', longRunning: true });
+    const raw = createCommandResult({ commandLog: cls, command: TRACE.initialise, argKey: 'candidateId', matchMode: 'key', longRunning: true });
     const result = plain(raw);
-    const blocked = () => (hasCap(engine(), 'unknownDiskReadOnly') ? null : CAP_HINT.unknownDiskReadOnly);
+    const [erasing, setErasing] = createSignal(false);
+    // Contract v2: non-ext4 → Erase first (same candidateId), then Initialise.
+    const mustErase = () => needsErase(engine(), p.disk.candidateId);
+    const canErase = () => engineHasCapability(engine(), 'eraseDisk');
+    const blocked = () => (!hasCap(engine(), 'unknownDiskReadOnly') ? CAP_HINT.unknownDiskReadOnly
+      : mustErase() ? errorText('NOT_EXT4: ') : null);
     const busy = () => raw.state().kind === 'pending';
     const label = () => `${p.disk.model ?? 'disk'} (${formatBytes(p.disk.sizeBytes)})`;
     return (
@@ -118,8 +126,30 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
         >
           {busy() ? 'Initialising…' : 'Initialise'}
         </button>
+        <Show when={mustErase()}>
+          <button
+            class="btn"
+            data-testid={`new-disk-erase-${p.disk.candidateId}`}
+            disabled={!canErase()}
+            onClick={() => setErasing(true)}
+          >
+            Erase first…
+          </button>
+        </Show>
         <Show when={blocked()}>
           {(h) => <p class="edp-form__hint" data-testid={`new-disk-hint-${p.disk.candidateId}`}>{h()}</p>}
+        </Show>
+        <Show when={erasing()}>
+          <EraseDialog
+            targetId={p.disk.candidateId}
+            engineId={props.engineId}
+            fallbackLabel={label()}
+            mode="erase"
+            store={props.store}
+            commandLogStore={props.commandLogStore}
+            onClose={() => setErasing(false)}
+            onErasedEmpty={() => setErasing(false)}
+          />
         </Show>
         <Show when={raw.state().kind === 'success'}>
           <p class="edp-form__hint" role="status" data-testid={`new-disk-done-${p.disk.candidateId}`}>Initialised. It now appears as an IDEA disk.</p>

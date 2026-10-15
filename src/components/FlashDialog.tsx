@@ -71,13 +71,13 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
   let baseline = new Set<string>();
 
   const cls = () => mergeCommandLogs(props.commandLogStore?.() ?? null, remoteCommandLog(props.engineId)?.() ?? null);
-  const raw = createCommandResult({ commandLog: cls, command: TRACE.flash, argKey: 'diskId', matchMode: 'includes', longRunning: true });
+  const raw = createCommandResult({ commandLog: cls, command: TRACE.flash, argKey: 'candidateId', matchMode: 'key', longRunning: true });
   const result = plain(raw);
   const cancelRaw = createCommandResult({ commandLog: cls, command: TRACE.cancel, argKey: 'operationId', matchMode: 'includes' });
   const cancelResult = plain(cancelRaw);
 
   const op = createMemo(() => (phase() === 'running' ? findDiskOperation(props.store(), props.engineId, 'flashCard', props.candidateId, startedAt() - 5_000) : undefined));
-  const trace = createMemo(() => (phase() === 'running' ? findCommandTrace(cls(), baseline, TRACE.flash, 'diskId', props.candidateId, 'includes') : null));
+  const trace = createMemo(() => (phase() === 'running' ? findCommandTrace(cls(), baseline, TRACE.flash, 'candidateId', props.candidateId, 'key') : null));
 
   type Outcome =
     | { kind: 'progress' }
@@ -87,13 +87,16 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
   const outcome = createMemo((): Outcome => {
     const o = op();
     const t = trace();
-    if (o?.status === 'Cancelled') return { kind: 'cancelled' };
+    // Contract v2: no Cancelled status; a cancel is Failed 'CANCELLED: ...'.
     if (o?.status === 'Failed') {
       const e = parseEngineError(o.error);
       return e.code === 'CANCELLED' ? { kind: 'cancelled' } : { kind: 'failed', text: e.text, code: e.code };
     }
     if (o?.status === 'Done') {
-      // Safe only when the trace confirms safeToRemove:true. Wait for the trace to close.
+      // Contract v2: Operation.safeToRemove (set with Done) is the primary signal.
+      if (o.safeToRemove === true) return { kind: 'done', safe: true, note: null };
+      if (o.safeToRemove === false) return { kind: 'done', safe: false, note: errorText('POWER_OFF_FAILED: ') };
+      // Fallback (older Engine without the field): the closed trace's result.
       if (!t || t.status === 'running') return { kind: 'progress' };
       const r = parseFlashResult(t);
       if (r?.safeToRemove === true) return { kind: 'done', safe: true, note: null };

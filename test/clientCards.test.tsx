@@ -1,7 +1,7 @@
 /**
  * idea#201 §10.2 — Client cards section, Flash dialog (pick → confirm → progress
  * → done), Initialise for new disks, error paths, capability gates, adapter
- * commands and the demo store. Engine API: Axle's contract DRAFT v1.
+ * commands and the demo store. Engine API: Axle's contract v2.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
@@ -228,7 +228,39 @@ describe('Flash dialog', () => {
     expect(q(container, 'flash-progress-percent')!.textContent).toContain('42%');
   });
 
-  it('Done + trace safeToRemove:true → "Done – safe to remove"', () => {
+  it('contract v2: Operation.safeToRemove:true is enough (no trace needed)', () => {
+    const { container, h } = open();
+    toConfirm(container);
+    confirm(container);
+    const s = base();
+    s.operationDB = { 'op-1': flashOp({ status: 'Done', safeToRemove: true }) };
+    h.setS(s);
+    expect(q(container, 'flash-done')!.textContent).toBe(SAFE_TO_REMOVE_TEXT);
+  });
+
+  it('contract v2: Operation.safeToRemove:false wins over a trace that says true (POWER_OFF_FAILED)', () => {
+    const { container, h } = open();
+    toConfirm(container);
+    confirm(container);
+    const s = base();
+    s.operationDB = { 'op-1': flashOp({ status: 'Done', safeToRemove: false }) };
+    h.setS(s);
+    h.setCls(log(trace({ status: 'ok', completedAt: Date.now(), result: JSON.stringify({ safeToRemove: true }) })));
+    expect(q(container, 'flash-done')).toBeNull();
+    expect(q(container, 'flash-done-eject')!.textContent).toBe(EJECT_FIRST_TEXT);
+    expect(q(container, 'flash-done-note')!.textContent).toBe(ERROR_TEXT.POWER_OFF_FAILED);
+  });
+
+  it('matches the trace on the named arg candidateId only (another card\'s trace is ignored)', () => {
+    const { container, h } = open();
+    toConfirm(container);
+    confirm(container);
+    // A different card's flash whose other args happen to contain our id.
+    h.setCls(log(trace({ args: { candidateId: 'aaaaaaaaaaaaaaaa', version: CARD, confirmSizeBytes: '1' }, status: 'error', completedAt: Date.now(), errorMessage: 'BUSY: x' })));
+    expect(q(container, 'flash-feedback-error')).toBeNull();
+  });
+
+  it('fallback (no Operation.safeToRemove): Done + trace safeToRemove:true → "Done – safe to remove"', () => {
     const { container, h, onClose } = open();
     toConfirm(container);
     confirm(container);
@@ -312,7 +344,7 @@ describe('Flash dialog', () => {
     expect(q(container, 'flash-feedback-timeout')).not.toBeNull();
   });
 
-  it('Cancel during checking/writing sends cancelFlash <operationId>; Cancelled shows the wiped warning', () => {
+  it('Cancel during checking/writing sends cancelFlash <operationId>; Failed CANCELLED shows the wiped warning', () => {
     const { container, h } = open();
     toConfirm(container);
     confirm(container);
@@ -323,7 +355,7 @@ describe('Flash dialog', () => {
     expect(sent).toHaveBeenLastCalledWith(E, 'cancelFlash op-1');
     expect(q(container, 'flash-cancel')).toBeNull(); // sent once only
     const s2 = base();
-    s2.operationDB = { 'op-1': flashOp({ status: 'Cancelled' }) };
+    s2.operationDB = { 'op-1': flashOp({ status: 'Failed', error: 'CANCELLED: cancelled by operator' }) };
     h.setS(s2);
     expect(q(container, 'flash-cancelled')!.textContent).toBe(ERROR_TEXT.CANCELLED);
   });
@@ -385,7 +417,7 @@ describe('Initialise new disks', () => {
     fireEvent.click(q(container, `new-disk-initialise-${DISK}`)!);
     expect(sent).toHaveBeenCalledWith(E, `initialiseDisk ${DISK} files`);
     expect(q(container, `new-disk-initialise-${DISK}`)!.textContent).toBe('Initialising…');
-    h.setCls(log(trace({ traceId: 'i1', command: 'initialiseDisk', args: { candidateId: DISK }, status: 'ok', completedAt: Date.now() })));
+    h.setCls(log(trace({ traceId: 'i1', command: 'initialiseDisk', args: { candidateId: DISK, role: 'files' }, status: 'ok', completedAt: Date.now() })));
     expect(q(container, `new-disk-done-${DISK}`)).not.toBeNull();
   });
 
@@ -394,7 +426,7 @@ describe('Initialise new disks', () => {
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
     fireEvent.click(q(container, `new-disk-initialise-${DISK}`)!);
     expect(sent).toHaveBeenCalledWith(E, `initialiseDisk ${DISK} empty`);
-    h.setCls(log(trace({ traceId: 'i1', command: 'initialiseDisk', args: { candidateId: DISK }, status: 'error', completedAt: Date.now(), errorMessage: 'IN_USE_BY_APP: holder kolibri' })));
+    h.setCls(log(trace({ traceId: 'i1', command: 'initialiseDisk', args: { candidateId: DISK, role: 'empty' }, status: 'error', completedAt: Date.now(), errorMessage: 'IN_USE_BY_APP: holder kolibri' })));
     expect(q(container, `new-disk-feedback-${DISK}-error`)!.textContent).toContain(ERROR_TEXT.IN_USE_BY_APP);
   });
 
@@ -404,6 +436,31 @@ describe('Initialise new disks', () => {
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
     expect((q(container, `new-disk-initialise-${DISK}`) as HTMLButtonElement).disabled).toBe(true);
     expect(q(container, `new-disk-hint-${DISK}`)!.textContent).toMatch(/claims new disks/);
+  });
+
+  it('contract v2: a non-ext4 new disk (also in unformattedDisks, same id) offers Erase first, Initialise disabled with NOT_EXT4', () => {
+    const s = withEngine(base(), {
+      unformattedDisks: [{ candidateId: DISK, device: 'sdb', sizeBytes: 1_000_204_886_016, model: 'WD Elements 2620', fsType: 'ntfs', label: 'WD' }],
+      capabilities: [...(base().engineDB[E].capabilities ?? []), 'eraseDisk'],
+    });
+    const h = harness(s);
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    expect((q(container, `new-disk-initialise-${DISK}`) as HTMLButtonElement).disabled).toBe(true);
+    expect(q(container, `new-disk-hint-${DISK}`)!.textContent).toBe(ERROR_TEXT.NOT_EXT4);
+    fireEvent.click(q(container, `new-disk-erase-${DISK}`)!);
+    expect(q(container, 'erase-dialog')).not.toBeNull();
+    expect(sent).toHaveBeenCalledWith(E, `summariseDisk ${DISK}`);
+    expect(sent).not.toHaveBeenCalledWith(E, expect.stringMatching(/^initialiseDisk/));
+    // Once erased (ext4, gone from unformattedDisks), Initialise is offered.
+    h.setS(withEngine(base(), { unformattedDisks: [] }));
+    expect(q(container, `new-disk-erase-${DISK}`)).toBeNull();
+    expect((q(container, `new-disk-initialise-${DISK}`) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('an ext4 new disk has no Erase button', () => {
+    const h = harness();
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    expect(q(container, `new-disk-erase-${DISK}`)).toBeNull();
   });
 });
 
@@ -424,7 +481,7 @@ describe('Adapter commands (ids only, fail loudly)', () => {
     expect(() => buildCancelFlashCommand('op 1')).toThrow();
   });
   it('every contract §5 code has plain text', () => {
-    for (const c of ['NOT_FOUND', 'NOT_REMOVABLE', 'SYSTEM_DISK', 'BOOT_DEVICE', 'HAS_IDEA_META', 'ALREADY_IDEA', 'MOUNTED', 'IN_USE_BY_APP', 'BUSY', 'SIZE_CHANGED', 'MEDIUM_SWAPPED', 'IMAGE_NOT_FOUND', 'IMAGE_BAD_SHA', 'IMAGE_TOO_LARGE', 'WRITE_FAILED', 'VERIFY_FAILED', 'POWER_OFF_FAILED', 'INTERRUPTED', 'CANCELLED', 'HELPER_MISSING']) {
+    for (const c of ['NOT_FOUND', 'NOT_REMOVABLE', 'SYSTEM_DISK', 'BOOT_DEVICE', 'HAS_IDEA_META', 'ALREADY_IDEA', 'MOUNTED', 'IN_USE_BY_APP', 'BUSY', 'SIZE_CHANGED', 'MEDIUM_SWAPPED', 'IMAGE_NOT_FOUND', 'IMAGE_BAD_SHA', 'IMAGE_TOO_LARGE', 'WRITE_FAILED', 'VERIFY_FAILED', 'POWER_OFF_FAILED', 'INTERRUPTED', 'CANCELLED', 'HELPER_MISSING', 'NOT_EXT4']) {
       expect(ERROR_TEXT[c], c).toBeTruthy();
       expect(errorText(`${c}: x`)).toBe(ERROR_TEXT[c]);
     }
