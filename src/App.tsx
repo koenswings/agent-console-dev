@@ -40,6 +40,8 @@ import {
   STORAGE_KEY_STORE_URL,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
+import { decideFailover, PROD_FAILOVER_MS, PROD_FAILOVER_RETRY_MS } from './store/prodFailover';
+import { defaultEnginePort } from './store/discovery';
 import { resolveDemoMode } from './store/demoMode';
 import { discoverAllEngines, enginesFromStore, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
@@ -323,6 +325,30 @@ const App: Component = () => {
       }, 15_000);
       return () => clearTimeout(timer);
     }
+  });
+
+  // idea#203: served from an Engine, the Console only talks to its page host.
+  // If that Engine stays unreachable, reconnect when it (or the new idea.local
+  // holder) answers again, else open another live Engine's Console.
+  createEffect(() => {
+    const isConn = connected();
+    if (isConn || !hasEverConnected() || demo() || !isProductionWebMode()) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const attempt = async () => {
+      if (stopped || connected()) return;
+      const step = await decideFailover(store(), window.location.hostname, defaultEnginePort());
+      if (stopped || connected()) return;
+      if (step.kind === 'reconnect') { await initConnection(); return; }
+      if (step.kind === 'navigate') {
+        console.info(`[app] Serving Engine unreachable — opening ${step.url}`);
+        window.location.assign(step.url);
+        return;
+      }
+      timer = setTimeout(attempt, PROD_FAILOVER_RETRY_MS);
+    };
+    timer = setTimeout(attempt, PROD_FAILOVER_MS);
+    onCleanup(() => { stopped = true; clearTimeout(timer); });
   });
 
   onMount(async () => {
