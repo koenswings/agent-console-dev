@@ -162,7 +162,9 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     } else {
       // EXTENSION-ONLY: hostname from storage is only used in extension mode.
       // Web deployments always derive hostname from window.location via isProductionWebMode().
-      hostname = (await readFromStorage(STORAGE_KEY_HOSTNAME)) ?? 'appdocker01.local';
+      // idea#184: no guessed default host; without a saved Engine the operator
+      // connects by the sticker name (Connection Management).
+      hostname = (await readFromStorage(STORAGE_KEY_HOSTNAME)) ?? '';
       // Saved connections from before idea#100 have no port → default HTTP port.
       httpHost = formatHostPort(hostname, parsePort(await readFromStorage(STORAGE_KEY_PORT)));
       const envStoreUrl = import.meta.env.VITE_STORE_URL as string | undefined;
@@ -178,6 +180,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       }
     }
 
+    if (!hostname) storeUrl = null; // no Engine chosen yet (idea#184)
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
       const clsErr: CommandLogError = { error: true, url: `http://${httpHost}/api/command-log-url`, status: null };

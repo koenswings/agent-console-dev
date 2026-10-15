@@ -34,7 +34,8 @@ describe('Console served on :8080', () => {
 
   it('discoverAllEngines finds the :8080 pool and never probes bare :80 URLs', async () => {
     const f = stubFetch(['idea01:8080', 'idea03:8080', 'idea04:8080']);
-    const found = await discoverAllEngines();
+    // idea#184: candidates are the page host (idea02, refused here) + history
+    const found = await discoverAllEngines(['idea01', 'idea03', 'idea04']);
     expect(found.map((r) => r.hostname)).toEqual(['idea01', 'idea03', 'idea04']);
     expect(found.every((r) => r.port === 8080)).toBe(true);
     expect(f.mock.calls.every(([u]) => /:8080\/api\/store-url$/.test(String(u)))).toBe(true);
@@ -69,10 +70,10 @@ async function enterManually(value: string, onSelect: (r: DiscoveryResult) => vo
     await waitFor(() => expect(onSelect).toHaveBeenCalled());
     expect(onSelect.mock.calls[0][0]).toEqual({ hostname: '10.99.0.13', storeUrl: STORE_URL, port: 9000 });
   });
-  it('initial scan lists the :8080 Engines', async () => {
-    stubFetch(['idea01:8080', 'idea03:8080', 'idea04:8080']);
+  it('initial scan finds the :8080 Engine the page was served from (idea#184)', async () => {
+    stubFetch(['idea02:8080']);
     render(() => <ConnectionManagement onComplete={() => undefined} onDiscoverySelect={() => undefined} />);
-    for (const h of ['idea01', 'idea03', 'idea04']) {
+    for (const h of ['idea02']) {
       expect(await screen.findByTestId(`connect-engine-${h}`, {}, { timeout: 8000 })).toBeInTheDocument();
     }
   }, 15000);

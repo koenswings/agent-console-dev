@@ -37,10 +37,11 @@ import {
   saveHostnameAndStoreUrl,
   saveDemoMode,
   STORAGE_KEY_PORT,
+  STORAGE_KEY_STORE_URL,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
 import { resolveDemoMode } from './store/demoMode';
-import { discoverAllEngines, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
+import { discoverAllEngines, enginesFromStore, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
 import type { CommandLogState } from './store/commandLog';
@@ -470,6 +471,7 @@ const App: Component = () => {
             discovering={discovering()}
             discoveryResults={discoveryResults()}
             onDiscoverySelect={handleDiscoverySelect}
+            storeEngines={enginesFromStore(store(), localStorage.getItem(STORAGE_KEY_STORE_URL) ?? '')}
           />
         </Match>
 

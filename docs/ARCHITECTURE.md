@@ -251,9 +251,13 @@ compared with the same Engine's `lastRun` seen at send, minus 5 min slack.
 
 ### `src/store/discovery.ts` — engine hostname discovery
 
-Probes a list of candidate hostnames (`appdocker01`, `idea01`, `engine01`, `appdocker02`, …)
-concurrently by attempting `GET /api/store-url` on each. Returns all that respond within the
-timeout. Used by `App.tsx` on first load when no hostname is stored:
+Sticker-name bootstrap (idea#184). Pis have free, unique two-word names (e.g. `brave-otter`)
+printed on a sticker; there is no number scheme and no shared alias. A browser cannot browse
+mDNS, so the Console never guesses names: it probes only the host the page was served from
+(the operator opened `http://<sticker-name>.local:<port>`) plus Engines used before (history),
+via `GET /api/store-url`. Once connected, every Engine is listed from the network database
+(`enginesFromStore(store)` → `engineDB[*].hostname` as `<name>.local`). Used by `App.tsx` on
+first load when no hostname is stored:
 
 - 0 results → show Onboarding form
 - 1 result → auto-connect silently

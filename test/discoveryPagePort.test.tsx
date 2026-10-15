@@ -17,7 +17,6 @@ import {
   enginePortFromLocation,
   defaultEnginePort,
   probeHost,
-  discoverEnginesByPrefix,
 } from '../src/store/discovery';
 
 const STORE_URL = 'automerge:store123';
@@ -56,7 +55,7 @@ describe('enginePortFromLocation', () => {
   });
 });
 
-describe('probeHost / discoverEnginesByPrefix port', () => {
+describe('probeHost port', () => {
   it('probes host:port and reports the non-default port', async () => {
     const f = stubFetch(['idea01:8080']);
     expect(await probeHost('idea01', 8080)).toEqual({ hostname: 'idea01', storeUrl: STORE_URL, port: 8080 });
@@ -65,16 +64,6 @@ describe('probeHost / discoverEnginesByPrefix port', () => {
   it('port 80 keeps the bare URL and no port field', async () => {
     stubFetch(['idea01']);
     expect(await probeHost('idea01', 80)).toEqual({ hostname: 'idea01', storeUrl: STORE_URL });
-  });
-  it('sibling scan finds all :8080 Engines (pool idea01/03/04)', async () => {
-    stubFetch(['idea01:8080', 'idea03:8080', 'idea04.local:8080']);
-    const found = await discoverEnginesByPrefix('idea', false, 10, 8080);
-    expect(found.map((r) => r.hostname)).toEqual(['idea01', 'idea03', 'idea04.local']);
-    expect(found.every((r) => r.port === 8080)).toBe(true);
-  });
-  it('port-80 scan does not see :8080-only Engines (the r86m symptom)', async () => {
-    stubFetch(['idea01:8080', 'idea03:8080']);
-    expect(await discoverEnginesByPrefix('idea', false, 10, 80)).toEqual([]);
   });
 });
 
