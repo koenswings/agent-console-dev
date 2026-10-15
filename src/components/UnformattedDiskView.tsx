@@ -8,6 +8,7 @@ import EraseDialog, { type EraseMode } from './EraseDialog';
 import { DEFAULT_SHARE_NAME, UPDATE_ENGINE_TOOLTIP, engineHasCapability, validateShareName } from '../store/commands';
 import { eraseBlockedReason, findUnformatted } from '../store/erase';
 import { formatBytes as fmt } from '../store/diskRoles';
+import { STICK_FS_LINE, stickForCandidate, stickRowLabel } from '../store/usbSticks';
 import type { CommandLogState } from '../store/commandLog';
 import type { Selection } from './NetworkTree';
 import type { Store } from '../types/store';
@@ -23,6 +24,8 @@ interface UnformattedDiskViewProps {
 const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   const candidate = createMemo(() => findUnformatted(props.store(), props.engineId, props.candidateId));
   const engine = () => props.store()?.engineDB[props.engineId];
+  /** idea#193: this candidate is a read-only USB stick (same device in Engine.usbSticks). */
+  const stick = createMemo(() => stickForCandidate(engine(), candidate()));
   const eraseBlocked = createMemo(() =>
     eraseBlockedReason(engine(), props.store(), props.candidateId)
   );
@@ -45,8 +48,22 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
     <section class="disk-view unformatted-disk-view" aria-label="Unformatted disk">
       <header class="disk-view__header">
         <span class="disk-view__icon" aria-hidden="true">💾</span>
-        <span class="disk-view__title">{candidate()?.label ?? props.candidateId}</span>
-        <span class="disk-view__badge-unformatted">unformatted</span>
+        <Show
+          when={stick()}
+          fallback={
+            <>
+              <span class="disk-view__title">{candidate()?.label ?? props.candidateId}</span>
+              <span class="disk-view__badge-unformatted">unformatted</span>
+            </>
+          }
+        >
+          {(st) => (
+            <>
+              <span class="disk-view__title">{stickRowLabel(st())}</span>
+              <span class="disk-view__badge-readonly">read-only</span>
+            </>
+          )}
+        </Show>
       </header>
 
       <Show when={candidate()}>
@@ -55,7 +72,12 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
             <Show when={c().model}><p>Model: {c().model}</p></Show>
             <p>Size: {fmt(c().sizeBytes)}</p>
             <Show when={c().fsType}><p>Filesystem: {c().fsType}</p></Show>
-            <p class="edp-form__hint">Contents unknown until the disk is erased into an empty IDEA disk.</p>
+            <Show
+              when={stick()}
+              fallback={<p class="edp-form__hint">Contents unknown until the disk is erased into an empty IDEA disk.</p>}
+            >
+              <p class="edp-form__hint" data-testid="usb-stick-fs-line">{STICK_FS_LINE}</p>
+            </Show>
           </div>
         )}
       </Show>

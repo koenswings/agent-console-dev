@@ -61,6 +61,32 @@ const engine1: Engine = {
   // idea#201 §10 capabilities (demo: client cards, Flash, images, Initialise)
   capabilities: ['diskIdArgs', 'unknownDiskReadOnly', 'clientCards', 'flashCard', 'clientImages'],
   capabilitiesBootedAt: ONE_HOUR_AGO,
+  // idea#193 §8.4: a teacher's exFAT stick with a `kolibri` folder, mounted
+  // read-only. It also stays in unformattedDisks (same device) so Erase works.
+  unformattedDisks: [
+    {
+      candidateId: 'CAND_MARY_STICK',
+      device: 'sdg1',
+      sizeBytes: 3_200_000_000,
+      model: 'SanDisk Cruzer',
+      fsType: 'exfat',
+      label: 'MARY-STICK',
+    },
+  ],
+  usbSticks: [
+    {
+      stickId: 'usb-4A2B-19C7',
+      device: 'sdg1',
+      label: 'MARY-STICK',
+      displayName: 'USB: MARY-STICK',
+      fsType: 'exfat',
+      sizeBytes: 3_200_000_000,
+      usedBytes: 1_100_000_000,
+      mountedAt: TWO_MINS_AGO,
+      readOnly: true,
+      hasKolibriFolder: true,
+    },
+  ],
   // idea#201 §10 demo: a card reader with a Raspberry Pi OS card, and an unknown USB disk.
   cardReaders: [
     { id: DEMO_READER_ID, name: 'Generic STORAGE DEVICE', usbPath: '1-1.2', hasMedium: true, candidateId: DEMO_CARD_ID },
@@ -173,6 +199,7 @@ const DISK_2_ID = 'DISK002';
 const DISK_3_ID = 'DISK003';
 const DISK_4_ID = 'DISK004';
 const DISK_5_ID = 'DISK005';
+const DISK_6_ID = 'DISK006';
 
 const kolibriDisk: Disk = {
   id: DISK_1_ID,
@@ -219,6 +246,18 @@ const emptyDisk: Disk = {
   backupConfig: null,
 };
 
+// Kolibri channel builder app disk (idea#193 §8.4)
+const channelBuilderDisk: Disk = {
+  id: DISK_6_ID,
+  name: 'channel-builder-disk',
+  device: 'sdf',
+  created: ONE_HOUR_AGO,
+  lastDocked: ONE_HOUR_AGO,
+  dockedTo: ENGINE_1_ID,
+  diskTypes: ['app'],
+  backupConfig: null,
+};
+
 // Backup disk — linked to kolibri instance
 const backupDisk: Disk = {
   id: DISK_4_ID,
@@ -242,6 +281,19 @@ const APP_NEXTCLOUD_ID = 'nextcloud-1.0';
 const APP_WIKIPEDIA_ID = 'wikipedia-1.0';
 const APP_EMPTY_ID = 'empty-disk-app-1.0';
 const APP_BROKEN_ID = 'broken-app-1.0';
+export const APP_CHANNEL_BUILDER_ID = 'kolibri-channel-builder-1.0';
+
+const channelBuilderApp: App = {
+  id: APP_CHANNEL_BUILDER_ID,
+  name: 'kolibri-channel-builder',
+  version: '1.0',
+  title: 'Kolibri Channel Builder',
+  description: 'Builds Kolibri channels from teacher folders and USB sticks',
+  url: null,
+  category: 'education',
+  icon: null,
+  author: 'IDEA',
+};
 
 const kolibriApp: App = {
   id: APP_KOLIBRI_ID,
@@ -311,6 +363,25 @@ const INST_NEXTCLOUD_ID = 'nextcloud-inst-001';
 const INST_WIKIPEDIA_ID = 'wikipedia-inst-001';
 const INST_EMPTY_ID = 'empty-disk-instance-001';
 const INST_BROKEN_ID = 'broken-app-inst-001';
+const INST_CHANNEL_BUILDER_ID = 'channel-builder-inst-001';
+
+const channelBuilderInstance: Instance = {
+  id: INST_CHANNEL_BUILDER_ID,
+  instanceOf: APP_CHANNEL_BUILDER_ID,
+  name: 'kolibri-channel-builder',
+  status: 'Running',
+  port: 8090,
+  serviceImages: [],
+  created: ONE_HOUR_AGO,
+  lastBackup: null,
+  lastStarted: TWO_MINS_AGO,
+  storedOn: DISK_6_ID,
+  statusCondition: null,
+  currentStep: null,
+  totalSteps: null,
+  stepLabel: null,
+  metrics: null,
+};
 
 const kolibriInstance: Instance = {
   id: INST_KOLIBRI_ID,
@@ -436,6 +507,7 @@ export const MOCK_STORE: Store = {
     [DISK_3_ID]: wikipediaDisk,
     [DISK_4_ID]: backupDisk,
     [DISK_5_ID]: emptyDisk,
+    [DISK_6_ID]: channelBuilderDisk,
   },
   appDB: {
     [APP_KOLIBRI_ID]: kolibriApp,
@@ -443,6 +515,7 @@ export const MOCK_STORE: Store = {
     [APP_WIKIPEDIA_ID]: wikipediaApp,
     [APP_EMPTY_ID]: emptyDiskApp,
     [APP_BROKEN_ID]: brokenApp,
+    [APP_CHANNEL_BUILDER_ID]: channelBuilderApp,
   },
   instanceDB: {
     [INST_KOLIBRI_ID]: kolibriInstance,
@@ -450,6 +523,7 @@ export const MOCK_STORE: Store = {
     [INST_WIKIPEDIA_ID]: wikipediaInstance,
     [INST_EMPTY_ID]: emptyDiskInstance,
     [INST_BROKEN_ID]: brokenAppInstance,
+    [INST_CHANNEL_BUILDER_ID]: channelBuilderInstance,
   },
   userDB: {
     // Pre-provisioned demo admin — no first-time setup required in demo mode
@@ -625,6 +699,11 @@ export const MOCK_IDS = {
   INST_WIKIPEDIA_ID,
   INST_EMPTY_ID,
   INST_BROKEN_ID,
+  DISK_6_ID,
+  APP_CHANNEL_BUILDER_ID,
+  INST_CHANNEL_BUILDER_ID,
+  MARY_STICK_ID: 'usb-4A2B-19C7',
+  MARY_CAND_ID: 'CAND_MARY_STICK',
   DEMO_READER_ID,
   DEMO_CARD_ID,
   DEMO_UNKNOWN_DISK_ID,
