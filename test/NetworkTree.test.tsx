@@ -62,7 +62,7 @@ describe('NetworkTree component', () => {
     expect(engineItems).toHaveLength(2);
   });
 
-  it('renders all 5 disks as sub-nodes (including empty disk)', () => {
+  it('renders all 6 disks as sub-nodes (including empty disk and channel-builder disk)', () => {
     const { container } = render(() => (
       <NetworkTree
         store={() => MOCK_STORE}
@@ -72,8 +72,9 @@ describe('NetworkTree component', () => {
           onDrop={() => {}}
       />
     ));
-    const diskItems = container.querySelectorAll('.tree-item--disk');
-    expect(diskItems).toHaveLength(5);
+    // The demo USB stick (idea#193) is a read-only row, not an IDEA disk.
+    const diskItems = container.querySelectorAll('.tree-item--disk:not(.tree-item--usb-stick):not(.tree-item--unformatted)');
+    expect(diskItems).toHaveLength(6);
   });
 
   it('shows disk names', () => {
@@ -167,7 +168,7 @@ describe('NetworkTree component', () => {
           onDrop={() => {}}
       />
     ));
-    const firstDisk = container.querySelector('.tree-item--disk') as HTMLElement;
+    const firstDisk = container.querySelector('.tree-item--disk:not(.tree-item--usb-stick):not(.tree-item--unformatted)') as HTMLElement;
     firstDisk?.click();
     expect(calls).toHaveLength(1);
     expect(calls[0].type).toBe('disk');
