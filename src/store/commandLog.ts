@@ -18,6 +18,8 @@ export interface CommandLogConnectionOptions {
   pollMs?: number;
   /** Polling stops once this returns true (connection disposed). */
   isDisposed?: () => boolean;
+  /** Called after the followed doc URL changed (rotation or another Engine behind the host). */
+  onUrlChange?: (url: string) => void;
 }
 
 /**
@@ -89,6 +91,7 @@ export async function createCommandLogConnection(
         if (url && url !== currentUrl && !isDisposed()) {
           console.info(`[commandLog] Engine rotated its command log: ${currentUrl} -> ${url}`);
           await follow(url);
+          options.onUrlChange?.(url);
         }
       } catch { /* transient: keep the current doc, retry next tick */ }
     }, pollMs);
