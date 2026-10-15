@@ -228,7 +228,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
 
     // Connect to the command-log doc (same WS repo, separate Automerge doc).
     // This runs in parallel; don't let it block the main connection.
-    const commandLogStore = await createCommandLogConnection(httpHost, repo);
+    const commandLogStore = await createCommandLogConnection(httpHost, repo, { isDisposed: () => disposed });
 
     if (disposed) {
       dispose();
@@ -287,7 +287,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       const [inner, setInner] = createSignal<Accessor<CommandLogState> | null>(null);
       const log: Accessor<CommandLogState> = () => inner()?.() ?? null;
       remoteLogs.set(key, log);
-      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo)
+      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo, { isDisposed: () => disposed })
         .then((acc) => setInner(() => acc))
         .catch(() => setInner(() => () => ({ error: true, url: otherHost, status: null })));
       return log;
