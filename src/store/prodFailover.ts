@@ -46,6 +46,9 @@ export function failoverCandidates(store: StoreLike, pageHostname: string, port:
   return out;
 }
 
+/** Open another Engine's Console (separate so tests can observe it). */
+export const navigateTo = (url: string): void => { window.location.assign(url); };
+
 export const consoleUrl = (r: Pick<DiscoveryResult, 'hostname' | 'port'>): string =>
   `http://${formatHostPort(r.hostname, r.port ?? 80)}/`;
 

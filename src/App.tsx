@@ -17,7 +17,7 @@ import FirstTimeSetup from './components/FirstTimeSetup';
 import CommandFeedback from './components/CommandFeedback';
 import CopyMoveModal from './components/CopyMoveModal';
 import { createDragCopyMove } from './store/dragCopyMove';
-import { connectedEngineId, setConnectedEngineHost } from './store/connectedEngine';
+import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
 import { remoteCommandLog, setRemoteCommandLogFn } from './store/remoteCommandLogs';
 import { setSendCommandFn } from './store/commands';
 import {
@@ -40,7 +40,7 @@ import {
   STORAGE_KEY_STORE_URL,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
-import { decideFailover, PROD_FAILOVER_MS, PROD_FAILOVER_RETRY_MS } from './store/prodFailover';
+import { decideFailover, navigateTo, PROD_FAILOVER_MS, PROD_FAILOVER_RETRY_MS } from './store/prodFailover';
 import { defaultEnginePort } from './store/discovery';
 import { resolveDemoMode } from './store/demoMode';
 import { discoverAllEngines, enginesFromStore, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
@@ -342,7 +342,7 @@ const App: Component = () => {
       if (step.kind === 'reconnect') { await initConnection(); return; }
       if (step.kind === 'navigate') {
         console.info(`[app] Serving Engine unreachable — opening ${step.url}`);
-        window.location.assign(step.url);
+        navigateTo(step.url);
         return;
       }
       timer = setTimeout(attempt, PROD_FAILOVER_RETRY_MS);
@@ -400,7 +400,7 @@ const App: Component = () => {
   };
 
   const statusLabel = () => {
-    if (connected()) return hostname().replace(/\.local$/i, '');
+    if (connected()) return connectedEngineName(store(), hostname());
     if (demo()) return '';
     if (discovering()) return 'Scanning for engines...';
     if (hostname()) return 'Connecting…';
