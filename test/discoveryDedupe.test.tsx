@@ -10,7 +10,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
 import ConnectionManagement from '../src/components/ConnectionManagement';
 import {
-  dedupeEngines, discoverAllEngines, discoverEnginesByPrefix, type DiscoveryResult,
+  dedupeEngines, discoverAllEngines, enginesFromStore, type DiscoveryResult,
 } from '../src/store/discovery';
 
 const urlFor = (_h: string) => 'automerge:fleet-store';
@@ -65,21 +65,21 @@ describe('dedupeEngines', () => {
 describe('discovery with name + .local both answering', () => {
   it('discoverAllEngines returns one entry per engine, bare name preferred', async () => {
     stubFetch(['idea01', 'idea03', 'idea04']);
-    const found = await discoverAllEngines();
+    // idea#184: no name guessing; the Engines come from history (and the page host)
+    const found = await discoverAllEngines(['idea01', 'idea03.local', 'idea04']);
     expect(found.map((r) => r.hostname)).toEqual(['idea01', 'idea03', 'idea04']);
   });
-  it('discoverEnginesByPrefix dedupes too', async () => {
-    stubFetch(['idea01', 'idea03']);
-    const found = await discoverEnginesByPrefix('idea', true, 10, 8080);
-    expect(found.map((r) => r.hostname)).toEqual(['idea01', 'idea03']);
-  });
-  it('picker renders exactly one connect-engine-idea01 button', async () => {
-    stubFetch(['idea01', 'idea03', 'idea04']);
-    render(() => <ConnectionManagement onComplete={() => undefined} onDiscoverySelect={() => undefined} />);
+  it('picker renders exactly one connect-engine-idea01 button (Engines from the store)', async () => {
+    stubFetch([]);
+    const store = { engineDB: {
+      e1: { id: 'e1', hostname: 'idea01' }, e3: { id: 'e3', hostname: 'idea03' }, e4: { id: 'e4', hostname: 'idea04' },
+    } };
+    const fromStore = enginesFromStore(store, 'automerge:fleet-store', 8080);
+    render(() => <ConnectionManagement onComplete={() => undefined} onDiscoverySelect={() => undefined} storeEngines={fromStore} />);
     await screen.findByTestId('connect-engine-idea01');
     expect(screen.getAllByTestId('connect-engine-idea01')).toHaveLength(1);
     expect(screen.getAllByTestId(/^connect-engine-idea\d+$/)).toHaveLength(3);
-    expect(screen.getByText('3 engines found')).toBeTruthy();
+    expect(await screen.findByText('3 engines found')).toBeTruthy();
   });
   it('parent-provided results with .local twins merge into one row', async () => {
     stubFetch([]);

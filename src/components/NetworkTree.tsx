@@ -99,6 +99,17 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
       </div>
 
       {/* ── Per-engine rows ──────────────────────────────────────── */}
+      {/* While the store is null (first connect, or a reconnect: App.initConnection
+          calls setStore(null) and re-syncs), show a loading state instead of an
+          empty tree that reads as "no Engines" (issue #151). */}
+      <Show
+        when={props.store()}
+        fallback={
+          <div class="network-tree__loading" role="status" aria-live="polite" data-testid="network-loading">
+            Connecting to the network…
+          </div>
+        }
+      >
       <For each={engineIds()}>
         {(engineId) => {
           const engine = () => props.store()?.engineDB[engineId];
@@ -442,6 +453,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           );
         }}
       </For>
+      </Show>
     </nav>
   );
 };

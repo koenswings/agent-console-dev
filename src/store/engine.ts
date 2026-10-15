@@ -10,6 +10,7 @@
  * Automerge syncs changes from the Engine.
  */
 import { createSignal, type Accessor } from 'solid-js';
+import { receiveEphemeral, resetLive } from './live';
 import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
@@ -161,7 +162,9 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     } else {
       // EXTENSION-ONLY: hostname from storage is only used in extension mode.
       // Web deployments always derive hostname from window.location via isProductionWebMode().
-      hostname = (await readFromStorage(STORAGE_KEY_HOSTNAME)) ?? 'appdocker01.local';
+      // idea#184: no guessed default host; without a saved Engine the operator
+      // connects by the sticker name (Connection Management).
+      hostname = (await readFromStorage(STORAGE_KEY_HOSTNAME)) ?? '';
       // Saved connections from before idea#100 have no port → default HTTP port.
       httpHost = formatHostPort(hostname, parsePort(await readFromStorage(STORAGE_KEY_PORT)));
       const envStoreUrl = import.meta.env.VITE_STORE_URL as string | undefined;
@@ -177,6 +180,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       }
     }
 
+    if (!hostname) storeUrl = null; // no Engine chosen yet (idea#184)
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
       const clsErr: CommandLogError = { error: true, url: `http://${httpHost}/api/command-log-url`, status: null };
@@ -228,7 +232,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
 
     // Connect to the command-log doc (same WS repo, separate Automerge doc).
     // This runs in parallel; don't let it block the main connection.
-    const commandLogStore = await createCommandLogConnection(httpHost, repo);
+    const commandLogStore = await createCommandLogConnection(httpHost, repo, { isDisposed: () => disposed });
 
     if (disposed) {
       dispose();
@@ -242,6 +246,15 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       setConnected(true);
       console.info('[engine] Document already ready on connect');
     }
+
+    // Live liveness + metrics (store-design 2026-10-13): Engines broadcast
+    // ephemeral 'idea/hb' and 'idea/metrics' messages on the store handle and
+    // relay them across peers; they are never stored. See live.ts.
+    resetLive();
+    handle.addListener?.('ephemeral-message', ({ message }: { message: unknown }) => {
+      if (disposed) return;
+      receiveEphemeral(message);
+    });
 
     // Subscribe to document changes — fires whenever Automerge syncs new data.
     handle.addListener?.('change', ({ doc: d }: { doc: unknown }) => {
@@ -287,7 +300,7 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
       const [inner, setInner] = createSignal<Accessor<CommandLogState> | null>(null);
       const log: Accessor<CommandLogState> = () => inner()?.() ?? null;
       remoteLogs.set(key, log);
-      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo)
+      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo, { isDisposed: () => disposed })
         .then((acc) => setInner(() => acc))
         .catch(() => setInner(() => () => ({ error: true, url: otherHost, status: null })));
       return log;

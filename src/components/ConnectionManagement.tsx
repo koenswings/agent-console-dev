@@ -1,9 +1,7 @@
 import { createSignal, createEffect, onMount, Show, For, type Component } from 'solid-js';
 import {
   discoverAllEngines,
-  discoverEnginesByPrefix,
   dedupeEngines,
-  extractHostnameBase,
   defaultEnginePort,
   DISCOVERY_REFRESH_INTERVAL_MS,
   type DiscoveryResult,
@@ -48,6 +46,8 @@ interface ConnectionManagementProps {
   /** Passed from App.tsx when background discovery already ran */
   discoveryResults?: DiscoveryResult[];
   onDiscoverySelect?: (result: DiscoveryResult) => void;
+  /** Engines from the network database (enginesFromStore), when connected. */
+  storeEngines?: DiscoveryResult[];
 }
 
 type ScanState = 'scanning' | 'done' | 'refreshing';
@@ -69,7 +69,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   // Initial scan on mount
   const runScan = async () => {
     setScanState('scanning');
-    setResults([]);
+    setResults(dedupeEngines(props.storeEngines ?? []));
     const found = await discoverAllEngines();
     mergeResults(found);
     setScanState('done');
@@ -88,6 +88,12 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
       setScanState('done');
     }, DISCOVERY_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
+  });
+
+  // Engines from the network database (idea#184): the full list, no guessing
+  createEffect(() => {
+    const fromStore = props.storeEngines;
+    if (fromStore && fromStore.length > 0) mergeResults(fromStore);
   });
 
   // Sync with parent-provided discovery results (from App.tsx background scan)
@@ -139,53 +145,18 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
 
     try {
       const { host: rawHost, port } = parseHostPort(raw);
-      const base = extractHostnameBase(rawHost);
       const portProp = port !== 80 ? { port } : {};
-
-      if (base) {
-        const siblings = await discoverEnginesByPrefix(base.prefix, base.hasDotLocal, undefined, port);
-        const normalised = normaliseHostname(rawHost);
-
-        const enteredResult = siblings.find(
-          (r) =>
-            r.hostname === normalised ||
-            r.hostname === rawHost ||
-            r.hostname.replace(/\.local$/i, '') === rawHost.replace(/\.local$/i, '')
-        );
-
-        if (siblings.length === 0 || (siblings.length === 1 && enteredResult)) {
-          const directResult = enteredResult ?? siblings[0];
-          if (directResult) {
-            setShowManual(false);
-            handleConnect({ ...directResult, ...portProp });
-          } else {
-            const bare = rawHost.replace(/\.local$/i, '');
-            const probes = bare === normalised.replace(/\.local$/i, '')
-              ? [bare, normalised]
-              : [normalised];
-            const result = await probeFirst(probes, port);
-            if (result) {
-              setShowManual(false);
-              handleConnect({ ...result, ...portProp });
-            } else {
-              setManualError('Could not reach engine. Check the hostname.');
-            }
-          }
-        } else {
-          mergeResults(siblings);
-          setShowManual(false);
-        }
+      // idea#184: probe exactly the entered host (the sticker name), never
+      // sibling names. Once connected, every Engine comes from the store.
+      const isIp = /^[\d.]+$/.test(rawHost);
+      const bare = rawHost.replace(/\.local$/i, '');
+      const candidates = isIp ? [bare] : [bare, `${bare}.local`];
+      const result = await probeFirst(candidates, port);
+      if (result) {
+        setShowManual(false);
+        handleConnect({ ...result, ...portProp });
       } else {
-        const isIp = /^[\d.]+$/.test(rawHost);
-        const bare = rawHost.replace(/\.local$/i, '');
-        const candidates = isIp ? [bare] : [bare, `${bare}.local`];
-        const result = await probeFirst(candidates, port);
-        if (result) {
-          setShowManual(false);
-          handleConnect({ ...result, ...portProp });
-        } else {
-          setManualError('Could not reach engine. Check the hostname.');
-        }
+        setManualError('Could not reach engine. Check the name on the sticker.');
       }
     } catch {
       setManualError('Could not reach engine. Check the hostname.');

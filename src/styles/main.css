@@ -1877,6 +1877,16 @@ body {
   padding-top: 10px;
 }
 
+.docker-metrics--stale .docker-metrics__grid {
+  opacity: 0.45;
+}
+
+.docker-metrics__stale {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #888);
+  margin: 0 0 0.25rem;
+}
+
 .docker-metrics__title {
   font-size: var(--font-size-xs);
   font-weight: 600;
@@ -3676,4 +3686,11 @@ body {
   border: 1px solid currentColor;
   border-radius: 0.6em;
   opacity: 0.7;
+}
+
+/* Network tree: store not loaded yet (issue #151) */
+.network-tree__loading {
+  padding: 0.5rem 0.75rem;
+  font-style: italic;
+  opacity: 0.75;
 }
