@@ -25,6 +25,10 @@ export const COMMAND_VERBS: Record<string, string> = {
   ejectDisk: 'eject',
   cancelOperation: 'cancel',
   reboot: 'reboot',
+  // idea#201 §10
+  flashCard: 'flash',
+  initialiseDisk: 'initialise',
+  cancelFlash: 'cancel the flash of',
 };
 
 export const commandVerb = (command: string | null): string =>

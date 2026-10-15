@@ -127,6 +127,8 @@ const OP_LABEL: Record<OperationKind, string> = {
   upgradeEngine: 'Upgrading engine',
   startApp:      'Starting',
   stopApp:       'Stopping',
+  flashCard:     'Flashing card',
+  initialiseDisk: 'Initialising disk',
 };
 
 // ---------------------------------------------------------------------------

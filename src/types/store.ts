@@ -69,6 +69,16 @@ export interface Engine {
    * (files-disk.md §7.5, idea#136). Present once the Engine has eraseDisk.
    */
   unformattedDisks?: UnformattedDisk[];
+  /** idea#201 §10: devices without IDEA META.yaml, never written (rule 1). */
+  newDisks?: NewDisk[];
+  /** idea#201 §10: card readers on this Engine (with or without a card). */
+  cardReaders?: CardReader[];
+  /** idea#201 §10: flashable removable media present now (subset view of newDisks). */
+  clientCards?: ClientCard[];
+  /** idea#201 §10: client images stored on this Engine. */
+  clientImages?: ClientImageStore | null;
+  /** idea#201 §10: set for the whole run of a flash; one at a time per Engine. */
+  flashInProgress?: FlashInProgress | null;
   /**
    * At most one erase in progress on this Engine (idea#136). Cleared when
    * eraseDisk finishes; used for progress while the Disk record is gone.
@@ -108,6 +118,85 @@ export interface FilesConfig {
 
 
 /** Unformatted (non-ext4) whole disk published by the Engine (idea#136). */
+// ---------------------------------------------------------------------------
+// idea#201 §10: new (unknown) disks, card readers, client cards, client images.
+// Mirrors Axle's Engine API contract DRAFT v1 (2026-10-15). All optional: older
+// Engines do not publish them (the Console gates on Engine.capabilities).
+// ---------------------------------------------------------------------------
+export type CandidateID = string;
+export type ReaderID = string;
+export type ClientImageVersion = string;
+
+export type CardContents =
+  | { kind: 'idea-client'; imageName: string; version: ClientImageVersion | null }
+  | { kind: 'raspios' }
+  | { kind: 'ubuntu' }
+  | { kind: 'empty' }
+  | { kind: 'other'; summary: string }
+  | { kind: 'unknown' };
+
+/** Whole device WITHOUT IDEA META.yaml, looked at read-only (rule 1). */
+export interface NewDisk {
+  candidateId: CandidateID;
+  device: string;
+  byId: string;
+  sizeBytes: number;
+  model: string | null;
+  serial: string | null;
+  removable: boolean;
+  readerId: ReaderID | null;
+  partitions: { label: string | null; fsType: string | null; sizeBytes: number }[];
+  contents: CardContents;
+  mountedReadOnly: boolean;
+  firstSeen: Timestamp;
+}
+
+export interface CardReader {
+  id: ReaderID;
+  name: string;
+  usbPath: string;
+  hasMedium: boolean;
+  candidateId: CandidateID | null;
+}
+
+export type FlashRefusal = string;
+
+export interface ClientCard {
+  candidateId: CandidateID;
+  sizeBytes: number;
+  model: string | null;
+  readerId: ReaderID | null;
+  contents: CardContents;
+  flashable: boolean;
+  refusal: FlashRefusal | null;
+}
+
+export interface ClientImage {
+  version: ClientImageVersion;
+  fileName: string;
+  sizeBytes: number;
+  imageSizeBytes: number | null;
+  sha256: string;
+  state: 'arriving' | 'verified' | 'bad-sha';
+  source: { type: 'disk'; diskId: string } | { type: 'engine'; engineId: string } | { type: 'local' };
+  addedAt: Timestamp;
+}
+
+export interface ClientImageStore {
+  current: ClientImageVersion | null;
+  previous: ClientImageVersion | null;
+  images: ClientImage[];
+}
+
+export type FlashStep = 'checking' | 'verifying-image' | 'writing' | 'reading-back' | 'flushing' | 'powering-off';
+
+export interface FlashInProgress {
+  operationId: string;
+  candidateId: CandidateID;
+  version: ClientImageVersion;
+  step: FlashStep;
+}
+
 export interface UnformattedDisk {
   candidateId: string;
   device: string;
@@ -268,7 +357,8 @@ export interface User {
 // Operation — mirrors agent-engine-dev/src/data/Operation.ts
 // Progress tracking for long-running engine operations written to operationDB.
 // ---------------------------------------------------------------------------
-export type OperationStatus = 'Pending' | 'Running' | 'Done' | 'Failed';
+/** 'Cancelled': idea#201 §10 contract (cancelFlash). */
+export type OperationStatus = 'Pending' | 'Running' | 'Done' | 'Failed' | 'Cancelled';
 export type OperationKind =
   | 'copyApp'
   | 'moveApp'
@@ -277,7 +367,10 @@ export type OperationKind =
   | 'upgradeApp'
   | 'upgradeEngine'
   | 'startApp'
-  | 'stopApp';
+  | 'stopApp'
+  // idea#201 §10 (Engine API contract DRAFT v1)
+  | 'flashCard'
+  | 'initialiseDisk';
 
 export type OperationCause =
   | 'console-command'

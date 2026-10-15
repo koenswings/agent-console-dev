@@ -41,6 +41,10 @@ const ONE_HOUR_AGO = NOW - 60 * 60 * 1000;
 // Engines
 // ---------------------------------------------------------------------------
 const ENGINE_1_ID = 'ENGINE_DISK001';
+// idea#201 §10 demo ids (16 hex, as the Engine contract derives them)
+const DEMO_READER_ID = '3f2a9c1e5b7d0a46';
+const DEMO_CARD_ID = '9d41c2b7e05a6f13';
+const DEMO_UNKNOWN_DISK_ID = 'c07e5a19b3d2f864';
 const ENGINE_2_ID = 'ENGINE_DISK002';
 
 // Files Disk step 0b Engine (idea#128/#129): 'diskIdArgs' stamped with this boot.
@@ -54,8 +58,84 @@ const engine1: Engine = {
   lastRun: NOW - 5 * 1000,        // 5 seconds ago — online
   lastHalted: null,
   commands: [],
-  capabilities: ['diskIdArgs'],
+  // idea#201 §10 capabilities (demo: client cards, Flash, images, Initialise)
+  capabilities: ['diskIdArgs', 'unknownDiskReadOnly', 'clientCards', 'flashCard', 'clientImages'],
   capabilitiesBootedAt: ONE_HOUR_AGO,
+  // idea#201 §10 demo: a card reader with a Raspberry Pi OS card, and an unknown USB disk.
+  cardReaders: [
+    { id: DEMO_READER_ID, name: 'Generic STORAGE DEVICE', usbPath: '1-1.2', hasMedium: true, candidateId: DEMO_CARD_ID },
+  ],
+  newDisks: [
+    {
+      candidateId: DEMO_CARD_ID,
+      device: 'sdh',
+      byId: '/dev/disk/by-id/usb-Generic_STORAGE_DEVICE_000000001206-0:0',
+      sizeBytes: 31_914_983_424,
+      model: 'STORAGE DEVICE',
+      serial: '000000001206',
+      removable: true,
+      readerId: DEMO_READER_ID,
+      partitions: [
+        { label: 'bootfs', fsType: 'vfat', sizeBytes: 536_870_912 },
+        { label: 'rootfs', fsType: 'ext4', sizeBytes: 31_378_112_512 },
+      ],
+      contents: { kind: 'raspios' },
+      mountedReadOnly: false,
+      firstSeen: TWO_MINS_AGO,
+    },
+    {
+      candidateId: DEMO_UNKNOWN_DISK_ID,
+      device: 'sdi',
+      byId: '/dev/disk/by-id/usb-WD_Elements_2620-0:0',
+      sizeBytes: 1_000_204_886_016,
+      model: 'WD Elements 2620',
+      serial: 'WX12A3456789',
+      removable: false,
+      readerId: null,
+      partitions: [{ label: 'DATA', fsType: 'ext4', sizeBytes: 1_000_202_788_864 }],
+      contents: { kind: 'other', summary: "1 × ext4 'DATA'" },
+      mountedReadOnly: false,
+      firstSeen: TWO_MINS_AGO,
+    },
+  ],
+  clientCards: [
+    {
+      candidateId: DEMO_CARD_ID,
+      sizeBytes: 31_914_983_424,
+      model: 'STORAGE DEVICE',
+      readerId: DEMO_READER_ID,
+      contents: { kind: 'raspios' },
+      flashable: true,
+      refusal: null,
+    },
+  ],
+  clientImages: {
+    current: '26.04-20261015-ab12cd3',
+    previous: '26.04-20261001-9f8e7d6',
+    images: [
+      {
+        version: '26.04-20261015-ab12cd3',
+        fileName: 'idea-client-26.04-20261015-ab12cd3.img.xz',
+        sizeBytes: 3_221_225_472,
+        imageSizeBytes: 9_663_676_416,
+        sha256: 'a'.repeat(64),
+        state: 'verified',
+        source: { type: 'local' },
+        addedAt: ONE_HOUR_AGO,
+      },
+      {
+        version: '26.04-20261001-9f8e7d6',
+        fileName: 'idea-client-26.04-20261001-9f8e7d6.img.xz',
+        sizeBytes: 3_196_059_648,
+        imageSizeBytes: 9_663_676_416,
+        sha256: 'b'.repeat(64),
+        state: 'verified',
+        source: { type: 'local' },
+        addedAt: ONE_HOUR_AGO,
+      },
+    ],
+  },
+  flashInProgress: null,
 };
 
 const engine2: Engine = {
@@ -545,4 +625,7 @@ export const MOCK_IDS = {
   INST_WIKIPEDIA_ID,
   INST_EMPTY_ID,
   INST_BROKEN_ID,
+  DEMO_READER_ID,
+  DEMO_CARD_ID,
+  DEMO_UNKNOWN_DISK_ID,
 } as const;
