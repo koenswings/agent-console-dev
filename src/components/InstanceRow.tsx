@@ -23,6 +23,7 @@ import type { Status } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
+import { live, liveNow, metricsFor } from '../store/live';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -134,13 +135,22 @@ const OP_LABEL: Record<OperationKind, string> = {
 
 interface MetricsPanelProps {
   metrics: () => DockerMetrics | null | undefined;
+  /** Live metrics older than 45 s (live.ts): shown greyed with the last update time. */
+  stale?: () => boolean;
+  /** Console-clock time the live sample arrived, for the stale note. */
+  receivedAt?: () => number | null;
 }
 
 export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
   const m = () => props.metrics();
   return (
-    <div class="docker-metrics">
+    <div class="docker-metrics" classList={{ 'docker-metrics--stale': !!props.stale?.() }} data-testid="docker-metrics">
       <div class="docker-metrics__title">Container metrics</div>
+      <Show when={props.stale?.() && m() != null}>
+        <p class="docker-metrics__stale" data-testid="docker-metrics-stale">
+          Stale: no update since {formatTs(props.receivedAt?.() ?? null)}
+        </p>
+      </Show>
       <Show
         when={m() != null}
         fallback={
@@ -652,7 +662,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </Show>
           </dl>
 
-          <DockerMetricsPanel metrics={() => props.instance()?.metrics} />
+          <DockerMetricsPanel
+            metrics={() => metricsFor(props.instance(), live(), liveNow()).metrics}
+            stale={() => metricsFor(props.instance(), live(), liveNow()).stale}
+            receivedAt={() => metricsFor(props.instance(), live(), liveNow()).receivedAt}
+          />
         </div>
       </Show>
     </div>

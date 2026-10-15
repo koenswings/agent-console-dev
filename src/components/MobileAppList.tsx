@@ -14,6 +14,7 @@ import {
   type RemoteCheck,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
+import { live, liveNow, metricsFor } from '../store/live';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
   store: Accessor<Store | null>;
@@ -145,7 +146,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
   };
 
   const statusText = (inst: Instance): string => {
-    const m = inst.metrics;
+    const view = metricsFor(inst, live(), liveNow());
+    const m = view.stale ? null : view.metrics;
     if (inst.status === 'Running' && m) {
       const parts: string[] = ['Running'];
       if (m.cpuPercent != null) parts.push(`CPU ${m.cpuPercent.toFixed(0)}%`);
