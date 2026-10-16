@@ -30,7 +30,15 @@ export function getSendCommandFn(): (engineId: string, command: string) => void 
 // ---------------------------------------------------------------------------
 
 /** Capability flags the Console knows about (written by the Engine, idea#128). */
-export type EngineCapability = 'diskIdArgs' | 'filesDisk' | 'eraseDisk';
+export type EngineCapability =
+  | 'diskIdArgs'
+  | 'filesDisk'
+  | 'eraseDisk'
+  // idea#201 §10
+  | 'unknownDiskReadOnly'
+  | 'clientCards'
+  | 'flashCard'
+  | 'clientImages';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';

@@ -28,6 +28,8 @@ const KIND_LABEL: Record<OperationKind, string> = {
   upgradeEngine: 'Upgrade engine',
   startApp:      'Starting',
   stopApp:       'Stopping',
+  flashCard:     'Flash client card',
+  initialiseDisk: 'Initialise disk',
 };
 
 const argsSummary = (op: Operation, store: Store | null): string => {
