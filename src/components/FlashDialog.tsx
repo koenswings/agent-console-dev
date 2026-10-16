@@ -30,6 +30,8 @@ import {
   parseEngineError,
   parseFlashResult,
   readerForCard,
+  busyState,
+  effectiveRefusal,
 } from '../store/clientCards';
 
 interface FlashDialogProps {
@@ -132,10 +134,10 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
     if (!hasCap(engine(), 'clientImages')) return CAP_HINT.clientImages;
     const c = card();
     if (!c) return CARD_GONE_TEXT;
-    if (!c.flashable) return c.refusal ? errorText(`${c.refusal}: `) : 'The Engine says this card cannot be flashed.';
+    const r = effectiveRefusal(busyState(props.store(), props.engineId), c);
+    if (r.refusal === 'BUSY') return errorText('BUSY: ');
+    if (!r.flashable) return r.refusal ? errorText(`${r.refusal}: `) : 'The Engine says this card cannot be flashed.';
     if (images().length === 0) return 'There is no verified client image on this Pi yet.';
-    const busy = engine()?.flashInProgress;
-    if (busy && busy.candidateId !== props.candidateId) return errorText('BUSY: ');
     return null;
   };
 

@@ -96,6 +96,49 @@ export const findDiskOperation = (
       && o.subject.id === candidateId && (o.startedAt ?? 0) >= since)
     .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0];
 
+/**
+ * BUSY, derived from the Operations (agent-engine-dev#219): during a flash the
+ * Engine marks EVERY card BUSY, the target included, and the remaining cards'
+ * refusal can lag behind the Operation going Done. So:
+ *  - the card being flashed is never BUSY (the dialog's progress covers it);
+ *  - once the flash Operation is terminal and no disk Operation is active,
+ *    a leftover BUSY refusal (or a lingering flashInProgress) is ignored;
+ *  - with no Operation info at all, the Engine's refusal is honoured.
+ */
+const DISK_OP_KINDS = new Set(['flashCard', 'initialiseDisk', 'eraseDisk']);
+const isActive = (o: Operation | undefined): boolean => !!o && (o.status === 'Pending' || o.status === 'Running');
+
+export interface BusyState {
+  /** A disk Operation (or an unconfirmed flashInProgress) is running on this Engine. */
+  active: boolean;
+  /** candidateIds the active Operations work on (exempt from their own BUSY). */
+  targets: Set<string>;
+  /** A disk Operation on this Engine reached Done/Failed: a BUSY refusal can be stale. */
+  anyTerminal: boolean;
+}
+
+export const busyState = (store: Store | null, engineId: string): BusyState => {
+  const engine = engineOf(store, engineId);
+  const ops = Object.values(store?.operationDB ?? {})
+    .filter((o) => o && DISK_OP_KINDS.has(o.kind) && String(o.engineId) === engineId);
+  const active = ops.filter(isActive);
+  const targets = new Set(active.filter((o) => o.subject?.type === 'disk').map((o) => String(o.subject!.id)));
+  const fip = engine?.flashInProgress;
+  const fipOp = fip?.operationId ? store?.operationDB?.[fip.operationId] : undefined;
+  const fipLive = !!fip && (!fipOp || isActive(fipOp));
+  if (fipLive && fip!.candidateId) targets.add(fip!.candidateId);
+  return { active: active.length > 0 || fipLive, targets, anyTerminal: ops.some((o) => !isActive(o)) };
+};
+
+/** The refusal to show for a card, with BUSY corrected per busyState. */
+export const effectiveRefusal = (b: BusyState, card: ClientCard): { flashable: boolean; refusal: ClientCard['refusal'] } => {
+  const isTarget = b.targets.has(card.candidateId);
+  if (card.refusal === 'BUSY' && (isTarget || (!b.active && b.anyTerminal))) return { flashable: true, refusal: null };
+  if (!card.flashable || card.refusal) return { flashable: card.flashable, refusal: card.refusal };
+  if (b.active && !isTarget) return { flashable: false, refusal: 'BUSY' };
+  return { flashable: true, refusal: null };
+};
+
 // ── Display text ────────────────────────────────────────────────────────────
 export const contentsLabel = (c: CardContents | null | undefined): string => {
   switch (c?.kind) {

@@ -188,7 +188,7 @@ describe('Client cards section', () => {
   it('BUSY hint is not cached: it clears as soon as the Engine drops the refusal and flashInProgress (agent-engine-dev#219 2240d42)', () => {
     const s = base();
     s.engineDB[E].clientCards![0] = { ...s.engineDB[E].clientCards![0], flashable: false, refusal: 'BUSY' };
-    s.engineDB[E].flashInProgress = { operationId: 'op-x', candidateId: CARD, version: CUR, step: 'writing' };
+    s.engineDB[E].flashInProgress = { operationId: 'op-x', candidateId: 'ffffffffffffffff', version: CUR, step: 'writing' }; // another card: the target is never BUSY
     const h = harness(s);
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
     expect(q(container, `client-card-hint-${CARD}`)!.textContent).toBe(ERROR_TEXT.BUSY);
@@ -620,5 +620,77 @@ describe('Demo mode (idea#201)', () => {
         expect(resolveDemoMode({ productionWeb: true, storedDemo, searchParams }).isDemo).toBe(false);
       }
     }
+  });
+});
+describe('Stale BUSY after a flash (idea04 13:18 / 16:11)', () => {
+  const OTHER = 'ffffffffffffffff';
+  const twoCards = (): Store => {
+    const s = base();
+    s.engineDB[E].clientCards!.push({ ...s.engineDB[E].clientCards![0], candidateId: OTHER, readerId: null, model: 'Other SSD' });
+    return s;
+  };
+  const allBusy = (s: Store, opStatus: Operation['status'] = 'Running'): Store => {
+    s.engineDB[E].clientCards = s.engineDB[E].clientCards!.map((c) => ({ ...c, flashable: false, refusal: 'BUSY' }));
+    s.engineDB[E].flashInProgress = { operationId: 'op-1', candidateId: CARD, version: CUR, step: 'writing' };
+    s.operationDB = { 'op-1': flashOp({ status: opStatus, currentStep: 2, stepLabel: 'writing', progressPercent: 40 }) };
+    return s;
+  };
+  const startFromSection = () => {
+    const h = harness(twoCards());
+    const r = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    fireEvent.click(q(r.container, `client-card-flash-${CARD}`)!);
+    fireEvent.click(q(r.container, 'flash-next')!);
+    fireEvent.click(q(r.container, 'flash-confirm')!);
+    return { ...r, h };
+  };
+
+  it('during the flash: no BUSY hint on the target card (the dialog shows progress); other card says BUSY', () => {
+    const { container, h } = startFromSection();
+    h.setS(allBusy(twoCards()));
+    expect(q(container, `client-card-hint-${CARD}`)).toBeNull();
+    expect(q(container, 'flash-step-label')!.textContent).toContain('Writing');
+    expect(q(container, `client-card-hint-${OTHER}`)!.textContent).toBe(ERROR_TEXT.BUSY);
+  });
+
+  it('op Done + target gone from clientCards: no BUSY hint, no stale row, Flash enabled for the other card', () => {
+    const { container, h } = startFromSection();
+    h.setS(allBusy(twoCards()));
+    // Exact Engine sequence: op Done, the target powers off and leaves clientCards
+    // (its reader keeps hasMedium for a moment); the remaining card is still
+    // marked BUSY in the same doc change.
+    const done = allBusy(twoCards(), 'Done');
+    done.operationDB['op-1'] = { ...done.operationDB['op-1'], safeToRemove: true, currentStep: 5, stepLabel: 'powering-off', completedAt: Date.now() } as Operation;
+    done.engineDB[E].clientCards = done.engineDB[E].clientCards!.filter((c) => c.candidateId !== CARD);
+    h.setS(done);
+    expect(q(container, 'flash-done')!.textContent).toBe(SAFE_TO_REMOVE_TEXT);
+    expect(q(container, `client-card-${CARD}`)).toBeNull();
+    expect(container.textContent).not.toContain(ERROR_TEXT.BUSY);
+    fireEvent.click(q(container, 'flash-close')!);
+    expect((q(container, `client-card-flash-${OTHER}`) as HTMLButtonElement).disabled).toBe(false);
+    expect(container.textContent).not.toContain(ERROR_TEXT.BUSY);
+    // Engine then cleans its store: still no row and no hint.
+    const clean = twoCards();
+    clean.engineDB[E].clientCards = clean.engineDB[E].clientCards!.filter((c) => c.candidateId !== CARD);
+    h.setS(clean);
+    expect(q(container, `client-card-${CARD}`)).toBeNull();
+    expect((q(container, `client-card-flash-${OTHER}`) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a lingering flashInProgress for a Done op does not mark other cards BUSY', () => {
+    const s = allBusy(twoCards(), 'Done');
+    s.engineDB[E].clientCards = s.engineDB[E].clientCards!.map((c) => ({ ...c, flashable: true, refusal: null }));
+    const h = harness(s);
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    expect(q(container, `client-card-hint-${OTHER}`)).toBeNull();
+    expect(q(container, `client-card-hint-${CARD}`)).toBeNull();
+  });
+
+  it('a real BUSY (another op still running) is still shown', () => {
+    const s = allBusy(twoCards());
+    s.engineDB[E].flashInProgress = { operationId: 'op-1', candidateId: OTHER, version: CUR, step: 'writing' };
+    s.operationDB['op-1'] = { ...s.operationDB['op-1'], subject: { type: 'disk', id: OTHER } } as Operation;
+    const h = harness(s);
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    expect(q(container, `client-card-hint-${CARD}`)!.textContent).toBe(ERROR_TEXT.BUSY);
   });
 });

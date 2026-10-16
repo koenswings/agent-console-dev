@@ -28,6 +28,8 @@ import {
   initialiseDisk,
   needsErase,
   readerForCard,
+  busyState,
+  effectiveRefusal,
   type InitialiseType,
 } from '../store/clientCards';
 
@@ -63,13 +65,16 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
   const looseCardIds = createMemo(() => looseCards().map((c) => c.candidateId), [], { equals: sameIds });
   const newDiskIds = createMemo(() => initialisableDisks(engine()).map((d) => d.candidateId), [], { equals: sameIds });
 
+  /** Derived from operationDB + flashInProgress: BUSY never comes from a cached card. */
+  const busy = createMemo(() => busyState(props.store(), props.engineId));
+
   const flashHint = (c: ClientCard): string | null => {
     if (!hasCap(engine(), 'flashCard')) return CAP_HINT.flashCard;
     if (!hasCap(engine(), 'clientImages')) return CAP_HINT.clientImages;
-    if (!c.flashable) return c.refusal ? errorText(`${c.refusal}: `) : 'The Engine says this card cannot be flashed.';
+    const r = effectiveRefusal(busy(), c);
+    if (r.refusal === 'BUSY') return errorText('BUSY: ');
+    if (!r.flashable) return r.refusal ? errorText(`${r.refusal}: `) : 'The Engine says this card cannot be flashed.';
     if (flashableImages(engine()).length === 0) return 'There is no verified client image on this Pi yet.';
-    const busy = engine()?.flashInProgress;
-    if (busy && busy.candidateId !== c.candidateId) return errorText('BUSY: ');
     return null;
   };
 
@@ -84,7 +89,7 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
       <span data-testid="client-card-size">{formatBytes(p.card.sizeBytes)}</span>
       {' — '}
       <span data-testid="client-card-contents">{contentsLabel(p.card.contents)}</span>
-      <Show when={engine()?.flashInProgress?.candidateId === p.card.candidateId}>
+      <Show when={busy().targets.has(p.card.candidateId)}>
         <span class="edp-form__hint" data-testid="client-card-flashing"> (flashing…)</span>
       </Show>
       <button
