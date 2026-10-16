@@ -477,8 +477,8 @@ login `[data-login-form]` / `#user` / `#password` / `[data-login-form-submit]`; 
 `/apps/files/files[/<id>]?dir=/<path>`.
 
 - **`open_nextcloud_as_teacher` / `open_nextcloud_as_learner`:** now prove sign-in (kind-aware App tab: a leftover Kolibri `:18080` tab after a mid-walk Kolibri segment is never treated as Nextcloud — cover-all-8c8fe30-r9) (previously the Kolibri-style
-  login helper returned ok without checking). Passwords: Kid `CONTENT.live.json` (`TeacherGrade5A!`,
-  `Student01Grade5A!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
+  login helper returned ok without checking). Passwords: Kid `CONTENT.live.json`, `<account>911!` per agent-app-dev#19 (`teacher911!`,
+  `student01911!`), override `DURATION_NC_TEACHER_PASSWORD` / `DURATION_NC_LEARNER_PASSWORD`; legacy
   password=username tried once if refused. Success only with a signed-in Files list (header Files link clicked if NC
   lands on Dashboard) **and** `<head data-user>` matching the requested role. If the leftover tab is already signed
   in as the other role (cover-all-aeef795-r12: teacher session after `leave_nextcloud_as_teacher` soft-passed

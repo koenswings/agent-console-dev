@@ -164,8 +164,8 @@ export const DURATION_FIXTURES = {
      * Override: DURATION_NC_TEACHER_PASSWORD / DURATION_NC_LEARNER_PASSWORD.
      */
     auth: {
-      teacher: { username: 'teacher', password: process.env.DURATION_NC_TEACHER_PASSWORD || 'TeacherGrade5A!' },
-      learner: { username: 'student01', password: process.env.DURATION_NC_LEARNER_PASSWORD || 'Student01Grade5A!' },
+      teacher: { username: 'teacher', password: process.env.DURATION_NC_TEACHER_PASSWORD || 'teacher911!' },
+      learner: { username: 'student01', password: process.env.DURATION_NC_LEARNER_PASSWORD || 'student01911!' },
     },
     /** Kid CONTENT.yaml folders (Files Disk); may sit under the mount folder `shareName`. */
     shareName: 'Grade 5A Files',
