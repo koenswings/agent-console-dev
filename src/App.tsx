@@ -18,7 +18,7 @@ import FirstTimeSetup from './components/FirstTimeSetup';
 import CommandFeedback from './components/CommandFeedback';
 import CopyMoveModal from './components/CopyMoveModal';
 import { createDragCopyMove } from './store/dragCopyMove';
-import { connectedEngineId, setConnectedEngineHost } from './store/connectedEngine';
+import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
 import { remoteCommandLog, setRemoteCommandLogFn } from './store/remoteCommandLogs';
 import { setSendCommandFn } from './store/commands';
 import {
@@ -41,6 +41,8 @@ import {
   STORAGE_KEY_STORE_URL,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
+import { decideFailover, navigateTo, PROD_FAILOVER_MS, PROD_FAILOVER_RETRY_MS } from './store/prodFailover';
+import { defaultEnginePort } from './store/discovery';
 import { resolveDemoMode } from './store/demoMode';
 import { discoverAllEngines, enginesFromStore, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
@@ -190,6 +192,10 @@ const App: Component = () => {
   // starts before the previous resolves, the stale one can be abandoned.
   let currentInitId = 0;
 
+  // Issue #150: the Engine picked in Connection Management. It drives the connection
+  // (also when served from a Pi); null = default (page host / saved host).
+  let pickedTarget: { hostname: string; port?: number | null } | null = null;
+
   const initConnection = async () => {
     // Dispose the old connection before starting a new one to stop stale WS
     // retries (BrowserWebSocketClientAdapter retries every 5 s indefinitely).
@@ -222,7 +228,7 @@ const App: Component = () => {
 
     const conn = isDemo
       ? createMockConnection()
-      : await (await import('./store/engine')).createEngineConnection();
+      : await (await import('./store/engine')).createEngineConnection(3, { target: pickedTarget });
 
     if (myId !== currentInitId) {
       // Superseded — clean up immediately so we don't leak a WS connection
@@ -258,6 +264,8 @@ const App: Component = () => {
 
   const handleDiscoverySelect = async (result: DiscoveryResult) => {
     await saveHostnameAndStoreUrl(result.hostname, result.storeUrl, result.port);
+    pickedTarget = { hostname: result.hostname, port: result.port ?? null };
+    // Status bar = the host the connection is actually made to (issue #150).
     setHostname(result.hostname);
     setDiscoveryResults([]);
     setShowConnectionMgmt(false);
@@ -265,6 +273,7 @@ const App: Component = () => {
   };
 
   const handleConnectionFailure = async () => {
+    pickedTarget = null;
     setHostname('');
     localStorage.removeItem('engineHostname');
     localStorage.removeItem(STORAGE_KEY_PORT);
@@ -326,6 +335,30 @@ const App: Component = () => {
     }
   });
 
+  // idea#203: served from an Engine, the Console only talks to its page host.
+  // If that Engine stays unreachable, reconnect when it (or the new idea.local
+  // holder) answers again, else open another live Engine's Console.
+  createEffect(() => {
+    const isConn = connected();
+    if (isConn || !hasEverConnected() || demo() || !isProductionWebMode()) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const attempt = async () => {
+      if (stopped || connected()) return;
+      const step = await decideFailover(store(), window.location.hostname, defaultEnginePort());
+      if (stopped || connected()) return;
+      if (step.kind === 'reconnect') { await initConnection(); return; }
+      if (step.kind === 'navigate') {
+        console.info(`[app] Serving Engine unreachable — opening ${step.url}`);
+        navigateTo(step.url);
+        return;
+      }
+      timer = setTimeout(attempt, PROD_FAILOVER_RETRY_MS);
+    };
+    timer = setTimeout(attempt, PROD_FAILOVER_MS);
+    onCleanup(() => { stopped = true; clearTimeout(timer); });
+  });
+
   onMount(async () => {
     if (isProductionWebMode()) {
       setHostname(window.location.hostname);
@@ -375,7 +408,7 @@ const App: Component = () => {
   };
 
   const statusLabel = () => {
-    if (connected()) return hostname().replace(/\.local$/i, '');
+    if (connected()) return connectedEngineName(store(), hostname());
     if (demo()) return '';
     if (discovering()) return 'Scanning for engines...';
     if (hostname()) return 'Connecting…';

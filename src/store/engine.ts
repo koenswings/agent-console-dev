@@ -9,6 +9,7 @@
  * Returns a StoreConnection whose store() Accessor updates reactively as
  * Automerge syncs changes from the Engine.
  */
+import { forgetLearnedEngine, setServedEngineId } from './connectedEngine';
 import { createSignal, type Accessor } from 'solid-js';
 import { receiveEphemeral, resetLive } from './live';
 import type { StoreConnection } from '../mock/mockStore';
@@ -72,6 +73,8 @@ export interface EngineStoreInfo {
   url: string | null;
   /** WebSocket port advertised by the Engine, or null when absent/invalid. */
   wsPort: number | null;
+  /** Engine id, when the Engine reports one (newer Engines). */
+  engineId?: string | null;
 }
 
 /**
@@ -82,7 +85,8 @@ export function parseStoreUrlResponse(json: unknown): EngineStoreInfo {
   const obj = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
   const url = typeof obj.url === 'string' && obj.url ? obj.url : null;
   const wsPort = typeof obj.wsPort === 'number' ? parsePort(obj.wsPort) : null;
-  return { url, wsPort };
+  const engineId = typeof obj.engineId === 'string' && obj.engineId ? obj.engineId : null;
+  return engineId ? { url, wsPort, engineId } : { url, wsPort };
 }
 
 /** WebSocket URL for the Engine: advertised port when valid, else 4321. */
@@ -107,11 +111,74 @@ async function fetchStoreInfoFromEngine(host: string): Promise<EngineStoreInfo |
   }
 }
 
+/** An Engine the operator picked in Connection Management (issue #150). */
+export interface ConnectTarget {
+  hostname: string;
+  /** HTTP port of that Engine's Console/API, when not the default. */
+  port?: number | null;
+}
+
+export interface PageLocation {
+  productionWeb: boolean;
+  hostname: string;
+  port: string;
+}
+
+/**
+ * Which Engine to connect to (issue #150). An explicit pick always wins; served
+ * from a Pi, the page host is only the default. `null` = use saved storage
+ * (extension/dev path).
+ */
+export function resolveConnectTarget(
+  page: PageLocation,
+  picked: ConnectTarget | null | undefined,
+): { hostname: string; httpHost: string; picked: boolean } | null {
+  if (picked?.hostname) {
+    return { hostname: picked.hostname, httpHost: formatHostPort(picked.hostname, parsePort(picked.port)), picked: true };
+  }
+  if (page.productionWeb) {
+    return { hostname: page.hostname, httpHost: formatHostPort(page.hostname, parsePort(page.port)), picked: false };
+  }
+  return null;
+}
+
+/** Retry budget for /api/store-url on a picked (often cross-origin) Engine. */
+export const STORE_URL_ATTEMPTS = 4;
+export const STORE_URL_RETRY_MS = 1_500;
+
+/**
+ * GET /api/store-url with retries. A 503 ("not available yet") and a fetch
+ * failure are both treated as "not ready": cross-origin, the Engine's 503 has no
+ * Access-Control-Allow-Origin header, so the browser reports it as a network
+ * error rather than a 503 (Engine fix pending). Returns null when every attempt
+ * failed.
+ */
+export async function fetchStoreInfoWithRetry(
+  host: string,
+  opts: { attempts?: number; delayMs?: number; isDisposed?: () => boolean } = {},
+): Promise<EngineStoreInfo | null> {
+  const attempts = Math.max(1, opts.attempts ?? STORE_URL_ATTEMPTS);
+  const delayMs = opts.delayMs ?? STORE_URL_RETRY_MS;
+  for (let i = 0; i < attempts; i++) {
+    if (opts.isDisposed?.()) return null;
+    const info = await fetchStoreInfoFromEngine(host);
+    if (info?.url) return info;
+    if (i < attempts - 1) {
+      console.warn(`[engine] /api/store-url on ${host} not ready (attempt ${i + 1}/${attempts}) — retrying`);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // createEngineConnection
 // ---------------------------------------------------------------------------
 
-export async function createEngineConnection(retries = 3): Promise<StoreConnection> {
+export async function createEngineConnection(
+  retries = 3,
+  opts: { target?: ConnectTarget | null; page?: PageLocation; storeUrlRetryMs?: number } = {},
+): Promise<StoreConnection> {
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
   let disposed = false;
@@ -143,14 +210,25 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
     let storeUrl: string | null;
     let wsPort: number | null = null;
 
-    if (isProductionWebMode()) {
-      // Served from the Engine — hostname (and HTTP port, if any) is already in the URL
-      hostname = window.location.hostname;
-      httpHost = formatHostPort(hostname, parsePort(window.location.port));
-      console.info(`[engine] Production web mode — using hostname from URL: ${httpHost}`);
+    const page: PageLocation = opts.page ?? {
+      productionWeb: isProductionWebMode(),
+      hostname: window.location.hostname,
+      port: window.location.port,
+    };
+    const target = resolveConnectTarget(page, opts.target);
+
+    if (target) {
+      // Issue #150: an Engine picked in Connection Management drives the connection
+      // (its own /api/store-url). Served from a Pi, the page host is only the default.
+      hostname = target.hostname;
+      httpHost = target.httpHost;
+      console.info(`[engine] ${target.picked ? 'Picked Engine' : 'Production web mode — page host'}: ${httpHost}`);
       // Try to fetch store URL from the Engine API; fall back to localStorage
-      const info = await fetchStoreInfoFromEngine(httpHost);
+      const info = target.picked
+        ? await fetchStoreInfoWithRetry(httpHost, { delayMs: opts.storeUrlRetryMs, isDisposed: () => disposed })
+        : await fetchStoreInfoFromEngine(httpHost);
       wsPort = info?.wsPort ?? null;
+      setServedEngineId(info?.engineId ?? null);
       storeUrl = info?.url ?? null;
       if (storeUrl) {
         console.info(`[engine] Store URL from /api/store-url: ${storeUrl}`);
@@ -232,7 +310,15 @@ export async function createEngineConnection(retries = 3): Promise<StoreConnecti
 
     // Connect to the command-log doc (same WS repo, separate Automerge doc).
     // This runs in parallel; don't let it block the main connection.
-    const commandLogStore = await createCommandLogConnection(httpHost, repo, { isDisposed: () => disposed });
+    const commandLogStore = await createCommandLogConnection(httpHost, repo, {
+      isDisposed: () => disposed,
+      // The host's log doc changed: daily rotation, or another Engine now answers
+      // this name (idea.local takeover). Re-learn which Engine this is.
+      onUrlChange: () => {
+        forgetLearnedEngine();
+        void fetchStoreInfoFromEngine(httpHost).then((i) => { if (i && !disposed) setServedEngineId(i.engineId ?? null); });
+      },
+    });
 
     if (disposed) {
       dispose();

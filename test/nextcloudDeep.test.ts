@@ -58,7 +58,7 @@ describe('Nextcloud URL helpers', () => {
   });
 
   it('ncPasswordCandidates: Kid live password first, legacy username once', () => {
-    expect(ncPasswordCandidates(NC.auth.teacher)).toEqual(['TeacherGrade5A!', 'teacher']);
+    expect(ncPasswordCandidates(NC.auth.teacher)).toEqual(['teacher911!', 'teacher']);
     expect(ncPasswordCandidates({ username: 'x', password: 'x' })).toEqual(['x']);
   });
 });
@@ -231,16 +231,16 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   afterEach(() => vi.useRealTimers());
 
   it('signs in with the Kid live password, then opens Files from the header', async () => {
-    const { page, submitted } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': ['Grade 5A Files'] } });
+    const { page, submitted } = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: { '/': ['Grade 5A Files'] } });
     await ensureNextcloudFiles(page, 't', NC.auth.teacher);
-    expect(submitted).toEqual(['TeacherGrade5A!']);
+    expect(submitted).toEqual(['teacher911!']);
     expect(ncFilesDir(page.url())).toBe('/');
   });
 
   it('race: waits for the dashboard header Files link after leaving /login (Axle 2da863c-r1)', async () => {
     const { page, clicks } = fakeNextcloud({
       start: 'login',
-      accept: ['TeacherGrade5A!'],
+      accept: ['teacher911!'],
       tree: { '/': ['Class Materials'] },
       navDelayMs: 1_500,
     });
@@ -262,14 +262,14 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('loud-fails with page state when the Files link never renders within SETTLE_MS', async () => {
-    const { page } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {}, navDelayMs: 60_000 });
+    const { page } = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: {}, navDelayMs: 60_000 });
     await expect(ensureNextcloudFiles(page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher)).rejects.toThrow(
       /signed in but no Files app link in the Nextcloud header within 20000ms on http:\/\/idea01:18280\/apps\/dashboard\/ \(title=.*header links: .*tried nav\.app-menu/,
     );
   });
 
   it('First-run wizard (slides): clicks its Close button before the Files link (Axle 198eb69-r1)', async () => {
-    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, wizard: 'slides' });
+    const f = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: { '/': [] }, wizard: 'slides' });
     await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher);
     expect(f.clicks.indexOf('#firstrunwizard button[aria-label="Close"]')).toBeGreaterThanOrEqual(0);
     expect(f.clicks.indexOf('#firstrunwizard button[aria-label="Close"]')).toBeLessThan(
@@ -293,7 +293,7 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('First-run wizard opening late intercepts the Files click: dismiss and retry', async () => {
-    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, wizard: 'slides', wizardOnFirstClick: true });
+    const f = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: { '/': [] }, wizard: 'slides', wizardOnFirstClick: true });
     await ensureNextcloudFiles(f.page, 't', NC.auth.teacher);
     expect(f.wizardGone()).toBe(true);
     // first Files click was intercepted (not recorded), then Close, then the Files click landed
@@ -305,7 +305,7 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('loud-fails when the First-run wizard cannot be dismissed', async () => {
-    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, wizard: 'stuck' });
+    const f = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: { '/': [] }, wizard: 'stuck' });
     await expect(ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher)).rejects.toThrow(
       /First-run wizard \(#firstrunwizard\) still blocks the page after close, close, close, close/,
     );
@@ -321,10 +321,10 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('r25 FAIL@27: login form still missing after the wait → reload once, then signs in', async () => {
-    const f = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: { '/': [] }, loginFormNeedsReload: true });
+    const f = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: { '/': [] }, loginFormNeedsReload: true });
     await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_teacher', NC.auth.teacher);
     expect(f.reloads()).toBe(1);
-    expect(f.submitted).toEqual(['TeacherGrade5A!']);
+    expect(f.submitted).toEqual(['teacher911!']);
     expect(ncFilesDir(f.page.url())).toBe('/');
   });
 
@@ -342,7 +342,7 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   it('falls back once to the legacy password=username', async () => {
     const { page, submitted } = fakeNextcloud({ start: 'login', accept: ['teacher'], tree: { '/': [] } });
     await ensureNextcloudFiles(page, 't', NC.auth.teacher);
-    expect(submitted).toEqual(['TeacherGrade5A!', 'teacher']);
+    expect(submitted).toEqual(['teacher911!', 'teacher']);
   });
 
   it('loud-fails when Nextcloud refuses both passwords', async () => {
@@ -353,7 +353,7 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
   });
 
   it('deep Intents (no creds) loud-fail on the login page instead of guessing a role', async () => {
-    const { page, submitted } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {} });
+    const { page, submitted } = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: {} });
     await expect(ensureNextcloudFiles(page, 'idea#166 browse_folders', null)).rejects.toThrow(/not signed in/);
     expect(submitted).toEqual([]);
   });
@@ -362,13 +362,13 @@ describe('ensureNextcloudFiles (verified sign-in)', () => {
     const f = fakeNextcloud({
       start: 'files',
       uid: NC.auth.teacher.username,
-      accept: ['Student01Grade5A!'],
+      accept: ['student01911!'],
       tree: { '/': [] },
     });
     await ensureNextcloudFiles(f.page, 'idea#166 open_nextcloud_as_learner', NC.auth.learner);
     expect(f.clicks).toContain('#user-menu button');
     expect(f.clicks).toContain('a[href*="logout"]');
-    expect(f.submitted).toEqual(['Student01Grade5A!']);
+    expect(f.submitted).toEqual(['student01911!']);
     expect(ncFilesDir(f.page.url())).toBe('/');
     expect(await ncSignedInUser(f.page)).toBe(NC.auth.learner.username);
   });
@@ -503,7 +503,7 @@ describe('runShareToClass guards', () => {
   });
 
   it('loud-fails on the login page (no role guessing)', async () => {
-    const { page } = fakeNextcloud({ start: 'login', accept: ['TeacherGrade5A!'], tree: {} });
+    const { page } = fakeNextcloud({ start: 'login', accept: ['teacher911!'], tree: {} });
     await expect(runShareToClass(page)).rejects.toThrow(/not signed in/);
   });
 });
