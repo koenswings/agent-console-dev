@@ -184,6 +184,20 @@ describe('Client cards section', () => {
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
     expect(q(container, `client-card-hint-${CARD}`)!.textContent).toBe(ERROR_TEXT.BUSY);
   });
+
+  it('BUSY hint is not cached: it clears as soon as the Engine drops the refusal and flashInProgress (agent-engine-dev#219 2240d42)', () => {
+    const s = base();
+    s.engineDB[E].clientCards![0] = { ...s.engineDB[E].clientCards![0], flashable: false, refusal: 'BUSY' };
+    s.engineDB[E].flashInProgress = { operationId: 'op-x', candidateId: CARD, version: CUR, step: 'writing' };
+    const h = harness(s);
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    expect(q(container, `client-card-hint-${CARD}`)!.textContent).toBe(ERROR_TEXT.BUSY);
+    const after = base();
+    after.engineDB[E].flashInProgress = null as never;
+    h.setS(after);
+    expect(q(container, `client-card-hint-${CARD}`)).toBeNull();
+    expect((q(container, `client-card-flash-${CARD}`) as HTMLButtonElement).disabled).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
