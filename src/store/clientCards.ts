@@ -1,11 +1,7 @@
 /**
- * Client cards adapter (idea#201 §10.2). The ONE place that knows the Engine's
- * store fields and command strings for client cards, Flash and Initialise.
- * Built against Axle's Engine API contract v2 (2026-10-15); adapting to
- * a changed contract should only touch this file.
- *
- * Commands are space-split by the Engine: ids only, never names. An id with
- * whitespace throws (fail loudly) instead of sending a broken command.
+ * Client cards adapter (idea#201 §10.2): the ONE place that knows the Engine's
+ * client-card store fields and commands (Engine #219, contract v2). Commands
+ * are space-split by the Engine: ids only; an id with whitespace throws.
  */
 import { engineHasCapability, getSendCommandFn } from './commands';
 import type { CommandTrace } from '../types/commandLog';
@@ -123,6 +119,18 @@ export const FLASH_STEP_LABELS: Record<FlashStep, string> = {
   'powering-off': 'Switching the card off',
 };
 export const FLASH_STEP_COUNT = 6;
+const FLASH_STEP_ORDER = Object.keys(FLASH_STEP_LABELS);
+
+/**
+ * 1-based step number for "Step N of 6". Engine #219 writes a 0-based
+ * `currentStep` (index into its FLASH_STEPS), so the number comes from the
+ * step label; currentStep + 1 is only the fallback for an unknown label.
+ */
+export const flashStepNumber = (stepLabel: string | null | undefined, currentStep: number | null | undefined): number => {
+  const i = stepLabel ? FLASH_STEP_ORDER.indexOf(stepLabel) : -1;
+  if (i >= 0) return i + 1;
+  return currentStep != null ? currentStep + 1 : 0;
+};
 
 /** Plain, teacher-facing text per contract §5 code. */
 export const ERROR_TEXT: Record<string, string> = {
@@ -146,6 +154,7 @@ export const ERROR_TEXT: Record<string, string> = {
   POWER_OFF_FAILED: 'The card was written, but could not be switched off. Eject it before removing it.',
   INTERRUPTED: 'The Pi restarted during the operation. Flash the card again.',
   CANCELLED: 'Flash cancelled. The card is now wiped; flash it again before use.',
+  BAD_ARGS: 'The Engine did not understand the request. Update the Console or the Engine.',
   HELPER_MISSING: 'This Pi cannot flash cards yet (flash helper not installed).',
 };
 

@@ -37,6 +37,8 @@ interface ClientCardsSectionProps {
   commandLogStore?: Accessor<CommandLogState>;
 }
 
+const sameIds = (a: string[], b: string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+
 const plain = (r: CommandResult): CommandResult => ({
   ...r,
   state: () => {
@@ -55,6 +57,11 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
   /** Cards not in a known reader (e.g. an external USB SSD). */
   const looseCards = createMemo(() => cards().filter((c) => !readerForCard(engine(), c)));
   const cardIn = (candidateId: string | null) => (candidateId ? cards().find((c) => c.candidateId === candidateId) : undefined);
+  // <For> runs over stable ID lists (store objects get a new identity on every
+  // doc change, which would remount rows and drop their state).
+  const readerIds = createMemo(() => readers().map((r) => r.id), [], { equals: sameIds });
+  const looseCardIds = createMemo(() => looseCards().map((c) => c.candidateId), [], { equals: sameIds });
+  const newDiskIds = createMemo(() => initialisableDisks(engine()).map((d) => d.candidateId), [], { equals: sameIds });
 
   const flashHint = (c: ClientCard): string | null => {
     if (!hasCap(engine(), 'flashCard')) return CAP_HINT.flashCard;
@@ -66,7 +73,11 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
     return null;
   };
 
-  const CardLine = (p: { card: ClientCard; readerName: string | null }) => (
+  const CardLine = (p: { candidateId: string; readerName: string | null }) => (
+    <Show when={cardIn(p.candidateId)}>{(card) => <CardRow card={card()} readerName={p.readerName} />}</Show>
+  );
+
+  const CardRow = (p: { card: ClientCard; readerName: string | null }) => (
     <div class="client-card" data-testid={`client-card-${p.card.candidateId}`}>
       <span data-testid="client-card-reader">{p.readerName ?? p.card.model ?? 'USB disk'}</span>
       {' — '}
@@ -91,7 +102,13 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
     </div>
   );
 
-  const NewDiskLine = (p: { disk: NewDisk }) => {
+  const NewDiskLine = (p: { candidateId: string }) => (
+    <Show when={initialisableDisks(engine()).find((d) => d.candidateId === p.candidateId)}>
+      {(d) => <NewDiskRow disk={d()} />}
+    </Show>
+  );
+
+  const NewDiskRow = (p: { disk: NewDisk }) => {
     const [type, setType] = createSignal<InitialiseType>('empty');
     const raw = createCommandResult({ commandLog: cls, command: TRACE.initialise, argKey: 'candidateId', matchMode: 'key', longRunning: true });
     const result = plain(raw);
@@ -173,23 +190,27 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
           </p>
         </Show>
         <Show when={readers().length + looseCards().length > 0} fallback={<p class="edp-form__hint" data-testid="client-cards-none">No card reader or client card on this Pi.</p>}>
-          <For each={readers()}>
-            {(r) => (
-              <div class="card-reader" data-testid={`card-reader-${r.id}`}>
-                <Show
-                  when={r.hasMedium && cardIn(r.candidateId)}
-                  fallback={
-                    <p data-testid="card-reader-empty">
-                      {r.name} (port {r.usbPath}): {r.hasMedium ? 'card present, not flashable' : 'no card'}
-                    </p>
-                  }
-                >
-                  {(c) => <CardLine card={c()} readerName={`${r.name} (port ${r.usbPath})`} />}
-                </Show>
-              </div>
+          <For each={readerIds()}>
+            {(id) => (
+              <Show when={readers().find((x) => x.id === id)}>
+                {(r) => (
+                  <div class="card-reader" data-testid={`card-reader-${id}`}>
+                    <Show
+                      when={r().hasMedium && cardIn(r().candidateId) ? r().candidateId : null}
+                      fallback={
+                        <p data-testid="card-reader-empty">
+                          {r().name} (port {r().usbPath}): {r().hasMedium ? 'card present, not flashable' : 'no card'}
+                        </p>
+                      }
+                    >
+                      {(cid) => <CardLine candidateId={cid()} readerName={`${r().name} (port ${r().usbPath})`} />}
+                    </Show>
+                  </div>
+                )}
+              </Show>
             )}
           </For>
-          <For each={looseCards()}>{(c) => <CardLine card={c} readerName={null} />}</For>
+          <For each={looseCardIds()}>{(cid) => <CardLine candidateId={cid} readerName={null} />}</For>
         </Show>
 
         <Show when={flashing()}>
@@ -210,7 +231,7 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
           fallback={<p class="edp-form__hint" data-testid="new-disks-none">No new disks.</p>}
         >
           <p class="edp-form__hint">These disks are not IDEA disks yet. Nothing is written to them until you choose Initialise.</p>
-          <For each={initialisableDisks(engine())}>{(d) => <NewDiskLine disk={d} />}</For>
+          <For each={newDiskIds()}>{(cid) => <NewDiskLine candidateId={cid} />}</For>
         </Show>
       </Show>
     </section>

@@ -21,6 +21,7 @@ import {
   flashableImages,
   initialisableDisks,
   parseEngineError,
+  flashStepNumber,
 } from '../src/store/clientCards';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
@@ -49,7 +50,7 @@ const trace = (over: Partial<CommandTrace>): CommandTrace => ({
 });
 const flashOp = (over: Partial<Operation>): Operation => ({
   id: 'op-1', kind: 'flashCard', args: {}, cause: 'console-command', subject: { type: 'disk', id: CARD },
-  engineId: E, status: 'Running', progressPercent: null, currentStep: 1, totalSteps: 6, stepLabel: 'checking',
+  engineId: E, status: 'Running', progressPercent: null, currentStep: 0, totalSteps: 6, stepLabel: 'checking',
   startedAt: Date.now(), completedAt: null, error: null, ...over,
 } as Operation);
 
@@ -221,7 +222,7 @@ describe('Flash dialog', () => {
     // Engine opens a trace and an Operation; writing at 42 %
     h.setCls(log(trace({})));
     const s = base();
-    s.operationDB = { 'op-1': flashOp({ currentStep: 3, stepLabel: 'writing', progressPercent: 42.4 }) };
+    s.operationDB = { 'op-1': flashOp({ currentStep: 2, stepLabel: 'writing', progressPercent: 42.4 }) };
     h.setS(s);
     expect(q(container, 'flash-step-label')!.textContent).toBe('Step 3 of 6: Writing');
     expect((q(container, 'flash-progress-bar') as HTMLProgressElement).value).toBe(42.4);
@@ -349,7 +350,7 @@ describe('Flash dialog', () => {
     toConfirm(container);
     confirm(container);
     const s = base();
-    s.operationDB = { 'op-1': flashOp({ currentStep: 3, stepLabel: 'writing', progressPercent: 10 }) };
+    s.operationDB = { 'op-1': flashOp({ currentStep: 2, stepLabel: 'writing', progressPercent: 10 }) };
     h.setS(s);
     fireEvent.click(q(container, 'flash-cancel')!);
     expect(sent).toHaveBeenLastCalledWith(E, 'cancelFlash op-1');
@@ -421,6 +422,18 @@ describe('Initialise new disks', () => {
     expect(q(container, `new-disk-done-${DISK}`)).not.toBeNull();
   });
 
+  it('ID-keyed rows: a store update with new objects keeps the row and its "Initialising…" state', () => {
+    const h = harness();
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    fireEvent.click(q(container, `new-disk-initialise-${DISK}`)!);
+    const row = q(container, `new-disk-${DISK}`);
+    const cardRow = q(container, `client-card-${CARD}`);
+    h.setS(base()); // every engine/disk/card object is new (as after an Automerge change)
+    expect(q(container, `new-disk-${DISK}`)).toBe(row);
+    expect(q(container, `client-card-${CARD}`)).toBe(cardRow);
+    expect(q(container, `new-disk-initialise-${DISK}`)!.textContent).toBe('Initialising…');
+  });
+
   it('a refusal shows in plain text through CommandFeedback', () => {
     const h = harness();
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
@@ -466,6 +479,14 @@ describe('Initialise new disks', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Adapter commands (ids only, fail loudly)', () => {
+  it('Engine #219: step number comes from the label (currentStep is 0-based)', () => {
+    expect(flashStepNumber('checking', 0)).toBe(1);
+    expect(flashStepNumber('writing', 2)).toBe(3);
+    expect(flashStepNumber('powering-off', 5)).toBe(6);
+    expect(flashStepNumber('something-new', 3)).toBe(4);
+    expect(flashStepNumber(null, null)).toBe(0);
+  });
+
   it('builds the contract strings', () => {
     expect(buildFlashCardCommand(CARD, 'current', SIZE)).toBe(`flashCard ${CARD} current ${SIZE}`);
     expect(buildInitialiseDiskCommand(DISK)).toBe(`initialiseDisk ${DISK} empty`);
@@ -481,7 +502,7 @@ describe('Adapter commands (ids only, fail loudly)', () => {
     expect(() => buildCancelFlashCommand('op 1')).toThrow();
   });
   it('every contract §5 code has plain text', () => {
-    for (const c of ['NOT_FOUND', 'NOT_REMOVABLE', 'SYSTEM_DISK', 'BOOT_DEVICE', 'HAS_IDEA_META', 'ALREADY_IDEA', 'MOUNTED', 'IN_USE_BY_APP', 'BUSY', 'SIZE_CHANGED', 'MEDIUM_SWAPPED', 'IMAGE_NOT_FOUND', 'IMAGE_BAD_SHA', 'IMAGE_TOO_LARGE', 'WRITE_FAILED', 'VERIFY_FAILED', 'POWER_OFF_FAILED', 'INTERRUPTED', 'CANCELLED', 'HELPER_MISSING', 'NOT_EXT4']) {
+    for (const c of ['NOT_FOUND', 'NOT_REMOVABLE', 'SYSTEM_DISK', 'BOOT_DEVICE', 'HAS_IDEA_META', 'ALREADY_IDEA', 'MOUNTED', 'IN_USE_BY_APP', 'BUSY', 'SIZE_CHANGED', 'MEDIUM_SWAPPED', 'IMAGE_NOT_FOUND', 'IMAGE_BAD_SHA', 'IMAGE_TOO_LARGE', 'WRITE_FAILED', 'VERIFY_FAILED', 'POWER_OFF_FAILED', 'INTERRUPTED', 'CANCELLED', 'HELPER_MISSING', 'NOT_EXT4', 'BAD_ARGS']) {
       expect(ERROR_TEXT[c], c).toBeTruthy();
       expect(errorText(`${c}: x`)).toBe(ERROR_TEXT[c]);
     }

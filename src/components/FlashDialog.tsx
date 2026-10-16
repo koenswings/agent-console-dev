@@ -1,9 +1,7 @@
 /**
- * FlashDialog (idea#201 §10.2): pick the image version (default: current) →
- * confirm (target name, size, current contents, wipe warning) → progress (with
- * Cancel while allowed) → "Done – safe to remove". Follows the target Engine's
- * command log like EraseDialog; errors via CommandFeedback in plain text.
- * All Engine access goes through ../store/clientCards (the adapter).
+ * FlashDialog (idea#201 §10.2): pick version → confirm (target, size, contents,
+ * wipe warning) → progress (Cancel while allowed) → "Done – safe to remove".
+ * Follows the target Engine's command log; Engine access via ../store/clientCards.
  */
 import { For, Match, Show, Switch, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import CommandFeedback from './CommandFeedback';
@@ -16,6 +14,7 @@ import type { Store } from '../types/store';
 import {
   CAP_HINT,
   FLASH_STEP_COUNT,
+  flashStepNumber,
   FLASH_STEP_LABELS,
   TRACE,
   cancelFlash,
@@ -64,6 +63,8 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
   const targetName = seenReader ? `${seenReader.name} (port ${seenReader.usbPath})` : (seen?.model ?? props.candidateId);
 
   const images = createMemo(() => flashableImages(engine()));
+  /** Version strings: <For> keyed by a stable id, not by store object identity. */
+  const versions = createMemo(() => images().map((i) => i.version), [], { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) });
   const [version, setVersion] = createSignal<string | null>(currentImageVersion(engine()) ?? images()[0]?.version ?? null);
   const [phase, setPhase] = createSignal<Phase>('pick');
   const [startedAt, setStartedAt] = createSignal(0);
@@ -73,7 +74,7 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
   const cls = () => mergeCommandLogs(props.commandLogStore?.() ?? null, remoteCommandLog(props.engineId)?.() ?? null);
   const raw = createCommandResult({ commandLog: cls, command: TRACE.flash, argKey: 'candidateId', matchMode: 'key', longRunning: true });
   const result = plain(raw);
-  const cancelRaw = createCommandResult({ commandLog: cls, command: TRACE.cancel, argKey: 'operationId', matchMode: 'includes' });
+  const cancelRaw = createCommandResult({ commandLog: cls, command: TRACE.cancel, argKey: 'operationId', matchMode: 'key' });
   const cancelResult = plain(cancelRaw);
 
   const op = createMemo(() => (phase() === 'running' ? findDiskOperation(props.store(), props.engineId, 'flashCard', props.candidateId, startedAt() - 5_000) : undefined));
@@ -170,19 +171,19 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
             </Show>
             <fieldset class="flash-dialog__versions">
               <legend>Image version</legend>
-              <For each={images()}>
-                {(img) => (
-                  <label data-testid={`flash-version-${img.version}`}>
+              <For each={versions()}>
+                {(v) => (
+                  <label data-testid={`flash-version-${v}`}>
                     <input
                       type="radio"
                       name="flash-version"
-                      value={img.version}
-                      checked={version() === img.version}
-                      onChange={() => setVersion(img.version)}
+                      value={v}
+                      checked={version() === v}
+                      onChange={() => setVersion(v)}
                     />
-                    {' '}{img.version}
-                    {img.version === currentImageVersion(engine()) ? ' (current)' : ''}
-                    {img.version === engine()?.clientImages?.previous ? ' (previous)' : ''}
+                    {' '}{v}
+                    {v === currentImageVersion(engine()) ? ' (current)' : ''}
+                    {v === engine()?.clientImages?.previous ? ' (previous)' : ''}
                   </label>
                 )}
               </For>
@@ -248,7 +249,7 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
               <Match when={!['error', 'timeout'].includes(raw.state().kind)}>
                 <div data-testid="flash-progress">
                   <p data-testid="flash-step-label">
-                    Step {op()?.currentStep ?? 0} of {op()?.totalSteps ?? FLASH_STEP_COUNT}: {stepLabel()}
+                    Step {flashStepNumber(op()?.stepLabel ?? engine()?.flashInProgress?.step, op()?.currentStep)} of {op()?.totalSteps ?? FLASH_STEP_COUNT}: {stepLabel()}
                   </p>
                   <progress
                     max={100}
