@@ -104,8 +104,8 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
             >
               Available in:{' '}
               <For each={mountedIds()}>
-                {(id, i) => (
-                  <span data-instance-id={id}>{i() > 0 ? ', ' : ''}{mountedLabel(id)}</span>
+                {(id) => (
+                  <span data-instance-id={id}>{mountedIds()[0] !== id ? ', ' : ''}{mountedLabel(id)}</span>
                 )}
               </For>
             </Show>
