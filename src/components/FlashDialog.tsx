@@ -43,6 +43,9 @@ interface FlashDialogProps {
 type Phase = 'pick' | 'confirm' | 'running';
 
 export const SAFE_TO_REMOVE_TEXT = 'Done – safe to remove';
+/** The card's candidateId is gone (removed, or swapped: a new card gets a new id). */
+export const CARD_GONE_TEXT = 'The card was removed or swapped. Close this and choose the card again.';
+export const UNLABELLED_UBUNTU_TEXT = 'A freshly flashed IDEA client card shows as Ubuntu until it has been used once. You can flash it again.';
 export const EJECT_FIRST_TEXT = 'Done – eject the card before removing it';
 const CANCELLABLE = new Set(['checking', 'verifying-image', 'writing']);
 
@@ -77,7 +80,17 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
   const cancelRaw = createCommandResult({ commandLog: cls, command: TRACE.cancel, argKey: 'operationId', matchMode: 'key' });
   const cancelResult = plain(cancelRaw);
 
-  const op = createMemo(() => (phase() === 'running' ? findDiskOperation(props.store(), props.engineId, 'flashCard', props.candidateId, startedAt() - 5_000) : undefined));
+  // Once the Operation is found, follow it by its id (the card may vanish from
+  // clientCards during the write, e.g. at powering-off or on a swap).
+  let opId: string | null = null;
+  const op = createMemo(() => {
+    if (phase() !== 'running') return undefined;
+    const db = props.store()?.operationDB ?? {};
+    if (opId && db[opId]) return db[opId];
+    const o = findDiskOperation(props.store(), props.engineId, 'flashCard', props.candidateId, startedAt() - 5_000);
+    if (o) opId = o.id;
+    return o;
+  });
   const trace = createMemo(() => (phase() === 'running' ? findCommandTrace(cls(), baseline, TRACE.flash, 'candidateId', props.candidateId, 'key') : null));
 
   type Outcome =
@@ -118,7 +131,7 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
     if (!hasCap(engine(), 'flashCard')) return CAP_HINT.flashCard;
     if (!hasCap(engine(), 'clientImages')) return CAP_HINT.clientImages;
     const c = card();
-    if (!c) return errorText('NOT_FOUND: ');
+    if (!c) return CARD_GONE_TEXT;
     if (!c.flashable) return c.refusal ? errorText(`${c.refusal}: `) : 'The Engine says this card cannot be flashed.';
     if (images().length === 0) return 'There is no verified client image on this Pi yet.';
     const busy = engine()?.flashInProgress;
@@ -133,7 +146,8 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
 
   const startFlash = () => {
     const v = version();
-    if (!seen || !v || flashBlocked()) return;
+    // Send only to the id the user saw, and only while that id is still listed.
+    if (!seen || !v || flashBlocked() || !findClientCard(engine(), props.candidateId)) return;
     baseline = traceIdSnapshot(cls());
     setStartedAt(Date.now());
     setPhase('running');
@@ -213,6 +227,9 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
               <dt>Now on the card</dt><dd data-testid="flash-confirm-contents">{contentsLabel(seen?.contents)}</dd>
               <dt>Image</dt><dd data-testid="flash-confirm-version">{version()}</dd>
             </dl>
+            <Show when={seen?.contents?.kind === 'ubuntu'}>
+              <p class="edp-form__hint" data-testid="flash-ubuntu-note">{UNLABELLED_UBUNTU_TEXT}</p>
+            </Show>
             <p class="edp-form__error" role="alert" data-testid="flash-wipe-warning">
               Everything on this card will be wiped ({contentsLabel(seen?.contents)}, {formatBytes(seen?.sizeBytes ?? 0)}). This cannot be undone.
             </p>

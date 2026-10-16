@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import ClientCardsSection from '../src/components/ClientCardsSection';
-import FlashDialog, { SAFE_TO_REMOVE_TEXT, EJECT_FIRST_TEXT } from '../src/components/FlashDialog';
+import FlashDialog, { SAFE_TO_REMOVE_TEXT, EJECT_FIRST_TEXT, CARD_GONE_TEXT, UNLABELLED_UBUNTU_TEXT } from '../src/components/FlashDialog';
 import { setSendCommandFn } from '../src/store/commands';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
 import { resolveDemoMode } from '../src/store/demoMode';
@@ -140,6 +140,28 @@ describe('Client cards section', () => {
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
     expect((q(container, `client-card-flash-${CARD}`) as HTMLButtonElement).disabled).toBe(true);
     expect(q(container, `client-card-hint-${CARD}`)!.textContent).toBe(ERROR_TEXT.MOUNTED);
+  });
+
+  it.each(['MOUNTED', 'BUSY', 'HELPER_MISSING'] as const)('#219 refusal %s: plain text hint, Flash disabled, no code shown', (code) => {
+    const s = base();
+    s.engineDB[E].clientCards![0] = { ...s.engineDB[E].clientCards![0], flashable: false, refusal: code };
+    const h = harness(s);
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    expect((q(container, `client-card-flash-${CARD}`) as HTMLButtonElement).disabled).toBe(true);
+    const hint = q(container, `client-card-hint-${CARD}`)!.textContent!;
+    expect(hint).toBe(ERROR_TEXT[code]);
+    expect(hint).not.toContain(code);
+  });
+
+  it('#219: a ubuntu card row reads "Ubuntu" with Flash enabled (no foreign/broken wording)', () => {
+    const s = base();
+    s.engineDB[E].clientCards![0] = { ...s.engineDB[E].clientCards![0], contents: { kind: 'ubuntu' } };
+    const h = harness(s);
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    const card = q(container, `client-card-${CARD}`)!;
+    expect(q(card, 'client-card-contents')!.textContent).toBe('Ubuntu');
+    expect((q(container, `client-card-flash-${CARD}`) as HTMLButtonElement).disabled).toBe(false);
+    expect(card.textContent).not.toMatch(/foreign|broken|unknown|damaged/i);
   });
 
   it('no verified image: Flash disabled (arriving / bad-sha images are never offered)', () => {
@@ -377,10 +399,65 @@ describe('Flash dialog', () => {
     const s = base();
     s.engineDB[E].clientCards = [];
     h.setS(s);
-    expect(q(container, 'flash-blocked')!.textContent).toBe(ERROR_TEXT.NOT_FOUND);
+    expect(q(container, 'flash-blocked')!.textContent).toBe(CARD_GONE_TEXT);
     expect((q(container, 'flash-confirm') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(q(container, 'flash-confirm')!);
     expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('#219: card swapped while the dialog is open (new candidateId) → "removed or swapped", nothing sent to either id', () => {
+    const { container, h } = open();
+    toConfirm(container);
+    const s = base();
+    s.engineDB[E].clientCards = [{ ...s.engineDB[E].clientCards![0], candidateId: 'CAND_SWAPPED' }];
+    s.engineDB[E].cardReaders = s.engineDB[E].cardReaders!.map((r) => ({ ...r, candidateId: 'CAND_SWAPPED' }));
+    h.setS(s);
+    expect(q(container, 'flash-blocked')!.textContent).toBe(CARD_GONE_TEXT);
+    expect(CARD_GONE_TEXT).toMatch(/removed or swapped/);
+    fireEvent.click(q(container, 'flash-confirm')!);
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('#219: swapped in the pick step → Next disabled with the same text', () => {
+    const { container, h } = open();
+    const s = base();
+    s.engineDB[E].clientCards = [];
+    h.setS(s);
+    expect(q(container, 'flash-blocked')!.textContent).toBe(CARD_GONE_TEXT);
+    expect((q(container, 'flash-next') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('#219: card leaves clientCards during progress → the Operation is followed by id to Done', () => {
+    const { container, h } = open();
+    toConfirm(container);
+    confirm(container);
+    const s = base();
+    s.operationDB = { 'op-1': flashOp({ currentStep: 2, stepLabel: 'writing', progressPercent: 50 }) };
+    h.setS(s);
+    expect(q(container, 'flash-step-label')!.textContent).toContain('Writing');
+    const s2 = base();
+    s2.engineDB[E].clientCards = [];
+    s2.engineDB[E].cardReaders = s2.engineDB[E].cardReaders!.map((r) => ({ ...r, hasMedium: false, candidateId: null }));
+    // subject id changed too: only the operation id links it
+    s2.operationDB = { 'op-1': flashOp({ subject: { type: 'disk', id: 'CAND_OTHER' }, status: 'Done', safeToRemove: true, currentStep: 5, stepLabel: 'powering-off' } as Partial<Operation>) };
+    h.setS(s2);
+    expect(q(container, 'flash-done')!.textContent).toBe(SAFE_TO_REMOVE_TEXT);
+    expect(q(container, 'flash-blocked')).toBeNull();
+    expect(sent).toHaveBeenCalledTimes(1);
+  });
+
+  it('#219: a freshly flashed card (contents ubuntu) reads neutrally and can be flashed again', () => {
+    const s = base();
+    s.engineDB[E].clientCards![0] = { ...s.engineDB[E].clientCards![0], contents: { kind: 'ubuntu' } };
+    const { container } = open(s);
+    expect(q(container, 'flash-blocked')).toBeNull();
+    toConfirm(container);
+    expect(q(container, 'flash-confirm-contents')!.textContent).toBe('Ubuntu');
+    expect(q(container, 'flash-ubuntu-note')!.textContent).toBe(UNLABELLED_UBUNTU_TEXT);
+    const all = container.textContent!;
+    expect(all).not.toMatch(/foreign|broken|unknown|damaged|not an IDEA/i);
+    confirm(container);
+    expect(sent).toHaveBeenCalledWith(E, `flashCard ${CARD} ${CUR} ${SIZE}`);
   });
 
   it('an image larger than the card blocks Next with IMAGE_TOO_LARGE text', () => {
