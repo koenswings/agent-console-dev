@@ -151,3 +151,34 @@ describe('pageEngineId (connectedEngine.ts): the page Engine from /api/store-url
     expect(pageEngineId(s, '10.42.0.127')).toBeNull();
   });
 });
+
+describe('lanAddress as published by agent-engine-dev#166 (IPv4 string or explicit null)', () => {
+  /** Kit store where kind-panda and happy-zebra publish an IP, sunny-robin publishes null. */
+  const mixed = () => {
+    const s = kitStore({ withLan: true });
+    s.engineDB[KIT.SR].lanAddress = null;
+    return s;
+  };
+  for (const page of ['10.42.0.127', 'kind-panda.local', 'kind-panda']) {
+    it(`page ${page}: IP string → IP link, explicit null → .local`, () => {
+      const s = mixed();
+      const c = ctx(page, KIT.KP);
+      expect(buildAppUrl(s.engineDB[KIT.HZ], 8081, c)).toBe('http://10.42.0.3:8081');
+      expect(buildAppUrl(s.engineDB[KIT.SR], 8082, c)).toBe('http://sunny-robin.local:8082');
+      expect(buildAppUrl(s.engineDB[KIT.KP], 8080, c)).toBe(`http://${page}:8080`);
+    });
+  }
+  it('all Engines publish null: others → .local, page Engine → page host', () => {
+    const s = kitStore();
+    for (const e of ENGINES) s.engineDB[e].lanAddress = null;
+    const c = ctx('10.42.0.127', KIT.KP);
+    expect(buildAppUrl(s.engineDB[KIT.KP], 8080, c)).toBe('http://10.42.0.127:8080');
+    expect(buildAppUrl(s.engineDB[KIT.HZ], 8081, c)).toBe('http://happy-zebra.local:8081');
+    expect(buildAppUrl(s.engineDB[KIT.SR], 8082, c)).toBe('http://sunny-robin.local:8082');
+  });
+  it('page Engine publishes null and page opened by IP: recognised by engineId alone', () => {
+    const s = kitStore();
+    s.engineDB[KIT.KP].lanAddress = null;
+    expect(buildAppUrl(s.engineDB[KIT.KP], 8080, ctx('10.42.0.127', KIT.KP))).toBe('http://10.42.0.127:8080');
+  });
+});

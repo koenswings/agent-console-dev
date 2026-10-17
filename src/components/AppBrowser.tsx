@@ -1,6 +1,6 @@
 import { For, Show, createMemo, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
-import type { Store } from '../types/store';
+import type { Engine, Store } from '../types/store';
 import AppCard from './AppCard';
 import { buildAppUrl, appHostContextFor } from '../store/appUrl';
 
@@ -14,12 +14,18 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
   // Page context (engine count, page Engine id) — shared by every card.
   const hostCtx = createMemo(() => appHostContextFor(props.store()));
 
-  // Open link for an instance via disk → engine chain; null = button disabled.
-  const urlForInstance = (instanceId: string): string | null => {
+  // Engine of an instance via disk → engine chain.
+  const engineForInstance = (instanceId: string): Engine | undefined => {
     const store = props.store();
     const inst = store?.instanceDB[instanceId];
     const disk = inst?.storedOn ? store?.diskDB[inst.storedOn] : undefined;
-    const engine = disk?.dockedTo ? store?.engineDB[disk.dockedTo] : undefined;
+    return disk?.dockedTo ? store?.engineDB[disk.dockedTo] : undefined;
+  };
+
+  // Open link for an instance; null = button disabled.
+  const urlForInstance = (instanceId: string): string | null => {
+    const inst = props.store()?.instanceDB[instanceId];
+    const engine = engineForInstance(instanceId);
     if (!inst || !engine) return null;
     return buildAppUrl(engine, inst.port, hostCtx());
   };
@@ -57,12 +63,14 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
                 return inst ? props.store()?.appDB[inst.instanceOf] : undefined;
               };
               const url = () => urlForInstance(id);
+              const engine = () => engineForInstance(id);
 
               return (
                 <AppCard
                   instance={instance}
                   app={app}
                   appUrl={url}
+                  engine={engine}
                 />
               );
             }}

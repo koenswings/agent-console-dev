@@ -147,3 +147,8 @@ export function buildAppUrl(engine: AppEngine | null | undefined, port: unknown,
   if (!host) return null;
   return `http://${host}:${p}`;
 }
+
+/** Engine name shown on App cards ("on kind-panda"): hostname without `.local`. */
+export function engineDisplayName(hostname: string | null | undefined): string {
+  return String(hostname ?? '').trim().replace(/\.local\.?$/i, '');
+}
