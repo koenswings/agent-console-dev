@@ -3694,3 +3694,15 @@ body {
   font-style: italic;
   opacity: 0.75;
 }
+
+/* App Open with no usable host/port (fix/kit-app-links): shown, not clickable */
+.app-card__open-btn:disabled,
+.btn--open:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tree-item__link--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}

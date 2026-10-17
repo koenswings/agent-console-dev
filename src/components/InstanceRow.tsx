@@ -17,7 +17,7 @@ import {
   remoteWatchFor,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
-import { buildAppUrl, currentAppHostContext } from '../store/appUrl';
+import { buildAppUrl, appHostContextFor } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
@@ -418,16 +418,15 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     setPickerOpen(false);
   };
 
-  // Engine count only matters for attributing an IP page host to an engine.
-  const engineCount = createMemo(() => Object.keys(props.store?.()?.engineDB ?? {}).length);
+  // Page context (engine count, page Engine id) for the App link host.
+  const hostCtx = createMemo(() => appHostContextFor(props.store?.()));
 
+  const isRunningInst = () => props.instance()?.status === 'Running' && !!props.engine();
+  /** Open link (appUrl.ts); null when not running or no usable host/port. */
   const openUrl = () => {
     const inst = props.instance();
-    const eng = props.engine();
-    if (!inst || inst.status !== 'Running' || !eng) return null;
-    const port = inst.port;
-    if (!port) return null;
-    return buildAppUrl(eng, port, currentAppHostContext(engineCount()));
+    if (!inst || !isRunningInst()) return null;
+    return buildAppUrl(props.engine(), inst.port, hostCtx());
   };
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
@@ -578,16 +577,32 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           </div>
         </Show>
 
-        <Show when={openUrl() !== null}>
-          <a
-            class="btn--open" data-testid={`open-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
-            href={openUrl()!}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Open ${props.instance()?.name} in browser`}
+        <Show when={isRunningInst()}>
+          <Show
+            when={openUrl()}
+            fallback={
+              <button
+                class="btn--open" data-testid={`open-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
+                disabled
+                title="No address or port known for this app yet"
+                aria-label={`Open ${props.instance()?.name} in browser (unavailable)`}
+              >
+                Open ↗
+              </button>
+            }
           >
-            Open ↗
-          </a>
+            {(url) => (
+              <a
+                class="btn--open" data-testid={`open-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
+                href={url()}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${props.instance()?.name} in browser`}
+              >
+                Open ↗
+              </a>
+            )}
+          </Show>
         </Show>
       </div>
 

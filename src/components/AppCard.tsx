@@ -4,18 +4,17 @@ import type { Instance, App } from '../types/store';
 interface AppCardProps {
   instance: () => Instance | undefined;
   app: () => App | undefined;
-  engineHostname: () => string;
+  /** Open link from `buildAppUrl` (appUrl.ts); null = no usable host/port → disabled. */
+  appUrl: () => string | null;
 }
 
 const AppCard: Component<AppCardProps> = (props) => {
   const isRunning = () => props.instance()?.status === 'Running';
 
-  const appUrl = () =>
-    `http://${props.engineHostname()}:${props.instance()?.port}`;
-
   const handleOpen = () => {
-    if (!isRunning()) return;
-    window.open(appUrl(), '_blank', 'noopener,noreferrer');
+    const url = props.appUrl();
+    if (!isRunning() || !url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -40,6 +39,9 @@ const AppCard: Component<AppCardProps> = (props) => {
           <button
             class="app-card__open-btn"
             data-testid={`open-instance-${props.instance()?.id ?? ''}`}
+            data-href={props.appUrl() ?? undefined}
+            disabled={!props.appUrl()}
+            title={props.appUrl() ? undefined : 'No address or port known for this app yet'}
             onClick={handleOpen}
           >
             Open

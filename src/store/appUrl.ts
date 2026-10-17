@@ -1,21 +1,31 @@
 /**
- * appUrl.ts — build the link used to open an App instance.
+ * appUrl.ts — the one place that builds the link used to open an App instance.
+ * Every Open button / link (AppCard, InstanceRow, MobileAppList, UsbStickRow)
+ * goes through `buildAppUrl`.
  *
  * `.local` names only resolve via mDNS, which many learner devices (Android
  * phones/tablets, some networks) cannot do, and never remotely. Host order:
  *
- *   1. App on the engine the Console page was loaded from, in production web
- *      mode: the host the page was opened with (`window.location.hostname`) —
- *      whatever already worked for this device (IP, name or Tailscale).
- *   2. Any other engine that publishes its LAN address in the store
- *      (`engine.lanAddress`): that IP.
- *   3. Otherwise `<hostname>.local` via `ensureLocal()` — a fallback only,
- *      never used when an IP is available.
+ *   1. App on the Engine that served the Console page (production web mode):
+ *      the host the page was opened with (`window.location.hostname`) —
+ *      whatever already worked for this device (IP, name or Tailscale). That
+ *      Engine is recognised by any of:
+ *        - name: first DNS label of the page host = engine hostname;
+ *        - IP: page host = the Engine's published `lanAddress`;
+ *        - id: the Engine id the page host reported on /api/store-url
+ *          (only when the Console is connected to the page host itself);
+ *        - an IP page host with exactly one Engine in the store.
+ *   2. Any other Engine that publishes its LAN address (`engine.lanAddress`):
+ *      that IP.
+ *   3. Otherwise `<hostname>.local` via `ensureLocal()` — last fallback only.
  *
- * The connected engine is the one named by the page host, the same host
- * App.tsx uses as the connection hostname in production web mode.
+ * The instance port is always part of the URL. A missing / non-numeric / 0 /
+ * out-of-range port gives `null` (callers render a disabled Open button), so
+ * no `http://host:undefined` or port-less link is ever produced.
  */
 import { isProductionWebMode } from './engine';
+import { pageEngineId } from './connectedEngine';
+import type { Store } from '../types/store';
 
 /** Add .local suffix if hostname is a bare name (not an IP, not already .local). */
 export function ensureLocal(hostname: string): string {
@@ -47,33 +57,40 @@ export interface AppHostContext {
   productionWebMode: boolean;
   /** Number of engines in the store — used only when the page host is an IP. */
   engineCount: number;
+  /**
+   * Engine id of the Engine serving the page, when known (from the page
+   * host's /api/store-url `engineId`, see connectedEngine.ts `pageEngineId`).
+   */
+  pageEngineId?: string | null;
 }
 
 /** Read the live page context. Kept separate so the pure helpers stay testable. */
-export function currentAppHostContext(engineCount: number): AppHostContext {
+export function currentAppHostContext(engineCount: number, pageEngine: string | null = null): AppHostContext {
   return {
     pageHostname: window.location.hostname,
     productionWebMode: isProductionWebMode(),
     engineCount,
+    pageEngineId: pageEngine,
   };
 }
 
 /**
- * Is `engineHostname` the engine the Console page is served from?
- *
- * Name match on the first DNS label (`idea02`, `idea02.local` and a MagicDNS
- * FQDN all match engine `idea02`). An IP page host carries no name, so it can
- * only be attributed when the store holds exactly one engine; otherwise the
- * engine is treated as "other" and keeps today's `.local` link.
+ * Live page context for a store: engine count plus the page Engine's id when
+ * the Console is connected to the page host. Reactive when called inside a
+ * memo / JSX (reads the store accessor's value and the connectedEngine signals).
  */
-export function isConnectedEngine(engineHostname: string, ctx: AppHostContext): boolean {
-  if (!ctx.productionWebMode || !engineHostname || !ctx.pageHostname) return false;
-  if (isIpLiteral(ctx.pageHostname)) return ctx.engineCount === 1;
-  return shortName(engineHostname) === shortName(ctx.pageHostname);
+export function appHostContextFor(store: Store | null | undefined): AppHostContext {
+  const engineCount = Object.keys(store?.engineDB ?? {}).length;
+  return currentAppHostContext(engineCount, pageEngineId(store, window.location.hostname));
+}
+
+/** Lower-case, strip IPv6 brackets: for comparing a page host with an address. */
+function normAddr(host: string): string {
+  return host.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
 }
 
 /** What appUrl needs from a store Engine record (or just its hostname). */
-export type AppEngine = string | { hostname: string; lanAddress?: string | null };
+export type AppEngine = string | { id?: string | null; hostname: string; lanAddress?: string | null };
 
 /** The Engine's published LAN address, if it is a usable IP literal. */
 export function engineLanAddress(engine: AppEngine): string | null {
@@ -82,16 +99,51 @@ export function engineLanAddress(engine: AppEngine): string | null {
   return a && isIpLiteral(a) ? a : null;
 }
 
-/** Host (no scheme, no port) to use in an App link for an engine. */
-export function resolveAppHost(engine: AppEngine, ctx: AppHostContext): string {
+/**
+ * Is `engine` the Engine the Console page is served from? See the header for
+ * the four ways it is recognised. Never in dev / extension mode (the page host
+ * is then the dev server, not an Engine).
+ */
+export function isConnectedEngine(engine: AppEngine, ctx: AppHostContext): boolean {
+  if (!ctx.productionWebMode || !ctx.pageHostname) return false;
   const hostname = typeof engine === 'string' ? engine : String(engine.hostname ?? '');
-  if (isConnectedEngine(hostname, ctx)) return urlHost(ctx.pageHostname);
-  const ip = engineLanAddress(engine);
-  if (ip) return urlHost(ip);
-  return ensureLocal(hostname);
+  const id = typeof engine === 'string' ? null : engine.id;
+  if (id && ctx.pageEngineId && String(id) === String(ctx.pageEngineId)) return true;
+  if (isIpLiteral(ctx.pageHostname)) {
+    const ip = engineLanAddress(engine);
+    if (ip && normAddr(ip) === normAddr(ctx.pageHostname)) return true;
+    // An IP page host with an id or address that names another Engine is not this one.
+    return ctx.engineCount === 1 && !ctx.pageEngineId;
+  }
+  return !!hostname && shortName(hostname) === shortName(ctx.pageHostname);
 }
 
-/** Full App link: `http://<host>:<port>`. */
-export function buildAppUrl(engine: AppEngine, port: number, ctx: AppHostContext): string {
-  return `http://${resolveAppHost(engine, ctx)}:${port}`;
+/** Host (no scheme, no port) to use in an App link for an engine; '' if none. */
+export function resolveAppHost(engine: AppEngine, ctx: AppHostContext): string {
+  const hostname = typeof engine === 'string' ? engine : String(engine.hostname ?? '');
+  if (isConnectedEngine(engine, ctx)) return urlHost(ctx.pageHostname);
+  const ip = engineLanAddress(engine);
+  if (ip) return urlHost(ip);
+  return ensureLocal(hostname.trim());
+}
+
+/** A usable TCP port (1–65535) from a store value, or null. */
+export function validAppPort(port: unknown): number | null {
+  if (typeof port !== 'number' && typeof port !== 'string') return null;
+  if (typeof port === 'string' && !/^\d+$/.test(port.trim())) return null;
+  const n = Number(port);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
+}
+
+/**
+ * Full App link `http://<host>:<port>`, or null when there is no usable port
+ * or no host — the caller then renders the Open button disabled.
+ */
+export function buildAppUrl(engine: AppEngine | null | undefined, port: unknown, ctx: AppHostContext): string | null {
+  if (!engine) return null;
+  const p = validAppPort(port);
+  if (p === null) return null;
+  const host = resolveAppHost(engine, ctx);
+  if (!host) return null;
+  return `http://${host}:${p}`;
 }
