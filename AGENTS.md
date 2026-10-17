@@ -117,6 +117,24 @@ BOT_NAME=Pixel tools/fleet/update-fleet-state.sh <pi> status idle
 - Command testing never targets `idea02`.
 - Do not write into a Pi's deployed `dist/` (`/home/pi/idea/agents/agent-console-dev/dist`). Deploys are Ops' job through `tools/fleet/deploy.sh`.
 
+## Live kit check: App Open links (e2e/kit-app-links.mjs)
+
+Ops (Atlas) runs this from any host on the kit LAN after a deploy. It is not part of `pnpm test` and makes no changes; it only loads the Console and GETs the App links.
+
+```bash
+cd agent-console-dev            # this repo, any branch with the script
+pnpm install                    # once; provides the `playwright` package
+pnpm exec playwright install chromium   # once, or set CHROMIUM_PATH=/usr/bin/chromium
+CONSOLE_URL=http://kind-panda.local CONSOLE_USER=<operator> CONSOLE_PASSWORD=<password> \
+  node e2e/kit-app-links.mjs    # or: pnpm e2e:kit
+```
+
+- `CONSOLE_URL`: the Console as a client opens it (`http://10.42.0.127`, `http://kind-panda.local`, …). Run it once per form.
+- **Desktop pass** (1280×800, signed out): AppBrowser card grid.
+- **Mobile pass** (Playwright `Pixel 7` profile, signed in): MobileLayout / MobileAppList. MobileAppList is rendered only when **an operator is signed in** (`isOperator()`) **and** `window.innerWidth <= 600` (`src/App.tsx`, re-checked on resize). User agent, touch, route and settings play no part. Signed out, every width gets the card grid, so the mobile pass needs `CONSOLE_USER` / `CONSOLE_PASSWORD` and FAILs without them.
+- **Checks per Running instance**: Open enabled, href with a numeric port, the right host, the "on <engine>" label, and a GET returning 2xx/3xx with the port kept in any `Location`. The right host is the page host for the serving Engine (engineId from `/api/store-url`, name, or page IP == `lanAddress`), else `lanAddress`, else `<hostname>.local`.
+- **Output**: a PASS/FAIL table. Exit 0 = all pass, 1 = a FAIL, 2 = setup error. Options: `SKIP_DESKTOP=1`, `SKIP_MOBILE=1`, `HEADED=1`, `SYNC_TIMEOUT_MS`, `CHROMIUM_PATH`.
+
 ## Deploy (Ops Bot — do not deploy manually)
 
 Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.

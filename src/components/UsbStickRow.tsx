@@ -5,7 +5,7 @@
  */
 import { Show, type Component } from 'solid-js';
 import type { Engine, Store, UsbStickPublic } from '../types/store';
-import { currentAppHostContext } from '../store/appUrl';
+import { appHostContextFor } from '../store/appUrl';
 import {
   BUILDER_LINK_TEXT,
   STICK_TEAMS_LINE,
@@ -30,9 +30,10 @@ const UsbStickRow: Component<UsbStickRowProps> = (props) => {
   const link = () => {
     const s = state();
     if (s.kind !== 'running') return null;
-    const n = Object.keys(props.store()?.engineDB ?? {}).length;
-    return builderUrl(props.engine, s.instance, currentAppHostContext(n));
+    return builderUrl(props.engine, s.instance, appHostContextFor(props.store()));
   };
+  /** Builder running but no usable host/port: show the text, disabled. */
+  const linkDisabled = () => state().kind === 'running' && !link();
   const hint = () => {
     const s = state();
     return s.kind === 'no-builder' || s.kind === 'stopped' ? s.hint : null;
@@ -74,6 +75,16 @@ const UsbStickRow: Component<UsbStickRowProps> = (props) => {
               {BUILDER_LINK_TEXT}
             </a>
           )}
+        </Show>
+        <Show when={linkDisabled()}>
+          <span
+            class="tree-item__link tree-item__link--disabled"
+            data-testid="usb-stick-builder-link"
+            aria-disabled="true"
+            title="No address or port known for this app yet"
+          >
+            {BUILDER_LINK_TEXT}
+          </span>
         </Show>
         <Show when={hint()}>
           {(h) => (
