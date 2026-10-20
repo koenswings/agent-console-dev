@@ -39,7 +39,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => baseInstance}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     expect(screen.getByText('Kolibri Learning Platform')).toBeInTheDocument();
@@ -51,7 +51,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => baseInstance}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     expect(screen.getByText('education')).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => baseInstance}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     const btn = screen.getByRole('button', { name: 'Open' });
@@ -75,7 +75,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => stopped}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     expect(screen.getByText('Not available')).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => stopped}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     expect(container.querySelector('.app-card--unavailable')).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => baseInstance}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     expect(container.querySelector('.app-card--unavailable')).not.toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => baseInstance}
         app={() => baseApp}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     fireEvent.click(screen.getByRole('button', { name: 'Open' }));
@@ -128,7 +128,7 @@ describe('AppCard', () => {
       <AppCard
         instance={() => baseInstance}
         app={() => undefined}
-        engineHostname={() => 'appdocker01'}
+        appUrl={() => 'http://appdocker01:8080'}
       />
     ));
     expect(screen.getByText('kolibri')).toBeInTheDocument();

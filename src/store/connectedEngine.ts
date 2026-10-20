@@ -85,3 +85,16 @@ export const connectedEngineName = (store: Store | null | undefined, fallbackHos
   const name = id ? store?.engineDB?.[id]?.hostname : null;
   return String(name || fallbackHost || '').replace(/\.local$/i, '');
 };
+
+/**
+ * Id of the Engine that served the Console page (App links, appUrl.ts), or
+ * null when unknown. Only the connection to the page host itself says which
+ * Engine that is (its /api/store-url `engineId`, or a learned trace): after an
+ * explicit pick of another Engine (#150) the connected Engine is not the page's
+ * Engine, so this returns null and appUrl falls back to name / IP matching.
+ */
+export const pageEngineId = (store: Store | null | undefined, pageHostname: string): string | null => {
+  const host = connectedHost();
+  if (!host || !pageHostname || host !== normHost(pageHostname)) return null;
+  return connectedEngineId(store);
+};

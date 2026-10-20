@@ -87,7 +87,7 @@ export function stickBuilderState(store: Store | null, engineId: string, s: UsbS
   return { kind: 'other', instance: inst };
 }
 
-/** Link to the builder start page on this Pi (same host rules as App links, #139). */
-export function builderUrl(engine: Engine, inst: Instance, ctx: AppHostContext): string {
+/** Link to the builder start page on this Pi (same host rules as App links, #139); null = no usable port. */
+export function builderUrl(engine: Engine, inst: Instance, ctx: AppHostContext): string | null {
   return buildAppUrl(engine, inst.port, ctx);
 }

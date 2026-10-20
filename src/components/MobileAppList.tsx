@@ -15,6 +15,7 @@ import {
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
 import { live, liveNow, metricsFor } from '../store/live';
+import { buildAppUrl, appHostContextFor, engineDisplayName } from '../store/appUrl';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
   store: Accessor<Store | null>;
@@ -110,6 +111,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     if (!s || !inst.storedOn) return undefined;
     return s.diskDB[inst.storedOn];
   };
+
+  // Page context (engine count, page Engine id) for App Open links (appUrl.ts).
+  const hostCtx = createMemo(() => appHostContextFor(props.store()));
 
   const resolveEngine = (inst: Instance): Engine | undefined => {
     const s = props.store();
@@ -251,6 +255,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           const inst = () => props.store()?.instanceDB[id];
           const disk = () => { const i = inst(); return i ? resolveDisk(i) : undefined; };
           const engine = () => { const i = inst(); return i ? resolveEngine(i) : undefined; };
+          const engineName = () => engineDisplayName(engine()?.hostname);
           const backupOp = () => { const i = inst(); return i ? getBackupOp(i) : undefined; };
           const isOpRunning = () => getActiveOpsForInstance(props.store(), id).length > 0;
           const hasBackupDisks = () => {
@@ -272,10 +277,25 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           return (
             <Show when={inst()}>
               {(i) => (
-            <div class={`mobile-app-card${i().status === 'Error' ? ' mobile-app-card--error' : ''}`}>
+            <div
+              class={`mobile-app-card${i().status === 'Error' ? ' mobile-app-card--error' : ''}`}
+              data-testid={`mobile-instance-${id}`}
+              data-instance-id={id}
+              data-status={i().status}
+              data-engine-id={engine()?.id}
+              data-engine-hostname={engineName() || undefined}
+              data-engine-lan={engine()?.lanAddress ?? ''}
+            >
               <div class="mobile-app-card__top">
                 <StatusDot status={i().status} size={9} />
-                <span class="mobile-app-card__name">{i().name}</span>
+                <span class="mobile-app-card__name">
+                  {i().name}
+                  <Show when={engineName()}>
+                    <span class="mobile-app-card__engine" data-testid={`mobile-app-engine-${id}`}>
+                      on {engineName()}
+                    </span>
+                  </Show>
+                </span>
                 <span class="mobile-app-card__disk">{disk()?.name ?? '—'}</span>
                 <button
                   class="mobile-app-card__more-btn"
@@ -322,16 +342,31 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 <div class="mobile-app-card__actions">
                   <button class="btn btn--stop" onClick={() => handleStop(i())}>Stop</button>
                   <Show when={engine()}>
-                    {(eng) => (
-                      <a
-                        class="btn btn--open"
-                        href={`http://${eng().hostname}:${i().port}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Open ↗
-                      </a>
-                    )}
+                    <Show
+                      when={buildAppUrl(engine(), i().port, hostCtx())}
+                      fallback={
+                        <button
+                          class="btn btn--open"
+                          data-testid={`mobile-open-instance-${id}`}
+                          disabled
+                          title="No address or port known for this app yet"
+                        >
+                          Open ↗
+                        </button>
+                      }
+                    >
+                      {(url) => (
+                        <a
+                          class="btn btn--open"
+                          data-testid={`mobile-open-instance-${id}`}
+                          href={url()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open ↗
+                        </a>
+                      )}
+                    </Show>
                   </Show>
                   <Show when={hasBackupDisks()}>
                     <button

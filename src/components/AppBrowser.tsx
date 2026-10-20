@@ -1,8 +1,8 @@
 import { For, Show, createMemo, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
-import type { Store } from '../types/store';
+import type { Engine, Store } from '../types/store';
 import AppCard from './AppCard';
-import { resolveAppHost, currentAppHostContext } from '../store/appUrl';
+import { buildAppUrl, appHostContextFor } from '../store/appUrl';
 
 interface AppBrowserProps {
   store: Accessor<Store | null>;
@@ -11,20 +11,23 @@ interface AppBrowserProps {
 }
 
 const AppBrowser: Component<AppBrowserProps> = (props) => {
-  // Engine count only matters for attributing an IP page host to an engine.
-  const engineCount = createMemo(() => Object.keys(props.store()?.engineDB ?? {}).length);
+  // Page context (engine count, page Engine id) — shared by every card.
+  const hostCtx = createMemo(() => appHostContextFor(props.store()));
 
-  // Resolve the engine hostname for an instance via disk → engine chain
-  const hostnameForInstance = (instanceId: string): string => {
+  // Engine of an instance via disk → engine chain.
+  const engineForInstance = (instanceId: string): Engine | undefined => {
     const store = props.store();
-    if (!store) return 'localhost';
-    const inst = store.instanceDB[instanceId];
-    if (!inst?.storedOn) return 'localhost';
-    const disk = store.diskDB[inst.storedOn];
-    if (!disk?.dockedTo) return 'localhost';
-    const engine = store.engineDB[disk.dockedTo];
-    if (!engine) return 'localhost';
-    return resolveAppHost(engine, currentAppHostContext(engineCount()));
+    const inst = store?.instanceDB[instanceId];
+    const disk = inst?.storedOn ? store?.diskDB[inst.storedOn] : undefined;
+    return disk?.dockedTo ? store?.engineDB[disk.dockedTo] : undefined;
+  };
+
+  // Open link for an instance; null = button disabled.
+  const urlForInstance = (instanceId: string): string | null => {
+    const inst = props.store()?.instanceDB[instanceId];
+    const engine = engineForInstance(instanceId);
+    if (!inst || !engine) return null;
+    return buildAppUrl(engine, inst.port, hostCtx());
   };
 
   // ID list of all instances (Running and non-Running alike).
@@ -59,13 +62,15 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
                 const inst = instance();
                 return inst ? props.store()?.appDB[inst.instanceOf] : undefined;
               };
-              const hostname = () => hostnameForInstance(id);
+              const url = () => urlForInstance(id);
+              const engine = () => engineForInstance(id);
 
               return (
                 <AppCard
                   instance={instance}
                   app={app}
-                  engineHostname={hostname}
+                  appUrl={url}
+                  engine={engine}
                 />
               );
             }}
