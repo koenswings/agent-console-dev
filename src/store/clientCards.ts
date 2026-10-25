@@ -24,6 +24,8 @@ export const CAP = {
   clientCards: 'clientCards',
   flashCard: 'flashCard',
   clientImages: 'clientImages',
+  diskRolesV2: 'diskRolesV2',
+  diskCandidates: 'diskCandidates',
 } as const;
 
 export const hasCap = (engine: Engine | null | undefined, cap: keyof typeof CAP): boolean =>

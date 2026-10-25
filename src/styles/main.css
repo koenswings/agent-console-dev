@@ -3718,3 +3718,7 @@ body {
   font-weight: 400;
   color: var(--colour-text-dim);
 }
+
+/* idea#303: one entry per physical disk with its roles */
+.disk-role { padding: 0.4rem 0; border-bottom: 1px solid var(--border, #ddd); }
+.disk-role__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }

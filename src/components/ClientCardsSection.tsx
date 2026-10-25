@@ -3,6 +3,9 @@
  * in each (reader, size, what is on it now) with Flash, plus new (unknown)
  * disks with Initialise (rule 1: the Engine no longer claims them itself).
  * Gated on Engine.capabilities; a missing capability shows a hint, never a fake.
+ * idea#303: on an Engine with disk roles (see store/diskCandidates), one entry
+ * per physical disk with "Make IDEA disk" and/or "Make classroom computer disk"
+ * replaces the two lists; older Engines keep the two lists unchanged.
  */
 import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import CommandFeedback from './CommandFeedback';
@@ -13,7 +16,7 @@ import { createCommandResult, type CommandResult } from '../store/commandResult'
 import { mergeCommandLogs, remoteCommandLog } from '../store/remoteCommandLogs';
 import { formatBytes } from '../store/diskRoles';
 import type { CommandLogState } from '../store/commandLog';
-import type { ClientCard, NewDisk, Store } from '../types/store';
+import type { CardContents, ClientCard, Store } from '../types/store';
 import {
   CAP_HINT,
   TRACE,
@@ -32,6 +35,7 @@ import {
   effectiveRefusal,
   type InitialiseType,
 } from '../store/clientCards';
+import { ACTION_LABEL, diskRoleEntries, flashCopy, hasDiskRoles, type DiskRoleEntry } from '../store/diskCandidates';
 
 interface ClientCardsSectionProps {
   engineId: string;
@@ -109,11 +113,11 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
 
   const NewDiskLine = (p: { candidateId: string }) => (
     <Show when={initialisableDisks(engine()).find((d) => d.candidateId === p.candidateId)}>
-      {(d) => <NewDiskRow disk={d()} />}
+      {(d) => <NewDiskRow disk={{ candidateId: d().candidateId, model: d().model, sizeBytes: d().sizeBytes, contents: d().contents }} />}
     </Show>
   );
 
-  const NewDiskRow = (p: { disk: NewDisk }) => {
+  const NewDiskRow = (p: { disk: { candidateId: string; model: string | null; sizeBytes: number; contents: CardContents | null } }) => {
     const [type, setType] = createSignal<InitialiseType>('empty');
     const raw = createCommandResult({ commandLog: cls, command: TRACE.initialise, argKey: 'candidateId', matchMode: 'key', longRunning: true });
     const result = plain(raw);
@@ -181,6 +185,88 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
     );
   };
 
+  const rolesOn = () => hasDiskRoles(engine());
+  const roleIds = createMemo(() => (rolesOn() ? diskRoleEntries(engine()).map((e) => e.candidateId) : []), [], { equals: sameIds });
+  const roleEntry = (cid: string) => diskRoleEntries(engine()).find((e) => e.candidateId === cid);
+
+  const roleFlashHint = (e: DiskRoleEntry): string | null => {
+    const card = cardIn(e.candidateId);
+    if (!card) return e.flashRefusal ? errorText(`${e.flashRefusal}: `) : 'The Engine says this disk cannot be flashed.';
+    return flashHint(card) ?? (e.flashRefusal && e.flashRefusal !== 'BUSY' ? errorText(`${e.flashRefusal}: `) : null);
+  };
+
+  const roleLabel = (e: DiskRoleEntry): string => {
+    const r = e.readerId ? readers().find((x) => x.id === e.readerId) : undefined;
+    return `${r ? `${r.name} (port ${r.usbPath})` : (e.model ?? 'USB disk')} (${formatBytes(e.sizeBytes)})`;
+  };
+
+  const DiskRoleLine = (p: { candidateId: string }) => (
+    <Show when={roleEntry(p.candidateId)}>{(e) => <DiskRoleRow entry={e()} />}</Show>
+  );
+
+  const DiskRoleRow = (p: { entry: DiskRoleEntry }) => {
+    const id = p.entry.candidateId;
+    const [ideaOpen, setIdeaOpen] = createSignal(false);
+    const [erasing, setErasing] = createSignal(false);
+    const has = (a: DiskRoleEntry['actions'][number]) => p.entry.actions.includes(a);
+    const canErase = () => engineHasCapability(engine(), 'eraseDisk');
+    const makeIdea = () => (p.entry.needsErase ? setErasing(true) : setIdeaOpen(true));
+    return (
+      <div class="disk-role" data-testid={`disk-role-${id}`}>
+        <span data-testid="disk-role-label">{roleLabel(p.entry)}</span>
+        {' — '}
+        <span data-testid="disk-role-contents">{contentsLabel(p.entry.contents)}</span>
+        <Show when={busy().targets.has(id)}>
+          <span class="edp-form__hint" data-testid="disk-role-flashing"> (flashing…)</span>
+        </Show>
+        <div class="disk-role__actions">
+          <Show when={has('makeIdeaDisk')}>
+            <button
+              class="btn"
+              data-testid={`disk-role-idea-${id}`}
+              disabled={(p.entry.needsErase && !canErase()) || ideaOpen()}
+              onClick={makeIdea}
+            >
+              {ACTION_LABEL.makeIdeaDisk}
+            </button>
+          </Show>
+          <Show when={has('makeClientDisk')}>
+            <button
+              class="btn"
+              data-testid={`disk-role-flash-${id}`}
+              disabled={!!roleFlashHint(p.entry) || flashing() !== null}
+              title={roleFlashHint(p.entry) ?? undefined}
+              onClick={() => setFlashing(id)}
+            >
+              {ACTION_LABEL.makeClientDisk}
+            </button>
+          </Show>
+        </div>
+        <Show when={has('makeClientDisk')}>
+          <p class="edp-form__hint" data-testid={`disk-role-flash-copy-${id}`}>{flashCopy(p.entry.kind)}</p>
+          <Show when={roleFlashHint(p.entry)}>
+            {(h) => <p class="edp-form__hint" data-testid={`disk-role-hint-${id}`}>{h()}</p>}
+          </Show>
+        </Show>
+        <Show when={ideaOpen() && !p.entry.needsErase}>
+          <NewDiskRow disk={{ candidateId: id, model: p.entry.model, sizeBytes: p.entry.sizeBytes, contents: p.entry.contents }} />
+        </Show>
+        <Show when={erasing()}>
+          <EraseDialog
+            targetId={id}
+            engineId={props.engineId}
+            fallbackLabel={roleLabel(p.entry)}
+            mode="erase"
+            store={props.store}
+            commandLogStore={props.commandLogStore}
+            onClose={() => setErasing(false)}
+            onErasedEmpty={() => { setErasing(false); setIdeaOpen(true); }}
+          />
+        </Show>
+      </div>
+    );
+  };
+
   return (
     <section class="disk-section client-cards" aria-label="Client cards" data-testid="client-cards-section">
       <h3 class="disk-section__title">Client cards</h3>
@@ -194,6 +280,15 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
             {engine()?.clientImages?.previous ? ` (previous ${engine()!.clientImages!.previous})` : ''}
           </p>
         </Show>
+        <Show when={!rolesOn()} fallback={
+          <>
+            <h4 class="disk-section__title">Disks</h4>
+            <Show when={roleIds().length > 0} fallback={<p class="edp-form__hint" data-testid="disk-roles-none">No new disks or cards.</p>}>
+              <p class="edp-form__hint">These disks are not IDEA disks. Nothing is written to them until you choose an action and confirm it.</p>
+              <For each={roleIds()}>{(cid) => <DiskRoleLine candidateId={cid} />}</For>
+            </Show>
+          </>
+        }>
         <Show when={readers().length + looseCards().length > 0} fallback={<p class="edp-form__hint" data-testid="client-cards-none">No card reader or client card on this Pi.</p>}>
           <For each={readerIds()}>
             {(id) => (
@@ -218,6 +313,16 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
           <For each={looseCardIds()}>{(cid) => <CardLine candidateId={cid} readerName={null} />}</For>
         </Show>
 
+        <h4 class="disk-section__title">New disks</h4>
+        <Show
+          when={initialisableDisks(engine()).length > 0}
+          fallback={<p class="edp-form__hint" data-testid="new-disks-none">No new disks.</p>}
+        >
+          <p class="edp-form__hint">These disks are not IDEA disks yet. Nothing is written to them until you choose Initialise.</p>
+          <For each={newDiskIds()}>{(cid) => <NewDiskLine candidateId={cid} />}</For>
+        </Show>
+        </Show>
+
         <Show when={flashing()}>
           {(cid) => (
             <FlashDialog
@@ -228,15 +333,6 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
               onClose={() => setFlashing(null)}
             />
           )}
-        </Show>
-
-        <h4 class="disk-section__title">New disks</h4>
-        <Show
-          when={initialisableDisks(engine()).length > 0}
-          fallback={<p class="edp-form__hint" data-testid="new-disks-none">No new disks.</p>}
-        >
-          <p class="edp-form__hint">These disks are not IDEA disks yet. Nothing is written to them until you choose Initialise.</p>
-          <For each={newDiskIds()}>{(cid) => <NewDiskLine candidateId={cid} />}</For>
         </Show>
       </Show>
     </section>
