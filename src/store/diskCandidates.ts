@@ -1,5 +1,5 @@
 /**
- * Disk roles selector (idea#303 point 3): one entry per physical non-IDEA disk
+ * Disk roles selector (idea#303 point 3; Engine shape: agent-engine-dev#247): one entry per physical non-IDEA disk
  * with the roles it can take. This is the ONLY place that knows how the
  * Engine describes them, so the shape can change here alone once Axle
  * confirms it on idea#303. Three sources, best first:
@@ -40,6 +40,11 @@ export const hasDiskRoles = (engine: Engine | undefined): boolean => diskRolesSo
 const ORDER: DiskRoleAction[] = ['makeIdeaDisk', 'makeClientDisk'];
 const ordered = (s: Set<DiskRoleAction>): DiskRoleAction[] => ORDER.filter((a) => s.has(a));
 
+/**
+ * Engine #247: buttons come strictly from `actions`. `initialise` and `erase`
+ * are never both set; an OS-rootfs disk (old Engine stick/SSD) gets ['flash']
+ * only. `removable` (kernel rm flag) only picks the stick/SSD copy, never an action.
+ */
 const fromCandidates = (engine: Engine | undefined): DiskRoleEntry[] =>
   (engine?.diskCandidates ?? []).map((c) => {
     const acts = new Set<DiskRoleAction>();

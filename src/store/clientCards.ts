@@ -195,6 +195,7 @@ export const ERROR_TEXT: Record<string, string> = {
   IMAGE_TOO_LARGE: 'The image does not fit on this card. Use a bigger card.',
   WRITE_FAILED: 'Writing to the card failed. The card may be faulty; try another card.',
   VERIFY_FAILED: 'The check after writing failed. The card may be faulty; try another card.',
+  OS_ROOTFS: "This disk holds an operating system (for example an old IDEA Engine install), so it can't become an IDEA disk as it is. You can still make it a classroom computer disk.",
   NOT_EXT4: 'This disk is not formatted for IDEA yet. Erase it first, then initialise it.',
   POWER_OFF_FAILED: 'The card was written, but could not be switched off. Eject it before removing it.',
   INTERRUPTED: 'The Pi restarted during the operation. Flash the card again.',
