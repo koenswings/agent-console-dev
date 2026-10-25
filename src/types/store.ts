@@ -75,6 +75,8 @@ export interface Engine {
   cardReaders?: CardReader[];
   /** idea#201 §10: flashable removable media present now (subset view of newDisks). */
   clientCards?: ClientCard[];
+  /** idea#303: one entry per physical non-IDEA disk (Axle's proposal, capability `diskCandidates`). */
+  diskCandidates?: DiskCandidate[];
   /** idea#201 §10: client images stored on this Engine. */
   clientImages?: ClientImageStore | null;
   /** idea#201 §10: set for the whole run of a flash; one at a time per Engine. */
@@ -155,6 +157,30 @@ export interface NewDisk {
   contents: CardContents;
   mountedReadOnly: boolean;
   firstSeen: Timestamp;
+  /** idea#303 (diskRolesV2): physical kind; absent on older Engines. */
+  kind?: DiskKind;
+}
+
+/** idea#303: physical kind of a candidate (Pixel's proposal; pending confirmation on idea#303). */
+export type DiskKind = 'stick' | 'ssd' | 'sdReader';
+
+/** idea#303: Axle's proposed per-disk entry (pending confirmation on idea#303). */
+export type DiskCandidateAction = 'initialise' | 'erase' | 'flash';
+export interface DiskCandidate {
+  candidateId: CandidateID;
+  kind: 'usbDisk' | 'sdCard';
+  device: string;
+  sizeBytes: number;
+  model: string | null;
+  serial: string | null;
+  removable: boolean;
+  readerId: ReaderID | null;
+  partitions: { label: string | null; fsType: string | null; sizeBytes: number }[];
+  contents: CardContents;
+  actions: DiskCandidateAction[];
+  flashRefusal: FlashRefusal | null;
+  mountedReadOnly: boolean;
+  firstSeen: Timestamp;
 }
 
 export interface CardReader {
@@ -175,6 +201,8 @@ export interface ClientCard {
   contents: CardContents;
   flashable: boolean;
   refusal: FlashRefusal | null;
+  /** idea#303 (diskRolesV2): physical kind; absent on older Engines. */
+  kind?: DiskKind;
 }
 
 export interface ClientImage {

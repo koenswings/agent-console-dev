@@ -38,7 +38,10 @@ export type EngineCapability =
   | 'unknownDiskReadOnly'
   | 'clientCards'
   | 'flashCard'
-  | 'clientImages';
+  | 'clientImages'
+  // idea#303 point 3 (Engine shape pending confirmation on idea#303)
+  | 'diskRolesV2'
+  | 'diskCandidates';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
