@@ -16,10 +16,13 @@ import {
 import { getActiveOpsForInstance } from '../store/operations';
 import { live, liveNow, metricsFor } from '../store/live';
 import { buildAppUrl, appHostContextFor, engineDisplayName } from '../store/appUrl';
+import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
   store: Accessor<Store | null>;
   commandLogStore?: Accessor<import('../store/commandLog').CommandLogState>;
+  /** Hide-list loader (idea#212); injectable for tests. */
+  loadHidden?: HiddenInstancesLoader;
 }
 
 const statusSortOrder = (status: string): number => {
@@ -86,6 +89,10 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     return Object.keys(s.engineDB);
   });
 
+  // Instances on the optional hide list (idea#212) are left out, as on the dashboard.
+  const [hidden, setHidden] = createSignal<ReadonlySet<string>>(new Set());
+  void (props.loadHidden ?? sharedHiddenInstances)().then((ids) => setHidden(new Set(ids)));
+
   /** ID-keyed + status-sorted so Automerge updates don't re-render the whole list (idea#83). */
   const allInstanceIds = createMemo((): string[] => {
     const s = props.store();
@@ -93,7 +100,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const sel = selectedEngineId();
     const ids = Object.keys(s.instanceDB ?? {}).filter((id) => {
       const inst = s.instanceDB[id];
-      if (!inst) return false;
+      if (!inst || hidden().has(id)) return false;
       if (!sel) return true;
       if (!inst.storedOn) return false;
       const disk = s.diskDB[inst.storedOn];

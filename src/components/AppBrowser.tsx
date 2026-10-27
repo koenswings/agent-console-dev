@@ -3,7 +3,7 @@ import type { Accessor } from 'solid-js';
 import type { Engine, Store } from '../types/store';
 import AppCard from './AppCard';
 import { buildAppUrl, appHostContextFor } from '../store/appUrl';
-import { loadHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
+import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 
 interface AppBrowserProps {
   store: Accessor<Store | null>;
@@ -37,7 +37,7 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
   // AppCard shows non-running apps as greyed-out/unavailable.
   // Instances on the optional hide list (idea#212) are left out.
   const [hidden, setHidden] = createSignal<ReadonlySet<string>>(new Set());
-  void (props.loadHidden ?? loadHiddenInstances)().then((ids) => setHidden(new Set(ids)));
+  void (props.loadHidden ?? sharedHiddenInstances)().then((ids) => setHidden(new Set(ids)));
   const instanceIds = createMemo(() =>
     Object.keys(props.store()?.instanceDB ?? {}).filter((id) => !hidden().has(id))
   );

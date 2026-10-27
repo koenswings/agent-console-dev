@@ -30,3 +30,19 @@ export const loadHiddenInstances = async (
     return [];
   }
 };
+
+let shared: Promise<string[]> | null = null;
+
+/**
+ * The hide list, fetched once per page load and shared by every list that
+ * filters on it (AppBrowser and MobileAppList).
+ */
+export const sharedHiddenInstances: HiddenInstancesLoader = () => {
+  shared ??= loadHiddenInstances();
+  return shared;
+};
+
+/** Test helper: forget the shared result so the next call fetches again. */
+export const resetSharedHiddenInstances = (): void => {
+  shared = null;
+};

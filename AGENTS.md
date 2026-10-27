@@ -145,7 +145,7 @@ Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
 
 ### Optional dashboard hide list (idea#212)
 
-To hide instance cards from the Apps dashboard on one Engine (e.g. fixtures during a demo), put `hidden-instances.json` in the served `dist/`: `{ "hidden": ["<instanceId>", ...] }`. Records stay in the store and nothing is stopped; delete the file to show the cards again. `vite build` empties `dist/`, so re-place the file after every deploy if it is still wanted. It is not in git.
+To hide instance cards from the Apps dashboard and the mobile app list on one Engine (e.g. fixtures during a demo), put `hidden-instances.json` in the served `dist/`: `{ "hidden": ["<instanceId>", ...] }`. The file is fetched once per page load and shared by both lists. Records stay in the store and nothing is stopped; delete the file to show the cards again. `vite build` empties `dist/`, so re-place the file after every deploy if it is still wanted. It is not in git.
 
 ## Quality rules (every PR, no exceptions)
 
