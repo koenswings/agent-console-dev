@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@solidjs/testing-library';
+import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
 import AppBrowser from '../src/components/AppBrowser';
+import { loadHiddenInstances, parseHiddenInstances } from '../src/store/hiddenInstances';
 import type { Store } from '../src/types/store';
 
 const makeStore = (): Store => ({
@@ -127,5 +128,49 @@ describe('AppBrowser', () => {
   it('shows Apps heading', () => {
     render(() => <AppBrowser store={() => makeStore()} connected={() => true} onLogin={vi.fn()} />);
     expect(screen.getByRole('heading', { name: 'Apps' })).toBeInTheDocument();
+  });
+});
+
+describe('AppBrowser hide list (idea#212)', () => {
+  it('hides instances listed in the hide list and keeps the others', async () => {
+    render(() => (
+      <AppBrowser store={() => makeStore()} connected={() => true} loadHidden={() => Promise.resolve(['inst-2'])} />
+    ));
+    expect(screen.getByText('Kolibri')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Nextcloud')).not.toBeInTheDocument());
+    expect(screen.getByText('Kolibri')).toBeInTheDocument();
+  });
+
+  it('shows everything when the hide list is empty', async () => {
+    render(() => <AppBrowser store={() => makeStore()} connected={() => true} loadHidden={() => Promise.resolve([])} />);
+    await Promise.resolve();
+    expect(screen.getByText('Kolibri')).toBeInTheDocument();
+    expect(screen.getByText('Nextcloud')).toBeInTheDocument();
+  });
+});
+
+describe('hidden-instances.json loader (idea#212)', () => {
+  const res = (ok: boolean, body: unknown) =>
+    Promise.resolve({ ok, json: () => Promise.resolve(body) } as Response);
+
+  it('parses only string IDs from {"hidden": [...]}', () => {
+    expect(parseHiddenInstances({ hidden: ['a', 1, 'b'] })).toEqual(['a', 'b']);
+    expect(parseHiddenInstances({ hidden: 'a' })).toEqual([]);
+    expect(parseHiddenInstances(null)).toEqual([]);
+  });
+
+  it('fetches /hidden-instances.json uncached', async () => {
+    const f = vi.fn(() => res(true, { hidden: ['x'] }));
+    expect(await loadHiddenInstances(f as unknown as typeof fetch)).toEqual(['x']);
+    expect(f).toHaveBeenCalledWith('/hidden-instances.json', { cache: 'no-store' });
+  });
+
+  it('hides nothing when the file is missing, invalid or unreachable', async () => {
+    expect(await loadHiddenInstances((() => res(false, {})) as unknown as typeof fetch)).toEqual([]);
+    expect(
+      await loadHiddenInstances((() =>
+        Promise.resolve({ ok: true, json: () => Promise.reject(new Error('bad json')) } as unknown as Response)) as unknown as typeof fetch),
+    ).toEqual([]);
+    expect(await loadHiddenInstances((() => Promise.reject(new Error('offline'))) as unknown as typeof fetch)).toEqual([]);
   });
 });
