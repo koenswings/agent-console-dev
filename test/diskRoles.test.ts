@@ -101,7 +101,7 @@ describe('filesAvailability — the three "available in" states', () => {
 
 describe('filesNotMountedReason — Not mounted', () => {
   it('password case (passwordProtected / filesConfig.error)', () => {
-    expect(filesNotMountedReason(d(I.FA_PASSWORD))).toBe('password-protected Files Disks are not supported yet');
+    expect(filesNotMountedReason(d(I.FA_LOCKED))).toBe('password-protected Files Disks are not supported yet');
   });
   it('stuck unmount (unmountError)', () => {
     expect(filesNotMountedReason(d(I.FA_UNMOUNT))).toBe("Stuck Files couldn't be unmounted cleanly. Restart this Pi.");

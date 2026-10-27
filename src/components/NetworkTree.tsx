@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type Component } from 'solid-js';
+import { sameIds } from '../store/sameIds';
 import { isEngineOnline } from '../store/signals';
 
 // Reactive clock — ticks every 15 s so online badges flip promptly
@@ -130,7 +131,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
           const unmountIds = createMemo(
             () => unmountWarningDiskIds(props.store(), engineId),
             [],
-            { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) }
+            { equals: sameIds }
           );
 
           // Engine answer to "reboot" (no arguments: any new reboot trace).
