@@ -1,11 +1,21 @@
 # Authoritative Documentation Index — Pixel (agent-console-dev)
 
-Authoritative docs for the Console project. See `../../docs/INDEX.md` for org-level docs.
+This index lists the authoritative docs for the Console. Org-level docs are in [`koenswings/idea` → docs/INDEX.md](https://github.com/koenswings/idea/blob/main/docs/INDEX.md). On a fleet Pi, that file is at `../../docs/INDEX.md` from this checkout.
 
-Update this file whenever an authoritative doc is added or significantly revised.
+Update this file whenever a doc in `docs/` is added, removed or significantly revised. `docs/` holds only `.md`, `.pdf`, `.png` and `.svg` files, never source.
 
 ---
 
+## Docs in `docs/`
+
 | Doc | Description | Status |
 |---|---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Console architecture: Solid.js components, Chrome Extension integration, Engine API contract | Current |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Console architecture: deployment contexts, dual-mode UI, components, store layer, data types, mock mode, build, Engine API contract (the Chrome Extension is legacy) | Current |
+| [INDEX.md](INDEX.md) | This index | Current |
+
+## Related (outside `docs/`)
+
+| Doc | Description |
+|---|---|
+| [../AGENTS.md](../AGENTS.md) | Build, test, deploy and QC rules for the Console Dev bot. Read it at the start of every task |
+| [../proposals/INDEX.md](../proposals/INDEX.md) | Proposals and historical design reasoning (not authoritative) |
