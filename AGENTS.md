@@ -143,6 +143,10 @@ Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
 - This Console repo has **no** `scripts/deploy-fleet.sh` (historical name only; do not invent or re-add it here)
 - On the Pi, after deploy, Engine serves Console from `consolePath: /home/pi/idea/agents/agent-console-dev/dist`
 
+### Optional dashboard hide list (idea#212)
+
+To hide instance cards from the Apps dashboard and the mobile app list on one Engine (e.g. fixtures during a demo), put `hidden-instances.json` in the served `dist/`: `{ "hidden": ["<instanceId>", ...] }`. The file is fetched once per page load and shared by both lists. Records stay in the store and nothing is stopped; delete the file to show the cards again. `vite build` empties `dist/`, so re-place the file after every deploy if it is still wanted. It is not in git.
+
 ## Quality rules (every PR, no exceptions)
 
 - No source files in docs/ — .md, .pdf, .png, .svg only

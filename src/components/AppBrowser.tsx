@@ -1,13 +1,16 @@
-import { For, Show, createMemo, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import type { Engine, Store } from '../types/store';
 import AppCard from './AppCard';
 import { buildAppUrl, appHostContextFor } from '../store/appUrl';
+import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 
 interface AppBrowserProps {
   store: Accessor<Store | null>;
   connected: () => boolean;
   onLogin?: () => void;
+  /** Hide-list loader (idea#212); injectable for tests. */
+  loadHidden?: HiddenInstancesLoader;
 }
 
 const AppBrowser: Component<AppBrowserProps> = (props) => {
@@ -32,8 +35,11 @@ const AppBrowser: Component<AppBrowserProps> = (props) => {
 
   // ID list of all instances (Running and non-Running alike).
   // AppCard shows non-running apps as greyed-out/unavailable.
+  // Instances on the optional hide list (idea#212) are left out.
+  const [hidden, setHidden] = createSignal<ReadonlySet<string>>(new Set());
+  void (props.loadHidden ?? sharedHiddenInstances)().then((ids) => setHidden(new Set(ids)));
   const instanceIds = createMemo(() =>
-    Object.keys(props.store()?.instanceDB ?? {})
+    Object.keys(props.store()?.instanceDB ?? {}).filter((id) => !hidden().has(id))
   );
 
   return (
