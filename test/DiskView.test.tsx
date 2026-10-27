@@ -214,7 +214,7 @@ describe('FilesSection — states', () => {
   });
 
   it('Not mounted: password-protected', () => {
-    const { container } = renderView(I.FA_PASSWORD);
+    const { container } = renderView(I.FA_LOCKED);
     expect(screen.getByRole('alert').textContent).toBe('Not mounted: password-protected Files Disks are not supported yet');
     expect(filesText(container)).not.toContain('Available in');
   });

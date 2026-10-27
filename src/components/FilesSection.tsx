@@ -5,6 +5,7 @@
  * warning and Eject. Derived signals only.
  */
 import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
+import { sameIds } from '../store/sameIds';
 import EjectConfirm from './EjectConfirm';
 import { ejectDisk } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
@@ -40,7 +41,7 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
   const mountedIds = createMemo(
     (): string[] => { const a = availability(); return a.kind === 'mounted' ? a.instances.map((i) => i.instanceId) : []; },
     [],
-    { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) }
+    { equals: sameIds }
   );
   const mountedLabel = (id: string) => {
     const a = availability();

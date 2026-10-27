@@ -7,7 +7,7 @@
  *     FA_FILES      ['files']                   mounted → "Available in: …"
  *     FA_APP_FILES  ['app', 'files']            combined, hosts Nextcloud, low space
  *     FA_ABF        ['app', 'backup', 'files']  combined, all three sections
- *     FA_PASSWORD   ['files']                   Not mounted: password-protected
+ *     FA_LOCKED     ['files']                   Not mounted: password-protected
  *     FA_UNMOUNT    ['files']                   Not mounted: stuck unmount
  *     FA_BACKUP     ['backup']                  pure Backup Disk (no eject), Add Files offered
  *     FA_APP        ['app']                     Add Files offered
@@ -62,7 +62,7 @@ export const FILES_IDS = {
   FA_FILES: 'DISK_FA_FILES',
   FA_APP_FILES: 'DISK_FA_APP_FILES',
   FA_ABF: 'DISK_FA_ABF',
-  FA_PASSWORD: 'DISK_FA_PASSWORD',
+  FA_LOCKED: 'DISK_FA_LOCKED',
   FA_UNMOUNT: 'DISK_FA_UNMOUNT',
   FA_BACKUP: 'DISK_FA_BACKUP',
   FA_APP: 'DISK_FA_APP',
@@ -148,7 +148,7 @@ const disks: Disk[] = [
     backupConfig: { mode: 'on-demand', links: [I.INST_KOLIBRI_A] },
     filesConfig: filesConfig({ shareName: 'Shared' }),
   }),
-  disk(I.FA_PASSWORD, 'Locked Files', I.ENGINE_A, 'sde1', {
+  disk(I.FA_LOCKED, 'Locked Files', I.ENGINE_A, 'sde1', {
     diskTypes: ['files'],
     filesConfig: filesConfig({ passwordProtected: true, error: 'password-protected Files Disks are not supported yet' }),
   }),
