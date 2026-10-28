@@ -41,7 +41,9 @@ export type EngineCapability =
   | 'clientImages'
   // idea#303 point 3 (Engine shape pending confirmation on idea#303)
   | 'diskRolesV2'
-  | 'diskCandidates';
+  | 'diskCandidates'
+  // idea#347 (option A: quarantine)
+  | 'removeInstance';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -390,4 +392,17 @@ export const restoreApp = (
   targetDiskId: string
 ): void => {
   _sendCommand(engineId, buildRestoreAppCommand(instanceId, targetDiskId));
+};
+
+/**
+ * Build the "removeInstance" command string (idea#347, option A).
+ * Format: "removeInstance <instanceId>". The Engine deletes nothing: it runs
+ * compose down without -v and moves the instance folder into the disk's
+ * .idea-quarantine, then drops the instanceDB record.
+ */
+export const buildRemoveInstanceCommand = (instanceId: string): string =>
+  `removeInstance ${instanceId}`;
+
+export const removeInstance = (engineId: string, instanceId: string): void => {
+  _sendCommand(engineId, buildRemoveInstanceCommand(instanceId));
 };

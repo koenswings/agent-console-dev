@@ -35,7 +35,7 @@ export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
 /** Timeout message for the Files actions (files-disk.md §4). */
 export const FILES_TIMEOUT_MESSAGE = "The Engine didn't respond. It may not support Files Disks yet.";
 
-export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId';
+export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId' | 'instanceId';
 
 export type TraceOutcome =
   | { kind: 'ok' }

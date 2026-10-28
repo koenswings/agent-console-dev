@@ -10,6 +10,8 @@ import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
+import RemoveInstanceControl from './RemoveInstanceControl';
+import { canOfferRemove } from '../store/removeInstance';
 import {
   confirmInstanceStatus,
   confirmNewOperation,
@@ -678,6 +680,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               </div>
             </Show>
           </dl>
+
+          <Show when={canOfferRemove(props.engine())}>
+            <RemoveInstanceControl
+              instance={props.instance}
+              engine={props.engine}
+              store={storeAcc}
+              commandLog={() => props.commandLogStore?.() ?? null}
+              locked={locked}
+            />
+          </Show>
 
           <DockerMetricsPanel
             metrics={() => metricsFor(props.instance(), live(), liveNow()).metrics}
