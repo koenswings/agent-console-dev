@@ -82,6 +82,7 @@ describe('updateApp adapter (provisional shapes)', () => {
   it('maps refusals (CODE: text) to plain sentences', () => {
     expect(friendlyUpdateError('NEEDS_BACKUP: no recent backup', ctx)).toBe(NEEDS_BACKUP_TEXT);
     expect(friendlyUpdateError('NO_SUMS: missing', ctx)).toBe(NO_SUMS_TEXT);
+    expect(NO_SUMS_TEXT).toBe("This disk's new version can't be checked, so the app wasn't updated. Your app still works as before. Ask for a fresh copy of this App Disk.");
     expect(friendlyUpdateError('NO_SPACE: Apps disk', ctx)).toContain('Apps disk is full');
     expect(friendlyUpdateError('TRANSFER_FAILED: eof', ctx)).toBe("The copy from library-pi didn't finish, so nothing changed. Kolibri is still on 0.15.5. Try again while library-pi is switched on.");
     expect(friendlyUpdateError('SOURCE_MISSING: gone', ctx)).toBe('The disk with the new version is no longer in library-pi. Nothing changed.');

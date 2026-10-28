@@ -121,8 +121,8 @@ export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | 
 };
 
 export const NEEDS_BACKUP_TEXT = 'Dock a Backup Disk and make a backup first';
-/** Placeholder: NO_SUMS wording is waiting on Steve. */
-export const NO_SUMS_TEXT = "The new version on this disk couldn't be checked, so nothing changed.";
+/** NO_SUMS wording (Steve, 2026-10-28). */
+export const NO_SUMS_TEXT = "This disk's new version can't be checked, so the app wasn't updated. Your app still works as before. Ask for a fresh copy of this App Disk.";
 
 export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null }
 
