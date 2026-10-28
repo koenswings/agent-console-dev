@@ -41,7 +41,10 @@ export type EngineCapability =
   | 'clientImages'
   // idea#303 point 3 (Engine shape pending confirmation on idea#303)
   | 'diskRolesV2'
-  | 'diskCandidates';
+  | 'diskCandidates'
+  // console#168 (provisional, see store/updateApp.ts)
+  | 'updateApp'
+  | 'updateAppFetch';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -390,4 +393,9 @@ export const restoreApp = (
   targetDiskId: string
 ): void => {
   _sendCommand(engineId, buildRestoreAppCommand(instanceId, targetDiskId));
+};
+
+/** Send a prebuilt command string (adapters own their command shapes). */
+export const sendRawCommand = (engineId: string, command: string): void => {
+  _sendCommand(engineId, command);
 };

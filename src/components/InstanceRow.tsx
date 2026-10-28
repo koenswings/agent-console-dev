@@ -10,6 +10,8 @@ import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
+import UpdateAppControl from './UpdateAppControl';
+import { canUpdate, isUpdateRunning, latestUpdateOp } from '../store/updateApp';
 import {
   confirmInstanceStatus,
   confirmNewOperation,
@@ -261,6 +263,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const firstActiveOp = (): Operation | null => activeOps()[0] ?? null;
 
+  // console#168: while an update runs (or the update UI owns the result), the
+  // update control shows the step; unhealthy/starting is not shown as an error.
+  const updateOwned = createMemo((): boolean => canUpdate(props.engine()));
+  const updating = createMemo((): boolean =>
+    updateOwned() && !!props.instanceId && isUpdateRunning(latestUpdateOp(props.store?.() ?? null, props.instanceId)));
+
   // Only show runtime failures on the app row (start/stop/backup/restore).
   // Copy/move failures are shown in the OperationProgress panel instead.
   const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp']);
@@ -274,6 +282,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       (op) => op.status === 'Failed'
         && String(op.args['instanceId']) === String(props.instanceId)
         && RUNTIME_OP_KINDS.has(op.kind)
+        && !(op.kind === 'upgradeApp' && updateOwned())
     );
     if (failed.length === 0) return null;
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
@@ -468,7 +477,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         aria-label={`${expanded() ? 'Hide' : 'Show'} details for ${props.instance()?.name}`}
         onClick={() => setExpanded((v) => !v)}
       >
-        <StatusDot status={props.instance()?.status ?? 'Stopped'} />
+        <StatusDot status={updating() && props.instance()?.status === 'Error' ? 'Starting' : props.instance()?.status ?? 'Stopped'} />
       </button>
 
       <div class="instance-row__info">
@@ -479,7 +488,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         {/* ── Inline operation progress ─────────────────────── */}
         {/* Hide when expanded: the log panel in expanded view is the source of truth */}
-        <Show when={!expanded() && firstActiveOp()}>
+        <Show when={!expanded() && firstActiveOp() && !updating()}>
           <div class="instance-row__progress">
             <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
             <StepProgressBar
@@ -508,11 +517,18 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             <StepProgressBar currentStep={null} totalSteps={null} progressPercent={null} />
           </div>
         </Show>
-        <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded()}>
+        <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded() && !updating()}>
           <div class="instance-row__error-hint">
             {props.instance()!.statusCondition}
           </div>
         </Show>
+        <UpdateAppControl
+          instance={props.instance}
+          engine={props.engine}
+          store={() => props.store?.() ?? null}
+          commandLog={() => props.commandLogStore?.() ?? null}
+          appTitle={() => props.app()?.title ?? props.instance()?.name ?? ''}
+        />
         <CommandFeedback
           result={cmdResult}
           subject={() => props.instance()?.name ?? ''}
