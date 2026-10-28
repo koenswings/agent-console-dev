@@ -43,6 +43,9 @@ interface ClientCardsSectionProps {
   commandLogStore?: Accessor<CommandLogState>;
 }
 
+/** idea#163: shown under an ignored disk; actions stay exactly as the Engine sends them. */
+export const IGNORED_HINT = 'This disk has an IDEA-IGNORE marker, so IDEA leaves it alone.';
+
 const sameIds = (a: string[], b: string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 const plain = (r: CommandResult): CommandResult => ({
@@ -216,6 +219,11 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
         <span data-testid="disk-role-label">{roleLabel(p.entry)}</span>
         {' — '}
         <span data-testid="disk-role-contents">{contentsLabel(p.entry.contents)}</span>
+        <Show when={p.entry.ignored}>
+          {' '}
+          <span class="disk-role__ignored" data-testid={`disk-role-ignored-${id}`}>Ignored</span>
+          <p class="edp-form__hint" data-testid={`disk-role-ignored-hint-${id}`}>{IGNORED_HINT}</p>
+        </Show>
         <Show when={busy().targets.has(id)}>
           <span class="edp-form__hint" data-testid="disk-role-flashing"> (flashing…)</span>
         </Show>

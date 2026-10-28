@@ -10,7 +10,7 @@
  *     newDisks minus clientCards ids (initialisableDisks), Flash = clientCards.
  */
 import { clientCardsOf, hasCap, initialisableDisks, needsErase as listedUnformatted, newDisksOf } from './clientCards';
-import type { CardContents, DiskKind, Engine } from '../types/store';
+import type { CardContents, DiskCandidate, DiskKind, Engine } from '../types/store';
 
 export type DiskRoleAction = 'makeIdeaDisk' | 'makeClientDisk';
 export type DiskRolesSource = 'diskCandidates' | 'diskRolesV2' | 'legacy';
@@ -29,6 +29,8 @@ export interface DiskRoleEntry {
   readerId: string | null;
   /** Engine-reported reason flash can't run now (diskCandidates source only). */
   flashRefusal: string | null;
+  /** idea#163: IDEA-IGNORE marker seen (diskCandidates source only; actions stay as sent). */
+  ignored: boolean;
 }
 
 export const diskRolesSource = (engine: Engine | undefined): DiskRolesSource =>
@@ -45,6 +47,9 @@ const ordered = (s: Set<DiskRoleAction>): DiskRoleAction[] => ORDER.filter((a) =
  * are never both set; an OS-rootfs disk (old Engine stick/SSD) gets ['flash']
  * only. `removable` (kernel rm flag) only picks the stick/SSD copy, never an action.
  */
+/** idea#163: only an explicit `ignored: true` counts; missing = today's behaviour. */
+export const isIgnoredCandidate = (c: DiskCandidate): boolean => c.ignored === true;
+
 const fromCandidates = (engine: Engine | undefined): DiskRoleEntry[] =>
   (engine?.diskCandidates ?? []).map((c) => {
     const acts = new Set<DiskRoleAction>();
@@ -61,6 +66,7 @@ const fromCandidates = (engine: Engine | undefined): DiskRoleEntry[] =>
       contents: c.contents,
       readerId: c.readerId,
       flashRefusal: c.flashRefusal,
+      ignored: isIgnoredCandidate(c),
     };
   });
 
@@ -69,7 +75,7 @@ const merged = (engine: Engine | undefined): DiskRoleEntry[] => {
   const get = (candidateId: string) => {
     let e = byId.get(candidateId);
     if (!e) {
-      e = { candidateId, actions: [], acts: new Set(), needsErase: false, kind: null, model: null, sizeBytes: 0, contents: null, readerId: null, flashRefusal: null };
+      e = { candidateId, actions: [], acts: new Set(), needsErase: false, kind: null, model: null, sizeBytes: 0, contents: null, readerId: null, flashRefusal: null, ignored: false };
       byId.set(candidateId, e);
     }
     return e;
@@ -103,11 +109,11 @@ const merged = (engine: Engine | undefined): DiskRoleEntry[] => {
 const legacy = (engine: Engine | undefined): DiskRoleEntry[] => [
   ...initialisableDisks(engine).map((d) => ({
     candidateId: d.candidateId, actions: ['makeIdeaDisk'] as DiskRoleAction[], needsErase: listedUnformatted(engine, d.candidateId),
-    kind: null, model: d.model, sizeBytes: d.sizeBytes, contents: d.contents, readerId: d.readerId, flashRefusal: null,
+    kind: null, model: d.model, sizeBytes: d.sizeBytes, contents: d.contents, readerId: d.readerId, flashRefusal: null, ignored: false,
   })),
   ...clientCardsOf(engine).map((c) => ({
     candidateId: c.candidateId, actions: ['makeClientDisk'] as DiskRoleAction[], needsErase: false,
-    kind: null, model: c.model, sizeBytes: c.sizeBytes, contents: c.contents, readerId: c.readerId, flashRefusal: null,
+    kind: null, model: c.model, sizeBytes: c.sizeBytes, contents: c.contents, readerId: c.readerId, flashRefusal: null, ignored: false,
   })),
 ];
 

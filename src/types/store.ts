@@ -181,6 +181,8 @@ export interface DiskCandidate {
   flashRefusal: FlashRefusal | null;
   mountedReadOnly: boolean;
   firstSeen: Timestamp;
+  /** idea#163: true when the disk carries the IDEA-IGNORE marker. Absent on older Engines. */
+  ignored?: boolean;
 }
 
 export interface CardReader {
