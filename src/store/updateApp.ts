@@ -16,7 +16,8 @@
  *             toVersion, estimatedMinutes, sourceEngineId, sizeBytes, migrationNote —
  *             are read too when present)
  *  - op       kind `upgradeApp`, steps Fetch/Check/Snapshot/Swap/Start/Health,
- *             states running/done/failed/rolledBack, failure text `ROLLED BACK: <why>`
+ *             states running/done/failed/rolledBack, failure text `ROLLED BACK: <why>` (confirmed);
+ *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed)
  *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
  *  - refusals `CODE: text` in the trace error
  */
@@ -209,6 +210,11 @@ export const pausedText = (p: FetchPaused, sourceEngine: string): string =>
     ? `Paused while ${sourceEngine} cools down. The copy continues by itself.`
     : `The copy from ${sourceEngine} is paused. It continues by itself.`;
 
+/** Confirmed by Axle: a failed rollback leaves the instance Stopped with this statusCondition prefix. */
+export const ROLLBACK_FAILED_PREFIX = 'ROLLBACK FAILED:';
+export const isRollbackFailed = (inst: Instance | undefined): boolean =>
+  inst?.status === 'Stopped' && (inst.statusCondition ?? '').trim().startsWith(ROLLBACK_FAILED_PREFIX);
+
 export type UpdateOutcome =
   | { kind: 'updated'; text: string }
   | { kind: 'rolledBack'; text: string }
@@ -227,11 +233,11 @@ export const updateOutcome = (
   const s = stateOf(op);
   const err = op.error ?? '';
   if (s === 'done') return { kind: 'updated', text: `Updated from ${fromVersion}` };
-  if (s === 'rolledback' || /ROLLED BACK/.test(err)) {
-    return { kind: 'rolledBack', text: `The update didn't work, so ${app} is back on ${fromVersion} with all its data.` };
-  }
-  if (inst?.status === 'Stopped' && inst.statusCondition) {
+  if (isRollbackFailed(inst) || err.trim().startsWith(ROLLBACK_FAILED_PREFIX)) {
     return { kind: 'stopped', text: `${app} is stopped. Nothing was deleted. Ask for help.` };
+  }
+  if (s === 'rolledback' || /ROLLED BACK:/.test(err)) {
+    return { kind: 'rolledBack', text: `The update didn't work, so ${app} is back on ${fromVersion} with all its data.` };
   }
   return { kind: 'failed', text: friendlyUpdateError(err, ctx) };
 };

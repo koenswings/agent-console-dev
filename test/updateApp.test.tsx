@@ -106,8 +106,11 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(updateOutcome(op('Done'), inst(), 'Kolibri', '0.15.5', ctx)!.text).toBe('Updated from 0.15.5');
     expect(updateOutcome(op('Failed', { error: 'ROLLED BACK: health' }), inst(), 'Kolibri', '0.15.5', ctx)!.text)
       .toBe("The update didn't work, so Kolibri is back on 0.15.5 with all its data.");
-    expect(updateOutcome(op('Failed', { error: 'rollback failed' }), inst({ status: 'Stopped', statusCondition: 'x' }), 'Kolibri', '0.15.5', ctx)!.text)
+    expect(updateOutcome(op('Failed', { error: 'ROLLED BACK: health' }), inst({ status: 'Stopped', statusCondition: 'ROLLBACK FAILED: snapshot restore' }), 'Kolibri', '0.15.5', ctx)!.text)
       .toBe('Kolibri is stopped. Nothing was deleted. Ask for help.');
+    // A Stopped instance with some other condition is not a failed rollback.
+    expect(updateOutcome(op('Failed', { error: 'BUSY: lock' }), inst({ status: 'Stopped', statusCondition: 'exited' }), 'Kolibri', '0.15.5', ctx)!.kind)
+      .toBe('failed');
   });
 });
 
