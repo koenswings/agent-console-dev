@@ -8,7 +8,8 @@ import { createSignal } from 'solid-js';
 import ClientCardsSection from '../src/components/ClientCardsSection';
 import { setSendCommandFn } from '../src/store/commands';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
-import { diskRoleEntries, diskRolesSource, flashCopy } from '../src/store/diskCandidates';
+import { diskRoleEntries, diskRolesSource, flashCopy, isIgnoredCandidate } from '../src/store/diskCandidates';
+import { IGNORED_HINT } from '../src/components/ClientCardsSection';
 import { ERROR_TEXT, errorText, initialisableDisks } from '../src/store/clientCards';
 import type { CommandLogStore } from '../src/types/commandLog';
 import type { CommandLogState } from '../src/store/commandLog';
@@ -197,5 +198,46 @@ describe('ClientCardsSection with disk roles', () => {
     expect(q(c, 'client-card-s')).not.toBeNull();
     expect(q(c, 'new-disk-x')).not.toBeNull();
     expect(q(c, 'new-disk-s')).toBeNull();
+  });
+});
+
+// ── idea#163: IDEA-IGNORE marker (option b: badge, actions exactly as sent) ──
+describe('idea#163 ignored disks', () => {
+  const ign = (ignored: boolean | undefined) => {
+    const c = dc('g', 'usbDisk', ['initialise', 'flash']);
+    return ignored === undefined ? c : { ...c, ignored };
+  };
+  it('selector: only an explicit true counts', () => {
+    expect(isIgnoredCandidate(ign(true))).toBe(true);
+    expect(isIgnoredCandidate(ign(false))).toBe(false);
+    expect(isIgnoredCandidate(ign(undefined))).toBe(false);
+  });
+  it('an ignored candidate keeps the Engine-sent actions', () => {
+    const plain = diskRoleEntries(eng(CAND_CAPS, { diskCandidates: [ign(undefined)] }))[0];
+    const r = diskRoleEntries(eng(CAND_CAPS, { diskCandidates: [ign(true)] }))[0];
+    expect(r.ignored).toBe(true);
+    expect(plain.ignored).toBe(false);
+    expect({ ...r, ignored: false }).toEqual(plain);
+  });
+  it('fallback shapes (diskRolesV2, legacy) are never ignored', () => {
+    expect(diskRoleEntries(v2({ newDisks: [nd('s', 'stick')], clientCards: [cc('s', 'stick')] })).every((e) => !e.ignored)).toBe(true);
+    expect(diskRoleEntries(eng(BASE_CAPS, { newDisks: [nd('x')], clientCards: [cc('y')] })).every((e) => !e.ignored)).toBe(true);
+  });
+  it('an ignored disk shows the badge and hint, with both Engine-sent buttons', () => {
+    const c = mount({ diskCandidates: [ign(true)] }, CAND_CAPS);
+    expect(q(c, 'disk-role-ignored-g')!.textContent).toBe('Ignored');
+    expect(q(c, 'disk-role-ignored-hint-g')!.textContent).toBe(IGNORED_HINT);
+    expect(q(c, 'disk-role-idea-g')).not.toBeNull();
+    expect(q(c, 'disk-role-flash-g')).not.toBeNull();
+  });
+  it('ignored false or missing shows no badge and the same buttons', () => {
+    for (const v of [false, undefined]) {
+      const c = mount({ diskCandidates: [ign(v)] }, CAND_CAPS);
+      expect(q(c, 'disk-role-ignored-g')).toBeNull();
+      expect(q(c, 'disk-role-ignored-hint-g')).toBeNull();
+      expect(q(c, 'disk-role-idea-g')).not.toBeNull();
+      expect(q(c, 'disk-role-flash-g')).not.toBeNull();
+      cleanup();
+    }
   });
 });
