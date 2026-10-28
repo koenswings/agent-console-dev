@@ -125,6 +125,13 @@ export const NEEDS_BACKUP_TEXT = 'Dock a Backup Disk and make a backup first';
 /** NO_SUMS wording (Steve, 2026-10-28). */
 export const NO_SUMS_TEXT = "This disk's new version can't be checked, so the app wasn't updated. Your app still works as before. Ask for a fresh copy of this App Disk.";
 
+/** engine#268 helper text: `snapshot needs X bytes (…), free Y bytes`. Null when it doesn't parse. */
+export const parseNoSpace = (detail: string): { needBytes: number; freeBytes: number } | null => {
+  const m = /needs\s+(\d+)\s+bytes\b.*?\bfree\s+(\d+)\s+bytes/s.exec(detail);
+  return m ? { needBytes: Number(m[1]), freeBytes: Number(m[2]) } : null;
+};
+const gbText = (bytes: number): string => (bytes / 1024 ** 3).toFixed(1);
+
 export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null }
 
 export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => string> = {
@@ -135,7 +142,16 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   NOT_NEWER: (c) => `${c.app} is already on this version or newer. Nothing changed.`,
   MAJOR_NOT_ALLOWED: (c) => `This is a big update for ${c.app} and was not confirmed. Nothing changed.`,
   NEEDS_BACKUP: () => NEEDS_BACKUP_TEXT,
-  NO_SPACE: (c, detail) => `${c.diskName ?? (detail || 'The disk')} is full. Make room and try again. Nothing changed.`,
+  NO_SPACE: (c, detail) => {
+    const space = parseNoSpace(detail);
+    const disk = c.diskName ?? 'The disk';
+    if (space) return `${disk} is too full: the safety copy needs ${gbText(space.needBytes)} GB and only ${gbText(space.freeBytes)} GB is free. Make room and try again. Nothing changed.`;
+    return `${c.diskName ?? (detail || 'The disk')} is full. Make room and try again. Nothing changed.`;
+  },
+  // Confirmed from engine#268
+  NOT_FOUND: () => 'This app is no longer on this Engine. Nothing changed.',
+  AMBIGUOUS: () => "IDEA couldn't tell which copy of this app to update. Nothing changed. Ask for help.",
+  HELPER_OUTDATED: () => 'This Engine needs a system update before Apps can be updated. Nothing changed.',
   NO_SUMS: () => NO_SUMS_TEXT,
   TRANSFER_FAILED: (c) => `The copy from ${c.engine} didn't finish, so nothing changed. ${c.app} is still on ${c.fromVersion}. Try again while ${c.engine} is switched on.`,
   SOURCE_UNSUPPORTED: (c) => `${c.engine} needs a newer IDEA version before it can share this update. Nothing changed.`,

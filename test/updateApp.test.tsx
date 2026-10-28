@@ -90,6 +90,18 @@ describe('updateApp adapter (provisional shapes)', () => {
     for (const code of Object.keys(REFUSAL_TEXT)) expect(friendlyUpdateError(`${code}: x`, ctx)).not.toContain(code);
     expect(friendlyUpdateError('something odd', ctx)).toBe('something odd');
   });
+  it('maps the engine#268 codes NOT_FOUND, AMBIGUOUS, HELPER_OUTDATED', () => {
+    expect(friendlyUpdateError("NOT_FOUND: instance 'x' not found on this Engine", ctx)).toBe('This app is no longer on this Engine. Nothing changed.');
+    expect(friendlyUpdateError("AMBIGUOUS: instance name 'k' is shared by several instances on this Engine; use the instance id", ctx))
+      .toBe("IDEA couldn't tell which copy of this app to update. Nothing changed. Ask for help.");
+    expect(friendlyUpdateError('HELPER_OUTDATED: idea-app-data v4, need v5', ctx)).toBe('This Engine needs a system update before Apps can be updated. Nothing changed.');
+  });
+  it('NO_SPACE: plain GB amounts when the helper text parses, else the old message', () => {
+    const g = 1024 ** 3;
+    const msg = `NO_SPACE: snapshot needs ${3 * g} bytes (100 KB + 10 KB margin), free ${1.5 * g} bytes`;
+    expect(friendlyUpdateError(msg, ctx)).toBe('Apps disk is too full: the safety copy needs 3.0 GB and only 1.5 GB is free. Make room and try again. Nothing changed.');
+    expect(friendlyUpdateError('NO_SPACE: not enough free space on sdb1', ctx)).toBe('Apps disk is full. Make room and try again. Nothing changed.');
+  });
   it('step labels, copy progress and pause', () => {
     const p = { step: 'Fetch', bytesDone: 1.5 * 1024 ** 3, bytesTotal: 3 * 1024 ** 3, receivedAt: 0 };
     expect(stepLabel('Fetch', p, 'library-pi')).toBe('Copying from library-pi: 1.5 of 3.0 GB');
