@@ -29,6 +29,8 @@ export const COMMAND_VERBS: Record<string, string> = {
   flashCard: 'flash',
   initialiseDisk: 'initialise',
   cancelFlash: 'cancel the flash of',
+  // agent-engine-dev#220
+  renameInstance: 'rename',
 };
 
 export const commandVerb = (command: string | null): string =>
@@ -40,12 +42,14 @@ interface CommandFeedbackProps {
   subject: Accessor<string>;
   /** data-testid prefix: renders `<prefix>-error` / `<prefix>-timeout`. */
   testId: string;
+  /** Optional: turn the Engine's raw error (refusal code) into a plain sentence. */
+  formatError?: (message: string) => string;
 }
 
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
   const errorMessage = () => {
     const s = props.result.state();
-    return s.kind === 'error' ? s.message : null;
+    return s.kind === 'error' ? (props.formatError ? props.formatError(s.message) : s.message) : null;
   };
   const sentTo = () => {
     const s = props.result.state();
