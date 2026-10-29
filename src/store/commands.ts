@@ -46,7 +46,9 @@ export type EngineCapability =
   | 'updateApp'
   | 'updateAppFetch'
   // idea#347 (option A: quarantine)
-  | 'removeInstance';
+  | 'removeInstance'
+  // idea#79 (cross-Engine Move, see store/moveApp.ts)
+  | 'moveAppCrossEngine';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
