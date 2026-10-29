@@ -13,7 +13,7 @@ vi.mock('../src/store/engine', async (importOriginal) => {
 
 const makeEngine = (id: string, hostname: string, lanAddress?: string | null): Engine => ({
   id, hostname, version: '1.0', hostOS: 'Linux',
-  created: 0, lastBooted: 0, lastRun: 0, lastHalted: null, commands: [],
+  created: 0, lastBooted: 0, lastRun: Date.now(), lastHalted: null, commands: [], // online: Open links are greyed out for an offline Engine
   ...(lanAddress !== undefined ? { lanAddress } : {}),
 });
 

@@ -25,7 +25,8 @@
  */
 import { isProductionWebMode } from './engine';
 import { pageEngineId } from './connectedEngine';
-import type { Store } from '../types/store';
+import type { Engine, Store } from '../types/store';
+import { isOnline, live, liveNow, type LiveState } from './live';
 
 /** Add .local suffix if hostname is a bare name (not an IP, not already .local). */
 export function ensureLocal(hostname: string): string {
@@ -152,3 +153,22 @@ export function buildAppUrl(engine: AppEngine | null | undefined, port: unknown,
 export function engineDisplayName(hostname: string | null | undefined): string {
   return String(hostname ?? '').trim().replace(/\.local\.?$/i, '');
 }
+
+// ── Offline Engine (follow-up to Console PR #162) ───────────────────────────
+// App links to an Engine that is offline are greyed out and not clickable.
+// Same online rule as the Engine badge (live.ts isOnline: hb within 30 s, or
+// the stored lastRun within 90 s for old Engines), on the 5 s liveNow tick.
+
+/** Pure: is this Engine offline at `now`? No Engine known → not "offline". */
+export const isAppEngineOffline = (engine: Pick<Engine, 'id' | 'lastRun'> | undefined, liveState: LiveState, now: number): boolean =>
+  !!engine && !isOnline(engine, liveState, now);
+
+/** Reactive: reads the live beats and the 5 s clock (use inside a component). */
+export const appEngineOffline = (engine: Pick<Engine, 'id' | 'lastRun'> | undefined): boolean =>
+  isAppEngineOffline(engine, live(), liveNow());
+
+/** Plain hint shown next to a greyed-out Open control. */
+export const offlineAppHint = (hostname: string | undefined | null): string => {
+  const name = engineDisplayName(hostname);
+  return `${name || 'This Engine'} is offline, so this app can't be opened right now.`;
+};

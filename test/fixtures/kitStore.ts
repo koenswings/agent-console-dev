@@ -32,7 +32,7 @@ export const KIT_APP: Record<string, { inst: string; port: number }> = {
 
 export const kitEngine = (id: string, withLan: boolean): Engine => ({
   id, hostname: KIT_NAME[id], version: '1.0', hostOS: 'Linux',
-  created: 0, lastBooted: 0, lastRun: 0, lastHalted: null, commands: [],
+  created: 0, lastBooted: 0, lastRun: Date.now(), lastHalted: null, commands: [], // online: Open links are greyed out for an offline Engine
   ...(withLan ? { lanAddress: KIT_IP[id] } : {}),
 });
 
