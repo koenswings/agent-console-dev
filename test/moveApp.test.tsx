@@ -92,7 +92,7 @@ const EXPECTED: Record<string, string> = {
   NOT_FOUND: "Couldn't move nextcloud: it is no longer on this disk. Nothing changed.",
   AMBIGUOUS: "Couldn't move nextcloud: more than one app matches. Nothing was removed: it is still on appdocker02.",
   SOURCE_REMOTE: "Couldn't move nextcloud: its disk is no longer in appdocker02. Nothing changed.",
-  TARGET_UNREACHABLE: "Couldn't move nextcloud: appdocker01 can't be reached. Check that it is switched on and try again. Nothing was removed: it is still on appdocker02.",
+  TARGET_UNREACHABLE: "Couldn't move nextcloud: appdocker01 can't be reached. Check that appdocker01 is switched on and connected to the school network, then try again. Nothing was removed: it is still on appdocker02.",
   PEER_ACCESS: "Couldn't move nextcloud: appdocker02 and appdocker01 are not yet allowed to share Apps. Ask for help. Nothing was removed: it is still on appdocker02.",
   TARGET_OUTDATED: "Couldn't move nextcloud: appdocker01 needs a system update before Apps can be moved to it. Nothing was removed: it is still on appdocker02.",
   HELPER_OUTDATED: "Couldn't move nextcloud: appdocker02 needs a system update before Apps can be moved. Nothing was removed: it is still on appdocker02.",
