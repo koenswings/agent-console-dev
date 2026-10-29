@@ -17,13 +17,20 @@ import type { CommandLogState } from './commandLog';
 import { createCommandResult, type CommandResult } from './commandResult';
 import { confirmNewOperation, instanceStoredOn, newInstanceOnDisk, remoteWatchFor } from './remoteConfirm';
 import { copyApp, moveApp } from './commands';
+import { ENGINE_CLOCK_SLACK_MS } from './remoteConfirm';
+import { crossMoveSupported, moveConfirmText } from './moveApp';
 
 export interface PendingMove {
   data: DragAppData;
   targetDiskId: string;
   targetDiskName: string;
   targetEngineHostname: string;
+  /** idea#79: "<App> moves to <Engine>…" when this is a cross-Engine Move both Engines support. */
+  crossMoveNote: string | null;
 }
+
+/** idea#79: the cross-Engine Move in flight, so its steps and result can be shown. */
+export interface CrossMove { instanceId: string; app: string; targetEngine: string; since: number }
 
 export interface DragCopyMove {
   dragData: Accessor<DragAppData | null>;
@@ -34,6 +41,7 @@ export interface DragCopyMove {
   choose: (op: 'copy' | 'move') => void;
   result: CommandResult;
   subject: Accessor<string>;
+  crossMove: Accessor<CrossMove | null>;
 }
 
 export const createDragCopyMove = (
@@ -44,6 +52,7 @@ export const createDragCopyMove = (
   const [pendingMove, setPendingMove] = createSignal<PendingMove | null>(null);
   const result = createCommandResult({ commandLog, argKey: 'instanceName', longRunning: true });
   const [subject, setSubject] = createSignal('');
+  const [crossMove, setCrossMove] = createSignal<CrossMove | null>(null);
 
   const handleDrop = (data: DragAppData, targetDiskId: string) => {
     const s = store();
@@ -51,11 +60,13 @@ export const createDragCopyMove = (
     const targetDisk = s.diskDB[targetDiskId];
     if (!targetDisk?.dockedTo) return;
     const targetEngine = s.engineDB[String(targetDisk.dockedTo)];
+    const targetEngineHostname = targetEngine ? String(targetEngine.hostname) : String(targetDisk.dockedTo);
     setPendingMove({
       data,
       targetDiskId,
       targetDiskName: String(targetDisk.name),
-      targetEngineHostname: targetEngine ? String(targetEngine.hostname) : String(targetDisk.dockedTo),
+      targetEngineHostname,
+      crossMoveNote: crossMoveSupported(s, data.sourceDiskId, targetDiskId) ? moveConfirmText(data.instanceName, targetEngineHostname) : null,
     });
   };
 
@@ -70,6 +81,9 @@ export const createDragCopyMove = (
     const { instanceId, instanceName, sourceDiskId } = pending.data;
     const targetDiskId = pending.targetDiskId;
     setSubject(instanceName);
+    setCrossMove(op === 'move' && pending.crossMoveNote
+      ? { instanceId, app: instanceName, targetEngine: pending.targetEngineHostname, since: Date.now() - ENGINE_CLOCK_SLACK_MS }
+      : null);
     // Instance by NAME: copyApp/moveApp resolve the instance by name on every
     // Engine (8d98718 and Axle's fix); the disks go by ID.
     if (op === 'copy') {
@@ -100,5 +114,5 @@ export const createDragCopyMove = (
     setDragData(null);
   };
 
-  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject };
+  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove };
 };

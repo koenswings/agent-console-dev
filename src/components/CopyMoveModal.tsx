@@ -11,6 +11,7 @@ const CopyMoveModal: Component<{ ctl: DragCopyMove }> = (props) => (
           <p class="copy-move-modal__desc">
             <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em> on <em>{pm().targetEngineHostname}</em>
           </p>
+          <Show when={pm().crossMoveNote}>{(note) => <p class="copy-move-modal__note" data-testid="copy-move-cross-note">{note()}</p>}</Show>
           <div class="copy-move-modal__actions">
             <button class="btn" data-testid="copy-move-cancel" onClick={() => props.ctl.cancel()}>Cancel</button>
             <button class="btn" data-testid="copy-move-move" onClick={() => props.ctl.choose('move')}>Move</button>
