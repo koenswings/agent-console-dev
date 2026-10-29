@@ -18,6 +18,7 @@
  */
 import { createSignal } from 'solid-js';
 import type { DockerMetrics, Engine, Instance } from '../types/store';
+import { receiveUpdateProgress } from './updateApp';
 
 /** No hb for this long: the Engine is offline (3 x 10 s). */
 export const LIVE_OFFLINE_MS = 30_000;
@@ -107,6 +108,7 @@ export { live, liveNow };
 /** Feed one received ephemeral message (engine.ts). */
 export const receiveEphemeral = (message: unknown, receivedAt: number = Date.now()): void => {
   setLive((s) => applyEphemeral(s, message, receivedAt));
+  receiveUpdateProgress(message, receivedAt);
 };
 /** Forget everything (new connection / dispose). */
 export const resetLive = (): void => { setLive(emptyLive()); };

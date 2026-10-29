@@ -42,6 +42,9 @@ export type EngineCapability =
   // idea#303 point 3 (Engine shape pending confirmation on idea#303)
   | 'diskRolesV2'
   | 'diskCandidates'
+  // console#168 (provisional, see store/updateApp.ts)
+  | 'updateApp'
+  | 'updateAppFetch'
   // idea#347 (option A: quarantine)
   | 'removeInstance';
 
@@ -392,6 +395,11 @@ export const restoreApp = (
   targetDiskId: string
 ): void => {
   _sendCommand(engineId, buildRestoreAppCommand(instanceId, targetDiskId));
+};
+
+/** Send a prebuilt command string (adapters own their command shapes). */
+export const sendRawCommand = (engineId: string, command: string): void => {
+  _sendCommand(engineId, command);
 };
 
 /**
