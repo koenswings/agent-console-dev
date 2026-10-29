@@ -3753,3 +3753,17 @@ body {
   margin: 0.25rem 0 0;
   font-size: 0.85em;
 }
+
+/* Follow-up to PR #162: App links to an offline Engine are greyed out */
+.app-card--offline .app-card__open-btn,
+.btn--open:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+.app-offline-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8em;
+  color: var(--color-text-muted, #666);
+}
