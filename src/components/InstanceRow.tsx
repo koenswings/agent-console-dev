@@ -11,7 +11,7 @@ import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
 import UpdateAppControl from './UpdateAppControl';
-import { canUpdate, isUpdateRunning, latestUpdateOp } from '../store/updateApp';
+import { canUpdate, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND } from '../store/updateApp';
 import RemoveInstanceControl from './RemoveInstanceControl';
 import { canOfferRemove } from '../store/removeInstance';
 import {
@@ -128,6 +128,7 @@ const OP_LABEL: Record<OperationKind, string> = {
   backupApp:     'Backing up',
   restoreApp:    'Restoring',
   upgradeApp:    'Upgrading',
+  updateApp:     'Updating',
   upgradeEngine: 'Upgrading engine',
   startApp:      'Starting',
   stopApp:       'Stopping',
@@ -273,7 +274,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   // Only show runtime failures on the app row (start/stop/backup/restore).
   // Copy/move failures are shown in the OperationProgress panel instead.
-  const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp']);
+  const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp', 'updateApp']);
 
   const failedOp = (): Operation | null => {
     if (!props.instanceId || !props.store) return null;
@@ -284,7 +285,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       (op) => op.status === 'Failed'
         && String(op.args['instanceId']) === String(props.instanceId)
         && RUNTIME_OP_KINDS.has(op.kind)
-        && !(op.kind === 'upgradeApp' && updateOwned())
+        && !(op.kind === UPDATE_OP_KIND && updateOwned())
     );
     if (failed.length === 0) return null;
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];

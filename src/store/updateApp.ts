@@ -15,7 +15,7 @@
  *             (the agreed design's richer fields — diskId, major, fromVersion,
  *             toVersion, estimatedMinutes, sourceEngineId, sizeBytes, migrationNote —
  *             are read too when present)
- *  - op       kind `upgradeApp`, steps Fetch/Check/Snapshot/Swap/Start/Health,
+ *  - op       kind `updateApp` (engine#268), steps Fetch/Check/Snapshot/Swap/Start/Health,
  *             states running/done/failed/rolledBack, failure text `ROLLED BACK: <why>` (confirmed);
  *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed)
  *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
@@ -28,7 +28,8 @@ import type { App, Engine, Instance, Operation, Store } from '../types/store';
 // ── Capabilities ────────────────────────────────────────────────────────────
 export const CAP_UPDATE = 'updateApp' as const;
 export const CAP_FETCH = 'updateAppFetch' as const;
-export const OP_KIND = 'upgradeApp' as const;
+/** engine#268: the op kind is `updateApp` (UpdateApp.ts createOperation), not `upgradeApp`. */
+export const OP_KIND = 'updateApp' as const;
 export const COMMAND = 'updateApp' as const;
 
 export const canUpdate = (engine: Engine | null | undefined): boolean => engineHasCapability(engine, CAP_UPDATE);
@@ -258,7 +259,7 @@ export const updateOutcome = (
   const s = stateOf(op);
   const err = op.error ?? '';
   if (s === 'done') return { kind: 'updated', text: `Updated from ${fromVersion}` };
-  if (isRollbackFailed(inst) || err.trim().startsWith(ROLLBACK_FAILED_PREFIX)) {
+  if (isRollbackFailed(inst) || err.trim().replace(/^INTERRUPTED:\s*/, '').startsWith(ROLLBACK_FAILED_PREFIX)) {
     return { kind: 'stopped', text: `${app} is stopped. Nothing was deleted. Ask for help.` };
   }
   if (s === 'rolledback' || /ROLLED BACK:/.test(err)) {
