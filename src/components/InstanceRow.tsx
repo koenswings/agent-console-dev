@@ -10,6 +10,7 @@ import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
+import RenameInstanceName from './RenameInstanceName';
 import UpdateAppControl from './UpdateAppControl';
 import { canUpdate, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND } from '../store/updateApp';
 import RemoveInstanceControl from './RemoveInstanceControl';
@@ -486,7 +487,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       </button>
 
       <div class="instance-row__info">
-        <div class="instance-row__name">{props.instance()?.name}</div>
+        <RenameInstanceName
+          instance={props.instance}
+          engine={props.engine}
+          store={() => props.store?.() ?? null}
+          commandLog={() => props.commandLogStore?.() ?? null}
+        />
         <div class="instance-row__app">
           {props.app() ? props.app()!.title : props.instance()?.instanceOf}
         </div>

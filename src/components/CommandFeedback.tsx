@@ -29,6 +29,8 @@ export const COMMAND_VERBS: Record<string, string> = {
   flashCard: 'flash',
   initialiseDisk: 'initialise',
   cancelFlash: 'cancel the flash of',
+  // agent-engine-dev#220
+  renameInstance: 'rename',
   // idea#347
   removeInstance: 'remove',
 };

@@ -42,6 +42,8 @@ export type EngineCapability =
   // idea#303 point 3 (Engine shape pending confirmation on idea#303)
   | 'diskRolesV2'
   | 'diskCandidates'
+  // agent-engine-dev#220 / PR #266
+  | 'renameInstance'
   // console#168 (provisional, see store/updateApp.ts)
   | 'updateApp'
   | 'updateAppFetch'
@@ -400,6 +402,18 @@ export const restoreApp = (
 /** Send a prebuilt command string (adapters own their command shapes). */
 export const sendRawCommand = (engineId: string, command: string): void => {
   _sendCommand(engineId, command);
+};
+
+/**
+ * Build the "renameInstance" command string (agent-engine-dev#220, PR #266).
+ * Format: "renameInstance <instanceId> <new name…>"; the Engine joins the
+ * name tokens with single spaces, so whitespace runs are collapsed here.
+ */
+export const buildRenameInstanceCommand = (instanceId: string, newName: string): string =>
+  `renameInstance ${instanceId} ${newName.trim().split(/\s+/).join(' ')}`;
+
+export const renameInstance = (engineId: string, instanceId: string, newName: string): void => {
+  _sendCommand(engineId, buildRenameInstanceCommand(instanceId, newName));
 };
 
 /**
