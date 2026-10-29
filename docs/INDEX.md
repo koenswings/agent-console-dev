@@ -17,5 +17,7 @@ Update this file whenever a doc in `docs/` is added, removed or significantly re
 
 | Doc | Description |
 |---|---|
+| [../README.md](../README.md) | What the Console is, its two audiences, and how to run it |
 | [../AGENTS.md](../AGENTS.md) | Build, test, deploy and QC rules for the Console Dev bot. Read it at the start of every task |
-| [../proposals/INDEX.md](../proposals/INDEX.md) | Proposals and historical design reasoning (not authoritative) |
+| [../e2e/intents/README.md](../e2e/intents/README.md) | Duration-test intent adapters (Playwright) and their Engine wiring |
+| [../proposals/INDEX.md](../proposals/INDEX.md) | Proposals and historical design reasoning (not authoritative); format in [../proposals/README.md](../proposals/README.md) |
