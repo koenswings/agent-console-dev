@@ -25,6 +25,7 @@ const KIND_LABEL: Record<OperationKind, string> = {
   backupApp:     'Back up',
   restoreApp:    'Restore',
   upgradeApp:    'Upgrade app',
+  updateApp:     'Update app',
   upgradeEngine: 'Upgrade engine',
   startApp:      'Starting',
   stopApp:       'Stopping',

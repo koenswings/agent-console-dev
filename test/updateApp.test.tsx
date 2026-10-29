@@ -5,6 +5,7 @@ import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
   confirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
+  OP_KIND, latestUpdateOp,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
 
@@ -23,7 +24,7 @@ const inst = (extra: Record<string, unknown> = {}): Instance => ({
   stepLabel: null, metrics: null, ...extra,
 } as Instance);
 const op = (status: Operation['status'], extra: Partial<Operation> = {}): Operation => ({
-  id: 'op1', kind: 'upgradeApp', args: { instanceId: 'i1' }, cause: 'console-command' as Operation['cause'], subject: null,
+  id: 'op1', kind: 'updateApp', args: { instanceId: 'i1' }, cause: 'console-command' as Operation['cause'], subject: null,
   engineId: 'ENG1', status, progressPercent: null, currentStep: null, totalSteps: null, stepLabel: null,
   startedAt: T, completedAt: null, error: null, ...extra,
 });
@@ -41,6 +42,18 @@ const ctx = { app: 'Kolibri', fromVersion: '0.15.5', engine: 'library-pi', diskN
 
 beforeEach(() => { localStorage.clear(); resetDismissed(); });
 afterEach(() => cleanup());
+
+describe('engine#268 alignment', () => {
+  it('finds the op by the real kind updateApp, not upgradeApp', () => {
+    expect(OP_KIND).toBe('updateApp');
+    expect(latestUpdateOp(mkStore(inst(), [op('Running')]), 'i1')?.id).toBe('op1');
+    expect(latestUpdateOp(mkStore(inst(), [op('Running', { kind: 'upgradeApp' })]), 'i1')).toBeNull();
+  });
+  it('an interrupted update whose rollback failed reads as stopped', () => {
+    expect(updateOutcome(op('Failed', { error: 'INTERRUPTED: ROLLBACK FAILED: Swap failed' }), inst(), 'Kolibri', '0.15.5', ctx)!.kind).toBe('stopped');
+    expect(updateOutcome(op('Failed', { error: 'INTERRUPTED: ROLLED BACK: Swap failed' }), inst(), 'Kolibri', '0.15.5', ctx)!.kind).toBe('rolledBack');
+  });
+});
 
 describe('updateApp adapter (provisional shapes)', () => {
   const caps = engine('ENG1', ['updateApp']);

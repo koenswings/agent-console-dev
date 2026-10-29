@@ -420,6 +420,7 @@ export type OperationKind =
   | 'backupApp'
   | 'restoreApp'
   | 'upgradeApp'
+  | 'updateApp'      // agent-engine-dev#268: the updateApp command's op kind
   | 'upgradeEngine'
   | 'startApp'
   | 'stopApp'
