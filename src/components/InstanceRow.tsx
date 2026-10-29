@@ -11,6 +11,8 @@ import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
 import RenameInstanceName from './RenameInstanceName';
+import UpdateAppControl from './UpdateAppControl';
+import { canUpdate, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND } from '../store/updateApp';
 import RemoveInstanceControl from './RemoveInstanceControl';
 import { canOfferRemove } from '../store/removeInstance';
 import {
@@ -20,7 +22,7 @@ import {
   remoteWatchFor,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
-import { buildAppUrl, appHostContextFor } from '../store/appUrl';
+import { buildAppUrl, appHostContextFor, appEngineOffline, offlineAppHint } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
@@ -127,6 +129,7 @@ const OP_LABEL: Record<OperationKind, string> = {
   backupApp:     'Backing up',
   restoreApp:    'Restoring',
   upgradeApp:    'Upgrading',
+  updateApp:     'Updating',
   upgradeEngine: 'Upgrading engine',
   startApp:      'Starting',
   stopApp:       'Stopping',
@@ -264,9 +267,15 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const firstActiveOp = (): Operation | null => activeOps()[0] ?? null;
 
+  // console#168: while an update runs (or the update UI owns the result), the
+  // update control shows the step; unhealthy/starting is not shown as an error.
+  const updateOwned = createMemo((): boolean => canUpdate(props.engine()));
+  const updating = createMemo((): boolean =>
+    updateOwned() && !!props.instanceId && isUpdateRunning(latestUpdateOp(props.store?.() ?? null, props.instanceId)));
+
   // Only show runtime failures on the app row (start/stop/backup/restore).
   // Copy/move failures are shown in the OperationProgress panel instead.
-  const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp']);
+  const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp', 'updateApp']);
 
   const failedOp = (): Operation | null => {
     if (!props.instanceId || !props.store) return null;
@@ -277,6 +286,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       (op) => op.status === 'Failed'
         && String(op.args['instanceId']) === String(props.instanceId)
         && RUNTIME_OP_KINDS.has(op.kind)
+        && !(op.kind === UPDATE_OP_KIND && updateOwned())
     );
     if (failed.length === 0) return null;
     return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
@@ -425,10 +435,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const hostCtx = createMemo(() => appHostContextFor(props.store?.()));
 
   const isRunningInst = () => props.instance()?.status === 'Running' && !!props.engine();
-  /** Open link (appUrl.ts); null when not running or no usable host/port. */
+  /** The instance's Engine is offline: Open is greyed out (follow-up to PR #162). */
+  const appOffline = () => appEngineOffline(props.engine());
+  /** Open link (appUrl.ts); null when not running, Engine offline, or no usable host/port. */
   const openUrl = () => {
     const inst = props.instance();
-    if (!inst || !isRunningInst()) return null;
+    if (!inst || !isRunningInst() || appOffline()) return null;
     return buildAppUrl(props.engine(), inst.port, hostCtx());
   };
 
@@ -471,7 +483,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         aria-label={`${expanded() ? 'Hide' : 'Show'} details for ${props.instance()?.name}`}
         onClick={() => setExpanded((v) => !v)}
       >
-        <StatusDot status={props.instance()?.status ?? 'Stopped'} />
+        <StatusDot status={updating() && props.instance()?.status === 'Error' ? 'Starting' : props.instance()?.status ?? 'Stopped'} />
       </button>
 
       <div class="instance-row__info">
@@ -487,7 +499,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         {/* ── Inline operation progress ─────────────────────── */}
         {/* Hide when expanded: the log panel in expanded view is the source of truth */}
-        <Show when={!expanded() && firstActiveOp()}>
+        <Show when={!expanded() && firstActiveOp() && !updating()}>
           <div class="instance-row__progress">
             <div class="instance-row__progress-label">{activeOpProgressLabel()}</div>
             <StepProgressBar
@@ -516,11 +528,18 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             <StepProgressBar currentStep={null} totalSteps={null} progressPercent={null} />
           </div>
         </Show>
-        <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded()}>
+        <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded() && !updating()}>
           <div class="instance-row__error-hint">
             {props.instance()!.statusCondition}
           </div>
         </Show>
+        <UpdateAppControl
+          instance={props.instance}
+          engine={props.engine}
+          store={() => props.store?.() ?? null}
+          commandLog={() => props.commandLogStore?.() ?? null}
+          appTitle={() => props.app()?.title ?? props.instance()?.name ?? ''}
+        />
         <CommandFeedback
           result={cmdResult}
           subject={() => props.instance()?.name ?? ''}
@@ -592,7 +611,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               <button
                 class="btn--open" data-testid={`open-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
                 disabled
-                title="No address or port known for this app yet"
+                title={appOffline() ? offlineAppHint(props.engine()?.hostname) : 'No address or port known for this app yet'}
                 aria-label={`Open ${props.instance()?.name} in browser (unavailable)`}
               >
                 Open ↗
@@ -610,6 +629,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
                 Open ↗
               </a>
             )}
+          </Show>
+          <Show when={appOffline()}>
+            <span class="app-offline-hint" data-testid={`app-offline-hint-${props.instanceId ?? props.instance()?.id ?? ''}`}>
+              {offlineAppHint(props.engine()?.hostname)}
+            </span>
           </Show>
         </Show>
       </div>

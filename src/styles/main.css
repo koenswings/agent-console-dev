@@ -197,6 +197,12 @@ body {
   background: var(--colour-error);
 }
 
+/* Store socket lost, redialling (agent-engine-dev#168): red pulsing dot */
+.status-bar__dot--reconnecting {
+  background: var(--colour-error);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
 /* Searching/connecting: amber pulsing dot */
 .status-bar__dot--searching {
   background: #d97706;
@@ -3750,6 +3756,54 @@ body {
   flex-basis: 100%;
   margin: 0;
 }
+/* console#168: update an App (badge, confirm, steps, result) */
+.update-app__badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+.update-app__badge {
+  border: 1px solid #2e7d32;
+  border-radius: 999px;
+  background: #e8f5e9;
+  color: #1b5e20;
+  font-size: 0.8em;
+  padding: 0.1rem 0.6rem;
+  cursor: pointer;
+}
+.update-app__badge:disabled,
+.update-app__badge--offline {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+.update-app__confirm {
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.35rem;
+}
+.update-app__line,
+.update-app__note {
+  margin: 0 0 0.35rem;
+}
+.update-app__note {
+  font-style: italic;
+}
+.update-app__buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+.update-app__step,
+.update-app__ok {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+}
+.update-app__ok {
+  color: #1b5e20;
+}
 
 /* idea#347: remove an instance from its disk (quarantine) */
 .instance-remove {
@@ -3769,4 +3823,28 @@ body {
 }
 .btn--remove {
   color: #b42318;
+}
+
+/* agent-engine-dev#191: restore-to-another-disk confirm */
+.restore-panel__confirm-points {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+.restore-panel__summary {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+}
+
+/* Follow-up to PR #162: App links to an offline Engine are greyed out */
+.app-card--offline .app-card__open-btn,
+.btn--open:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+.app-offline-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8em;
+  color: var(--color-text-muted, #666);
 }

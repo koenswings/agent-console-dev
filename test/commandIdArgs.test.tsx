@@ -143,7 +143,7 @@ describe('restoreApp / backupApp send instance ID + disk ID (r30 id contract)', 
     ));
     fireEvent.change(screen.getByRole('combobox'), { target: { value: DISK_ID } });
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
+    fireEvent.click(document.querySelector('[data-testid^="restore-confirm-"]:not([data-testid*="-box-"]):not([data-testid*="-text-"]):not([data-testid*="-points-"])') as HTMLElement);
     expect(send).toHaveBeenCalledOnce();
     const cmd = send.mock.calls[0][1] as string;
     expect(cmd).toBe(`restoreApp ${INST_ID} ${DISK_ID}`);

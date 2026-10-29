@@ -44,6 +44,9 @@ export type EngineCapability =
   | 'diskCandidates'
   // agent-engine-dev#220 / PR #266
   | 'renameInstance'
+  // console#168 (provisional, see store/updateApp.ts)
+  | 'updateApp'
+  | 'updateAppFetch'
   // idea#347 (option A: quarantine)
   | 'removeInstance';
 
@@ -394,6 +397,11 @@ export const restoreApp = (
   targetDiskId: string
 ): void => {
   _sendCommand(engineId, buildRestoreAppCommand(instanceId, targetDiskId));
+};
+
+/** Send a prebuilt command string (adapters own their command shapes). */
+export const sendRawCommand = (engineId: string, command: string): void => {
+  _sendCommand(engineId, command);
 };
 
 /**
