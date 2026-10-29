@@ -21,6 +21,7 @@ import { createDragCopyMove } from './store/dragCopyMove';
 import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
 import { remoteCommandLog, setRemoteCommandLogFn } from './store/remoteCommandLogs';
 import { setSendCommandFn } from './store/commands';
+import { connectionIndicator } from './store/connectionIndicator';
 import {
   currentUser,
   isOperator,
@@ -401,19 +402,19 @@ const App: Component = () => {
   const rightPanel       = () => rightPanelFor(selection(), store());
 
   // ── Status-bar dot ────────────────────────────────────────────────────────
-  const dotClass = () => {
-    if (connected()) return 'status-bar__dot--connected';
-    if (discovering() || (hostname() && !demo())) return 'status-bar__dot--searching';
-    return 'status-bar__dot--disconnected';
-  };
-
-  const statusLabel = () => {
-    if (connected()) return connectedEngineName(store(), hostname());
-    if (demo()) return '';
-    if (discovering()) return 'Scanning for engines...';
-    if (hostname()) return 'Connecting…';
-    return 'No engine found';
-  };
+  // Store socket liveness (agent-engine-dev#168): only this one accessor of the
+  // connection is read, never the store.
+  const socketState = createMemo(() => connection()?.socketState?.() ?? 'live');
+  const indicator = createMemo(() => connectionIndicator({
+    connected: connected(),
+    socketState: socketState(),
+    demo: !!demo(),
+    discovering: discovering(),
+    hostname: hostname() || null,
+    engineName: () => connectedEngineName(store(), hostname()),
+  }));
+  const dotClass = () => indicator().dotClass;
+  const statusLabel = () => indicator().label;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

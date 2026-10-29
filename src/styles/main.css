@@ -197,6 +197,12 @@ body {
   background: var(--colour-error);
 }
 
+/* Store socket lost, redialling (agent-engine-dev#168): red pulsing dot */
+.status-bar__dot--reconnecting {
+  background: var(--colour-error);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
 /* Searching/connecting: amber pulsing dot */
 .status-bar__dot--searching {
   background: #d97706;
