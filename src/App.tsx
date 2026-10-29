@@ -17,7 +17,7 @@ import MobileLayout from './components/MobileLayout';
 import FirstTimeSetup from './components/FirstTimeSetup';
 import CommandFeedback from './components/CommandFeedback';
 import CrossMoveStatus from './components/CrossMoveStatus';
-import { friendlyMoveError } from './store/moveApp';
+import { moveFailedLine } from './store/moveApp';
 import CopyMoveModal from './components/CopyMoveModal';
 import { createDragCopyMove } from './store/dragCopyMove';
 import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
@@ -602,7 +602,7 @@ const App: Component = () => {
                   commandLogStore={commandLogStore}
                 />
                 <div class="main-layout__right">
-                  <CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" formatError={(m) => friendlyMoveError(m, copyMoveSubject())} />
+                  <CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" formatLine={(m) => moveFailedLine(m, copyMoveSubject(), dragCopyMove.sourceEngine())} />
                   <CrossMoveStatus store={store} move={dragCopyMove.crossMove} />
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
                   <Switch>
@@ -686,7 +686,7 @@ const App: Component = () => {
               pendingMove={pendingMove}
               onCopyMoveChoice={handleCopyMoveChoice}
               onCancelMove={dragCopyMove.cancel}
-              copyMoveFeedback={<><CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" formatError={(m) => friendlyMoveError(m, copyMoveSubject())} />
+              copyMoveFeedback={<><CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" formatLine={(m) => moveFailedLine(m, copyMoveSubject(), dragCopyMove.sourceEngine())} />
                   <CrossMoveStatus store={store} move={dragCopyMove.crossMove} /></>}
             />
           </Show>

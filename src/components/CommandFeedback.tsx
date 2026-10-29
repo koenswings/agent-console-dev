@@ -44,6 +44,8 @@ interface CommandFeedbackProps {
   testId: string;
   /** Optional: turn the Engine's raw error (refusal code) into a plain sentence. */
   formatError?: (message: string) => string;
+  /** Optional: a complete sentence for this error (replaces "Couldn't <verb> <subject>: …"); null = default line. */
+  formatLine?: (message: string) => string | null;
 }
 
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
@@ -77,7 +79,11 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
             data-testid={`${props.testId}-error`}
             data-command={props.result.command() ?? ''}
           >
-            Couldn't {commandVerb(props.result.command())} {props.subject()}: {msg()}
+            {(() => {
+              const raw = props.result.state();
+              const line = raw.kind === 'error' && props.formatLine ? props.formatLine(raw.message) : null;
+              return line ?? `Couldn't ${commandVerb(props.result.command())} ${props.subject()}: ${msg()}`;
+            })()}
           </p>
         )}
       </Show>

@@ -93,13 +93,13 @@ export const moveStepText = (op: Operation | null, targetEngine: string): string
 const reasonOf = (text: string, prefix: string): string =>
   text.trim().slice(prefix.length).replace(/;\s*source kept\s*\.?$/i, '').trim().replace(/[.;\s]+$/, '');
 
-/** `MOVE FAILED: …; source kept` → plain sentence; other text unchanged. */
-export const friendlyMoveError = (message: string, app = 'The App'): string => {
+/** `MOVE FAILED: …; source kept` → the whole plain sentence (Steve, #179); null for other text. */
+export const moveFailedLine = (message: string, app: string, sourceEngine: string): string | null => {
   const t = message.trim();
   const at = t.indexOf(MOVE_FAILED_PREFIX);
-  if (at < 0) return message;
+  if (at < 0) return null;
   const reason = reasonOf(t.slice(at), MOVE_FAILED_PREFIX);
-  return `${app} was not moved${reason ? ` (${reason})` : ''}. Nothing was removed: it is still where it was.`;
+  return `Couldn't move ${app}${reason ? ` (${reason})` : ''}. Nothing was removed: it is still on ${sourceEngine}.`;
 };
 
 export type MoveOutcome =
@@ -108,7 +108,7 @@ export type MoveOutcome =
   | { kind: 'failed'; text: string };
 
 /** Final outcome of a finished cross-Engine move (null while running). */
-export const moveOutcome = (op: Operation | null, app: string, targetEngine: string): MoveOutcome | null => {
+export const moveOutcome = (op: Operation | null, app: string, targetEngine: string, sourceEngine: string): MoveOutcome | null => {
   if (!op || isMoveRunning(op)) return null;
   const info = moveInfo(op);
   const text = (op.error ?? info?.resultText ?? '').trim();
@@ -119,5 +119,5 @@ export const moveOutcome = (op: Operation | null, app: string, targetEngine: str
     }
     return { kind: 'moved', text: `${app} moved to ${targetEngine}.` };
   }
-  return { kind: 'failed', text: friendlyMoveError(text || MOVE_FAILED_PREFIX, app) };
+  return { kind: 'failed', text: moveFailedLine(text || MOVE_FAILED_PREFIX, app, sourceEngine) ?? text };
 };

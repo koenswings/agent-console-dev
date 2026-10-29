@@ -42,6 +42,8 @@ export interface DragCopyMove {
   result: CommandResult;
   subject: Accessor<string>;
   crossMove: Accessor<CrossMove | null>;
+  /** Display name of the Engine the last copy/move was sent to (the source). */
+  sourceEngine: Accessor<string>;
 }
 
 export const createDragCopyMove = (
@@ -53,6 +55,7 @@ export const createDragCopyMove = (
   const result = createCommandResult({ commandLog, argKey: 'instanceName', longRunning: true });
   const [subject, setSubject] = createSignal('');
   const [crossMove, setCrossMove] = createSignal<CrossMove | null>(null);
+  const [sourceEngine, setSourceEngine] = createSignal('');
 
   const handleDrop = (data: DragAppData, targetDiskId: string) => {
     const s = store();
@@ -81,6 +84,7 @@ export const createDragCopyMove = (
     const { instanceId, instanceName, sourceDiskId } = pending.data;
     const targetDiskId = pending.targetDiskId;
     setSubject(instanceName);
+    setSourceEngine(String(s?.engineDB?.[engineId]?.hostname ?? engineId));
     setCrossMove(op === 'move' && pending.crossMoveNote
       ? { instanceId, app: instanceName, targetEngine: pending.targetEngineHostname, since: Date.now() - ENGINE_CLOCK_SLACK_MS }
       : null);
@@ -114,5 +118,5 @@ export const createDragCopyMove = (
     setDragData(null);
   };
 
-  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove };
+  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine };
 };

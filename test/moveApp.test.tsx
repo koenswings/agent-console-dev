@@ -9,7 +9,7 @@ import CopyMoveModal from '../src/components/CopyMoveModal';
 import CommandFeedback from '../src/components/CommandFeedback';
 import CrossMoveStatus from '../src/components/CrossMoveStatus';
 import {
-  CAP_MOVE_CROSS, canMoveCrossEngine, crossMoveSupported, friendlyMoveError, latestMoveOp, moveConfirmText,
+  CAP_MOVE_CROSS, canMoveCrossEngine, crossMoveSupported, moveFailedLine, latestMoveOp, moveConfirmText,
   moveOutcome, moveStepText,
 } from '../src/store/moveApp';
 import { MOCK_IDS, MOCK_STORE } from '../src/mock/mockStore';
@@ -63,19 +63,19 @@ describe('moveApp adapter', () => {
     expect(moveStepText(op('Running', { stepLabel: null, currentStep: null, move: { phase: 'removing' } }), 'x')).toBe('Step 3 of 3: Removing the old copy');
   });
   it('outcomes: moved, warning (Done with error), failed', () => {
-    expect(moveOutcome(op('Running'), 'nextcloud', 'appdocker01')).toBeNull();
-    expect(moveOutcome(op('Done', { move: { code: 'MOVED', resultText: 'MOVED to appdocker01' } }), 'nextcloud', 'appdocker01'))
+    expect(moveOutcome(op('Running'), 'nextcloud', 'appdocker01', 'appdocker02')).toBeNull();
+    expect(moveOutcome(op('Done', { move: { code: 'MOVED', resultText: 'MOVED to appdocker01' } }), 'nextcloud', 'appdocker01', 'appdocker02'))
       .toEqual({ kind: 'moved', text: 'nextcloud moved to appdocker01.' });
-    const w = moveOutcome(op('Done', { error: 'MOVED, source not removed: quarantine failed' }), 'nextcloud', 'appdocker01')!;
+    const w = moveOutcome(op('Done', { error: 'MOVED, source not removed: quarantine failed' }), 'nextcloud', 'appdocker01', 'appdocker02')!;
     expect(w.kind).toBe('warning');
     expect(w.text).toBe('nextcloud moved to appdocker01 and works there, but the old copy could not be removed (quarantine failed). Nothing is lost; ask for help to remove the old copy.');
-    expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: the copy did not finish; source kept' }), 'nextcloud', 'appdocker01'))
-      .toEqual({ kind: 'failed', text: 'nextcloud was not moved (the copy did not finish). Nothing was removed: it is still where it was.' });
+    expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: the copy did not finish; source kept' }), 'nextcloud', 'appdocker01', 'appdocker02'))
+      .toEqual({ kind: 'failed', text: "Couldn't move nextcloud (the copy did not finish). Nothing was removed: it is still on appdocker02." });
   });
   it('refusal text (trace errorMessage) becomes a plain sentence; other text is unchanged', () => {
-    expect(friendlyMoveError('MOVE FAILED: the target Engine is not connected; source kept', 'nextcloud'))
-      .toBe('nextcloud was not moved (the target Engine is not connected). Nothing was removed: it is still where it was.');
-    expect(friendlyMoveError('Too many arguments')).toBe('Too many arguments');
+    expect(moveFailedLine('MOVE FAILED: the target Engine is not connected; source kept', 'nextcloud', 'appdocker02'))
+      .toBe("Couldn't move nextcloud (the target Engine is not connected). Nothing was removed: it is still on appdocker02.");
+    expect(moveFailedLine('Too many arguments', 'nextcloud', 'appdocker02')).toBeNull();
   });
   it('finds the op by move.sourceInstanceId, cross-Engine only, after `since`', () => {
     const same = { ...op('Running'), id: 'same', args: { instanceId: NEXTCLOUD }, move: undefined } as unknown as Operation;
@@ -95,7 +95,7 @@ describe('cross-Engine Move UI', () => {
       return (
         <div>
           <NetworkTree store={store} selection={{ type: 'network', id: '' }} onSelect={() => {}} dragData={ctl.dragData} onDrop={ctl.handleDrop} commandLogStore={own} />
-          <CommandFeedback result={ctl.result} subject={ctl.subject} testId="copy-move-feedback" formatError={(m) => friendlyMoveError(m, ctl.subject())} />
+          <CommandFeedback result={ctl.result} subject={ctl.subject} testId="copy-move-feedback" formatLine={(m) => moveFailedLine(m, ctl.subject(), ctl.sourceEngine())} />
           <CrossMoveStatus store={store} move={ctl.crossMove} />
           <CopyMoveModal ctl={ctl} />
         </div>
@@ -122,7 +122,7 @@ describe('cross-Engine Move UI', () => {
   it('both Engines capable: confirm says where it moves, steps show, then the result', () => {
     const { store, setStore, ctl } = renderApp(mkStore(both, both));
     drop(ctl());
-    expect(screen.getByTestId('copy-move-cross-note').textContent).toBe(moveConfirmText('nextcloud', 'appdocker01'));
+    expect(screen.getByTestId('copy-move-cross-note').textContent).toBe(moveConfirmText('nextcloud', 'appdocker01', 'appdocker02'));
     fireEvent.click(screen.getByTestId('copy-move-move'));
     expect(send).toHaveBeenCalledWith(E2, `moveApp nextcloud ${D2} ${D1}`);
     setStore({ ...store(), operationDB: { mv1: op('Running') } });
@@ -141,7 +141,7 @@ describe('cross-Engine Move UI', () => {
     fireEvent.click(screen.getByTestId('copy-move-move'));
     setStore({ ...store(), operationDB: { mv1: op('Failed', { error: 'MOVE FAILED: the check on the target failed; source kept' }) } });
     expect(screen.getByTestId('copy-move-feedback-error').textContent)
-      .toContain('nextcloud was not moved (the check on the target failed). Nothing was removed: it is still where it was.');
+      .toBe("Couldn't move nextcloud (the check on the target failed). Nothing was removed: it is still on appdocker02.");
     expect(screen.queryByTestId('cross-move-failed')).toBeNull();
   });
 });

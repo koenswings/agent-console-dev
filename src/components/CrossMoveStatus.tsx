@@ -1,7 +1,7 @@
 /**
  * idea#79: steps and result of a cross-Engine Move (shapes in store/moveApp.ts).
  * Renders nothing unless a supported cross-Engine Move was sent. A failure is
- * shown by the copy/move CommandFeedback (friendlyMoveError), not here.
+ * shown by the copy/move CommandFeedback (moveFailedLine), not here.
  */
 import { Show, createMemo, type Accessor, type Component } from 'solid-js';
 import type { Store } from '../types/store';
@@ -20,7 +20,7 @@ const CrossMoveStatus: Component<{ store: Accessor<Store | null>; move: Accessor
   });
   const outcome = createMemo(() => {
     const m = props.move();
-    const o = m ? moveOutcome(op(), m.app, m.targetEngine) : null;
+    const o = m ? moveOutcome(op(), m.app, m.targetEngine, '') : null;
     return o && o.kind !== 'failed' ? o : null;
   });
   return (
