@@ -1,15 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CHECK_MS, DEAD_MS, MAX_DEAD_MS, createSocketLiveness, forceReconnect, type ReconnectableAdapter } from '../src/store/socketLiveness';
+import { BACKOFF_MS, FIRST_RETRY_MS, CHECK_MS, DEAD_MS, createSocketLiveness, forceReconnect, type ReconnectableAdapter, type SocketState } from '../src/store/socketLiveness';
 
-const clock = () => ({ now: () => Date.now(), setInterval: (f: () => void, ms: number) => setInterval(f, ms), clearInterval: (id: unknown) => clearInterval(id as ReturnType<typeof setInterval>) });
+const clock = () => ({
+  now: () => Date.now(),
+  setInterval: (f: () => void, ms: number) => setInterval(f, ms),
+  clearInterval: (id: unknown) => clearInterval(id as ReturnType<typeof setInterval>),
+  setTimeout: (f: () => void, ms: number) => setTimeout(f, ms),
+  clearTimeout: (id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>),
+});
 
-beforeEach(() => { vi.useFakeTimers(); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('socket liveness watchdog (agent-engine-dev#168)', () => {
   it('is not armed until the first idea/hb (old Engines unchanged)', () => {
     const dead = vi.fn();
-    const l = createSocketLiveness(dead, clock());
+    const l = createSocketLiveness(dead, { clock: clock() });
     l.heard();
     vi.advanceTimersByTime(10 * DEAD_MS);
     expect(dead).not.toHaveBeenCalled();
@@ -17,7 +23,7 @@ describe('socket liveness watchdog (agent-engine-dev#168)', () => {
   });
   it('drops after 25 s of silence, checked every 5 s; hb every 10 s keeps it alive', () => {
     const dead = vi.fn();
-    const l = createSocketLiveness(dead, clock());
+    const l = createSocketLiveness(dead, { clock: clock() });
     l.beat();
     for (let i = 0; i < 6; i++) { vi.advanceTimersByTime(10_000); l.beat(); }
     expect(dead).not.toHaveBeenCalled();
@@ -30,76 +36,97 @@ describe('socket liveness watchdog (agent-engine-dev#168)', () => {
   });
   it('any inbound message counts as heard', () => {
     const dead = vi.fn();
-    const l = createSocketLiveness(dead, clock());
+    const l = createSocketLiveness(dead, { clock: clock() });
     l.beat();
     for (let i = 0; i < 10; i++) { vi.advanceTimersByTime(CHECK_MS); l.heard(); }
     expect(dead).not.toHaveBeenCalled();
     l.dispose();
   });
-  it('backs off 25, 50, 100, 100 s while nothing is heard, and resets on traffic', () => {
-    const dead = vi.fn();
-    const l = createSocketLiveness(dead, clock());
-    l.beat();
-    expect(l.deadAfterMs()).toBe(DEAD_MS);
-    expect([DEAD_MS, MAX_DEAD_MS]).toEqual([25_000, 100_000]);
-    vi.advanceTimersByTime(DEAD_MS); expect(dead).toHaveBeenCalledTimes(1); expect(l.deadAfterMs()).toBe(50_000);
-    vi.advanceTimersByTime(50_000); expect(dead).toHaveBeenCalledTimes(2); expect(l.deadAfterMs()).toBe(MAX_DEAD_MS);
-    vi.advanceTimersByTime(MAX_DEAD_MS); expect(dead).toHaveBeenCalledTimes(3); expect(l.deadAfterMs()).toBe(MAX_DEAD_MS);
-    l.heard();
-    expect(l.deadAfterMs()).toBe(DEAD_MS);
-    expect([DEAD_MS, MAX_DEAD_MS]).toEqual([25_000, 100_000]);
+  it('logs nothing to the console', () => {
+    const spies = (['log', 'warn', 'info', 'error'] as const).map((k) => vi.spyOn(console, k).mockImplementation(() => {}));
+    const l = createSocketLiveness(() => {}, { clock: clock() });
+    l.beat(); vi.advanceTimersByTime(5 * MAX);
+    for (const s of spies) expect(s).not.toHaveBeenCalled();
     l.dispose();
   });
-  it('dispose stops the timer', () => {
+  it('dispose stops every timer', () => {
     const dead = vi.fn();
-    const l = createSocketLiveness(dead, clock());
+    const l = createSocketLiveness(dead, { clock: clock() });
     l.beat(); l.dispose();
-    vi.advanceTimersByTime(10 * MAX_DEAD_MS);
+    vi.advanceTimersByTime(10 * MAX);
+    l.dropped();
+    vi.advanceTimersByTime(10 * MAX);
     expect(dead).not.toHaveBeenCalled();
   });
 });
 
-/**
- * Mirrors WebSocketClientAdapter.connect() in automerge-repo-network-websocket
- * 2.5.4: on a reconnect it detaches the old socket's four listeners and dials a
- * new socket. (The real class can't load here: vitest resolves ws to its
- * browser stub.)
- */
-class FakeSocket {
-  listeners: Record<string, Set<unknown>> = {};
-  closed = false;
-  addEventListener(t: string, f: unknown) { (this.listeners[t] ??= new Set()).add(f); }
-  removeEventListener(t: string, f: unknown) { this.listeners[t]?.delete(f); }
-  count() { return Object.values(this.listeners).reduce((n, x) => n + x.size, 0); }
-  close() { this.closed = true; }
-}
+const MAX = BACKOFF_MS[BACKOFF_MS.length - 1];
+
+describe('reconnect backoff 25/50/100 s', () => {
+  it('constants', () => { expect([...BACKOFF_MS]).toEqual([25_000, 50_000, 100_000]); expect(FIRST_RETRY_MS).toBe(5_000); });
+  it('silent socket: redial at once, then every 50, 100, 100 s until heard', () => {
+    const dial = vi.fn();
+    const l = createSocketLiveness(dial, { clock: clock() });
+    l.beat();
+    vi.advanceTimersByTime(DEAD_MS);
+    expect(dial).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(50_000 - 1); expect(dial).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(100_000 - 1); expect(dial).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(100_000); expect(dial).toHaveBeenCalledTimes(4);
+    l.heard();
+    vi.advanceTimersByTime(DEAD_MS - 1); expect(dial).toHaveBeenCalledTimes(4);
+    l.dispose();
+  });
+  it('closed socket: first retry after 5 s, then 25, 50, 100, 100 s; repeated drops add no dials', () => {
+    const dial = vi.fn();
+    const l = createSocketLiveness(dial, { clock: clock() });
+    l.dropped();
+    vi.advanceTimersByTime(FIRST_RETRY_MS - 1); expect(dial).toHaveBeenCalledTimes(0);
+    vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(1);
+    l.dropped(); l.dropped();
+    for (const [i, gap] of [25_000, 50_000, 100_000, 100_000].entries()) {
+      vi.advanceTimersByTime(gap - 1); expect(dial).toHaveBeenCalledTimes(i + 1);
+      vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(i + 2);
+      l.dropped();
+    }
+    l.heard();
+    l.dropped();
+    vi.advanceTimersByTime(FIRST_RETRY_MS); expect(dial).toHaveBeenCalledTimes(6);
+    l.dispose();
+  });
+  it('state: live -> reconnecting on loss -> live on the first inbound message', () => {
+    const states: SocketState[] = [];
+    const l = createSocketLiveness(() => {}, { clock: clock(), onState: (s) => states.push(s) });
+    expect(l.state()).toBe('live');
+    l.beat(); vi.advanceTimersByTime(DEAD_MS);
+    expect(l.state()).toBe('reconnecting');
+    vi.advanceTimersByTime(30_000);
+    l.heard();
+    expect(l.state()).toBe('live');
+    expect(states).toEqual(['reconnecting', 'live']);
+    l.dispose();
+  });
+});
+
 class FakeAdapter implements ReconnectableAdapter {
-  socket?: FakeSocket; peerId?: string; peerMetadata?: unknown; remotePeerId?: string; sockets: FakeSocket[] = [];
+  peerId?: string; peerMetadata?: unknown; remotePeerId?: string; dials = 0;
   emitted: unknown[] = [];
-  onOpen = () => {}; onClose = () => {}; onMessage = () => {}; onError = () => {};
-  connect(peerId: string, meta?: unknown) {
-    if (!this.socket || !this.peerId) { this.peerId = peerId; this.peerMetadata = meta ?? {}; }
-    else for (const [t, f] of [['open', this.onOpen], ['close', this.onClose], ['message', this.onMessage], ['error', this.onError]] as const) this.socket.removeEventListener(t, f);
-    this.socket = new FakeSocket(); this.sockets.push(this.socket);
-    for (const [t, f] of [['open', this.onOpen], ['close', this.onClose], ['message', this.onMessage], ['error', this.onError]] as const) this.socket.addEventListener(t, f);
-  }
+  connect(peerId: string, meta?: unknown) { this.peerId = peerId; this.peerMetadata = meta ?? {}; this.dials++; }
   emit(_e: 'peer-disconnected', p: { peerId: string }) { this.emitted.push(p); return true; }
 }
 
 describe('forceReconnect (same adapter, same Repo)', () => {
-  it('one new socket; the old one is detached and closed; the Repo is told the peer left', () => {
+  it('tells the Repo the peer left once, then dials on the same adapter', () => {
     const a = new FakeAdapter();
     a.connect('console-1');
     a.remotePeerId = 'engine-1';
     expect(forceReconnect(a)).toBe(true);
-    expect(a.sockets).toHaveLength(2);
-    expect(a.sockets[0].count()).toBe(0);
-    expect(a.sockets[0].closed).toBe(true);
-    expect(a.sockets[1].count()).toBe(4);
+    expect(a.dials).toBe(2);
     expect(a.peerId).toBe('console-1');
-    expect(a.emitted).toEqual([{ peerId: 'engine-1' }]);
     forceReconnect(a);
-    expect(a.sockets.map((x) => x.count())).toEqual([0, 0, 4]);
+    expect(a.emitted).toEqual([{ peerId: 'engine-1' }]);
   });
   it('does nothing before the adapter ever connected', () => {
     expect(forceReconnect(new FakeAdapter())).toBe(false);
