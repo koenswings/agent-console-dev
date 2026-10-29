@@ -93,7 +93,37 @@ export const moveStepText = (op: Operation | null, targetEngine: string): string
 const reasonOf = (text: string, prefix: string): string =>
   text.trim().slice(prefix.length).replace(/;\s*source kept\s*\.?$/i, '').trim().replace(/[.;\s]+$/, '');
 
-/** `MOVE FAILED: …; source kept` → the whole plain sentence (Steve, #179); null for other text. */
+// ── Codes (engine#289 b5429d6, MOVE_CODES in src/data/MoveAppShapes.ts) ─────
+export const MOVE_REFUSAL_CODES = ['NOT_FOUND', 'AMBIGUOUS', 'SOURCE_REMOTE', 'TARGET_UNREACHABLE', 'PEER_ACCESS', 'TARGET_OUTDATED', 'HELPER_OUTDATED', 'BUSY', 'INVALID'] as const;
+export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED', 'INTERRUPTED'] as const;
+export const MOVE_DONE_CODES = ['MOVED', 'SOURCE_NOT_REMOVED', 'SOURCE_CHANGED'] as const;
+
+export interface MoveCtx { app: string; sourceEngine: string; targetEngine: string }
+const kept = (c: MoveCtx): string => `Nothing was removed: it is still on ${c.sourceEngine}.`;
+
+/** Refusals and failures (source kept): one plain sentence per code. */
+export const MOVE_CODE_TEXT: Record<string, (c: MoveCtx) => string> = {
+  // Refusals (no op; trace errorCode)
+  NOT_FOUND: (c) => `Couldn't move ${c.app}: it is no longer on this disk. Nothing changed.`,
+  AMBIGUOUS: (c) => `Couldn't move ${c.app}: more than one app matches. ${kept(c)}`,
+  SOURCE_REMOTE: (c) => `Couldn't move ${c.app}: its disk is no longer in ${c.sourceEngine}. Nothing changed.`,
+  TARGET_UNREACHABLE: (c) => `Couldn't move ${c.app}: ${c.targetEngine} can't be reached. Check that it is switched on and try again. ${kept(c)}`,
+  PEER_ACCESS: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} and ${c.targetEngine} are not yet allowed to share Apps. Ask for help. ${kept(c)}`,
+  TARGET_OUTDATED: (c) => `Couldn't move ${c.app}: ${c.targetEngine} needs a system update before Apps can be moved to it. ${kept(c)}`,
+  HELPER_OUTDATED: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} needs a system update before Apps can be moved. ${kept(c)}`,
+  BUSY: (c) => `Couldn't move ${c.app}: something else is running on it or on the target disk. Try again when it is done. ${kept(c)}`,
+  INVALID: (c) => `Couldn't move ${c.app} to that disk. ${kept(c)}`,
+  // Failed outcomes (op Failed, source kept)
+  COPY_FAILED: (c) => `Couldn't move ${c.app}: the copy to ${c.targetEngine} didn't finish. ${kept(c)}`,
+  VERIFY_NOT_FOUND: (c) => `Couldn't move ${c.app}: the copy didn't show up on ${c.targetEngine}. ${kept(c)}`,
+  VERIFY_NOT_RUNNING: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} didn't start. ${kept(c)}`,
+  VERIFY_SIZE: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} is not complete. ${kept(c)}`,
+  VERIFY_TIMEOUT: (c) => `Couldn't move ${c.app}: ${c.targetEngine} didn't confirm the copy in time. ${kept(c)}`,
+  VERIFY_FAILED: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} couldn't be checked. ${kept(c)}`,
+  INTERRUPTED: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} restarted during the move. ${kept(c)}`,
+};
+
+/** Fallback for an unknown code: the Engine's reason in the approved sentence (Steve, #179). */
 export const moveFailedLine = (message: string, app: string, sourceEngine: string): string | null => {
   const t = message.trim();
   const at = t.indexOf(MOVE_FAILED_PREFIX);
@@ -102,22 +132,33 @@ export const moveFailedLine = (message: string, app: string, sourceEngine: strin
   return `Couldn't move ${app}${reason ? ` (${reason})` : ''}. Nothing was removed: it is still on ${sourceEngine}.`;
 };
 
+/**
+ * The whole line for a failed / refused Move: the code first (trace errorCode,
+ * result.code or op.move.code), else the `MOVE FAILED:` text; null = not ours.
+ */
+export const moveErrorLine = (message: string, code: string | null, c: MoveCtx): string | null =>
+  (code && MOVE_CODE_TEXT[code]?.(c)) || moveFailedLine(message, c.app, c.sourceEngine);
+
 export type MoveOutcome =
   | { kind: 'moved'; text: string }
   | { kind: 'warning'; text: string }
   | { kind: 'failed'; text: string };
 
-/** Final outcome of a finished cross-Engine move (null while running). */
-export const moveOutcome = (op: Operation | null, app: string, targetEngine: string, sourceEngine: string): MoveOutcome | null => {
+/** Final outcome of a finished cross-Engine move (null while running). Code first, text as fallback. */
+export const moveOutcome = (op: Operation | null, c: MoveCtx): MoveOutcome | null => {
   if (!op || isMoveRunning(op)) return null;
   const info = moveInfo(op);
   const text = (op.error ?? info?.resultText ?? '').trim();
+  const code = info?.code ?? null;
   if (op.status === 'Done') {
-    if (text.startsWith(NOT_REMOVED_PREFIX) || info?.code === 'SOURCE_NOT_REMOVED') {
-      const reason = text.startsWith(NOT_REMOVED_PREFIX) ? reasonOf(text, NOT_REMOVED_PREFIX) : '';
-      return { kind: 'warning', text: `${app} moved to ${targetEngine} and works there, but the old copy could not be removed${reason ? ` (${reason})` : ''}. Nothing is lost; ask for help to remove the old copy.` };
+    if (code === 'SOURCE_CHANGED') {
+      return { kind: 'warning', text: `${c.app} moved to ${c.targetEngine} and works there. The old copy on ${c.sourceEngine} was kept because it changed during the move. Nothing is lost; ask for help to remove the old copy.` };
     }
-    return { kind: 'moved', text: `${app} moved to ${targetEngine}.` };
+    if (code === 'SOURCE_NOT_REMOVED' || (code !== 'MOVED' && text.startsWith(NOT_REMOVED_PREFIX))) {
+      const reason = text.startsWith(NOT_REMOVED_PREFIX) ? reasonOf(text, NOT_REMOVED_PREFIX) : '';
+      return { kind: 'warning', text: `${c.app} moved to ${c.targetEngine} and works there, but the old copy could not be removed${reason ? ` (${reason})` : ''}. Nothing is lost; ask for help to remove the old copy.` };
+    }
+    return { kind: 'moved', text: `${c.app} moved to ${c.targetEngine}.` };
   }
-  return { kind: 'failed', text: moveFailedLine(text || MOVE_FAILED_PREFIX, app, sourceEngine) ?? text };
+  return { kind: 'failed', text: moveErrorLine(text || MOVE_FAILED_PREFIX, code, c) ?? text };
 };

@@ -12,6 +12,8 @@ export interface CommandTrace {
   completedAt: number | null;
   status: 'running' | 'ok' | 'error';
   errorMessage: string | null;
+  /** Machine code of the error when the Engine has one (e.g. moveApp, engine#289). */
+  errorCode?: string | null;
   logs: LogEntry[];
   /** Optional JSON result (e.g. summariseDisk contentSummary). */
   result?: string | null;

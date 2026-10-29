@@ -18,7 +18,7 @@ import { createCommandResult, type CommandResult } from './commandResult';
 import { confirmNewOperation, instanceStoredOn, newInstanceOnDisk, remoteWatchFor } from './remoteConfirm';
 import { copyApp, moveApp } from './commands';
 import { ENGINE_CLOCK_SLACK_MS } from './remoteConfirm';
-import { crossMoveSupported, moveConfirmText } from './moveApp';
+import { crossMoveSupported, latestMoveOp, moveConfirmText, moveErrorLine, moveInfo } from './moveApp';
 
 export interface PendingMove {
   data: DragAppData;
@@ -30,7 +30,7 @@ export interface PendingMove {
 }
 
 /** idea#79: the cross-Engine Move in flight, so its steps and result can be shown. */
-export interface CrossMove { instanceId: string; app: string; targetEngine: string; since: number }
+export interface CrossMove { instanceId: string; app: string; sourceEngine: string; targetEngine: string; since: number }
 
 export interface DragCopyMove {
   dragData: Accessor<DragAppData | null>;
@@ -44,6 +44,8 @@ export interface DragCopyMove {
   crossMove: Accessor<CrossMove | null>;
   /** Display name of the Engine the last copy/move was sent to (the source). */
   sourceEngine: Accessor<string>;
+  /** CommandFeedback formatLine for the copy/move result: the plain Move sentence, or null. */
+  formatLine: (message: string, code: string | null) => string | null;
 }
 
 export const createDragCopyMove = (
@@ -84,9 +86,10 @@ export const createDragCopyMove = (
     const { instanceId, instanceName, sourceDiskId } = pending.data;
     const targetDiskId = pending.targetDiskId;
     setSubject(instanceName);
-    setSourceEngine(String(s?.engineDB?.[engineId]?.hostname ?? engineId));
+    const sourceName = String(s?.engineDB?.[engineId]?.hostname ?? engineId);
+    setSourceEngine(sourceName);
     setCrossMove(op === 'move' && pending.crossMoveNote
-      ? { instanceId, app: instanceName, targetEngine: pending.targetEngineHostname, since: Date.now() - ENGINE_CLOCK_SLACK_MS }
+      ? { instanceId, app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname, since: Date.now() - ENGINE_CLOCK_SLACK_MS }
       : null);
     // Instance by NAME: copyApp/moveApp resolve the instance by name on every
     // Engine (8d98718 and Axle's fix); the disks go by ID.
@@ -118,5 +121,11 @@ export const createDragCopyMove = (
     setDragData(null);
   };
 
-  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine };
+  const formatLine = (message: string, code: string | null): string | null => {
+    const m = crossMove();
+    const opCode = m ? moveInfo(latestMoveOp(store(), m.instanceId, m.since))?.code ?? null : null;
+    return moveErrorLine(message, code ?? opCode, { app: subject(), sourceEngine: sourceEngine(), targetEngine: m?.targetEngine ?? 'the other Engine' });
+  };
+
+  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine, formatLine };
 };

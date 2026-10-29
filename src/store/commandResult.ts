@@ -39,7 +39,7 @@ export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId'
 
 export type TraceOutcome =
   | { kind: 'ok' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; code?: string | null };
 
 const ANSI_RE = /\u001b\[[0-9;]*m/g;
 const clean = (s: string): string => s.replace(ANSI_RE, '').trim();
@@ -117,13 +117,26 @@ export const findCommandTrace = (
   ) ?? null;
 };
 
+/** The trace's machine code: errorCode, else an upper-case `code` in the JSON result; null when none. */
+export const traceErrorCode = (trace: CommandTrace): string | null => {
+  if (typeof trace.errorCode === 'string' && trace.errorCode) return trace.errorCode;
+  try {
+    const raw: unknown = trace.result;
+    const r = (typeof raw === 'string' && raw ? JSON.parse(raw) : raw) as { code?: unknown } | null;
+    return typeof r?.code === 'string' && /^[A-Z][A-Z_]+$/.test(r.code) ? r.code : null;
+  } catch {
+    return null;
+  }
+};
+
 /** Outcome of a closed trace (null while running). */
 export const traceOutcome = (trace: CommandTrace, command: string): TraceOutcome | null => {
   if (trace.status === 'running') return null;
   const errorLogs = (trace.logs ?? []).filter((l) => l.level === 'error');
   const lastErrorLog = errorLogs.length > 0 ? clean(errorLogs[errorLogs.length - 1].message) : '';
   if (trace.status === 'error') {
-    return { kind: 'error', message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed` };
+    const code = traceErrorCode(trace);
+    return { kind: 'error', message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed`, ...(code ? { code } : {}) };
   }
   if (lastErrorLog) return { kind: 'error', message: lastErrorLog };
   return { kind: 'ok' };
@@ -149,7 +162,7 @@ export type CommandResultState =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'success' }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; code?: string | null }
   | { kind: 'timeout' }
   /** Cross-engine: sent to another Engine, waiting for confirmation (neutral, not red). */
   | { kind: 'sent'; engine: string };
@@ -241,7 +254,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     if (o.kind === 'error') {
       clearTimer();
       setPending(null);
-      setState({ kind: 'error', message: o.message });
+      setState(o.code ? { kind: 'error', message: o.message, code: o.code } : { kind: 'error', message: o.message });
       return;
     }
     if (!opts.isSuccess || opts.isSuccess()) {

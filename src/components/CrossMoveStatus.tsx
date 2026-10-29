@@ -20,7 +20,7 @@ const CrossMoveStatus: Component<{ store: Accessor<Store | null>; move: Accessor
   });
   const outcome = createMemo(() => {
     const m = props.move();
-    const o = m ? moveOutcome(op(), m.app, m.targetEngine, '') : null;
+    const o = m ? moveOutcome(op(), { app: m.app, targetEngine: m.targetEngine, sourceEngine: m.sourceEngine }) : null;
     return o && o.kind !== 'failed' ? o : null;
   });
   return (
