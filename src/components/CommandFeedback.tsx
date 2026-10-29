@@ -31,6 +31,8 @@ export const COMMAND_VERBS: Record<string, string> = {
   cancelFlash: 'cancel the flash of',
   // agent-engine-dev#220
   renameInstance: 'rename',
+  // idea#347
+  removeInstance: 'remove',
 };
 
 export const commandVerb = (command: string | null): string =>
