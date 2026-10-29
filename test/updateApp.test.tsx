@@ -4,7 +4,7 @@ import InstanceRow from '../src/components/InstanceRow';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
-  confirmText, friendlyUpdateError, pausedText, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
+  confirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
 
@@ -107,11 +107,24 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(stepLabel('Fetch', p, 'library-pi')).toBe('Copying from library-pi: 1.5 of 3.0 GB');
     expect(['Check', 'Snapshot', 'Swap', 'Start', 'Health'].map((s) => stepLabel(s, null, 'x')))
       .toEqual(['Checking', 'Saving a safety copy', 'Installing', 'Starting', 'Checking it works']);
-    expect(pausedText({ reason: 'temperature', bytesDone: null, bytesTotal: null }, 'library-pi'))
+    expect(pausedText({ reason: 'thermal', bytesDone: null, bytesTotal: null, since: null }, 'library-pi'))
       .toBe('Paused while library-pi cools down. The copy continues by itself.');
     const next = applyUpdateProgress({}, { type: 'idea/updateProgress', engineId: 'ENG1', instanceId: 'i1', step: 'Fetch', bytesDone: 1, bytesTotal: 2 }, 5);
-    expect(next.i1).toEqual({ step: 'Fetch', bytesDone: 1, bytesTotal: 2, receivedAt: 5 });
+    expect(next.i1).toEqual({ step: 'Fetch', bytesDone: 1, bytesTotal: 2, fetchPaused: null, receivedAt: 5 });
     expect(applyUpdateProgress(next, { type: 'idea/hb', engineId: 'ENG1' }, 6)).toBe(next);
+  });
+  it('engine PR #274 shapes: fetchPaused on idea/updateProgress, TRANSFER_FAILED with colon, --source keeps newAppId', () => {
+    const msg = { type: 'idea/updateProgress', engineId: 'ENG1', instanceId: 'i9', step: 'Fetch', bytesDone: 0, bytesTotal: 1000,
+      fetchPaused: { reason: 'thermal', bytesDone: 0, bytesTotal: 1000, since: 1000 } };
+    expect(applyUpdateProgress({}, msg, 7).i9.fetchPaused).toEqual({ reason: 'thermal', bytesDone: 0, bytesTotal: 1000, since: 1000 });
+    receiveUpdateProgress(msg, 7);
+    const i9 = inst({ id: 'i9' });
+    expect(fetchPausedOf(i9, null)).toEqual({ reason: 'thermal', bytesDone: 0, bytesTotal: 1000, since: 1000 });
+    receiveUpdateProgress({ ...msg, bytesDone: 10, fetchPaused: undefined }, 8);
+    expect(fetchPausedOf(i9, null)).toBeNull();
+    expect(friendlyUpdateError('TRANSFER_FAILED: rsync failed after 3 retries', ctx)).toBe(REFUSAL_TEXT.TRANSFER_FAILED(ctx));
+    expect(buildUpdateAppCommand('i1', { toAppId: 'kolibri-1.1', sourceDiskId: 'r1', major: false }))
+      .toBe('updateApp i1 kolibri-1.1 --source r1');
   });
   it('outcomes: updated, rolled back, stopped', () => {
     expect(updateOutcome(op('Running'), inst(), 'Kolibri', '0.15.5', ctx)).toBeNull();

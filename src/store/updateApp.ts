@@ -11,7 +11,7 @@
  *  - command  `updateApp <instanceId> <newAppId> [--source <diskId>] [--allow-major]`
  *  - caps     `updateApp`, `updateAppFetch`
  *  - instance `updateAvailable: { appId, sourceDiskId?, engineId? }`, `previousAppId`,
- *             optional `fetchPaused: { reason, bytesDone, bytesTotal, since }`
+ *             optional `fetchPaused: { reason: 'thermal', bytesDone, bytesTotal, since }` (engine PR #274)
  *             (the agreed design's richer fields — diskId, major, fromVersion,
  *             toVersion, estimatedMinutes, sourceEngineId, sizeBytes, migrationNote —
  *             are read too when present)
@@ -180,7 +180,7 @@ const STEP_LABEL: Record<Exclude<UpdateStep, 'Fetch'>, string> = {
   Health: 'Checking it works',
 };
 
-export interface UpdateProgress { step: string | null; bytesDone: number | null; bytesTotal: number | null; receivedAt: number }
+export interface UpdateProgress { step: string | null; bytesDone: number | null; bytesTotal: number | null; fetchPaused?: FetchPaused | null; receivedAt: number }
 
 const GB = 1024 ** 3;
 const gb = (n: number): string => (n / GB).toFixed(1);
@@ -214,15 +214,24 @@ export const isUpdateRunning = (op: Operation | null): boolean => {
 export const currentStep = (op: Operation | null, p: UpdateProgress | null): string | null =>
   p?.step ?? str(rawOf(op as unknown as Raw).step) ?? op?.stepLabel ?? null;
 
-export interface FetchPaused { reason: string; bytesDone: number | null; bytesTotal: number | null }
-export const fetchPausedOf = (inst: Instance | undefined, op: Operation | null): FetchPaused | null => {
-  const f = rawOf(rawOf(inst as unknown as Raw).fetchPaused ?? rawOf(op as unknown as Raw).fetchPaused);
+export interface FetchPaused { reason: string; bytesDone: number | null; bytesTotal: number | null; since: number | null }
+const pausedFrom = (f: Raw): FetchPaused | null => {
   const reason = str(f.reason);
-  return reason ? { reason, bytesDone: num(f.bytesDone), bytesTotal: num(f.bytesTotal) } : null;
+  return reason ? { reason, bytesDone: num(f.bytesDone), bytesTotal: num(f.bytesTotal), since: num(f.since) } : null;
+};
+/**
+ * Engine PR #274: fetchPaused rides on the latest idea/updateProgress message
+ * (a later message without it means the copy resumed). Instance/op fields are
+ * kept as a fallback.
+ */
+export const fetchPausedOf = (inst: Instance | undefined, op: Operation | null): FetchPaused | null => {
+  const live = inst ? progress()[inst.id] : undefined;
+  if (live) return live.fetchPaused ?? null;
+  return pausedFrom(rawOf(rawOf(inst as unknown as Raw).fetchPaused ?? rawOf(op as unknown as Raw).fetchPaused));
 };
 
 export const pausedText = (p: FetchPaused, sourceEngine: string): string =>
-  p.reason === 'temperature'
+  p.reason === 'thermal' || p.reason === 'temperature'
     ? `Paused while ${sourceEngine} cools down. The copy continues by itself.`
     : `The copy from ${sourceEngine} is paused. It continues by itself.`;
 
@@ -277,7 +286,7 @@ export const applyUpdateProgress = (
   if (m.type !== PROGRESS_TYPE) return state;
   const id = str(m.instanceId);
   if (!id) return state;
-  return { ...state, [id]: { step: str(m.step), bytesDone: num(m.bytesDone), bytesTotal: num(m.bytesTotal), receivedAt } };
+  return { ...state, [id]: { step: str(m.step), bytesDone: num(m.bytesDone), bytesTotal: num(m.bytesTotal), fetchPaused: pausedFrom(rawOf(m.fetchPaused)), receivedAt } };
 };
 
 export const receiveUpdateProgress = (message: unknown, receivedAt: number = Date.now()): void => {
