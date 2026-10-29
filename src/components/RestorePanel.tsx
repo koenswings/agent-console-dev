@@ -5,6 +5,9 @@ import type { CommandLogState } from '../store/commandLog';
 import { isInstanceLocked } from '../store/operations';
 import CommandFeedback from './CommandFeedback';
 import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
+import {
+  backupDateText, currentDiskName, isSameDiskRestore, otherDiskButton, otherDiskSummary, type RestoreWords,
+} from '../store/restoreConfirm';
 import type { Disk, Instance, Store } from '../types/store';
 
 interface RestorePanelProps {
@@ -72,7 +75,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     setConfirmingId(instanceId);
   };
 
-  const handleConfirm = (inst: Instance, result: CommandResult) => {
+  const handleConfirm = (inst: Instance, result: CommandResult, onSent?: () => void) => {
     const engineId = props.engineId();
     const s = props.store();
     const targetDiskId = targetSelections()[inst.id];
@@ -87,6 +90,7 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
       engineId,
       remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id, { engineId, args: { targetDiskId: targetDisk.id } })),
     });
+    onSent?.();
     setConfirmingId(null);
     // Clear the target selection so the button re-disables
     setTargetSelections((prev) => {
@@ -143,6 +147,20 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                   longRunning: true,
                 });
 
+                const words = (): RestoreWords => ({
+                  app: inst.name,
+                  date: backupDateText(inst.lastBackup),
+                  target: selectedDiskName(),
+                  current: currentDiskName(props.store(), inst),
+                });
+                const sameDisk = () => isSameDiskRestore(inst, selectedDiskId());
+                // Summary words, captured when sent (the selection is cleared then).
+                const [sentWords, setSentWords] = createSignal<RestoreWords | null>(null);
+                const summary = () => {
+                  const w = sentWords();
+                  return w && result.state().kind === 'success' ? otherDiskSummary(w) : null;
+                };
+
                 const selectedDiskName = () => {
                   const s = props.store();
                   const id = selectedDiskId();
@@ -190,19 +208,45 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                       </button>
                     </Show>
 
-                    {/* Inline confirmation */}
+                    {/* Inline confirmation (agent-engine-dev#191 wording) */}
                     <Show when={isConfirming()}>
-                      <div class="restore-panel__confirm">
-                        <p class="restore-panel__confirm-text">
-                          Are you sure? This will overwrite <strong>{inst.name}</strong> on <strong>{selectedDiskName()}</strong>.
-                        </p>
+                      <div class="restore-panel__confirm" data-testid={`restore-confirm-box-${inst.id}`}>
+                        <Show
+                          when={!sameDisk()}
+                          fallback={
+                            <p class="restore-panel__confirm-text" data-testid={`restore-confirm-text-${inst.id}`}>
+                              Restore <strong>{words().app}</strong> from the backup of {words().date}? The app will be stopped and its data replaced with the backup. Changes made since {words().date} will be lost.
+                            </p>
+                          }
+                        >
+                          <p class="restore-panel__confirm-text" data-testid={`restore-confirm-text-${inst.id}`}>
+                            Restore <strong>{words().app}</strong> from the backup of {words().date} onto <strong>{words().target}</strong>?
+                          </p>
+                          <ul class="restore-panel__confirm-points" data-testid={`restore-confirm-points-${inst.id}`}>
+                            <li>The running copy of {words().app} on <strong>{words().current}</strong> will be stopped.</li>
+                            <li>From now on, {words().app} will run from <strong>{words().target}</strong>.</li>
+                            <li>The old copy on {words().current} is not deleted. It stays there until you remove it.</li>
+                          </ul>
+                        </Show>
                         <div class="restore-panel__confirm-actions">
                           <button class="btn" data-testid={`restore-cancel-${inst.id}`} onClick={handleCancel}>Cancel</button>
-                          <button class="btn btn--danger" data-testid={`restore-confirm-${inst.id}`} onClick={() => handleConfirm(inst, result)}>
-                            Confirm Restore
+                          <button
+                            class="btn btn--danger"
+                            data-testid={`restore-confirm-${inst.id}`}
+                            onClick={() => {
+                              const w = words();
+                              const other = !sameDisk();
+                              handleConfirm(inst, result, () => setSentWords(other ? w : null));
+                            }}
+                          >
+                            {sameDisk() ? 'Restore' : otherDiskButton(words().target)}
                           </button>
                         </div>
                       </div>
+                    </Show>
+
+                    <Show when={summary()}>
+                      <p class="restore-panel__summary" role="status" data-testid={`restore-summary-${inst.id}`}>{summary()}</p>
                     </Show>
 
                     <CommandFeedback

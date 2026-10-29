@@ -3743,3 +3743,13 @@ body {
 .btn--remove {
   color: #b42318;
 }
+
+/* agent-engine-dev#191: restore-to-another-disk confirm */
+.restore-panel__confirm-points {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+.restore-panel__summary {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+}

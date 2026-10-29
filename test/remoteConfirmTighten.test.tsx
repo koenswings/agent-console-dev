@@ -297,7 +297,7 @@ describe('RestorePanel (remote): a restore op that existed before the click does
     ));
     fireEvent.change(screen.getByRole('combobox'), { target: { value: MOCK_IDS.DISK_2_ID } });
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
+    fireEvent.click(document.querySelector('[data-testid^="restore-confirm-"]:not([data-testid*="-box-"]):not([data-testid*="-text-"]):not([data-testid*="-points-"])') as HTMLElement);
     expect(send).toHaveBeenCalledWith(E2, `restoreApp ${KOLIBRI} ${MOCK_IDS.DISK_2_ID}`);
     // unrelated store churn: the pre-existing Done op must not confirm
     setStore(withOp(store(), done('earlier', MOCK_IDS.DISK_2_ID)));
