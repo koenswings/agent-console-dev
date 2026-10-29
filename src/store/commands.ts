@@ -44,7 +44,9 @@ export type EngineCapability =
   | 'diskCandidates'
   // console#168 (provisional, see store/updateApp.ts)
   | 'updateApp'
-  | 'updateAppFetch';
+  | 'updateAppFetch'
+  // idea#347 (option A: quarantine)
+  | 'removeInstance';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -398,4 +400,17 @@ export const restoreApp = (
 /** Send a prebuilt command string (adapters own their command shapes). */
 export const sendRawCommand = (engineId: string, command: string): void => {
   _sendCommand(engineId, command);
+};
+
+/**
+ * Build the "removeInstance" command string (idea#347, option A).
+ * Format: "removeInstance <instanceId>". The Engine deletes nothing: it runs
+ * compose down without -v and moves the instance folder into the disk's
+ * .idea-quarantine, then drops the instanceDB record.
+ */
+export const buildRemoveInstanceCommand = (instanceId: string): string =>
+  `removeInstance ${instanceId}`;
+
+export const removeInstance = (engineId: string, instanceId: string): void => {
+  _sendCommand(engineId, buildRemoveInstanceCommand(instanceId));
 };
