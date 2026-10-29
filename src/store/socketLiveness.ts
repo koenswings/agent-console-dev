@@ -17,7 +17,7 @@
  *   handles and listeners) and the Repo re-syncs. Redials are spaced by
  *   BACKOFF_MS (25 s, 50 s, 100 s, then 100 s) until anything is heard again.
  *   A silent socket is redialled at once (its 25 s of silence was the first
- *   wait); a closed socket waits 25 s. The adapter's own 5 s retry is off
+ *   wait); a closed socket is redialled after 5 s, then 25/50/100 s. The adapter's own 5 s retry is off
  *   (singleSocketAdapter.ts), so this is the only retry, and each redial fully
  *   tears down the previous socket.
  */
@@ -26,6 +26,8 @@ export const CHECK_MS = 5_000;
 export const DEAD_MS = 25_000;
 export const MAX_DEAD_MS = 100_000;
 /** Wait before redial n (0-based) while nothing is heard; the last repeats. */
+/** First redial after a closed or refused socket. */
+export const FIRST_RETRY_MS = 5_000;
 export const BACKOFF_MS = [25_000, 50_000, 100_000] as const;
 
 export interface LivenessClock {
@@ -99,7 +101,10 @@ export const createSocketLiveness = (redial: () => void, opts: LivenessOptions =
   const lost = (silent: boolean) => {
     if (disposed || pending !== null) return;
     setState('reconnecting');
-    if (silent && attempt === 0) { attempt = 1; dial(); } else schedule();
+    if (attempt === 0 && silent) { attempt = 1; dial(); return; }
+    // First retry after a close/refusal is quick (Engine restart); then 25/50/100 s.
+    if (attempt === 0) { pending = clock.setTimeout(dial, FIRST_RETRY_MS); return; }
+    schedule();
   };
 
   const check = () => {

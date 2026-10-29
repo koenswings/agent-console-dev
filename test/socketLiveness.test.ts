@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { BACKOFF_MS, CHECK_MS, DEAD_MS, createSocketLiveness, forceReconnect, type ReconnectableAdapter, type SocketState } from '../src/store/socketLiveness';
+import { BACKOFF_MS, FIRST_RETRY_MS, CHECK_MS, DEAD_MS, createSocketLiveness, forceReconnect, type ReconnectableAdapter, type SocketState } from '../src/store/socketLiveness';
 
 const clock = () => ({
   now: () => Date.now(),
@@ -63,7 +63,7 @@ describe('socket liveness watchdog (agent-engine-dev#168)', () => {
 const MAX = BACKOFF_MS[BACKOFF_MS.length - 1];
 
 describe('reconnect backoff 25/50/100 s', () => {
-  it('constants', () => { expect([...BACKOFF_MS]).toEqual([25_000, 50_000, 100_000]); });
+  it('constants', () => { expect([...BACKOFF_MS]).toEqual([25_000, 50_000, 100_000]); expect(FIRST_RETRY_MS).toBe(5_000); });
   it('silent socket: redial at once, then every 50, 100, 100 s until heard', () => {
     const dial = vi.fn();
     const l = createSocketLiveness(dial, { clock: clock() });
@@ -79,17 +79,21 @@ describe('reconnect backoff 25/50/100 s', () => {
     vi.advanceTimersByTime(DEAD_MS - 1); expect(dial).toHaveBeenCalledTimes(4);
     l.dispose();
   });
-  it('closed socket: redial after 25, then 50, then 100 s; repeated drops do not add dials', () => {
+  it('closed socket: first retry after 5 s, then 25, 50, 100, 100 s; repeated drops add no dials', () => {
     const dial = vi.fn();
     const l = createSocketLiveness(dial, { clock: clock() });
     l.dropped();
-    vi.advanceTimersByTime(25_000 - 1); expect(dial).toHaveBeenCalledTimes(0);
+    vi.advanceTimersByTime(FIRST_RETRY_MS - 1); expect(dial).toHaveBeenCalledTimes(0);
     vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(1);
     l.dropped(); l.dropped();
-    vi.advanceTimersByTime(50_000); expect(dial).toHaveBeenCalledTimes(2);
+    for (const [i, gap] of [25_000, 50_000, 100_000, 100_000].entries()) {
+      vi.advanceTimersByTime(gap - 1); expect(dial).toHaveBeenCalledTimes(i + 1);
+      vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(i + 2);
+      l.dropped();
+    }
+    l.heard();
     l.dropped();
-    vi.advanceTimersByTime(100_000 - 1); expect(dial).toHaveBeenCalledTimes(2);
-    vi.advanceTimersByTime(1); expect(dial).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(FIRST_RETRY_MS); expect(dial).toHaveBeenCalledTimes(6);
     l.dispose();
   });
   it('state: live -> reconnecting on loss -> live on the first inbound message', () => {

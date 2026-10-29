@@ -101,16 +101,16 @@ describe('single socket adapter (agent-engine-dev#168)', () => {
     l.dispose(); a.disconnect();
   });
 
-  it('a refused socket (close event) waits 25 s, then 50 s', () => {
+  it('a refused socket (close event) is retried after 5 s, then 25 s', () => {
     const { a, l } = setup();
     MockWebSocket.all[0].close();               // Engine restarted
     expect(l.state()).toBe('reconnecting');
-    vi.advanceTimersByTime(25_000 - 1);
+    vi.advanceTimersByTime(5_000 - 1);
     expect(MockWebSocket.all).toHaveLength(1);
     vi.advanceTimersByTime(1);
     expect(MockWebSocket.all).toHaveLength(2);
     MockWebSocket.all[1].close();               // refused again
-    vi.advanceTimersByTime(50_000 - 1);
+    vi.advanceTimersByTime(25_000 - 1);
     expect(MockWebSocket.all).toHaveLength(2);
     vi.advanceTimersByTime(1);
     expect(MockWebSocket.all).toHaveLength(3);
