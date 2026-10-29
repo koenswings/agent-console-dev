@@ -316,7 +316,7 @@ describe('RestorePanel restore on another Engine', () => {
     ));
     fireEvent.change(screen.getByRole('combobox'), { target: { value: MOCK_IDS.DISK_2_ID } });
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
+    fireEvent.click(document.querySelector('[data-testid^="restore-confirm-"]:not([data-testid*="-box-"]):not([data-testid*="-text-"]):not([data-testid*="-points-"])') as HTMLElement);
     return { store, setStore };
   };
 

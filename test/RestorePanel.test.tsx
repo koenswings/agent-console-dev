@@ -94,9 +94,9 @@ describe('RestorePanel', () => {
     renderPanel();
     selectFirstTargetDisk();
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    expect(screen.getByRole('button', { name: /confirm restore/i })).toBeInTheDocument();
+    expect(screen.getByTestId(`restore-confirm-${MOCK_IDS.INST_KOLIBRI_ID}`)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
-    expect(screen.getByText(/are you sure/i)).toBeInTheDocument();
+    expect(screen.getByTestId(`restore-confirm-text-${MOCK_IDS.INST_KOLIBRI_ID}`).textContent).toMatch(/^Restore kolibri from the backup of /);
   });
 
   it('Confirm Restore calls sendCommand with correct args', () => {
@@ -105,7 +105,7 @@ describe('RestorePanel', () => {
     renderPanel();
     const option = selectFirstTargetDisk();
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
+    fireEvent.click(screen.getByTestId(`restore-confirm-${MOCK_IDS.INST_KOLIBRI_ID}`));
     expect(mock).toHaveBeenCalledOnce();
     const [engineId, cmd] = mock.mock.calls[0];
     expect(engineId).toBe(MOCK_IDS.ENGINE_1_ID);
@@ -119,8 +119,8 @@ describe('RestorePanel', () => {
     renderPanel();
     selectFirstTargetDisk();
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm restore/i }));
-    expect(screen.queryByRole('button', { name: /confirm restore/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId(`restore-confirm-${MOCK_IDS.INST_KOLIBRI_ID}`));
+    expect(screen.queryByTestId(`restore-confirm-${MOCK_IDS.INST_KOLIBRI_ID}`)).not.toBeInTheDocument();
     expect(screen.getByText('kolibri')).toBeInTheDocument();
     // Selection cleared → Restore disabled again
     expect(screen.getByRole('button', { name: /^restore$/i })).toBeDisabled();
@@ -131,7 +131,7 @@ describe('RestorePanel', () => {
     selectFirstTargetDisk();
     fireEvent.click(screen.getByRole('button', { name: /^restore$/i }));
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
-    expect(screen.queryByRole('button', { name: /confirm restore/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`restore-confirm-${MOCK_IDS.INST_KOLIBRI_ID}`)).not.toBeInTheDocument();
     expect(screen.getByText('kolibri')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^restore$/i })).toBeInTheDocument();
   });
