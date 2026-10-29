@@ -9,19 +9,19 @@
  * connected Engine for all its peers, see live.ts). So any inbound message on
  * the adapter counts as "heard".
  *
- * - The watchdog checks every CHECK_MS (5 s). After DEAD_MS (15 s) without any
+ * - The watchdog checks every CHECK_MS (5 s). After DEAD_MS (25 s) without any
  *   inbound message it forces a reconnect on the SAME adapter (same Repo, same
  *   doc handles and listeners), and the Repo re-syncs.
  * - Capability by observation: it only arms after the first 'idea/hb' on this
  *   connection. Older Engines that send no hb behave exactly as before.
  * - Backoff: each forced reconnect with nothing heard since doubles the silence
- *   allowed (15 s, 30 s, 60 s, capped at MAX_DEAD_MS). Any inbound message
+ *   allowed (25 s, 50 s, 100 s, capped at MAX_DEAD_MS). Any inbound message
  *   resets it. The adapter's own retry (every 5 s) redials a refused socket.
  */
 
 export const CHECK_MS = 5_000;
-export const DEAD_MS = 15_000;
-export const MAX_DEAD_MS = 60_000;
+export const DEAD_MS = 25_000;
+export const MAX_DEAD_MS = 100_000;
 
 export interface LivenessClock {
   now: () => number;

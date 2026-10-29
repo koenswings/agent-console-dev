@@ -15,7 +15,7 @@ describe('socket liveness watchdog (agent-engine-dev#168)', () => {
     expect(dead).not.toHaveBeenCalled();
     l.dispose();
   });
-  it('drops after 15 s of silence, checked every 5 s; hb every 10 s keeps it alive', () => {
+  it('drops after 25 s of silence, checked every 5 s; hb every 10 s keeps it alive', () => {
     const dead = vi.fn();
     const l = createSocketLiveness(dead, clock());
     l.beat();
@@ -36,16 +36,18 @@ describe('socket liveness watchdog (agent-engine-dev#168)', () => {
     expect(dead).not.toHaveBeenCalled();
     l.dispose();
   });
-  it('backs off 15, 30, 60, 60 s while nothing is heard, and resets on traffic', () => {
+  it('backs off 25, 50, 100, 100 s while nothing is heard, and resets on traffic', () => {
     const dead = vi.fn();
     const l = createSocketLiveness(dead, clock());
     l.beat();
     expect(l.deadAfterMs()).toBe(DEAD_MS);
-    vi.advanceTimersByTime(DEAD_MS); expect(dead).toHaveBeenCalledTimes(1); expect(l.deadAfterMs()).toBe(30_000);
-    vi.advanceTimersByTime(30_000); expect(dead).toHaveBeenCalledTimes(2); expect(l.deadAfterMs()).toBe(MAX_DEAD_MS);
+    expect([DEAD_MS, MAX_DEAD_MS]).toEqual([25_000, 100_000]);
+    vi.advanceTimersByTime(DEAD_MS); expect(dead).toHaveBeenCalledTimes(1); expect(l.deadAfterMs()).toBe(50_000);
+    vi.advanceTimersByTime(50_000); expect(dead).toHaveBeenCalledTimes(2); expect(l.deadAfterMs()).toBe(MAX_DEAD_MS);
     vi.advanceTimersByTime(MAX_DEAD_MS); expect(dead).toHaveBeenCalledTimes(3); expect(l.deadAfterMs()).toBe(MAX_DEAD_MS);
     l.heard();
     expect(l.deadAfterMs()).toBe(DEAD_MS);
+    expect([DEAD_MS, MAX_DEAD_MS]).toEqual([25_000, 100_000]);
     l.dispose();
   });
   it('dispose stops the timer', () => {
