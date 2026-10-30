@@ -141,12 +141,14 @@ Playwright spec for updateApp on a real Engine: minor update succeeds, major wit
 
 ```bash
 UPDATE_E2E_ENGINE_HOST=idea04.local CONSOLE_USER=<operator> CONSOLE_PASSWORD=<password> \
-UPDATE_E2E_MINOR_INSTANCE_ID=<id> UPDATE_E2E_MINOR_TO=1.1.0 \
-UPDATE_E2E_MAJOR_INSTANCE_ID=<id> UPDATE_E2E_MAJOR_TO=2.0.0 UPDATE_E2E_BACKUP_DISK_ID=<diskId> \
-UPDATE_E2E_STALE_INSTANCE_ID=<id> pnpm test:e2e e2e/update-app.spec.ts
+UPDATE_E2E_MINOR_INSTANCE_ID=updtest-i76minor UPDATE_E2E_MINOR_TO=1.1 \
+UPDATE_E2E_MAJOR_INSTANCE_ID=updtest-i76major UPDATE_E2E_MAJOR_TO=2.0 UPDATE_E2E_BACKUP_DISK_ID=i76backup \
+UPDATE_E2E_STALE_INSTANCE_ID=updtest-i76stale pnpm test:e2e e2e/update-app.spec.ts
 ```
 
-Fixture: a test App on App Disks in three versions (1.0.0 installed, 1.1.0 minor, 2.0.0 major with `x-app.updatesFrom: [1]`), each with SHA256SUMS, and a docked Backup Disk. The file header lists every variable (`UPDATE_E2E_TIMEOUT_MS` defaults to 15 min).
+`*_TO` is matched as a substring of the update badge text, so `1.1` / `2.0` match Kid's `updtest-1.1` / `updtest-2.0` versions.
+
+Fixture on idea04 (Kid's agent-app-dev#40, written by Atlas): App Disks `updtest10i76` (1.0, carrying the three instances above), `updtest11i76` (minor) and `updtest20i76` (major, `x-app.updatesFrom: [1]`), plus Backup Disk `i76backup`. The Backup Disk's BACKUP.yaml **must link `updtest-i76major`**, or the Back up button won't show. With one linked Backup Disk, Back up starts at once; the spec clicks the disk picker only when it opens (2+ disks). The file header lists every variable (`UPDATE_E2E_TIMEOUT_MS` defaults to 15 min).
 
 ## Deploy (Ops Bot — do not deploy manually)
 
