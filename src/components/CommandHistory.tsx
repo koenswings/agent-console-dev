@@ -3,6 +3,7 @@ import type { Accessor } from 'solid-js';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 
 import LogLines from './LogLines';
+import TechnicalDetails from './TechnicalDetails';
 
 interface CommandHistoryProps {
   commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
@@ -67,7 +68,7 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
                     </span>
                   </div>
                   <Show when={trace.errorMessage}>
-                    <div class="command-history__error">{trace.errorMessage}</div>
+                    <TechnicalDetails raw={trace.errorMessage} class="command-history__error" testId="command-history-error" />
                   </Show>
                   <Show when={expandedIds().has(trace.traceId)}>
                     <div class="command-history__logs">
