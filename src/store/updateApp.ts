@@ -127,7 +127,7 @@ const fromTo = (o: Pick<UpdateOffer, 'fromVersion' | 'toVersion'>): string =>
   isUnversioned(o.fromVersion) ? o.toVersion : `${o.fromVersion} to ${o.toVersion}`;
 
 export const badgeText = (o: UpdateOffer, sourceEngine: string | null): string =>
-  `Update available: ${fromTo(o)}` + (sourceEngine ? ` (on a disk in ${sourceEngine})` : '');
+  `Update available: ${fromTo(o)}` + (sourceEngine ? ` (from the disk in ${sourceEngine})` : '');
 
 /** Shown in the confirm for a major update (Engine: --allow-major + a backup from the last hour). */
 export const majorConfirmText = (app: string, o: Pick<UpdateOffer, 'toVersion'>): string =>
@@ -150,6 +150,17 @@ export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | 
 };
 
 export const NEEDS_BACKUP_TEXT = 'Dock a Backup Disk and make a backup first';
+/** Design §7.3: Update is disabled for a major with this hint until a fresh backup exists. */
+export const MAKE_BACKUP_FIRST_TEXT = 'Make a backup first';
+/** Engine UpdateAppPolicy.BACKUP_MAX_AGE_MS: a major needs a backup under 1 h old. */
+export const BACKUP_MAX_AGE_MS = 60 * 60 * 1000;
+/** Upfront gate from `instance.lastBackup` (the field the Engine checks); the Engine still decides. */
+export const majorNeedsBackup = (o: Pick<UpdateOffer, 'major'> | null, lastBackup: number | null | undefined, now: number): boolean =>
+  !!o?.major && (lastBackup == null || now - Number(lastBackup) > BACKUP_MAX_AGE_MS);
+
+/** Version as shown to people: an unversioned (SHA/date) build reads "development build (5ab9f64)". */
+export const versionLabel = (v: string | null | undefined): string =>
+  !v ? '-' : isUnversioned(v) ? `development build (${v.length > 12 ? v.slice(0, 7) : v})` : v;
 /** NO_SUMS wording (Steve, 2026-10-28). */
 export const NO_SUMS_TEXT = "This disk's new version can't be checked, so the app wasn't updated. Your app still works as before. Ask for a fresh copy of this App Disk.";
 

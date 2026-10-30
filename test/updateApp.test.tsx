@@ -4,7 +4,7 @@ import InstanceRow from '../src/components/InstanceRow';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
-  confirmText, isUnversioned, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
+  confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
   OP_KIND, latestUpdateOp,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
@@ -83,7 +83,7 @@ describe('updateApp adapter (provisional shapes)', () => {
   it('badge and confirm wording', () => {
     const o = { toAppId: 'x', fromVersion: '1', toVersion: '2', major: false, estimatedMinutes: 6, sourceDiskId: null, sourceEngineId: null, sizeBytes: null, migrationNote: null };
     expect(badgeText(o, null)).toBe('Update available: 1 to 2');
-    expect(badgeText(o, 'library-pi')).toBe('Update available: 1 to 2 (on a disk in library-pi)');
+    expect(badgeText(o, 'library-pi')).toBe('Update available: 1 to 2 (from the disk in library-pi)');
     expect(confirmText('Kolibri', o, null)).toEqual([
       'Update Kolibri from 1 to 2?', "Your learners' work is kept.", 'Kolibri is unavailable for up to 6 minutes.',
       "If the new version doesn't work, IDEA switches back to the old one by itself.",
@@ -107,6 +107,24 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(lines[1]).toBe(majorConfirmText('Kolibri', o));
     expect(lines[1]).toBe('Kolibri 1.1-0.19.5 is a major update. It only starts if Kolibri was backed up in the last hour.');
     expect(buildUpdateAppCommand('i1', o)).toContain('--allow-major');
+  });
+  it('major: upfront backup gate from lastBackup; version label (idea#76)', () => {
+    const now = 10 * BACKUP_MAX_AGE_MS;
+    expect(majorNeedsBackup({ major: false }, null, now)).toBe(false);
+    expect(majorNeedsBackup({ major: true }, null, now)).toBe(true);
+    expect(majorNeedsBackup({ major: true }, now - BACKUP_MAX_AGE_MS - 1, now)).toBe(true);
+    expect(majorNeedsBackup({ major: true }, now - 60_000, now)).toBe(false);
+    expect(versionLabel('5ab9f64')).toBe('development build (5ab9f64)');
+    expect(versionLabel('5ab9f64c1d2e3f4a5b6c')).toBe('development build (5ab9f64)');
+    expect(versionLabel('1.1-0.19.5')).toBe('1.1-0.19.5');
+    expect(versionLabel(undefined)).toBe('-');
+  });
+  it('every Engine refusal code has a plain sentence', () => {
+    for (const code of ['NOT_NEWER', 'MAJOR_NOT_ALLOWED', 'NEEDS_BACKUP', 'NO_SPACE', 'NO_SUMS', 'TRANSFER_FAILED', 'HELPER_OUTDATED', 'NOT_FOUND', 'AMBIGUOUS', 'SOURCE_UNSUPPORTED']) {
+      const t = friendlyUpdateError(`${code}: x`, ctx);
+      expect(t).not.toContain(code);
+      expect(t.length).toBeGreaterThan(10);
+    }
   });
   it('maps refusals (CODE: text) to plain sentences', () => {
     expect(friendlyUpdateError('NEEDS_BACKUP: no recent backup', ctx)).toBe(`Make a backup of Kolibri before updating to the new version. ${NEEDS_BACKUP_TEXT}. Your current version keeps working.`);
@@ -200,12 +218,20 @@ describe('UpdateAppControl in InstanceRow', () => {
     const r = row(mkStore(inst({ updateAvailable: { appId: 'kolibri-1.0.0' } })));
     fireEvent.click(r.getByTestId('update-badge-i1'));
     expect(r.getByTestId('update-migration-note-i1').textContent).toBe('Big change: lessons move.');
+    expect((r.getByTestId('update-confirm-btn-i1') as HTMLButtonElement).disabled).toBe(true);
+    expect(r.getByTestId('update-confirm-needs-backup-i1').textContent).toBe('Make a backup first');
+  });
+  it('major with a backup under 1 h: Update enabled', () => {
+    const r = row(mkStore(inst({ lastBackup: Date.now() - 60_000, updateAvailable: { appId: 'kolibri-1.0.0' } })));
+    fireEvent.click(r.getByTestId('update-badge-i1'));
+    expect((r.getByTestId('update-confirm-btn-i1') as HTMLButtonElement).disabled).toBe(false);
+    expect(r.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
   });
   it('greys out the badge when the source Engine is offline', () => {
     const r = row(mkStore(inst({ updateAvailable: { appId: 'kolibri-0.15.6', engineId: 'ENG2' } }), [], false));
     const b = r.getByTestId('update-badge-i1') as HTMLButtonElement;
     expect(b.disabled).toBe(true);
-    expect(b.textContent).toBe('Update available: 0.15.5 to 0.15.6 (on a disk in library-pi)');
+    expect(b.textContent).toBe('Update available: 0.15.5 to 0.15.6 (from the disk in library-pi)');
   });
   it('while running: shows the step, not the Error hint', () => {
     const s = mkStore(inst({ status: 'Error', statusCondition: 'unhealthy' }), [op('Running', { stepLabel: 'Health' })]);

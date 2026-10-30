@@ -10,7 +10,7 @@ import { createCommandResult } from '../store/commandResult';
 import type { CommandLogState } from '../store/commandLog';
 import { isOnline, live, liveNow } from '../store/live';
 import {
-  COMMAND, NEEDS_BACKUP_TEXT, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
+  COMMAND, MAKE_BACKUP_FIRST_TEXT, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
   latestUpdateOp, parseRefusal, pausedText, previousVersionOf, stepLabel, updateOfferFor, updateOutcome,
   updateProgress, type RefusalCtx,
@@ -65,7 +65,10 @@ const UpdateAppControl: Component<Props> = (props) => {
   });
   createEffect(() => { if (running()) setWatching(true); });
 
-  const needsBackup = () => backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
+  const refusedForBackup = () => backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
+  const majorBackupMissing = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow());
+  const needsBackup = () => refusedForBackup() || majorBackupMissing();
+  const backupHint = () => (refusedForBackup() ? NEEDS_BACKUP_TEXT : MAKE_BACKUP_FIRST_TEXT);
   const showBadge = () => {
     const o = offer();
     return !!o && !running() && !isDismissed(id(), o.toAppId);
@@ -106,14 +109,14 @@ const UpdateAppControl: Component<Props> = (props) => {
               class="update-app__badge"
               classList={{ 'update-app__badge--offline': sourceOffline() }}
               data-testid={`update-badge-${id()}`}
-              disabled={sourceOffline() || needsBackup()}
-              title={sourceOffline() ? `${sourceName()} is switched off` : needsBackup() ? NEEDS_BACKUP_TEXT : 'Update'}
+              disabled={sourceOffline() || refusedForBackup()}
+              title={sourceOffline() ? `${sourceName()} is switched off` : refusedForBackup() ? NEEDS_BACKUP_TEXT : 'Update'}
               onClick={() => { result.reset(); setConfirming(true); }}
             >
               {badgeText(offer()!, sourceName())}
             </button>
-            <Show when={needsBackup()}>
-              <span class="edp-form__hint" data-testid={`update-needs-backup-${id()}`}>{NEEDS_BACKUP_TEXT}</span>
+            <Show when={refusedForBackup()}>
+              <span class="edp-form__hint" data-testid={`update-needs-backup-${id()}`}>{backupHint()}</span>
             </Show>
           </div>
         </Show>
@@ -124,6 +127,9 @@ const UpdateAppControl: Component<Props> = (props) => {
               <For each={confirmText(props.appTitle(), o(), sourceName())}>{(line) => <p class="update-app__line">{line}</p>}</For>
               <Show when={o().major && o().migrationNote}>
                 <p class="update-app__note" data-testid={`update-migration-note-${id()}`}>{o().migrationNote}</p>
+              </Show>
+              <Show when={needsBackup()}>
+                <p class="edp-form__hint" data-testid={`update-confirm-needs-backup-${id()}`}>{backupHint()}</p>
               </Show>
               <div class="update-app__buttons">
                 <button class="btn btn--update" data-testid={`update-confirm-btn-${id()}`} disabled={needsBackup() || sourceOffline()} onClick={send}>Update</button>

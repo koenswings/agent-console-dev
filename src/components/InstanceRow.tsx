@@ -1,3 +1,4 @@
+import { versionLabel } from '../store/updateApp';
 import { Show, For, createSignal, createEffect, createMemo, onCleanup, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import StatusDot from './StatusDot';
@@ -672,7 +673,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </div>
             <div class="instance-details__item">
               <dt>Version</dt>
-              <dd>{props.app()?.version ?? '-'}</dd>
+              <dd>{versionLabel(props.app()?.version)}</dd>
             </div>
             <div class="instance-details__item">
               <dt>Engine</dt>
