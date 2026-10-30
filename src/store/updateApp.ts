@@ -58,7 +58,25 @@ const rawOf = (o: unknown): Raw => (o && typeof o === 'object' ? (o as Raw) : {}
 export const versionOf = (appDB: Record<string, App> | undefined, appId: string): string =>
   appDB?.[appId]?.version ?? (appId.includes('-') ? appId.slice(appId.lastIndexOf('-') + 1) : appId);
 
-const majorOf = (v: string): string => v.split('.')[0] ?? v;
+/**
+ * Mirror of Engine `isUnversioned` (agent-engine-dev src/data/Version.ts, idea#76): a git SHA,
+ * a date, a leading component >= 1000 or no number at all is not a release and sorts as 0.0.
+ */
+export const isUnversioned = (raw: string | null | undefined): boolean => {
+  const s = String(raw ?? '').trim();
+  const m = /(\d+(?:\.\d+)*)/.exec(s);
+  if (!m) return true;
+  if (/(^|[^0-9])\d{4}[-._]\d{1,2}[-._]\d{1,2}([^0-9]|$)/.test(s)) return true;
+  for (const tok of s.split(/[^0-9A-Za-z]+/)) {
+    if (!tok) continue;
+    if (/^g?[0-9a-f]{7,40}$/i.test(tok) && /[a-f]/i.test(tok.replace(/^g/i, ''))) return true;
+    if (/^\d{7,}$/.test(tok)) return true;
+  }
+  return Number(m[1].split('.')[0]) >= 1000;
+};
+
+/** Major part; an unversioned version counts as 0, so unversioned -> 1.x is major (as on the Engine). */
+const majorOf = (v: string): string => (isUnversioned(v) ? '0' : (/(\d+)/.exec(v)?.[1] ?? v));
 
 /** The engine an instance runs on (its disk's dockedTo). */
 export const engineIdOfInstance = (store: Store | null, inst: Instance | undefined): string | null => {
@@ -104,12 +122,21 @@ export const buildUpdateAppCommand = (instanceId: string, offer: Pick<UpdateOffe
     ...(offer.major ? ['--allow-major'] : [])].join(' ');
 
 // ── Text ────────────────────────────────────────────────────────────────────
+/** "from X to Y", or just "Y" when the current version is a SHA/date nobody can read. */
+const fromTo = (o: Pick<UpdateOffer, 'fromVersion' | 'toVersion'>): string =>
+  isUnversioned(o.fromVersion) ? o.toVersion : `${o.fromVersion} to ${o.toVersion}`;
+
 export const badgeText = (o: UpdateOffer, sourceEngine: string | null): string =>
-  `Update available: ${o.fromVersion} to ${o.toVersion}` + (sourceEngine ? ` (on a disk in ${sourceEngine})` : '');
+  `Update available: ${fromTo(o)}` + (sourceEngine ? ` (on a disk in ${sourceEngine})` : '');
+
+/** Shown in the confirm for a major update (Engine: --allow-major + a backup from the last hour). */
+export const majorConfirmText = (app: string, o: Pick<UpdateOffer, 'toVersion'>): string =>
+  `${app} ${o.toVersion} is a major update. It only starts if ${app} was backed up in the last hour.`;
 
 export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | null): string[] => {
   const lines = [
-    `Update ${app} from ${o.fromVersion} to ${o.toVersion}?`,
+    isUnversioned(o.fromVersion) ? `Update ${app} to ${o.toVersion}?` : `Update ${app} from ${o.fromVersion} to ${o.toVersion}?`,
+    ...(o.major ? [majorConfirmText(app, o)] : []),
     "Your learners' work is kept.",
     o.estimatedMinutes != null
       ? `${app} is unavailable for up to ${o.estimatedMinutes} minutes.`
@@ -133,7 +160,9 @@ export const parseNoSpace = (detail: string): { needBytes: number; freeBytes: nu
 };
 const gbText = (bytes: number): string => (bytes / 1024 ** 3).toFixed(1);
 
-export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null }
+export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null; toVersion?: string | null }
+
+const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` : '');
 
 export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => string> = {
   NOT_DOCKED: (c) => `The disk with ${c.app} is not in this Engine. Nothing changed.`,
@@ -141,8 +170,8 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   SOURCE_MISSING: (c) => `The disk with the new version is no longer in ${c.engine}. Nothing changed.`,
   DIFFERENT_APP: () => 'That disk has a different app, not a new version of this one. Nothing changed.',
   NOT_NEWER: (c) => `${c.app} is already on this version or newer. Nothing changed.`,
-  MAJOR_NOT_ALLOWED: (c) => `This is a big update for ${c.app} and was not confirmed. Nothing changed.`,
-  NEEDS_BACKUP: () => NEEDS_BACKUP_TEXT,
+  MAJOR_NOT_ALLOWED: (c) => `${c.app}${newVersion(c)} is a major update and can't be installed automatically. Your current version keeps working.`,
+  NEEDS_BACKUP: (c) => `Make a backup of ${c.app} before updating to${newVersion(c) || ' the new version'}. ${NEEDS_BACKUP_TEXT}. Your current version keeps working.`,
   NO_SPACE: (c, detail) => {
     const space = parseNoSpace(detail);
     const disk = c.diskName ?? 'The disk';

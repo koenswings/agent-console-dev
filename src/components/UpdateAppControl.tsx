@@ -53,6 +53,7 @@ const UpdateAppControl: Component<Props> = (props) => {
     fromVersion: fromVersion() ?? offer()?.fromVersion ?? '',
     engine: sourceName() ?? engineLabel(props.store(), props.engine()?.id ?? null),
     diskName: diskName(),
+    toVersion: offer()?.toVersion ?? null,
   });
 
   const result = createCommandResult({ commandLog: props.commandLog, command: COMMAND, argKey: 'instanceId', matchMode: 'includes', longRunning: true });

@@ -4,7 +4,7 @@ import InstanceRow from '../src/components/InstanceRow';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
-  confirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
+  confirmText, isUnversioned, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
   OP_KIND, latestUpdateOp,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
@@ -92,8 +92,26 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(cross[2]).toBe('This can take a while.');
     expect(cross[4]).toBe('The new version is on a disk in library-pi. IDEA copies it here first, and Kolibri keeps working while it copies. Keep library-pi switched on until the copy is done.');
   });
+  it('unversioned (SHA/date) -> 1.x: hides the SHA, counts as major (idea#76)', () => {
+    expect(isUnversioned('5ab9f64')).toBe(true);
+    expect(isUnversioned('zimbabwe-2026-10-20')).toBe(true);
+    expect(isUnversioned('0.0-dev+5ab9f64c1d2e')).toBe(true);
+    expect(isUnversioned('1.1-0.19.5')).toBe(false);
+    expect(isUnversioned('0.15.5')).toBe(false);
+    const i = inst({ updateAvailable: { appId: 'kolibri-1.1-0.19.5', fromVersion: '5ab9f64', toVersion: '1.1-0.19.5' } });
+    const o = updateOfferFor(mkStore(i), i, caps)!;
+    expect(o.major).toBe(true);
+    expect(badgeText(o, null)).toBe('Update available: 1.1-0.19.5');
+    const lines = confirmText('Kolibri', o, null);
+    expect(lines[0]).toBe('Update Kolibri to 1.1-0.19.5?');
+    expect(lines[1]).toBe(majorConfirmText('Kolibri', o));
+    expect(lines[1]).toBe('Kolibri 1.1-0.19.5 is a major update. It only starts if Kolibri was backed up in the last hour.');
+    expect(buildUpdateAppCommand('i1', o)).toContain('--allow-major');
+  });
   it('maps refusals (CODE: text) to plain sentences', () => {
-    expect(friendlyUpdateError('NEEDS_BACKUP: no recent backup', ctx)).toBe(NEEDS_BACKUP_TEXT);
+    expect(friendlyUpdateError('NEEDS_BACKUP: no recent backup', ctx)).toBe(`Make a backup of Kolibri before updating to the new version. ${NEEDS_BACKUP_TEXT}. Your current version keeps working.`);
+    expect(friendlyUpdateError('NEEDS_BACKUP: x', { ...ctx, toVersion: '1.1-0.19.5' })).toBe(`Make a backup of Kolibri before updating to 1.1-0.19.5. ${NEEDS_BACKUP_TEXT}. Your current version keeps working.`);
+    expect(friendlyUpdateError('MAJOR_NOT_ALLOWED: 1 -> 2', { ...ctx, toVersion: '2.0' })).toBe("Kolibri 2.0 is a major update and can't be installed automatically. Your current version keeps working.");
     expect(friendlyUpdateError('NO_SUMS: missing', ctx)).toBe(NO_SUMS_TEXT);
     expect(NO_SUMS_TEXT).toBe("This disk's new version can't be checked, so the app wasn't updated. Your app still works as before. Ask for a fresh copy of this App Disk.");
     expect(friendlyUpdateError('NO_SPACE: Apps disk', ctx)).toContain('Apps disk is full');
