@@ -135,6 +135,19 @@ CONSOLE_URL=http://kind-panda.local CONSOLE_USER=<operator> CONSOLE_PASSWORD=<pa
 - **Checks per Running instance**: Open enabled, href with a numeric port, the right host, the "on <engine>" label, and a GET returning 2xx/3xx with the port kept in any `Location`. The right host is the page host for the serving Engine (engineId from `/api/store-url`, name, or page IP == `lanAddress`), else `lanAddress`, else `<hostname>.local`.
 - **Output**: a PASS/FAIL table. Exit 0 = all pass, 1 = a FAIL, 2 = setup error. Options: `SKIP_DESKTOP=1`, `SKIP_MOBILE=1`, `HEADED=1`, `SYNC_TIMEOUT_MS`, `CHROMIUM_PATH`.
 
+## Live update check: updateApp (e2e/update-app.spec.ts, idea#76)
+
+Playwright spec for updateApp on a real Engine: minor update succeeds, major with a fresh backup succeeds, major with a stale backup is held back ("Make a backup first"). Every case **skips** unless its env vars are set, so `pnpm test:e2e` stays green without a Pi. It changes the Engine: claim the Pi (idea04) first, and drive it from idea02 per the LAN rule. Never golden.
+
+```bash
+UPDATE_E2E_ENGINE_HOST=idea04.local CONSOLE_USER=<operator> CONSOLE_PASSWORD=<password> \
+UPDATE_E2E_MINOR_INSTANCE_ID=<id> UPDATE_E2E_MINOR_TO=1.1.0 \
+UPDATE_E2E_MAJOR_INSTANCE_ID=<id> UPDATE_E2E_MAJOR_TO=2.0.0 UPDATE_E2E_BACKUP_DISK_ID=<diskId> \
+UPDATE_E2E_STALE_INSTANCE_ID=<id> pnpm test:e2e e2e/update-app.spec.ts
+```
+
+Fixture: a test App on App Disks in three versions (1.0.0 installed, 1.1.0 minor, 2.0.0 major with `x-app.updatesFrom: [1]`), each with SHA256SUMS, and a docked Backup Disk. The file header lists every variable (`UPDATE_E2E_TIMEOUT_MS` defaults to 15 min).
+
 ## Deploy (Ops Bot — do not deploy manually)
 
 Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.

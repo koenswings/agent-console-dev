@@ -24,6 +24,7 @@
 import { createSignal } from 'solid-js';
 import { engineHasCapability } from './commands';
 import type { App, Engine, Instance, Operation, Store } from '../types/store';
+import { plainEngineText } from './plainError';
 
 // ── Capabilities ────────────────────────────────────────────────────────────
 export const CAP_UPDATE = 'updateApp' as const;
@@ -181,7 +182,8 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   SOURCE_MISSING: (c) => `The disk with the new version is no longer in ${c.engine}. Nothing changed.`,
   DIFFERENT_APP: () => 'That disk has a different app, not a new version of this one. Nothing changed.',
   NOT_NEWER: (c) => `${c.app} is already on this version or newer. Nothing changed.`,
-  MAJOR_NOT_ALLOWED: (c) => `${c.app}${newVersion(c)} is a major update and can't be installed automatically. Your current version keeps working.`,
+  // Generic on purpose (Axle): also returned for an App whose x-app.updatesFrom doesn't list the current major.
+  MAJOR_NOT_ALLOWED: (c) => `This version of ${c.app} can't be installed over the one you have. Nothing changed.`,
   NEEDS_BACKUP: (c) => `Make a backup of ${c.app} before updating to${newVersion(c) || ' the new version'}. ${NEEDS_BACKUP_TEXT}. Your current version keeps working.`,
   NO_SPACE: (c, detail) => {
     const space = parseNoSpace(detail);
@@ -207,7 +209,7 @@ export const parseRefusal = (message: string): { code: string | null; detail: st
 
 export const friendlyUpdateError = (message: string, ctx: RefusalCtx): string => {
   const { code, detail } = parseRefusal(message);
-  return code ? REFUSAL_TEXT[code](ctx, detail) : message;
+  return code ? REFUSAL_TEXT[code](ctx, detail) : plainEngineText(message);
 };
 
 // ── Operation / progress ────────────────────────────────────────────────────

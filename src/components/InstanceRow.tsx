@@ -30,6 +30,7 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
+import { plainEngineText } from '../store/plainError';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -515,7 +516,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           {(op) => (
             <div class="instance-row__progress instance-row__progress--failed">
               <div class="instance-row__progress-label">
-                Failed: {op().error ?? 'Unknown error'} - Try again
+                Failed: {plainEngineText(op().error)} - Try again
               </div>
             </div>
           )}
@@ -531,7 +532,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </Show>
         <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded() && !updating()}>
           <div class="instance-row__error-hint">
-            {props.instance()!.statusCondition}
+            {plainEngineText(props.instance()!.statusCondition)}
           </div>
         </Show>
         <UpdateAppControl

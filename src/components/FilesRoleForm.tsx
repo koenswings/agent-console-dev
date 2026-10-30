@@ -15,6 +15,7 @@ import { remoteWatchFor } from '../store/remoteConfirm';
 import type { Store } from '../types/store';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk } from '../types/store';
+import { plainEngineText } from '../store/plainError';
 
 export interface FilesRoleFormFooterArgs {
   shareName: string;
@@ -91,7 +92,7 @@ const FilesRoleForm: Component<FilesRoleFormProps> = (props) => {
       <Show when={(() => { const s = result.state(); return s.kind === 'sent' ? s.engine : null; })()}>
         {(engine) => <p class="edp-form__hint files-form__status" role="status">Sent to {engine()}, waiting for confirmation…</p>}
       </Show>
-      <Show when={(() => { const s = result.state(); return s.kind === 'error' ? s.message : null; })()}>
+      <Show when={(() => { const s = result.state(); return s.kind === 'error' ? plainEngineText(s.message) : null; })()}>
         {(msg) => <p class="edp-form__error files-form__result" role="alert">{msg()}</p>}
       </Show>
       <Show when={result.state().kind === 'timeout'}>

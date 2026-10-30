@@ -34,6 +34,7 @@ import {
 import { formatBytes } from '../store/diskRoles';
 import type { CommandLogState } from '../store/commandLog';
 import type { ContentSummary, Store } from '../types/store';
+import { plainEngineText } from '../store/plainError';
 
 export type EraseMode = 'erase' | 'erase-then-files';
 
@@ -112,7 +113,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     if (trace.status === 'error') {
       setPhase({
         kind: 'summary-error',
-        message: (trace.errorMessage ?? '').trim() || 'Could not read the disk.',
+        message: trace.errorMessage?.trim() ? plainEngineText(trace.errorMessage) : 'Could not read the disk.',
       });
       return;
     }
@@ -189,7 +190,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     if (trace.status === 'error') {
       setPhase({
         kind: 'error',
-        message: (trace.errorMessage ?? '').trim() || 'Erase failed.',
+        message: trace.errorMessage?.trim() ? plainEngineText(trace.errorMessage) : 'Erase failed.',
       });
       return;
     }

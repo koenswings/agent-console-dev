@@ -36,6 +36,7 @@ import type { Selection } from './NetworkTree';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk, Store } from '../types/store';
 import type { DragAppData } from '../types/drag';
+import { plainEngineText } from '../store/plainError';
 
 interface DiskViewProps {
   diskId: string;
@@ -154,7 +155,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
       </header>
 
       <Show when={props.filesError}>
-        <p class="edp-form__error" role="alert">{props.filesError}</p>
+        <p class="edp-form__error" role="alert">{plainEngineText(props.filesError)}</p>
       </Show>
 
       <Show when={!dialog()}>
