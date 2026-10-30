@@ -12,6 +12,7 @@
  */
 import { Show, type Accessor, type Component } from 'solid-js';
 import type { CommandResult } from '../store/commandResult';
+import { plainEngineText } from '../store/plainError';
 
 /** Verb per Engine command, for "Couldn't <verb> <subject>: <message>". */
 export const COMMAND_VERBS: Record<string, string> = {
@@ -33,10 +34,16 @@ export const COMMAND_VERBS: Record<string, string> = {
   renameInstance: 'rename',
   // idea#347
   removeInstance: 'remove',
+  // idea#76 and the disk adapters
+  updateApp: 'update',
+  upgradeEngine: 'update',
+  eraseDisk: 'erase',
+  createFilesDisk: 'set up',
+  createBackupDisk: 'set up',
 };
 
 export const commandVerb = (command: string | null): string =>
-  (command && COMMAND_VERBS[command]) || command || 'run the command for';
+  (command && COMMAND_VERBS[command]) || 'finish this for'; // never the raw command name (idea#76)
 
 interface CommandFeedbackProps {
   result: CommandResult;
@@ -51,7 +58,7 @@ interface CommandFeedbackProps {
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
   const errorMessage = () => {
     const s = props.result.state();
-    return s.kind === 'error' ? (props.formatError ? props.formatError(s.message) : s.message) : null;
+    return s.kind === 'error' ? plainEngineText(props.formatError ? props.formatError(s.message) : s.message) : null;
   };
   const sentTo = () => {
     const s = props.result.state();

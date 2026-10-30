@@ -5,6 +5,7 @@
  */
 import { engineHasCapability } from './commands';
 import type { Engine, Instance, Store } from '../types/store';
+import { plainEngineText } from './plainError';
 
 export const MAX_NAME_LENGTH = 64;
 
@@ -58,7 +59,7 @@ export const renameRefusalCode = (message: string): string | null => {
 
 export const friendlyRenameError = (message: string): string => {
   const code = renameRefusalCode(message);
-  return code ? RENAME_REFUSALS[code] : message;
+  return code ? RENAME_REFUSALS[code] : plainEngineText(message);
 };
 
 export const canOfferRename = (engine: Engine | null | undefined): boolean =>

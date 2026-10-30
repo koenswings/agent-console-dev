@@ -36,6 +36,7 @@ import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import type { CommandLogState } from '../store/commandLog';
 import type { App, Disk, Engine, Store, BackupMode } from '../types/store';
+import { plainEngineText } from '../store/plainError';
 
 /** installApp can take minutes (image load); keep waiting longer than Files/Backup. */
 export const INSTALL_RESULT_TIMEOUT_MS = 5 * 60_000;
@@ -427,7 +428,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <Show when={sentTo(backupResult)}>
               {(engine) => <p class="edp-form__hint" role="status" data-testid="backup-sent">Sent to {engine()}, waiting for confirmation…</p>}
             </Show>
-            <Show when={(() => { const s = backupResult.state(); return s.kind === 'error' ? s.message : null; })()}>
+            <Show when={(() => { const s = backupResult.state(); return s.kind === 'error' ? plainEngineText(s.message) : null; })()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
             </Show>
             <Show when={backupResult.state().kind === 'timeout'}>
@@ -524,7 +525,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <Show when={sentTo(installResult)}>
               {(engine) => <p class="edp-form__hint" role="status" data-testid="install-sent">Sent to {engine()}, waiting for confirmation…</p>}
             </Show>
-            <Show when={(() => { const s = installResult.state(); return s.kind === 'error' ? s.message : null; })()}>
+            <Show when={(() => { const s = installResult.state(); return s.kind === 'error' ? plainEngineText(s.message) : null; })()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="install-error">{msg()}</p>}
             </Show>
             <Show when={installResult.state().kind === 'timeout'}>
@@ -559,7 +560,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         </Show>
 
         <Show when={props.filesError}>
-          <p class="edp-form__error" role="alert">{props.filesError}</p>
+          <p class="edp-form__error" role="alert">{plainEngineText(props.filesError)}</p>
         </Show>
 
         <Show when={eraseDialog()}>

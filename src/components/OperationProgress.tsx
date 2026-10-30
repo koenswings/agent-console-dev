@@ -14,6 +14,7 @@ import CommandFeedback from './CommandFeedback';
 import { confirmCancelled, remoteWatchFor } from '../store/remoteConfirm';
 import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
+import { plainEngineText } from '../store/plainError';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -158,7 +159,7 @@ const OpCard: Component<OpCardProps> = (props) => {
       </Show>
 
       <Show when={isFailed() && props.op.error}>
-        <div class="operation-card__error">{props.op.error}</div>
+        <div class="operation-card__error">{plainEngineText(props.op.error)}</div>
       </Show>
 
       <Show when={logExpanded()}>

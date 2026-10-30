@@ -21,6 +21,7 @@ import UsbStickRow from './UsbStickRow';
 import { candidateForStick, stickForCandidate } from '../store/usbSticks';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
+import { plainEngineText } from '../store/plainError';
 
 // Eject rule and role badges live in ../store/diskRoles (idea#132).
 export { canEject };
@@ -346,7 +347,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   const ejectNotice = createMemo((): { tone: 'error' | 'info'; text: string } | null => {
                     const s = ejectState();
                     const name = disk()?.name ?? diskId;
-                    if (s.kind === 'error') return { tone: 'error', text: `Couldn't eject ${name}: ${s.message}` };
+                    if (s.kind === 'error') return { tone: 'error', text: `Couldn't eject ${name}: ${plainEngineText(s.message)}` };
                     if (s.kind === 'timeout') return { tone: 'info', text: `No response from the Engine for ejecting ${name}. Check History for details.` };
                     if (s.kind === 'sent') return { tone: 'info', text: `Sent to ${s.watch.engineLabel}, waiting for confirmation…` };
                     return null;

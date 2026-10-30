@@ -154,7 +154,7 @@ describe('RestorePanel shows the Engine error trace', () => {
     expect(alert).toHaveAttribute('role', 'alert');
     expect(alert).toHaveClass('edp-form__error');
     expect(alert.textContent).toContain("Couldn't restore kolibri");
-    expect(alert.textContent).toContain('Too many arguments');
+    expect(alert.textContent).toBe("Couldn't restore kolibri: IDEA couldn't finish this. Try again, or ask for help.");
   });
 
   it('"Target disk … not found" (named args) is shown', () => {
@@ -216,7 +216,7 @@ describe('InstanceRow shows the Engine error trace', () => {
       errorMessage: 'Error: Insufficient arguments',
     })));
     const alert = screen.getByTestId(`instance-cmd-${KOLIBRI}-error`);
-    expect(alert.textContent).toBe("Couldn't start kolibri: Error: Insufficient arguments");
+    expect(alert.textContent).toBe("Couldn't start kolibri: IDEA couldn't finish this. Try again, or ask for help.");
     // the refused start no longer shows a spinner
     expect(screen.queryByText('Starting...')).not.toBeInTheDocument();
   });
