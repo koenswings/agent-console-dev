@@ -215,6 +215,12 @@ they need the Engine fix that resolves both id-first (`resolveInstanceArg` / `re
 idea#168). `startInstance` / `stopInstance` / `copyApp` / `moveApp` keep the instance
 **name**, because no Engine resolves an instance id for them yet.
 
+### Technical details (`TechnicalDetails.tsx`)
+
+Debug views (expanded instance details, History panel, command history) show the
+`plainEngineText` sentence first; the raw Engine text sits in a closed native
+`<details>` "Technical details" toggle, left out when it is empty or equals the sentence (idea#76).
+
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
 
 Panels follow each command's trace in the connected Engine's command log: red

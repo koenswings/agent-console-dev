@@ -31,6 +31,7 @@ import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
 import { plainEngineText } from '../store/plainError';
+import TechnicalDetails from './TechnicalDetails';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -702,7 +703,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
                   Error
                   <ErrorCopyButton text={() => props.instance()!.statusCondition!} />
                 </dt>
-                <dd class="instance-details__error-text">{props.instance()!.statusCondition}</dd>
+                <dd class="instance-details__error-text"><TechnicalDetails raw={props.instance()!.statusCondition} testId="instance-error-details" /></dd>
               </div>
             </Show>
             <Show when={props.app()?.description}>

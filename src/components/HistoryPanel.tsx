@@ -3,6 +3,8 @@ import type { Accessor } from 'solid-js';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { CommandLogState, CommandLogError } from '../store/commandLog';
 import LogLines from './LogLines';
+import TechnicalDetails from './TechnicalDetails';
+import { plainEngineText } from '../store/plainError';
 
 interface HistoryPanelProps {
   commandLogStore: Accessor<CommandLogState>;
@@ -90,7 +92,7 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                       </span>
                       <span class="history-entry__command">{trace.command}</span>
                       <Show when={trace.errorMessage}>
-                        <span class="history-entry__error-msg">{stripAnsi(trace.errorMessage!)}</span>
+                        <span class="history-entry__error-msg">{plainEngineText(stripAnsi(trace.errorMessage!))}</span>
                       </Show>
                       <span class="history-entry__time">{timeAgo(trace.completedAt ?? trace.startedAt)}</span>
                       <span class="history-entry__chevron" aria-hidden="true">
@@ -99,6 +101,9 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                     </button>
                     <Show when={expandedIds().has(trace.traceId)}>
                       <div class="history-entry__detail">
+                        <Show when={trace.errorMessage}>
+                          <TechnicalDetails raw={trace.errorMessage} class="history-entry__error-detail" testId="history-error-details" />
+                        </Show>
                         <dl class="history-entry__meta">
                           <div><dt>Started</dt><dd>{formatTime(trace.startedAt)}</dd></div>
                           <Show when={trace.completedAt}>

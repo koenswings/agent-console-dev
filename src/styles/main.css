@@ -3848,3 +3848,25 @@ body {
   font-size: 0.8em;
   color: var(--color-text-muted, #666);
 }
+
+/* Technical details toggle: raw Engine text under the plain sentence (idea#76) */
+.tech-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tech-details__summary {
+  cursor: pointer;
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+.tech-details__summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.tech-details__raw {
+  margin: 4px 0 0;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
