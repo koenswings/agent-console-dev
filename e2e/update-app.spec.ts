@@ -106,7 +106,10 @@ test('major update with a fresh backup succeeds', async ({ page }) => {
   await openAllApps(page);
   // Fresh backup first (the Engine needs one under 1 h old for a major).
   await page.getByTestId(`backup-instance-${id}`).click();
-  await page.getByTestId(`backup-to-disk-${backupDisk}`).click();
+  // The picker only opens with 2+ linked Backup Disks; with one, Back up starts straight away.
+  const pick = page.getByTestId(`backup-to-disk-${backupDisk}`);
+  const picker = await pick.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true, () => false);
+  if (picker) await pick.click();
   await openConfirm(page, id, to);
   const update = page.getByTestId(`update-confirm-btn-${id}`);
   // The Console's gate reads instance.lastBackup: Update unlocks once the backup lands.
