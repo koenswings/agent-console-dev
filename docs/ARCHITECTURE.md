@@ -215,6 +215,18 @@ they need the Engine fix that resolves both id-first (`resolveInstanceArg` / `re
 idea#168). `startInstance` / `stopInstance` / `copyApp` / `moveApp` keep the instance
 **name**, because no Engine resolves an instance id for them yet.
 
+### Technical details (`TechnicalDetails.tsx`)
+
+Debug views (expanded instance details, History panel, command history) show the
+`plainEngineText` sentence first; the raw Engine text sits in a closed native
+`<details>` "Technical details" toggle, left out when it is empty or equals the sentence (idea#76).
+
+A `clearBackupLock` trace that closed `ok` with `result.cleared === false` (the
+Engine refused to clear anything but did not throw; result shape `{ cleared, message }`,
+agent-engine-dev#332) is shown on the collapsed History row as a neutral info line
+with `result.message`, not a green check and not red (`historyRow.ts`, idea#454).
+`clearBackupLock` is not wired through `commandResult`.
+
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
 
 Panels follow each command's trace in the connected Engine's command log: red

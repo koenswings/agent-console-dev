@@ -6,6 +6,7 @@
  */
 import { engineHasCapability } from './commands';
 import type { Engine, Instance } from '../types/store';
+import { plainEngineText } from './plainError';
 
 /** Plain words for teachers, shown in the confirm. */
 export const removeConfirmText = (name: string): string =>
@@ -35,7 +36,7 @@ export const removeRefusalCode = (message: string): string | null => {
 
 export const friendlyRemoveError = (message: string): string => {
   const code = removeRefusalCode(message);
-  return code ? REMOVE_REFUSALS[code] : message;
+  return code ? REMOVE_REFUSALS[code] : plainEngineText(message);
 };
 
 /** Offer Remove at all? Only when the Engine advertises it (older Engines: unchanged UI). */

@@ -21,6 +21,7 @@ import {
 } from '../store/diskRoles';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk, Store } from '../types/store';
+import { plainEngineText } from '../store/plainError';
 
 interface FilesSectionProps {
   disk: () => Disk | undefined;
@@ -129,7 +130,7 @@ const FilesSection: Component<FilesSectionProps> = (props) => {
           <Show when={confirming()}>
             <EjectConfirm disk={props.disk} store={props.store} onConfirm={doEject} onCancel={() => setConfirming(false)} />
           </Show>
-          <Show when={(() => { const s = eject.state(); return s.kind === 'error' ? s.message : null; })()}>
+          <Show when={(() => { const s = eject.state(); return s.kind === 'error' ? plainEngineText(s.message) : null; })()}>
             {(msg) => <p class="edp-form__error" role="alert">Couldn't eject {props.disk()?.name}: {msg()}</p>}
           </Show>
           <Show when={(() => { const s = eject.state(); return s.kind === 'sent' ? s.engine : null; })()}>

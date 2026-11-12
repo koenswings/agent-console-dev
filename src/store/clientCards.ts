@@ -4,6 +4,7 @@
  * are space-split by the Engine: ids only; an id with whitespace throws.
  */
 import { engineHasCapability, getSendCommandFn } from './commands';
+import { plainEngineText } from './plainError';
 import type { CommandTrace } from '../types/commandLog';
 import type {
   CardContents,
@@ -208,9 +209,9 @@ export const ERROR_TEXT: Record<string, string> = {
 export const parseEngineError = (raw: string | null | undefined): { code: string | null; text: string } => {
   const msg = String(raw ?? '').trim();
   const m = /^([A-Z][A-Z0-9_]+):\s*(.*)$/s.exec(msg);
-  if (!m) return { code: null, text: msg || 'The Engine reported an error without a message.' };
+  if (!m) return { code: null, text: plainEngineText(msg) };
   const code = m[1];
-  return { code, text: ERROR_TEXT[code] ?? `${m[2] || code} (${code})` };
+  return { code, text: ERROR_TEXT[code] ?? plainEngineText(m[2]) };
 };
 
 export const errorText = (raw: string | null | undefined): string => parseEngineError(raw).text;

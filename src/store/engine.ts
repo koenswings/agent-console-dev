@@ -9,7 +9,8 @@
  * Returns a StoreConnection whose store() Accessor updates reactively as
  * Automerge syncs changes from the Engine.
  */
-import { createSocketLiveness, forceReconnect, type ReconnectableAdapter, type SocketLiveness } from './socketLiveness';
+import { createSocketLiveness, forceReconnect, type ReconnectableAdapter, type SocketLiveness, type SocketState } from './socketLiveness';
+import { singleSocketAdapterClass, type WsClientAdapterCtor, type WsClientAdapterLike } from './singleSocketAdapter';
 import { forgetLearnedEngine, setServedEngineId } from './connectedEngine';
 import { createSignal, type Accessor } from 'solid-js';
 import { receiveEphemeral, resetLive } from './live';
@@ -182,6 +183,7 @@ export async function createEngineConnection(
 ): Promise<StoreConnection> {
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
+  const [socketState, setSocketState] = createSignal<SocketState>('live');
   let disposed = false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let repoRef: any = null;
@@ -283,12 +285,20 @@ export async function createEngineConnection(
     const wsUrl = buildEngineWsUrl(hostname, wsPort);
     console.info(`[engine] Connecting to ${wsUrl}`);
 
-    const adapter = new BrowserWebSocketClientAdapter(wsUrl);
+    // agent-engine-dev#168: one socket at a time; our backoff owns redials (singleSocketAdapter.ts).
+    const SingleSocketAdapter = singleSocketAdapterClass(
+      BrowserWebSocketClientAdapter as unknown as WsClientAdapterCtor<WsClientAdapterLike>,
+    );
+    const adapter = new SingleSocketAdapter(wsUrl) as unknown as InstanceType<typeof BrowserWebSocketClientAdapter> & { hooks: { onDrop?: () => void } };
     const repo = new Repo({ network: [adapter] });
     adapterRef = adapter;
     repoRef = repo;
-    // agent-engine-dev#168: drop and redial a silently dead socket (socketLiveness.ts).
-    liveness = createSocketLiveness(() => { if (!disposed) forceReconnect(adapter as unknown as ReconnectableAdapter); });
+    // Drop and redial a dead socket (socketLiveness.ts); socketState drives the status bar.
+    liveness = createSocketLiveness(
+      () => { if (!disposed) forceReconnect(adapter as unknown as ReconnectableAdapter); },
+      { onState: setSocketState },
+    );
+    adapter.hooks.onDrop = () => { if (!disposed) liveness?.dropped(); };
     (adapter as { on?: (e: 'message', f: () => void) => void }).on?.('message', () => liveness?.heard());
 
     // Bail if dispose() was called while we were awaiting module imports.
@@ -399,7 +409,7 @@ export async function createEngineConnection(
       return log;
     };
 
-    return { store, connected, sendCommand, changeDoc, commandLogStore, dispose, hostname, commandLogFor };
+    return { store, connected, socketState, sendCommand, changeDoc, commandLogStore, dispose, hostname, commandLogFor };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // 'Document ... is unavailable' means the peer hasn't synced the doc yet.

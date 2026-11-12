@@ -16,6 +16,8 @@ import type { CommandLogStore } from '../types/commandLog';
 export interface StoreConnection {
   store: Accessor<Store | null>;
   connected: Accessor<boolean>;
+  /** Store socket liveness (socketLiveness.ts); absent means always 'live'. */
+  socketState?: Accessor<import('../store/socketLiveness').SocketState>;
   sendCommand: (engineId: string, command: string) => void;
   changeDoc: (fn: (doc: Store) => void) => void;
   commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;

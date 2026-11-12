@@ -1,3 +1,4 @@
+import { versionLabel } from '../store/updateApp';
 import { Show, For, createSignal, createEffect, createMemo, onCleanup, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import StatusDot from './StatusDot';
@@ -10,6 +11,7 @@ import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
+import RenameInstanceName from './RenameInstanceName';
 import UpdateAppControl from './UpdateAppControl';
 import { canUpdate, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND } from '../store/updateApp';
 import RemoveInstanceControl from './RemoveInstanceControl';
@@ -28,6 +30,8 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
+import { plainEngineText } from '../store/plainError';
+import TechnicalDetails from './TechnicalDetails';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -486,7 +490,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       </button>
 
       <div class="instance-row__info">
-        <div class="instance-row__name">{props.instance()?.name}</div>
+        <RenameInstanceName
+          instance={props.instance}
+          engine={props.engine}
+          store={() => props.store?.() ?? null}
+          commandLog={() => props.commandLogStore?.() ?? null}
+        />
         <div class="instance-row__app">
           {props.app() ? props.app()!.title : props.instance()?.instanceOf}
         </div>
@@ -508,7 +517,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           {(op) => (
             <div class="instance-row__progress instance-row__progress--failed">
               <div class="instance-row__progress-label">
-                Failed: {op().error ?? 'Unknown error'} - Try again
+                Failed: {plainEngineText(op().error)} - Try again
               </div>
             </div>
           )}
@@ -524,7 +533,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         </Show>
         <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded() && !updating()}>
           <div class="instance-row__error-hint">
-            {props.instance()!.statusCondition}
+            {plainEngineText(props.instance()!.statusCondition)}
           </div>
         </Show>
         <UpdateAppControl
@@ -666,7 +675,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             </div>
             <div class="instance-details__item">
               <dt>Version</dt>
-              <dd>{props.app()?.version ?? '-'}</dd>
+              <dd>{versionLabel(props.app()?.version)}</dd>
             </div>
             <div class="instance-details__item">
               <dt>Engine</dt>
@@ -694,7 +703,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
                   Error
                   <ErrorCopyButton text={() => props.instance()!.statusCondition!} />
                 </dt>
-                <dd class="instance-details__error-text">{props.instance()!.statusCondition}</dd>
+                <dd class="instance-details__error-text"><TechnicalDetails raw={props.instance()!.statusCondition} testId="instance-error-details" /></dd>
               </div>
             </Show>
             <Show when={props.app()?.description}>

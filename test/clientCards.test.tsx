@@ -367,9 +367,9 @@ describe('Flash dialog', () => {
   });
 
   it('an unknown error code keeps the Engine text', () => {
-    expect(parseEngineError('NEW_CODE: something new')).toEqual({ code: 'NEW_CODE', text: 'something new (NEW_CODE)' });
+    expect(parseEngineError('NEW_CODE: something new')).toEqual({ code: 'NEW_CODE', text: 'something new' });
     expect(errorText('plain message')).toBe('plain message');
-    expect(errorText('')).toMatch(/without a message/);
+    expect(errorText('')).toBe("IDEA couldn't finish this. Try again, or ask for help.");
   });
 
   it('no answer from the Engine → timeout feedback', () => {

@@ -301,6 +301,7 @@ Lists recently completed commands (newest first). Each row shows:
 - ✓ / ✗ status icon + command name + time-ago label
 - Click to expand → `LogLines` viewer with the full captured log for that trace
 - Error message shown inline for failed commands
+- A `clearBackupLock` trace that closed `ok` with `result.cleared === false` (nothing to clear) shows `result.message` on the collapsed row in a neutral info tone — not the green check and not red (idea#454, engine#332)
 - "No command history yet" placeholder when empty
 - "Not available on this engine" message when the engine doesn't expose the command log endpoint
 

@@ -197,6 +197,12 @@ body {
   background: var(--colour-error);
 }
 
+/* Store socket lost, redialling (agent-engine-dev#168): red pulsing dot */
+.status-bar__dot--reconnecting {
+  background: var(--colour-error);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
 /* Searching/connecting: amber pulsing dot */
 .status-bar__dot--searching {
   background: #d97706;
@@ -3016,9 +3022,11 @@ body {
 .history-entry__status { font-size: 0.85rem; flex-shrink: 0; }
 .history-entry__status--ok { color: var(--colour-success, #4c4); }
 .history-entry__status--error { color: var(--colour-danger, #e05); }
+.history-entry__status--info { color: var(--colour-text-dim); }
 
 .history-entry__command { font-size: 0.82rem; font-family: monospace; color: var(--colour-text); flex: 1; }
 .history-entry__error-msg { font-size: 0.75rem; color: var(--colour-danger, #e05); flex: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-entry__info-msg { font-size: 0.75rem; color: var(--colour-text-dim); flex: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-entry__time { font-size: 0.75rem; color: var(--colour-text-dim); flex-shrink: 0; }
 .history-entry__chevron { font-size: 0.65rem; color: var(--colour-text-dim); flex-shrink: 0; margin-left: 2px; }
 
@@ -3736,6 +3744,32 @@ body {
 .disk-role__ignored { display: inline-block; padding: 0 0.4rem; border-radius: 0.6rem; font-size: 0.8em; background: var(--muted-bg, #eee); color: var(--muted, #555); }
 .disk-role__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
 
+/* agent-engine-dev#220: inline rename of an instance's display name */
+.instance-rename__btn {
+  margin-left: 0.35rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+.instance-rename__btn:hover {
+  opacity: 1;
+}
+.instance-rename {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.instance-rename__input {
+  min-width: 10rem;
+  font: inherit;
+}
+.instance-rename .edp-form__hint {
+  flex-basis: 100%;
+  margin: 0;
+}
 /* console#168: update an App (badge, confirm, steps, result) */
 .update-app__badge-row {
   display: flex;
@@ -3827,4 +3861,26 @@ body {
   margin-top: 0.25rem;
   font-size: 0.8em;
   color: var(--color-text-muted, #666);
+}
+
+/* Technical details toggle: raw Engine text under the plain sentence (idea#76) */
+.tech-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tech-details__summary {
+  cursor: pointer;
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+.tech-details__summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.tech-details__raw {
+  margin: 4px 0 0;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
