@@ -5,7 +5,7 @@ import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
   confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
-  OP_KIND, latestUpdateOp,
+  OP_KIND, latestUpdateOp, parseVersion, compareVersions, isNewerVersion,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
 
@@ -52,6 +52,63 @@ describe('engine#268 alignment', () => {
   it('an interrupted update whose rollback failed reads as stopped', () => {
     expect(updateOutcome(op('Failed', { error: 'INTERRUPTED: ROLLBACK FAILED: Swap failed' }), inst(), 'Kolibri', '0.15.5', ctx)!.kind).toBe('stopped');
     expect(updateOutcome(op('Failed', { error: 'INTERRUPTED: ROLLED BACK: Swap failed' }), inst(), 'Kolibri', '0.15.5', ctx)!.kind).toBe('rolledBack');
+  });
+});
+
+describe('update offer version guard (agent-engine-dev#337, idea#459)', () => {
+  const caps = engine('ENG1', ['updateApp']);
+  const offer = (runningAppId: string, available: Record<string, unknown>): Instance =>
+    inst({ instanceOf: runningAppId, updateAvailable: available });
+
+  it('compareVersions: Engine formats 1.0, 1.0.1, 1.1, 2.0; missing parts are 0', () => {
+    expect(parseVersion('1.0')).toEqual([1, 0]);
+    expect(parseVersion('1.0.1')).toEqual([1, 0, 1]);
+    expect(parseVersion('v1.2.3')).toEqual([1, 2, 3]);
+    expect(parseVersion('1.0-smoke')).toEqual([1, 0]);
+    expect(compareVersions('1.0', '1.0')).toBe(0);
+    expect(compareVersions('1.0', '1.0.0')).toBe(0);
+    expect(compareVersions('1.0-smoke', '1.0')).toBe(0);
+    expect(compareVersions('1.0.1', '1.0')! > 0).toBe(true);
+    expect(compareVersions('1.1', '1.0')! > 0).toBe(true);
+    expect(compareVersions('1.10', '1.9')! > 0).toBe(true);
+    expect(compareVersions('2.0', '1.99')! > 0).toBe(true);
+    expect(compareVersions('1.0', '1.0.1')! < 0).toBe(true);
+    expect(compareVersions('5ab9f64', '1.1')).toBeNull();
+  });
+
+  it('newer bundle: the offer is shown', () => {
+    const i = offer('kolibri-1.0', { appId: 'kolibri-1.1', fromVersion: '1.0', toVersion: '1.1' });
+    const o = updateOfferFor(mkStore(i), i, caps)!;
+    expect(o.toAppId).toBe('kolibri-1.1');
+    expect(o.toVersion).toBe('1.1');
+    expect(isNewerVersion('1.0', '1.1')).toBe(true);
+    expect(isNewerVersion('1.0', '1.0.1')).toBe(true);
+  });
+
+  it('equal version (including 1.0 vs 1.0.0, or the same app id): the offer is hidden', () => {
+    const sameId = offer('kolibri-1.1', { appId: 'kolibri-1.1', fromVersion: '1.0', toVersion: '1.1' });
+    expect(updateOfferFor(mkStore(sameId), sameId, caps)).toBeNull();
+    const equal = offer('kolibri-1.0', { appId: 'kolibri-1.0.0', fromVersion: '1.0', toVersion: '1.0.0' });
+    expect(updateOfferFor(mkStore(equal), equal, caps)).toBeNull();
+    expect(isNewerVersion('1.0', '1.0')).toBe(false);
+    expect(isNewerVersion('1.0', '1.0.0')).toBe(false);
+  });
+
+  it('older bundle: the offer is hidden', () => {
+    const i = offer('kolibri-1.1', { appId: 'kolibri-1.0', fromVersion: '1.1', toVersion: '1.0' });
+    expect(updateOfferFor(mkStore(i), i, caps)).toBeNull();
+    expect(isNewerVersion('1.1', '1.0')).toBe(false);
+    expect(isNewerVersion('2.0', '1.99')).toBe(false);
+  });
+
+  it('unparseable version: the offer is still shown, not hidden', () => {
+    expect(isNewerVersion('1.0', '5ab9f64')).toBeNull();
+    expect(isNewerVersion('1.0', 'zimbabwe-2026-10-20')).toBeNull();
+    expect(isNewerVersion('not-a-version', 'also-bad')).toBeNull();
+    const i = offer('kolibri-1.0', { appId: 'kolibri-5ab9f64', fromVersion: '1.0', toVersion: '5ab9f64' });
+    const o = updateOfferFor(mkStore(i), i, caps)!;
+    expect(o.toAppId).toBe('kolibri-5ab9f64');
+    expect(o.toVersion).toBe('5ab9f64');
   });
 });
 
