@@ -4,15 +4,12 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { CommandLogState, CommandLogError } from '../store/commandLog';
 import LogLines from './LogLines';
 import TechnicalDetails from './TechnicalDetails';
-import { plainEngineText } from '../store/plainError';
+import { historyRowView } from '../store/historyRow';
 
 interface HistoryPanelProps {
   commandLogStore: Accessor<CommandLogState>;
   onClose: () => void;
 }
-
-const ANSI_RE = /\u001b\[[0-9;]*[mGKHFABCDJsu]|\u001b[\[\]()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g;
-const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
 
 const timeAgo = (ts: number): string => {
   const secs = Math.floor((Date.now() - ts) / 1000);
@@ -45,13 +42,16 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
     return null;
   };
 
-  const finishedTraces = createMemo((): CommandTrace[] => {
+  const finishedTraceIds = createMemo((): string[] => {
     const store = cls();
     if (!store || (typeof store === 'object' && 'error' in store)) return [];
-    return [...(store as CommandLogStore).recentTraceIds]
+    const s = store as CommandLogStore;
+    return [...s.recentTraceIds]
       .reverse()
-      .map((id) => (store as CommandLogStore).traces[id])
-      .filter((t): t is CommandTrace => t != null && t.status !== 'running');
+      .filter((id) => {
+        const t = s.traces[id];
+        return t != null && t.status !== 'running';
+      });
   });
 
   return (
@@ -76,58 +76,78 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
             }
           >
             <Show
-              when={finishedTraces().length > 0}
+              when={finishedTraceIds().length > 0}
               fallback={<div class="history-panel__empty">No command history yet</div>}
             >
-              <For each={finishedTraces()}>
-                {(trace) => (
-                  <div class="history-entry">
-                    <button
-                      class="history-entry__row"
-                      onClick={() => toggleExpand(trace.traceId)}
-                      aria-expanded={expandedIds().has(trace.traceId)}
-                    >
-                      <span class={`history-entry__status history-entry__status--${trace.status}`}>
-                        {trace.status === 'ok' ? '✓' : '✗'}
-                      </span>
-                      <span class="history-entry__command">{trace.command}</span>
-                      <Show when={trace.errorMessage}>
-                        <span class="history-entry__error-msg">{plainEngineText(stripAnsi(trace.errorMessage!))}</span>
-                      </Show>
-                      <span class="history-entry__time">{timeAgo(trace.completedAt ?? trace.startedAt)}</span>
-                      <span class="history-entry__chevron" aria-hidden="true">
-                        {expandedIds().has(trace.traceId) ? '▲' : '▼'}
-                      </span>
-                    </button>
-                    <Show when={expandedIds().has(trace.traceId)}>
-                      <div class="history-entry__detail">
-                        <Show when={trace.errorMessage}>
-                          <TechnicalDetails raw={trace.errorMessage} class="history-entry__error-detail" testId="history-error-details" />
-                        </Show>
-                        <dl class="history-entry__meta">
-                          <div><dt>Started</dt><dd>{formatTime(trace.startedAt)}</dd></div>
-                          <Show when={trace.completedAt}>
-                            <div><dt>Finished</dt><dd>{formatTime(trace.completedAt!)}</dd></div>
-                            <div><dt>Duration</dt><dd>{((trace.completedAt! - trace.startedAt) / 1000).toFixed(1)}s</dd></div>
-                          </Show>
-                          <Show when={typeof trace.args === 'object' && trace.args !== null}>
-                            <For each={Object.entries(trace.args as Record<string, string>)}>
-                              {([k, v]) => (
-                                <div><dt>{k}</dt><dd>{String(v)}</dd></div>
-                              )}
-                            </For>
-                          </Show>
-                        </dl>
-                        <Show
-                          when={trace.logs.length > 0}
-                          fallback={<div class="history-entry__no-logs">No log output recorded</div>}
-                        >
-                          <LogLines logs={trace.logs} />
-                        </Show>
-                      </div>
+              <For each={finishedTraceIds()}>
+                {(id) => {
+                  const trace = (): CommandTrace | undefined => {
+                    const store = cls();
+                    if (!store || (typeof store === 'object' && 'error' in store)) return undefined;
+                    return (store as CommandLogStore).traces[id];
+                  };
+                  return (
+                    <Show when={trace()}>
+                      {(t) => {
+                        const view = () => historyRowView(t());
+                        return (
+                          <div class="history-entry" data-testid={`history-entry-${id}`}>
+                            <button
+                              class="history-entry__row"
+                              onClick={() => toggleExpand(id)}
+                              aria-expanded={expandedIds().has(id)}
+                            >
+                              <span
+                                class={`history-entry__status history-entry__status--${view().tone}`}
+                                data-testid={`history-entry-status-${id}`}
+                              >
+                                {view().icon}
+                              </span>
+                              <span class="history-entry__command">{t().command}</span>
+                              <Show when={view().message}>
+                                <span
+                                  class={view().tone === 'info' ? 'history-entry__info-msg' : 'history-entry__error-msg'}
+                                  data-testid={`history-entry-message-${id}`}
+                                >{view().message}</span>
+                              </Show>
+                              <span class="history-entry__time">{timeAgo(t().completedAt ?? t().startedAt)}</span>
+                              <span class="history-entry__chevron" aria-hidden="true">
+                                {expandedIds().has(id) ? '▲' : '▼'}
+                              </span>
+                            </button>
+                            <Show when={expandedIds().has(id)}>
+                              <div class="history-entry__detail">
+                                <Show when={t().errorMessage}>
+                                  <TechnicalDetails raw={t().errorMessage} class="history-entry__error-detail" testId="history-error-details" />
+                                </Show>
+                                <dl class="history-entry__meta">
+                                  <div><dt>Started</dt><dd>{formatTime(t().startedAt)}</dd></div>
+                                  <Show when={t().completedAt}>
+                                    <div><dt>Finished</dt><dd>{formatTime(t().completedAt!)}</dd></div>
+                                    <div><dt>Duration</dt><dd>{((t().completedAt! - t().startedAt) / 1000).toFixed(1)}s</dd></div>
+                                  </Show>
+                                  <Show when={typeof t().args === 'object' && t().args !== null}>
+                                    <For each={Object.entries(t().args as Record<string, string>)}>
+                                      {([k, v]) => (
+                                        <div><dt>{k}</dt><dd>{String(v)}</dd></div>
+                                      )}
+                                    </For>
+                                  </Show>
+                                </dl>
+                                <Show
+                                  when={t().logs.length > 0}
+                                  fallback={<div class="history-entry__no-logs">No log output recorded</div>}
+                                >
+                                  <LogLines logs={t().logs} />
+                                </Show>
+                              </div>
+                            </Show>
+                          </div>
+                        );
+                      }}
                     </Show>
-                  </div>
-                )}
+                  );
+                }}
               </For>
             </Show>
           </Show>

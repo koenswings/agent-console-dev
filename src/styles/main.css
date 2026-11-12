@@ -3010,9 +3010,11 @@ body {
 .history-entry__status { font-size: 0.85rem; flex-shrink: 0; }
 .history-entry__status--ok { color: var(--colour-success, #4c4); }
 .history-entry__status--error { color: var(--colour-danger, #e05); }
+.history-entry__status--info { color: var(--colour-text-dim); }
 
 .history-entry__command { font-size: 0.82rem; font-family: monospace; color: var(--colour-text); flex: 1; }
 .history-entry__error-msg { font-size: 0.75rem; color: var(--colour-danger, #e05); flex: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-entry__info-msg { font-size: 0.75rem; color: var(--colour-text-dim); flex: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-entry__time { font-size: 0.75rem; color: var(--colour-text-dim); flex-shrink: 0; }
 .history-entry__chevron { font-size: 0.65rem; color: var(--colour-text-dim); flex-shrink: 0; margin-left: 2px; }
 
