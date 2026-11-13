@@ -7,8 +7,10 @@ import {
   CLEANING_COPY,
   DISK_FULL_COPY,
   HELPER_OUTDATED_COPY,
+  CLEANUP_NEEDS_UPDATE_COPY,
   HOOK_FALLBACK_COPY,
   SCHEDULED_BACKUPS_CAPABILITY,
+  BACKUP_CLEANUP_CAPABILITY,
 } from '../src/store/backupStatus';
 import type { Disk, Engine, Instance, Store } from '../src/types/store';
 
@@ -134,7 +136,7 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
     expect(screen.getAllByText(DISK_FULL_COPY).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('flag on: shows cleanup paused only from a HELPER_OUTDATED result, not a missing flag', () => {
+  it('flag on: shows a pre-run cleanup-update warning when backupCleanup is missing', () => {
     const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
     const disk: Disk = {
       ...baseDisk,
@@ -146,13 +148,43 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
       clockTrusted: true,
     };
     renderPanel(storeWith({ engine, disk }), disk);
+    expect(screen.getByText(CLEANUP_NEEDS_UPDATE_COPY)).toBeInTheDocument();
     expect(screen.queryByText(HELPER_OUTDATED_COPY)).not.toBeInTheDocument();
+  });
 
+  it('flag on: a HELPER_OUTDATED result with backupCleanup missing shows the warning only once', () => {
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
+    const disk: Disk = {
+      ...baseDisk,
+      backupConfig: {
+        mode: 'scheduled',
+        links: [MOCK_IDS.INST_KOLIBRI_ID],
+        schedule: { daily: '02:30' },
+      },
+      clockTrusted: true,
+    };
     const instance: Instance = {
       ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
       lastResult: { time: Date.now(), method: 'live', result: 'HELPER_OUTDATED' },
     };
     renderPanel(storeWith({ engine, disk, instance }), disk);
+    expect(screen.getAllByText(CLEANUP_NEEDS_UPDATE_COPY)).toHaveLength(1);
+    expect(screen.queryByText(HELPER_OUTDATED_COPY)).not.toBeInTheDocument();
+  });
+
+  it('flag on: a HELPER_OUTDATED result still shows cleanup paused when backupCleanup is fresh', () => {
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY, BACKUP_CLEANUP_CAPABILITY]);
+    const disk: Disk = {
+      ...baseDisk,
+      backupConfig: { mode: 'on-demand', links: [MOCK_IDS.INST_KOLIBRI_ID] },
+      clockTrusted: true,
+    };
+    const instance: Instance = {
+      ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
+      lastResult: { time: Date.now(), method: 'live', result: 'HELPER_OUTDATED' },
+    };
+    renderPanel(storeWith({ engine, disk, instance }), disk);
+    expect(screen.queryByText(CLEANUP_NEEDS_UPDATE_COPY)).not.toBeInTheDocument();
     expect(screen.getAllByText(HELPER_OUTDATED_COPY).length).toBeGreaterThanOrEqual(1);
   });
 

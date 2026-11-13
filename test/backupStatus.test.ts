@@ -4,6 +4,8 @@ import {
   CLEANING_COPY,
   DISK_FULL_COPY,
   HELPER_OUTDATED_COPY,
+  CLEANUP_NEEDS_UPDATE_COPY,
+  BACKUP_CLEANUP_CAPABILITY,
   HOOK_FALLBACK_COPY,
   HOOK_POST_WARNING_COPY,
   APP_DISK_NOT_DOCKED_COPY,
@@ -247,23 +249,15 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     expect(justSpace.find((l) => l.id === 'disk-full')).toBeUndefined();
   });
 
-  it('shows "Pi needs an update" only from a HELPER_OUTDATED result, not from a missing flag', () => {
+  it('shows the runtime "Cleanup paused" line from a HELPER_OUTDATED result when backupCleanup is fresh', () => {
     const fromResult = diskBackupStatusLines({
       disk: disk({ clockTrusted: true, backupConfig: { mode: 'on-demand', links: ['inst-1'] } }),
-      engine,
+      engine: flaggedEngine([BACKUP_CLEANUP_CAPABILITY]),
       instances: [inst({ lastResult: result({ result: 'HELPER_OUTDATED' }) })],
       now: NOW,
     });
     expect(fromResult.find((l) => l.id === 'pi-update')?.text).toBe(HELPER_OUTDATED_COPY);
-
-    // Engine f114a28 does not advertise backupCleanup; a scheduled disk without
-    // a HELPER_OUTDATED result must not invent "Pi needs an update".
-    const noResult = diskBackupStatusLines({
-      disk: disk({ clockTrusted: true }),
-      engine: flaggedEngine(),
-      now: NOW,
-    });
-    expect(noResult.find((l) => l.id === 'pi-update')).toBeUndefined();
+    expect(fromResult.filter((l) => l.text === CLEANUP_NEEDS_UPDATE_COPY)).toEqual([]);
   });
 
   it('shows scheduleError in plain wording and still schedules the 02:30 default', () => {
@@ -459,5 +453,87 @@ describe('instanceBackupStatusLines', () => {
     });
     expect(lines.find((l) => l.id === 'last-result')?.text).toBe(APP_DISK_NOT_DOCKED_COPY);
     expect(JSON.stringify(lines)).not.toMatch(/APP_DISK_NOT_DOCKED/);
+  });
+});
+
+describe('diskBackupStatusLines — backupCleanup capability (Engine PR #354)', () => {
+  it('shows no pre-run warning when both scheduledBackups and backupCleanup are fresh', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine: flaggedEngine([BACKUP_CLEANUP_CAPABILITY]),
+      now: NOW,
+    });
+    expect(lines.find((l) => l.id === 'pi-update')).toBeUndefined();
+    expect(lines.filter((l) =>
+      l.text === CLEANUP_NEEDS_UPDATE_COPY || l.text === HELPER_OUTDATED_COPY
+    )).toEqual([]);
+  });
+
+  it('shows the pre-run warning when scheduledBackups is fresh but backupCleanup is not', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine: flaggedEngine(),
+      now: NOW,
+    });
+    const warn = lines.filter((l) => l.id === 'pi-update');
+    expect(warn).toHaveLength(1);
+    expect(warn[0]?.text).toBe(CLEANUP_NEEDS_UPDATE_COPY);
+    expect(warn[0]?.tone).toBe('warn');
+  });
+
+  it('shows no pre-run warning when capabilities are stale', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine: rolledBack,
+      now: NOW,
+    });
+    expect(lines).toEqual([]);
+    expect(lines.find((l) => l.id === 'pi-update')).toBeUndefined();
+  });
+
+  it('shows the warning only once when a HELPER_OUTDATED result arrives and backupCleanup is missing', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine: flaggedEngine(),
+      instances: [inst({ lastResult: result({ result: 'HELPER_OUTDATED' }) })],
+      now: NOW,
+    });
+    const warnings = lines.filter((l) =>
+      l.id === 'pi-update'
+      || l.text === CLEANUP_NEEDS_UPDATE_COPY
+      || l.text === HELPER_OUTDATED_COPY
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.text).toBe(CLEANUP_NEEDS_UPDATE_COPY);
+  });
+
+  it('shows no pre-run warning when scheduledBackups is missing', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine: oldEngine,
+      now: NOW,
+    });
+    expect(lines).toEqual([]);
+    expect(lines.find((l) => l.id === 'pi-update')).toBeUndefined();
+  });
+});
+
+describe('instanceBackupStatusLines — backupCleanup does not double the warning', () => {
+  it('omits the runtime HELPER_OUTDATED line when the pre-run warning already applies', () => {
+    const lines = instanceBackupStatusLines({
+      instance: inst({ lastResult: result({ result: 'HELPER_OUTDATED' }) }),
+      engine: flaggedEngine(),
+    });
+    expect(lines.filter((l) =>
+      l.text === HELPER_OUTDATED_COPY || l.text === CLEANUP_NEEDS_UPDATE_COPY
+    )).toEqual([]);
+  });
+
+  it('keeps the runtime HELPER_OUTDATED line when backupCleanup is fresh', () => {
+    const lines = instanceBackupStatusLines({
+      instance: inst({ lastResult: result({ result: 'HELPER_OUTDATED' }) }),
+      engine: flaggedEngine([BACKUP_CLEANUP_CAPABILITY]),
+    });
+    expect(lines.find((l) => l.id === 'last-result')?.text).toBe(HELPER_OUTDATED_COPY);
   });
 });

@@ -2,9 +2,9 @@
  * Backup Disk status lines (idea#404, Console PR 1 of 2).
  *
  * Derives operator-facing copy from the idea#400 store summary, aligned to
- * Engine main f114a28 (PR #353 / docs/BACKUP_SCHEDULE.md). All new store
- * fields are optional: when the `scheduledBackups` flag is missing or stale,
- * this module returns no lines and the existing UI is unchanged.
+ * Engine main (PR #353 schedule + PR #354 helper-gated `backupCleanup`).
+ * All new store fields are optional: when the `scheduledBackups` flag is
+ * missing or stale, this module returns no lines and the existing UI is unchanged.
  * Instance.lastAttempt is not a field; lastResult.time is the result time.
  * Disk.lastAttempt is kept. There is no nextRun field: the next run is
  * computed from schedule.daily only while clockTrusted is true.
@@ -22,8 +22,16 @@ import type {
   Store,
 } from '../types/store';
 
-/** Capability that gates every new status line and schedule controls. Engine f114a28. */
+/** Capability that gates every new status line and schedule controls. Engine f114a28 / PR #353. */
 export const SCHEDULED_BACKUPS_CAPABILITY = 'scheduledBackups' as const;
+
+/**
+ * Fullness-driven Backup Disk cleanup (Engine PR #354, idea#400 §3.1).
+ * Helper-gated like `flashCard`: advertised only when the app-data root helper
+ * is at BACKUP_CLEANUP_HELPER_MIN (v10) or newer, checked once at startup.
+ * Freshness is the usual `capabilitiesBootedAt === lastBooted` rule.
+ */
+export const BACKUP_CLEANUP_CAPABILITY = 'backupCleanup' as const;
 
 /** Default daily time when schedule is absent or invalid (Engine createBackupDisk / setBackupMode). */
 export const DEFAULT_BACKUP_TIME = '02:30';
@@ -42,6 +50,9 @@ export const CLOCK_UNKNOWN_COPY =
 export const DISK_FULL_COPY = 'Backup Disk full: add a bigger disk';
 export const CLEANING_COPY = 'Cleaning up old backups';
 export const HELPER_OUTDATED_COPY = 'Cleanup paused: Pi needs an update';
+/** Pre-run warning when scheduledBackups is fresh but backupCleanup is not. */
+export const CLEANUP_NEEDS_UPDATE_COPY =
+  'This Pi needs an update before backups can clean up old copies';
 export const HOOK_FALLBACK_COPY = 'Backed up, but the App was briefly stopped';
 export const HOOK_POST_WARNING_COPY = 'Done, with a warning';
 export const APP_DISK_NOT_DOCKED_COPY = "This App's disk isn't plugged in.";
@@ -270,11 +281,15 @@ export const diskBackupStatusLines = (opts: {
     lines.push({ id: 'disk-full', tone: 'error', text: DISK_FULL_COPY });
   }
 
-  // Engine f114a28 does not advertise a backupCleanup capability; HELPER_OUTDATED
-  // arrives only as a lastResult / attempt code after a run that skipped cleanup.
+  // Pre-run: fresh scheduledBackups but no fresh backupCleanup (Engine PR #354).
+  // HELPER_OUTDATED on a result remains the runtime fallback. When both apply,
+  // show the pre-run warning once — do not also emit the result line.
+  const missingCleanup = !engineHasCapability(opts.engine, BACKUP_CLEANUP_CAPABILITY);
   const anyHelper = instances.some((i) => i.lastResult?.result === RESULT_HELPER_OUTDATED)
     || attempt?.result?.result === RESULT_HELPER_OUTDATED;
-  if (anyHelper) {
+  if (missingCleanup) {
+    lines.push({ id: 'pi-update', tone: 'warn', text: CLEANUP_NEEDS_UPDATE_COPY });
+  } else if (anyHelper) {
     lines.push({ id: 'pi-update', tone: 'warn', text: HELPER_OUTDATED_COPY });
   }
 
@@ -339,14 +354,21 @@ export const instanceBackupStatusLines = (opts: {
       // when the instance already has a more specific last-result line.
       const prefix = result.time ? `Last backup: ${formatWhen(result.time)}. ` : '';
       // method:none and result lines already stand alone; keep proposal copy exact.
-      const text = (plain.text === METHOD_NONE_COPY
-        || plain.text === HOOK_FALLBACK_COPY
-        || plain.text === DISK_FULL_COPY
-        || plain.text === HELPER_OUTDATED_COPY
-        || plain.text === APP_DISK_NOT_DOCKED_COPY)
-        ? plain.text
-        : `${prefix}${plain.text}`.trim();
-      lines.push({ id: 'last-result', tone: plain.tone, text });
+      // Disk status already carries CLEANUP_NEEDS_UPDATE_COPY when the
+      // cleanup cap is missing; don't repeat the runtime line as well.
+      if (plain.text === HELPER_OUTDATED_COPY
+        && !engineHasCapability(opts.engine, BACKUP_CLEANUP_CAPABILITY)) {
+        // skip
+      } else {
+        const text = (plain.text === METHOD_NONE_COPY
+          || plain.text === HOOK_FALLBACK_COPY
+          || plain.text === DISK_FULL_COPY
+          || plain.text === HELPER_OUTDATED_COPY
+          || plain.text === APP_DISK_NOT_DOCKED_COPY)
+          ? plain.text
+          : `${prefix}${plain.text}`.trim();
+        lines.push({ id: 'last-result', tone: plain.tone, text });
+      }
     }
   }
 
