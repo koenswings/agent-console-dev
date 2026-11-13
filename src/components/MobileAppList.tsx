@@ -15,7 +15,7 @@ import {
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
 import { live, liveNow, metricsFor } from '../store/live';
-import { buildAppUrl, appHostContextFor, appEngineOffline, engineDisplayName, offlineAppHint } from '../store/appUrl';
+import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
@@ -345,9 +345,14 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               </Show>
 
               {/* Action buttons */}
-              <Show when={i().status === 'Running' && appEngineOffline(engine())}>
+              <Show when={i().status === 'Running' && !!engine() && appEngineStatus(engine()) === 'offline'}>
                 <div class="app-offline-hint" data-testid={`mobile-app-offline-hint-${id}`}>
                   {offlineAppHint(engine()?.hostname)}
+                </div>
+              </Show>
+              <Show when={i().status === 'Running' && !!engine() && appEngineStatus(engine()) === 'connecting'}>
+                <div class="app-connecting-hint" data-testid={`mobile-app-connecting-hint-${id}`}>
+                  {connectingAppHint(engine()?.hostname)}
                 </div>
               </Show>
               <Show when={i().status === 'Running'}>
@@ -355,13 +360,13 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                   <button class="btn btn--stop" onClick={() => handleStop(i())}>Stop</button>
                   <Show when={engine()}>
                     <Show
-                      when={!appEngineOffline(engine()) && buildAppUrl(engine(), i().port, hostCtx())}
+                      when={appEngineStatus(engine()) === 'online' && buildAppUrl(engine(), i().port, hostCtx())}
                       fallback={
                         <button
                           class="btn btn--open"
                           data-testid={`mobile-open-instance-${id}`}
                           disabled
-                          title={appEngineOffline(engine()) ? offlineAppHint(engine()?.hostname) : 'No address or port known for this app yet'}
+                          title={appEngineStatus(engine()) === 'offline' ? offlineAppHint(engine()?.hostname) : appEngineStatus(engine()) === 'connecting' ? connectingAppHint(engine()?.hostname) : 'No address or port known for this app yet'}
                         >
                           Open ↗
                         </button>

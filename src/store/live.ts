@@ -58,15 +58,47 @@ export const applyEphemeral = (state: LiveState, message: unknown, receivedAt: n
   return state;
 };
 
+/** Wait this long after we start listening for ephemeral messages before treating a missing beat + stale lastRun as offline. One 10 s heartbeat interval plus a short margin. */
+export const LIVE_CONNECTING_MS = 15_000;
+
+export type EngineStatus = 'connecting' | 'online' | 'offline';
+
 /**
- * Online: live hb within LIVE_OFFLINE_MS when this Engine has ever sent one;
- * otherwise (old Engine) the stored lastRun within LEGACY_ONLINE_MS.
+ * Liveness of an Engine at `now` (Console clock).
+ *
+ * - online: a live hb/metrics message arrived within LIVE_OFFLINE_MS; or (old
+ *   Engine, never sent a beat) stored lastRun within LEGACY_ONLINE_MS.
+ * - connecting: no beat yet and lastRun is stale or missing, but we have not
+ *   been listening for LIVE_CONNECTING_MS, so status is not yet known. Also
+ *   when no Engine record is given.
+ * - offline: a beat was seen and has expired, or the connecting grace has
+ *   passed with no beat and a stale lastRun.
+ *
+ * `listeningSince` is the Console clock when we began listening (see
+ * beginLiveListen). Default 0 skips the grace — used by unit tests of the
+ * lastRun rule, and after resetLive().
  */
-export const isOnline = (engine: Pick<Engine, 'id' | 'lastRun'>, live: LiveState, now: number): boolean => {
+export const engineStatus = (
+  engine: Pick<Engine, 'id' | 'lastRun'> | undefined,
+  live: LiveState,
+  now: number,
+  listeningSince: number = 0,
+): EngineStatus => {
+  if (!engine) return 'connecting';
   const beat = live.beats[String(engine.id)];
-  if (beat) return now - beat.receivedAt <= LIVE_OFFLINE_MS;
-  return Number(engine.lastRun) > now - LEGACY_ONLINE_MS;
+  if (beat) return now - beat.receivedAt <= LIVE_OFFLINE_MS ? 'online' : 'offline';
+  if (Number(engine.lastRun) > now - LEGACY_ONLINE_MS) return 'online';
+  if (now - listeningSince < LIVE_CONNECTING_MS) return 'connecting';
+  return 'offline';
 };
+
+/** True only when status is known to be online. */
+export const isOnline = (
+  engine: Pick<Engine, 'id' | 'lastRun'>,
+  live: LiveState,
+  now: number,
+  listeningSince: number = 0,
+): boolean => engineStatus(engine, live, now, listeningSince) === 'online';
 
 export interface MetricsView { metrics: DockerMetrics | null; stale: boolean; receivedAt: number | null }
 
@@ -102,13 +134,17 @@ export const engineClockOf = (engineId: string | null | undefined, live: LiveSta
 // ── the app-wide reactive state (one Engine connection at a time) ───────────
 const [live, setLive] = createSignal<LiveState>(emptyLive());
 const [liveNow, setLiveNow] = createSignal(Date.now());
+/** Console clock when we started listening for ephemeral messages; 0 = no connecting grace. */
+const [liveSince, setLiveSince] = createSignal(0);
 if (typeof setInterval === 'function') setInterval(() => setLiveNow(Date.now()), 5_000);
 
-export { live, liveNow };
+export { live, liveNow, liveSince };
 /** Feed one received ephemeral message (engine.ts). */
 export const receiveEphemeral = (message: unknown, receivedAt: number = Date.now()): void => {
   setLive((s) => applyEphemeral(s, message, receivedAt));
   receiveUpdateProgress(message, receivedAt);
 };
-/** Forget everything (new connection / dispose). */
-export const resetLive = (): void => { setLive(emptyLive()); };
+/** Forget everything (new connection / dispose). Clears the connecting grace. */
+export const resetLive = (): void => { setLive(emptyLive()); setLiveSince(0); };
+/** Mark that we are now listening for ephemeral hb/metrics (engine.ts after resetLive). */
+export const beginLiveListen = (at: number = Date.now()): void => { setLiveSince(at); };
