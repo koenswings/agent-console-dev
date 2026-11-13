@@ -29,6 +29,47 @@ export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
 export interface BackupConfig {
   mode: BackupMode;
   links: InstanceID[]; // instance IDs this backup disk is configured for
+  /**
+   * Daily local time on the docked Pi, e.g. `{ daily: "02:30" }`.
+   * Mirrors Engine Disk.backupConfig (f114a28). Null/absent when not set.
+   */
+  schedule?: BackupSchedule | null;
+  /**
+   * Set when BACKUP.yaml has a schedule that does not parse (BAD_TIME / BAD_SCHEDULE
+   * text); null when valid or absent (Engine f114a28). A scheduled disk with an
+   * error still runs at 02:30 until the file is fixed. Shown in plain wording.
+   */
+  scheduleError?: string | null;
+}
+
+/** Daily "HH:MM" local to the docked Pi. Mirrors Engine BackupConfig.schedule. */
+export interface BackupSchedule {
+  daily: string;
+}
+
+/**
+ * A leftover .backup-in-progress lock found when a Backup Disk docks or
+ * the Engine boots (idea#446). Shape matches Engine 71fc2c6 src/data/Disk.ts.
+ */
+export interface BackupStaleLock {
+  instanceId: InstanceID;
+  startedAt: Timestamp | null;
+  detectedAt: Timestamp;
+}
+
+/**
+ * One backup attempt in the idea#400 store summary (time, method, result).
+ * Mirrors Engine BackupResult (f114a28): time, method (stop|hook|live|none),
+ * and result. result is a plain string so unknown Engine codes still type-check.
+ * Known codes, precedence for combined outcomes: FAILED, SKIPPED_LOCKED,
+ * HOOK_FALLBACK, HOOK_POST_WARNING, HELPER_OUTDATED, OK. BACKUP_DISK_FULL,
+ * APP_DISK_NOT_DOCKED and INTERRUPTED occur alone. Do not show the raw code
+ * in the UI. lastResult.time is the result time (there is no Instance.lastAttempt).
+ */
+export interface BackupRunResult {
+  time: Timestamp;
+  method: string | null;
+  result: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +154,24 @@ export interface Disk {
   /** Filesystem size and free space in bytes (docked disks, idea#131); null or absent otherwise. */
   sizeBytes?: number | null;
   freeBytes?: number | null;
+  /**
+   * Stale .backup-in-progress locks found at dock/boot (idea#446).
+   * Not auto-retried. null/absent when none or undocked.
+   * Matches Engine 71fc2c6 Disk.ts — not provisional.
+   */
+  backupStaleLocks?: BackupStaleLock[] | null;
+  /**
+   * idea#400 store summary (agreed on idea#400 and Steve's decisions).
+   * All optional: today's Engines omit them and the Console looks as before.
+   * lastAttempt is a Disk field (BACKUP.yaml mirror); it is not on Instance.
+   */
+  freePct?: number | null;
+  clockTrusted?: boolean | null;
+  clockReason?: string | null;
+  missedRuns?: number | null;
+  cleaning?: boolean | null;
+  cleaningStartedAt?: Timestamp | null;
+  lastAttempt?: Timestamp | null;
 }
 
 /** Files Disk settings — mirrors Disk.filesConfig (files-disk.md §7.5). */
@@ -374,6 +433,14 @@ export interface Instance {
   serviceImages: ServiceImage[];
   created: Timestamp;
   lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
+  /**
+   * idea#400 per-instance backup summary (agreed on idea#400 and Steve's decisions).
+   * All optional: today's Engines omit them and the Console looks as before.
+   * There is no Instance.lastAttempt; use lastResult.time. lastBackup (last
+   * successful backup) is unchanged.
+   */
+  lastResult?: BackupRunResult | null;
+  backupHistory?: BackupRunResult[] | null;
   lastStarted: Timestamp;
   storedOn: DiskID | null;
   /**

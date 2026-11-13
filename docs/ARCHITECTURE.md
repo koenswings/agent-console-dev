@@ -103,7 +103,8 @@ src/
 │   ├── InstanceRow.tsx          Single instance row with start/stop/backup/eject actions
 │   ├── DiskView.tsx             Right pane for a disk: role badges, one section per role, Add Files
 │   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files / Backup Disk, Install App
-│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk)
+│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk; idea#404 status lines)
+│   ├── BackupStatusLines.tsx    Schedule, last run, missed runs, clock, full/cleaning, interrupted
 │   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
@@ -388,14 +389,21 @@ Disk {
   dockedTo:     EngineID | null
   diskTypes:    DiskType[]           // 'app' | 'backup' | 'empty' | 'upgrade' | 'files' | 'system'; several roles possible
   backupConfig: BackupConfig | null  // set on backup disks; null otherwise
+                                        // backupConfig.schedule?: { daily: "02:30" } | null
+                                        // backupConfig.scheduleError?: string | null — invalid schedule (Engine f114a28)
   filesConfig?:  { shareName; readOnly; passwordProtected; error } | null   // Files role (idea#131)
   unmountError?: { engineId; mountPoint; fsUuid; message } | null          // busy unmount (idea#126)
   sizeBytes?, freeBytes?: number | null                                    // docked disks (idea#131)
+  backupStaleLocks?: { instanceId; startedAt; detectedAt }[] | null        // idea#446; Engine 71fc2c6 shape
+  // idea#400 store summary — all optional, agreed names:
+  freePct?, clockTrusted?, clockReason?, missedRuns?, cleaning?,
+  cleaningStartedAt?, lastAttempt?
 }
 
 App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
-Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk'
+Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk',
+                                                     // 'scheduledBackups' (Engine f114a28; no backupCleanup flag)
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
@@ -403,7 +411,9 @@ CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
 Instance {
   ...                               // standard fields
   status:     Status                // includes 'Missing' in addition to standard statuses
-  lastBackup: Timestamp | null      // null = never backed up
+  lastBackup: Timestamp | null      // last successful backup; null = never backed up
+  lastResult?, backupHistory?       // idea#400 summary, optional; lastResult.time is the result time
+                                    // (no Instance.lastAttempt)
 }
 
 User {
@@ -416,6 +426,26 @@ User {
 ```
 
 Engine liveness (`src/store/live.ts` `engineStatus`): `connecting` until a heartbeat has been observed or the connecting grace (`LIVE_CONNECTING_MS`, 15 s after the Console starts listening) has passed with a stale `lastRun`; `online` when a live heartbeat arrived within 30 s (Console clock), or — for old Engines that never send heartbeats — when stored `lastRun` is within 90 s; `offline` only once that status is known (heartbeat expired, or grace over and `lastRun` stale).
+
+### Backup Disk status lines (idea#404)
+
+When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400,
+Engine main f114a28), `RestorePanel` and the instance row show store-summary status
+lines: schedule and next run (computed from `schedule.daily`, or 02:30 when the
+schedule is absent or invalid, and only while `clockTrusted` is true),
+`backupConfig.scheduleError` (plain wording; the disk still runs at 02:30 until
+it is fixed), last attempt (`Disk.lastAttempt` or `lastResult.time`) and result,
+missed runs, clock not trusted (grey "Backup time unknown: this Pi's clock may be
+wrong"), cleaning / Backup Disk full, "Pi needs an update" (`HELPER_OUTDATED` on
+a result, not a `backupCleanup` flag — Engine f114a28 does not advertise one),
+"App was briefly stopped" (`HOOK_FALLBACK`), "Done, with a warning"
+(`HOOK_POST_WARNING`), "This App's disk isn't plugged in." (`APP_DISK_NOT_DOCKED`),
+`FAILED` ("The backup did not finish."), and interrupted backups (including
+`backupStaleLocks`). An `OK` result with method `stop` is a successful stop-method
+backup, not a hook fallback. There is no `Instance.lastAttempt` and no `nextRun`
+field. All new store fields are optional; with the flag absent the UI is unchanged.
+Copy is plain language (no borg, YAML, helper, or result-code tokens). See
+`src/store/backupStatus.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

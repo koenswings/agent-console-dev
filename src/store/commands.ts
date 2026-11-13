@@ -50,7 +50,13 @@ export type EngineCapability =
   // idea#347 (option A: quarantine)
   | 'removeInstance'
   // idea#79 (cross-Engine Move, see store/moveApp.ts)
-  | 'moveAppCrossEngine';
+  | 'moveAppCrossEngine'
+  /**
+   * idea#400 / Engine f114a28: this Engine publishes the store summary, runs the
+   * schedule, and accepts setBackupMode. Engine does not advertise backupCleanup;
+   * a skipped cleanup is recorded as lastResult HELPER_OUTDATED.
+   */
+  | 'scheduledBackups';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
