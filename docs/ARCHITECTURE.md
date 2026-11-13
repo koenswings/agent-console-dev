@@ -103,7 +103,8 @@ src/
 │   ├── InstanceRow.tsx          Single instance row with start/stop/backup/eject actions
 │   ├── DiskView.tsx             Right pane for a disk: role badges, one section per role, Add Files
 │   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files / Backup Disk, Install App
-│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk; idea#404 status lines)
+│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk; idea#400 controls, idea#404 status lines)
+│   ├── BackupModeControls.tsx   setBackupMode: mode + daily time, gated on scheduledBackups (idea#400)
 │   ├── BackupStatusLines.tsx    Schedule, last run, missed runs, clock, full/cleaning, interrupted
 │   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
@@ -116,6 +117,8 @@ src/
 │   ├── engine.ts                Real Automerge WebSocket connection
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
+│   ├── setBackupMode.ts         setBackupMode validation, error wording, success copy (idea#400)
+│   ├── backupStatus.ts          Backup Disk status-line copy (idea#404 / Engine f114a28)
 │   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
 │   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
 │   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
@@ -446,6 +449,25 @@ backup, not a hook fallback. There is no `Instance.lastAttempt` and no `nextRun`
 field. All new store fields are optional; with the flag absent the UI is unchanged.
 Copy is plain language (no borg, YAML, helper, or result-code tokens). See
 `src/store/backupStatus.ts`.
+
+### Backup Disk schedule controls (idea#400)
+
+When the docked Engine advertises a fresh `scheduledBackups` capability
+(`capabilitiesBootedAt === lastBooted`; Engine main f114a28), `RestorePanel`
+shows mode and daily-time controls (`BackupModeControls`). The current mode
+and time are read from `Disk.backupConfig` (`mode`, `schedule.daily`, and
+`scheduleError` when the stored time is invalid). Saving sends
+`setBackupMode <backupDiskId> <immediate|on-demand|scheduled> [HH:MM]` to the
+Engine in `Disk.dockedTo`, always by id, never by name. A time is sent only
+with `scheduled` and is also validated on the client (`HH:MM` or `H:MM`,
+00:00–23:59). The result's `changed` and `note` fields are shown in plain
+wording; refusals `NOT_DOCKED`, `AMBIGUOUS`, `SYSTEM_DISK`, `NOT_A_BACKUP_DISK`,
+`BAD_BACKUP_YAML`, `BAD_MODE`, `BAD_TIME` and `BUSY` are mapped the same way.
+Saving `scheduled` on a disk with no `Disk.lastAttempt` (the store field #186
+reads for the last scheduled run; Engine `lastRun` is not in the store) shows
+"A first backup starts now, then daily at HH:MM." The Console never writes
+`lastRun`. Without the flag the existing read-only mode badge is unchanged.
+See `src/store/setBackupMode.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

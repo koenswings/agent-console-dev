@@ -3868,6 +3868,31 @@ body {
   font-size: 0.85em;
 }
 
+/* idea#400: Backup Disk mode and schedule controls */
+.backup-mode-controls {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--colour-border, #ddd);
+}
+.backup-mode-controls__intro {
+  margin: 0 0 0.5rem;
+  color: var(--colour-text-muted, #555);
+}
+.backup-mode-controls__fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.backup-mode-controls__legend {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+.backup-mode-controls__time {
+  max-width: 8rem;
+}
+
 /* Follow-up to PR #162: App links to an offline Engine are greyed out */
 .app-card--offline .app-card__open-btn,
 .btn--open:disabled {

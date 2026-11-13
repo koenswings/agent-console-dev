@@ -257,6 +257,32 @@ export const validateShareName = (name: string): string | null => {
   return null;
 };
 
+/**
+ * Build "setBackupMode <backupDiskId> <immediate|on-demand|scheduled> [HH:MM]"
+ * (idea#400, Engine f114a28). Always the disk id, never the name. A time is
+ * valid only with scheduled and is omitted for the other modes.
+ */
+export const buildSetBackupModeCommand = (
+  backupDiskId: string,
+  mode: string,
+  time?: string,
+): string => {
+  const t = time?.trim();
+  return t && mode === 'scheduled'
+    ? `setBackupMode ${backupDiskId} ${mode} ${t}`
+    : `setBackupMode ${backupDiskId} ${mode}`;
+};
+
+/** Switch a docked Backup Disk's mode and, for scheduled, its daily time. */
+export const setBackupMode = (
+  engineId: string,
+  backupDiskId: string,
+  mode: string,
+  time?: string,
+): void => {
+  _sendCommand(engineId, buildSetBackupModeCommand(backupDiskId, mode, time));
+};
+
 /** Configure an empty disk as a Backup Disk on the given engine. */
 export const createBackupDisk = (
   engineId: string,

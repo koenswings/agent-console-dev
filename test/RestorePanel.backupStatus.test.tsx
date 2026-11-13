@@ -114,7 +114,7 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
     expect(screen.getAllByText(HOOK_FALLBACK_COPY).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/interrupted/i).length).toBeGreaterThanOrEqual(1);
     // mode badge still shows Scheduled
-    expect(screen.getByText('Scheduled')).toBeInTheDocument();
+    expect(screen.getByText('Scheduled', { selector: '.restore-panel__mode' })).toBeInTheDocument();
     // existing last-backup line is still there
     expect(screen.getByText(/Last backup:/)).toBeInTheDocument();
   });
