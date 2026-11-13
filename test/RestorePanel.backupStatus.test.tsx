@@ -3,7 +3,6 @@ import { render, screen } from '@solidjs/testing-library';
 import RestorePanel from '../src/components/RestorePanel';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
 import {
-  BACKUP_CLEANUP_CAPABILITY,
   CLOCK_UNKNOWN_COPY,
   CLEANING_COPY,
   DISK_FULL_COPY,
@@ -80,7 +79,7 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
   });
 
   it('flag on: renders each disk status line from mock data', () => {
-    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY, BACKUP_CLEANUP_CAPABILITY]);
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
     const disk: Disk = {
       ...baseDisk,
       backupConfig: {
@@ -121,7 +120,7 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
   });
 
   it('flag on: shows Backup Disk full and Pi-needs-update from result codes', () => {
-    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY, BACKUP_CLEANUP_CAPABILITY]);
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
     const disk: Disk = {
       ...baseDisk,
       backupConfig: { mode: 'on-demand', links: [MOCK_IDS.INST_KOLIBRI_ID] },
@@ -135,7 +134,7 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
     expect(screen.getAllByText(DISK_FULL_COPY).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('flag on: shows cleanup paused when the cleanup capability is missing', () => {
+  it('flag on: shows cleanup paused only from a HELPER_OUTDATED result, not a missing flag', () => {
     const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
     const disk: Disk = {
       ...baseDisk,
@@ -147,11 +146,18 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
       clockTrusted: true,
     };
     renderPanel(storeWith({ engine, disk }), disk);
-    expect(screen.getByText(HELPER_OUTDATED_COPY)).toBeInTheDocument();
+    expect(screen.queryByText(HELPER_OUTDATED_COPY)).not.toBeInTheDocument();
+
+    const instance: Instance = {
+      ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
+      lastResult: { time: Date.now(), method: 'live', result: 'HELPER_OUTDATED' },
+    };
+    renderPanel(storeWith({ engine, disk, instance }), disk);
+    expect(screen.getAllByText(HELPER_OUTDATED_COPY).length).toBeGreaterThanOrEqual(1);
   });
 
   it('still lists two linked instances when iterated by id', () => {
-    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY, BACKUP_CLEANUP_CAPABILITY]);
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
     const other: Instance = {
       ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
       id: 'nextcloud-inst-001',

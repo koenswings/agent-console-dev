@@ -52,12 +52,11 @@ export type EngineCapability =
   // idea#79 (cross-Engine Move, see store/moveApp.ts)
   | 'moveAppCrossEngine'
   /**
-   * idea#400 / scheduled-backup-disk.md §3.1 (agreed on idea#400 and Steve's decisions).
-   * scheduledBackups: this Engine publishes the §3.6 store summary and runs the schedule.
-   * backupCleanup: advertised only when the cleanup helper is present.
+   * idea#400 / Engine f114a28: this Engine publishes the store summary, runs the
+   * schedule, and accepts setBackupMode. Engine does not advertise backupCleanup;
+   * a skipped cleanup is recorded as lastResult HELPER_OUTDATED.
    */
-  | 'scheduledBackups'
-  | 'backupCleanup';
+  | 'scheduledBackups';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';

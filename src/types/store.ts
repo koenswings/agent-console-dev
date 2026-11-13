@@ -31,12 +31,18 @@ export interface BackupConfig {
   links: InstanceID[]; // instance IDs this backup disk is configured for
   /**
    * Daily local time on the docked Pi, e.g. `{ daily: "02:30" }`.
-   * Provisional name/shape pending Axle's idea#400 store summary.
+   * Mirrors Engine Disk.backupConfig (f114a28). Null/absent when not set.
    */
   schedule?: BackupSchedule | null;
+  /**
+   * Set when BACKUP.yaml has a schedule that does not parse (BAD_TIME / BAD_SCHEDULE
+   * text); null when valid or absent (Engine f114a28). A scheduled disk with an
+   * error still runs at 02:30 until the file is fixed. Shown in plain wording.
+   */
+  scheduleError?: string | null;
 }
 
-/** Provisional pending idea#400. Daily "HH:MM" local to the docked Pi. */
+/** Daily "HH:MM" local to the docked Pi. Mirrors Engine BackupConfig.schedule. */
 export interface BackupSchedule {
   daily: string;
 }
@@ -53,8 +59,11 @@ export interface BackupStaleLock {
 
 /**
  * One backup attempt in the idea#400 store summary (time, method, result).
- * Field names are agreed on idea#400 and Steve's decisions. result is a plain
- * string so unknown Engine codes still type-check. Do not show the raw code
+ * Mirrors Engine BackupResult (f114a28): time, method (stop|hook|live|none),
+ * and result. result is a plain string so unknown Engine codes still type-check.
+ * Known codes, precedence for combined outcomes: FAILED, SKIPPED_LOCKED,
+ * HOOK_FALLBACK, HOOK_POST_WARNING, HELPER_OUTDATED, OK. BACKUP_DISK_FULL,
+ * APP_DISK_NOT_DOCKED and INTERRUPTED occur alone. Do not show the raw code
  * in the UI. lastResult.time is the result time (there is no Instance.lastAttempt).
  */
 export interface BackupRunResult {

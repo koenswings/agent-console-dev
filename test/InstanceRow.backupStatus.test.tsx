@@ -103,7 +103,7 @@ describe('InstanceRow — Backup status lines (idea#404)', () => {
   });
 
   it('flag on: shows HOOK_FALLBACK, method none, clock, and interrupted from mock data', () => {
-    const engine = makeEngine([SCHEDULED_BACKUPS_CAPABILITY, 'backupCleanup']);
+    const engine = makeEngine([SCHEDULED_BACKUPS_CAPABILITY]);
 
     const fallback = renderRow({
       instance: makeInstance({

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BACKUP_CLEANUP_CAPABILITY,
   CLOCK_UNKNOWN_COPY,
   CLEANING_COPY,
   DISK_FULL_COPY,
@@ -9,6 +8,9 @@ import {
   HOOK_POST_WARNING_COPY,
   APP_DISK_NOT_DOCKED_COPY,
   METHOD_NONE_COPY,
+  FAILED_COPY,
+  SCHEDULE_ERROR_COPY,
+  SCHEDULE_ERROR_IDLE_COPY,
   SCHEDULED_BACKUPS_CAPABILITY,
   diskBackupStatusLines,
   engineShowsBackupStatus,
@@ -113,15 +115,20 @@ describe('plainBackupResult', () => {
     expect(plainBackupResult('APP_DISK_NOT_DOCKED')?.text).toBe(APP_DISK_NOT_DOCKED_COPY);
     expect(plainBackupResult('BACKUP_DISK_FULL')?.text).toBe(DISK_FULL_COPY);
     expect(plainBackupResult('HELPER_OUTDATED')?.text).toBe(HELPER_OUTDATED_COPY);
+    expect(plainBackupResult('FAILED')?.text).toBe(FAILED_COPY);
+    expect(plainBackupResult('OK')?.text).toBe('The backup completed.');
+    expect(plainBackupResult('OK', 'stop')?.text).toBe('The backup completed.');
+    expect(plainBackupResult('OK', 'stop')?.tone).toBe('ok');
     expect(plainBackupResult('OK', 'none')?.text).toBe(METHOD_NONE_COPY);
     expect(plainBackupResult('INTERRUPTED')?.text).toMatch(/interrupted/i);
     expect(plainBackupResult('SKIPPED_LOCKED')?.text).toMatch(/already running/i);
-    const all = ['OK', 'HOOK_FALLBACK', 'HOOK_POST_WARNING', 'APP_DISK_NOT_DOCKED', 'INTERRUPTED', 'SKIPPED_LOCKED', 'BACKUP_DISK_FULL', 'HELPER_OUTDATED', 'WEIRD']
+    const all = ['OK', 'FAILED', 'HOOK_FALLBACK', 'HOOK_POST_WARNING', 'APP_DISK_NOT_DOCKED', 'INTERRUPTED', 'SKIPPED_LOCKED', 'BACKUP_DISK_FULL', 'HELPER_OUTDATED', 'WEIRD']
       .map((c) => plainBackupResult(c)!.text)
       .join(' ');
     expect(all).not.toMatch(/borg|\bYAML\b|helper/i);
     expect(all).not.toMatch(/HOOK_FALLBACK|HOOK_POST_WARNING|APP_DISK_NOT_DOCKED|BACKUP_DISK_FULL|HELPER_OUTDATED|SKIPPED_LOCKED/);
     expect(all).not.toContain('INTERRUPTED');
+    expect(all).not.toContain('FAILED');
   });
 });
 
@@ -157,7 +164,7 @@ describe('diskBackupStatusLines — flag off is a no-op', () => {
 });
 
 describe('diskBackupStatusLines — each §5 line from mock data', () => {
-  const engine = flaggedEngine([BACKUP_CLEANUP_CAPABILITY]);
+  const engine = flaggedEngine();
 
   it('shows schedule and next run when the clock is trusted', () => {
     const lines = diskBackupStatusLines({ disk: disk({ clockTrusted: true }), engine, now: NOW });
@@ -240,7 +247,7 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     expect(justSpace.find((l) => l.id === 'disk-full')).toBeUndefined();
   });
 
-  it('shows "Pi needs an update" from HELPER_OUTDATED or a missing cleanup flag', () => {
+  it('shows "Pi needs an update" only from a HELPER_OUTDATED result, not from a missing flag', () => {
     const fromResult = diskBackupStatusLines({
       disk: disk({ clockTrusted: true, backupConfig: { mode: 'on-demand', links: ['inst-1'] } }),
       engine,
@@ -249,12 +256,68 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     });
     expect(fromResult.find((l) => l.id === 'pi-update')?.text).toBe(HELPER_OUTDATED_COPY);
 
-    const noCleanup = diskBackupStatusLines({
+    // Engine f114a28 does not advertise backupCleanup; a scheduled disk without
+    // a HELPER_OUTDATED result must not invent "Pi needs an update".
+    const noResult = diskBackupStatusLines({
       disk: disk({ clockTrusted: true }),
-      engine: flaggedEngine(), // scheduledBackups only
+      engine: flaggedEngine(),
       now: NOW,
     });
-    expect(noCleanup.find((l) => l.id === 'pi-update')?.text).toBe(HELPER_OUTDATED_COPY);
+    expect(noResult.find((l) => l.id === 'pi-update')).toBeUndefined();
+  });
+
+  it('shows scheduleError in plain wording and still schedules the 02:30 default', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({
+        clockTrusted: true,
+        backupConfig: {
+          mode: 'scheduled',
+          links: ['inst-1'],
+          schedule: null,
+          scheduleError: 'BAD_TIME: daily "25:00" is not HH:MM',
+        },
+      }),
+      engine,
+      now: NOW,
+    });
+    const err = lines.find((l) => l.id === 'schedule-error');
+    expect(err?.text).toBe(SCHEDULE_ERROR_COPY);
+    expect(err?.tone).toBe('warn');
+    expect(JSON.stringify(lines)).not.toMatch(/BAD_TIME|25:00|YAML/);
+    const schedule = lines.find((l) => l.id === 'schedule');
+    expect(schedule?.text).toMatch(/Scheduled daily at 02:30/);
+    expect(schedule?.text).toMatch(/Next run tomorrow at 02:30/);
+  });
+
+  it('shows a shorter scheduleError line in on-demand mode and no next run', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({
+        clockTrusted: true,
+        backupConfig: {
+          mode: 'on-demand',
+          links: ['inst-1'],
+          schedule: null,
+          scheduleError: 'BAD_SCHEDULE: daily only',
+        },
+      }),
+      engine,
+      now: NOW,
+    });
+    expect(lines.find((l) => l.id === 'schedule-error')?.text).toBe(SCHEDULE_ERROR_IDLE_COPY);
+    expect(lines.find((l) => l.id === 'schedule')).toBeUndefined();
+    expect(JSON.stringify(lines)).not.toMatch(/BAD_SCHEDULE/);
+  });
+
+  it('does not invent a next run when clockTrusted is unset', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: undefined }),
+      engine,
+      now: NOW,
+    });
+    const schedule = lines.find((l) => l.id === 'schedule');
+    expect(schedule?.text).toBe('Scheduled daily at 02:30.');
+    expect(schedule?.text).not.toMatch(/Next run/);
+    expect(lines.find((l) => l.id === 'clock')).toBeUndefined();
   });
 
   it('shows HOOK_FALLBACK copy when any instance used the fallback', () => {
@@ -335,7 +398,7 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
 });
 
 describe('instanceBackupStatusLines', () => {
-  const engine = flaggedEngine([BACKUP_CLEANUP_CAPABILITY]);
+  const engine = flaggedEngine();
 
   it('returns no lines when the flag is off', () => {
     expect(instanceBackupStatusLines({

@@ -1,12 +1,13 @@
 /**
  * Backup Disk status lines (idea#404, Console PR 1 of 2).
  *
- * Derives operator-facing copy from the idea#400 store summary. Field and
- * capability names follow scheduled-backup-disk.md §3.6 / §3.1 and are
- * agreed on idea#400 and Steve's decisions. All new store fields are optional:
- * when the `scheduledBackups` flag is missing or stale, this module returns
- * no lines and the existing UI is unchanged. Instance.lastAttempt is not a
- * field; lastResult.time is the result time. Disk.lastAttempt is kept.
+ * Derives operator-facing copy from the idea#400 store summary, aligned to
+ * Engine main f114a28 (PR #353 / docs/BACKUP_SCHEDULE.md). All new store
+ * fields are optional: when the `scheduledBackups` flag is missing or stale,
+ * this module returns no lines and the existing UI is unchanged.
+ * Instance.lastAttempt is not a field; lastResult.time is the result time.
+ * Disk.lastAttempt is kept. There is no nextRun field: the next run is
+ * computed from schedule.daily only while clockTrusted is true.
  *
  * Operator copy has no jargon (no borg, YAML, helper, or result-code tokens).
  */
@@ -21,11 +22,11 @@ import type {
   Store,
 } from '../types/store';
 
-/** Capability that gates every new status line. Agreed, proposal §3.1. */
+/** Capability that gates every new status line and schedule controls. Engine f114a28. */
 export const SCHEDULED_BACKUPS_CAPABILITY = 'scheduledBackups' as const;
 
-/** Advertised only when the cleanup helper is present (agreed, proposal §3.1). */
-export const BACKUP_CLEANUP_CAPABILITY = 'backupCleanup' as const;
+/** Default daily time when schedule is absent or invalid (Engine createBackupDisk / setBackupMode). */
+export const DEFAULT_BACKUP_TIME = '02:30';
 
 export type BackupStatusTone = 'ok' | 'warn' | 'error' | 'neutral' | 'unknown';
 
@@ -45,6 +46,10 @@ export const HOOK_FALLBACK_COPY = 'Backed up, but the App was briefly stopped';
 export const HOOK_POST_WARNING_COPY = 'Done, with a warning';
 export const APP_DISK_NOT_DOCKED_COPY = "This App's disk isn't plugged in.";
 export const METHOD_NONE_COPY = 'Not backed up: its content is on the App Disk';
+export const FAILED_COPY = 'The backup did not finish.';
+export const SCHEDULE_ERROR_COPY =
+  'The saved backup time is not valid, so this disk runs at 02:30 until it is fixed.';
+export const SCHEDULE_ERROR_IDLE_COPY = 'The saved backup time is not valid.';
 
 const RESULT_OK = 'OK';
 const RESULT_HOOK_FALLBACK = 'HOOK_FALLBACK';
@@ -54,15 +59,12 @@ const RESULT_INTERRUPTED = 'INTERRUPTED';
 const RESULT_SKIPPED_LOCKED = 'SKIPPED_LOCKED';
 const RESULT_BACKUP_DISK_FULL = 'BACKUP_DISK_FULL';
 const RESULT_HELPER_OUTDATED = 'HELPER_OUTDATED';
+const RESULT_FAILED = 'FAILED';
 
 /** True when the docked Engine advertises a fresh scheduledBackups flag. */
 export const engineShowsBackupStatus = (
   engine: Engine | null | undefined,
 ): boolean => engineHasCapability(engine, SCHEDULED_BACKUPS_CAPABILITY);
-
-export const engineHasBackupCleanup = (
-  engine: Engine | null | undefined,
-): boolean => engineHasCapability(engine, BACKUP_CLEANUP_CAPABILITY);
 
 const formatWhen = (ts: number): string =>
   new Date(ts).toLocaleString(undefined, {
@@ -97,9 +99,19 @@ const isSameLocalDay = (a: Date, b: Date): boolean =>
   && a.getMonth() === b.getMonth()
   && a.getDate() === b.getDate();
 
+/**
+ * Daily time used for a scheduled disk: a valid schedule.daily, otherwise the
+ * Engine default 02:30 (absent or invalid schedule still runs at 02:30).
+ */
+export const scheduledDailyTime = (disk: Disk): string | null => {
+  if (disk.backupConfig?.mode !== 'scheduled') return null;
+  const daily = disk.backupConfig.schedule?.daily;
+  return daily && parseDailyTime(daily) ? daily : DEFAULT_BACKUP_TIME;
+};
+
 const scheduleLine = (disk: Disk, now: number, clockTrusted: boolean): BackupStatusLine | null => {
-  const when = disk.backupConfig?.schedule?.daily;
-  if (!when || disk.backupConfig?.mode !== 'scheduled') return null;
+  const when = scheduledDailyTime(disk);
+  if (!when) return null;
   if (!clockTrusted) {
     return { id: 'schedule', tone: 'neutral', text: `Scheduled daily at ${when}.` };
   }
@@ -118,6 +130,17 @@ const scheduleLine = (disk: Disk, now: number, clockTrusted: boolean): BackupSta
   };
 };
 
+const scheduleErrorLine = (disk: Disk): BackupStatusLine | null => {
+  const err = disk.backupConfig?.scheduleError;
+  if (!err) return null;
+  const scheduled = disk.backupConfig?.mode === 'scheduled';
+  return {
+    id: 'schedule-error',
+    tone: 'warn',
+    text: scheduled ? SCHEDULE_ERROR_COPY : SCHEDULE_ERROR_IDLE_COPY,
+  };
+};
+
 /** Plain-language result, never the raw Engine code. */
 export const plainBackupResult = (
   result: string | null | undefined,
@@ -129,9 +152,7 @@ export const plainBackupResult = (
   }
   switch (result) {
     case RESULT_OK:
-      if (method === 'stop') {
-        return { text: HOOK_FALLBACK_COPY, tone: 'warn' };
-      }
+      // method 'stop' on an OK result is the App's intended stop method, not a hook fallback.
       return {
         text: 'The backup completed.',
         tone: 'ok',
@@ -150,9 +171,11 @@ export const plainBackupResult = (
       return { text: DISK_FULL_COPY, tone: 'error' };
     case RESULT_HELPER_OUTDATED:
       return { text: HELPER_OUTDATED_COPY, tone: 'warn' };
+    case RESULT_FAILED:
+      return { text: FAILED_COPY, tone: 'error' };
     default:
       if (!result) return null;
-      return { text: 'The backup did not finish.', tone: 'error' };
+      return { text: FAILED_COPY, tone: 'error' };
   }
 };
 
@@ -192,11 +215,14 @@ export const diskBackupStatusLines = (opts: {
   const now = opts.now ?? Date.now();
   const disk = opts.disk;
   const instances = opts.instances ?? [];
-  const clockTrusted = disk.clockTrusted !== false;
+  // Next run only when the Engine has said the clock is trusted (f114a28).
+  const clockTrusted = disk.clockTrusted === true;
   const lines: BackupStatusLine[] = [];
 
   const sched = scheduleLine(disk, now, clockTrusted);
   if (sched) lines.push(sched);
+  const schedErr = scheduleErrorLine(disk);
+  if (schedErr) lines.push(schedErr);
 
   const attempt = latestAttempt(disk, instances);
   if (attempt) {
@@ -244,13 +270,11 @@ export const diskBackupStatusLines = (opts: {
     lines.push({ id: 'disk-full', tone: 'error', text: DISK_FULL_COPY });
   }
 
+  // Engine f114a28 does not advertise a backupCleanup capability; HELPER_OUTDATED
+  // arrives only as a lastResult / attempt code after a run that skipped cleanup.
   const anyHelper = instances.some((i) => i.lastResult?.result === RESULT_HELPER_OUTDATED)
     || attempt?.result?.result === RESULT_HELPER_OUTDATED;
-  // Proposal §3.1: backupCleanup is advertised only with helper v6+. A scheduled
-  // Engine without that flag is the HELPER_OUTDATED state.
-  const cleanupMissing = !engineHasBackupCleanup(opts.engine)
-    && disk.backupConfig?.mode === 'scheduled';
-  if (anyHelper || cleanupMissing) {
+  if (anyHelper) {
     lines.push({ id: 'pi-update', tone: 'warn', text: HELPER_OUTDATED_COPY });
   }
 
