@@ -29,6 +29,37 @@ export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
 export interface BackupConfig {
   mode: BackupMode;
   links: InstanceID[]; // instance IDs this backup disk is configured for
+  /**
+   * Daily local time on the docked Pi, e.g. `{ daily: "02:30" }`.
+   * Provisional name/shape pending Axle's idea#400 store summary.
+   */
+  schedule?: BackupSchedule | null;
+}
+
+/** Provisional pending idea#400. Daily "HH:MM" local to the docked Pi. */
+export interface BackupSchedule {
+  daily: string;
+}
+
+/**
+ * A leftover .backup-in-progress lock found when a Backup Disk docks or
+ * the Engine boots (idea#446). Shape matches Engine 71fc2c6 src/data/Disk.ts.
+ */
+export interface BackupStaleLock {
+  instanceId: InstanceID;
+  startedAt: Timestamp | null;
+  detectedAt: Timestamp;
+}
+
+/**
+ * One backup attempt in the idea#400 store summary (time, method, result).
+ * Field names are provisional pending Axle's #400; result is a plain string
+ * so unknown Engine codes still type-check. Do not show the raw code in the UI.
+ */
+export interface BackupRunResult {
+  time: Timestamp;
+  method: string | null;
+  result: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +144,23 @@ export interface Disk {
   /** Filesystem size and free space in bytes (docked disks, idea#131); null or absent otherwise. */
   sizeBytes?: number | null;
   freeBytes?: number | null;
+  /**
+   * Stale .backup-in-progress locks found at dock/boot (idea#446).
+   * Not auto-retried. null/absent when none or undocked.
+   * Matches Engine 71fc2c6 Disk.ts — not provisional.
+   */
+  backupStaleLocks?: BackupStaleLock[] | null;
+  /**
+   * idea#400 store summary (provisional field names pending Axle's Engine PR).
+   * All optional: today's Engines omit them and the Console looks as before.
+   */
+  freePct?: number | null;
+  clockTrusted?: boolean | null;
+  clockReason?: string | null;
+  missedRuns?: number | null;
+  cleaning?: boolean | null;
+  cleaningStartedAt?: Timestamp | null;
+  lastAttempt?: Timestamp | null;
 }
 
 /** Files Disk settings — mirrors Disk.filesConfig (files-disk.md §7.5). */
@@ -374,6 +422,13 @@ export interface Instance {
   serviceImages: ServiceImage[];
   created: Timestamp;
   lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
+  /**
+   * idea#400 per-instance backup summary (provisional names pending Axle's Engine PR).
+   * All optional: today's Engines omit them and the Console looks as before.
+   */
+  lastAttempt?: Timestamp | null;
+  lastResult?: BackupRunResult | null;
+  backupHistory?: BackupRunResult[] | null;
   lastStarted: Timestamp;
   storedOn: DiskID | null;
   /**

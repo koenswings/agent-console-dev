@@ -48,7 +48,14 @@ export type EngineCapability =
   | 'updateApp'
   | 'updateAppFetch'
   // idea#347 (option A: quarantine)
-  | 'removeInstance';
+  | 'removeInstance'
+  /**
+   * idea#400 / scheduled-backup-disk.md §3.1 (provisional names pending Axle's #400).
+   * scheduledBackups: this Engine publishes the §3.6 store summary and runs the schedule.
+   * backupCleanup: advertised only when root helper v6 or newer is present.
+   */
+  | 'scheduledBackups'
+  | 'backupCleanup';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
