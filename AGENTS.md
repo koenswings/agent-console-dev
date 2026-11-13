@@ -68,6 +68,7 @@ pnpm typecheck      # TypeScript check only
 ```
 
 `pnpm build` runs `scripts/build.mjs`. Vite writes into a fresh `dist.new-<timestamp>/` and, only if that build succeeds, the new tree is swapped into `dist/`: live `dist/` is renamed to `dist.prev` (exactly one previous tree is kept, for rollback), then the new folder is renamed to `dist/`. A failed or incomplete build leaves the live `dist/` untouched, so the Engine never serves an empty or half-written Console. Always use `pnpm build` on a Pi; do not `rm -rf dist`, and do not use `pnpm exec vite build` as a substitute. Vite is configured with `emptyOutDir: false`, so a direct `vite build` will not wipe live `dist/`, but it also will not do the swap.
+A live `dist/hidden-instances.json` is copied into the new tree before the swap, unless the build already produced a file of that name.
 
 ## Test (required before any PR)
 
@@ -162,7 +163,7 @@ Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
 
 ### Optional dashboard hide list (idea#212)
 
-To hide instance cards from the Apps dashboard and the mobile app list on one Engine (e.g. fixtures during a demo), put `hidden-instances.json` in the served `dist/`: `{ "hidden": ["<instanceId>", ...] }`. The file is fetched once per page load and shared by both lists. Records stay in the store and nothing is stopped; delete the file to show the cards again. A successful `pnpm build` replaces live `dist/` with the new tree (the previous tree is in `dist.prev`) and does not copy this file across, so re-place it after every deploy if it is still wanted. It is not in git.
+To hide instance cards from the Apps dashboard and the mobile app list on one Engine (e.g. fixtures during a demo), put `hidden-instances.json` in the served `dist/`: `{ "hidden": ["<instanceId>", ...] }`. The file is fetched once per page load and shared by both lists. Records stay in the store and nothing is stopped; delete the file to show the cards again. A successful `pnpm build` carries an existing `hidden-instances.json` into the new `dist/` (it is not overwritten if the build itself produced that file). It is not in git.
 
 ## Quality rules (every PR, no exceptions)
 

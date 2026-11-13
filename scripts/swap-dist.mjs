@@ -1,5 +1,8 @@
-import { existsSync, renameSync, rmSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { copyFileSync, existsSync, renameSync, rmSync, statSync } from 'node:fs';
+import { basename, isAbsolute, join } from 'node:path';
+
+/** Runtime state files written into live dist/ (not produced by the Vite build). */
+export const RUNTIME_DIST_FILES = Object.freeze(['hidden-instances.json']);
 
 /**
  * Swap a successful build directory into place as `dist/`.
@@ -62,5 +65,47 @@ export function swapDist({
       }
     }
     throw err;
+  }
+}
+
+/**
+ * Copy allowlisted runtime state from the live `dist/` into a finished new
+ * build tree, before `swapDist`. Existing files in the new tree are left
+ * alone so a file the build itself produced is never overwritten. The live
+ * `dist/` is not modified.
+ *
+ * @param {object} opts
+ * @param {string} opts.root
+ * @param {string} opts.newDir  Absolute path, or a name under `root`
+ * @param {string} [opts.distName='dist']
+ * @param {readonly string[]} [opts.files=RUNTIME_DIST_FILES]
+ * @param {(p: string) => boolean} [opts.exists]
+ * @param {(from: string, to: string) => void} [opts.copyFile]
+ * @param {(p: string) => { isFile(): boolean }} [opts.stat]
+ */
+export function copyRuntimeState({
+  root,
+  newDir,
+  distName = 'dist',
+  files = RUNTIME_DIST_FILES,
+  exists = existsSync,
+  copyFile = copyFileSync,
+  stat = statSync,
+}) {
+  const distPath = join(root, distName);
+  const newPath = isAbsolute(newDir) ? newDir : join(root, newDir);
+  if (!exists(newPath)) {
+    throw new Error(`new build directory is missing: ${newPath}`);
+  }
+
+  for (const name of files) {
+    if (name !== basename(name) || name === '' || name === '.' || name === '..') {
+      throw new Error(`runtime dist file must be a bare filename: ${name}`);
+    }
+    const from = join(distPath, name);
+    const to = join(newPath, name);
+    if (!exists(from) || !stat(from).isFile()) continue;
+    if (exists(to)) continue;
+    copyFile(from, to);
   }
 }

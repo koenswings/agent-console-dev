@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
-import { swapDist } from './swap-dist.mjs';
+import { copyRuntimeState, swapDist } from './swap-dist.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const newDirName = `dist.new-${Date.now()}`;
@@ -20,6 +20,7 @@ try {
       emptyOutDir: true,
     },
   });
+  copyRuntimeState({ root, newDir });
   swapDist({ root, newDir });
   process.stdout.write(`Build swapped into dist/ (previous kept as dist.prev if one existed)\n`);
 } catch (err) {
