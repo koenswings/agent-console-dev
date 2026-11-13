@@ -36,7 +36,7 @@ export const BACKUP_CLEANUP_CAPABILITY = 'backupCleanup' as const;
 /** Default daily time when schedule is absent or invalid (Engine createBackupDisk / setBackupMode). */
 export const DEFAULT_BACKUP_TIME = '02:30';
 
-export type BackupStatusTone = 'ok' | 'warn' | 'error' | 'neutral' | 'unknown';
+export type BackupStatusTone = 'ok' | 'warn' | 'error' | 'neutral' | 'unknown' | 'info';
 
 export interface BackupStatusLine {
   /** Stable id for an ID-keyed <For>. */
@@ -61,6 +61,15 @@ export const FAILED_COPY = 'The backup did not finish.';
 export const SCHEDULE_ERROR_COPY =
   'The saved backup time is not valid, so this disk runs at 02:30 until it is fixed.';
 export const SCHEDULE_ERROR_IDLE_COPY = 'The saved backup time is not valid.';
+
+export const orphanLinksCopy = (ids: readonly string[] | null | undefined): string | null => {
+  const n = ids?.length ?? 0;
+  if (n === 0) return null;
+  if (n === 1) {
+    return "1 older backup belongs to an app that isn't on this network. It is kept and skipped.";
+  }
+  return `${n} older backups belong to apps that aren't on this network. They are kept and skipped.`;
+};
 
 const RESULT_OK = 'OK';
 const RESULT_HOOK_FALLBACK = 'HOOK_FALLBACK';
@@ -234,6 +243,13 @@ export const diskBackupStatusLines = (opts: {
   if (sched) lines.push(sched);
   const schedErr = scheduleErrorLine(disk);
   if (schedErr) lines.push(schedErr);
+
+  // Engine #356: optional Disk.backupConfig.orphanLinks. Missing or empty → no line.
+  // Neutral/info, not a warning; no delete action.
+  const orphanText = orphanLinksCopy(disk.backupConfig?.orphanLinks);
+  if (orphanText) {
+    lines.push({ id: 'orphan-links', tone: 'info', text: orphanText });
+  }
 
   const attempt = latestAttempt(disk, instances);
   if (attempt) {

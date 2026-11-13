@@ -14,6 +14,7 @@ import {
   SCHEDULE_ERROR_COPY,
   SCHEDULE_ERROR_IDLE_COPY,
   SCHEDULED_BACKUPS_CAPABILITY,
+  orphanLinksCopy,
   diskBackupStatusLines,
   engineShowsBackupStatus,
   instanceBackupStatusLines,
@@ -535,5 +536,80 @@ describe('instanceBackupStatusLines — backupCleanup does not double the warnin
       engine: flaggedEngine([BACKUP_CLEANUP_CAPABILITY]),
     });
     expect(lines.find((l) => l.id === 'last-result')?.text).toBe(HELPER_OUTDATED_COPY);
+  });
+});
+
+describe('diskBackupStatusLines — orphanLinks (Engine #356)', () => {
+  const engine = flaggedEngine();
+
+  it('shows nothing when orphanLinks is missing (older Engines)', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine,
+      now: NOW,
+    });
+    expect(disk({}).backupConfig?.orphanLinks).toBeUndefined();
+    expect(lines.find((l) => l.id === 'orphan-links')).toBeUndefined();
+  });
+
+  it('shows nothing when orphanLinks is empty', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({
+        clockTrusted: true,
+        backupConfig: {
+          mode: 'scheduled',
+          links: ['inst-1'],
+          schedule: { daily: '02:30' },
+          orphanLinks: [],
+        },
+      }),
+      engine,
+      now: NOW,
+    });
+    expect(lines.find((l) => l.id === 'orphan-links')).toBeUndefined();
+  });
+
+  it('uses singular wording for one orphan link', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({
+        clockTrusted: true,
+        backupConfig: {
+          mode: 'scheduled',
+          links: ['inst-1', 'gone-1'],
+          schedule: { daily: '02:30' },
+          orphanLinks: ['gone-1'],
+        },
+      }),
+      engine,
+      now: NOW,
+    });
+    const line = lines.find((l) => l.id === 'orphan-links');
+    expect(line?.text).toBe(orphanLinksCopy(['gone-1']));
+    expect(line?.text).toBe(
+      "1 older backup belongs to an app that isn't on this network. It is kept and skipped.",
+    );
+    expect(line?.tone).toBe('info');
+  });
+
+  it('uses plural wording for two or more orphan links', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({
+        clockTrusted: true,
+        backupConfig: {
+          mode: 'scheduled',
+          links: ['inst-1', 'gone-1', 'gone-2'],
+          schedule: { daily: '02:30' },
+          orphanLinks: ['gone-1', 'gone-2'],
+        },
+      }),
+      engine,
+      now: NOW,
+    });
+    const line = lines.find((l) => l.id === 'orphan-links');
+    expect(line?.text).toBe(orphanLinksCopy(['gone-1', 'gone-2']));
+    expect(line?.text).toBe(
+      "2 older backups belong to apps that aren't on this network. They are kept and skipped.",
+    );
+    expect(line?.tone).toBe('info');
   });
 });

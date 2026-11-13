@@ -3984,3 +3984,5 @@ body {
 .backup-status__line--error { color: var(--colour-error); }
 .backup-status__line--unknown { color: var(--colour-text-dim); }
 .backup-status__line--neutral { color: var(--colour-text-muted); }
+/* idea#400 / Engine #356: orphan-links line uses --neutral (info, not a warning). */
+.backup-status__line--info { color: var(--colour-text-muted); }
