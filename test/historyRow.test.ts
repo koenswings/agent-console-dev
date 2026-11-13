@@ -91,3 +91,32 @@ describe('historyRowView — clearBackupLock (idea#454)', () => {
     }))).toEqual({ tone: 'ok', icon: '✓', message: null });
   });
 });
+
+
+describe('historyRowView — makeBackupDisk (idea#404)', () => {
+  const mb = (over: Partial<CommandTrace> = {}): CommandTrace => trace({
+    command: 'makeBackupDisk',
+    args: { diskId: 'DISK_1' },
+    status: 'ok',
+    errorMessage: null,
+    ...over,
+  });
+
+  it('ok → success with “This disk is now a Backup Disk.”', () => {
+    expect(historyRowView(mb())).toEqual({
+      tone: 'ok',
+      icon: '✓',
+      message: 'This disk is now a Backup Disk.',
+    });
+  });
+
+  it('TOO_SMALL → plain wording, no code', () => {
+    const view = historyRowView(mb({
+      status: 'error',
+      errorMessage: 'TOO_SMALL: 2 GB',
+    }));
+    expect(view.tone).toBe('error');
+    expect(view.message).toBe('This stick is too small to be a Backup Disk');
+    expect(view.message).not.toMatch(/TOO_SMALL|borg|YAML/i);
+  });
+});

@@ -1,16 +1,26 @@
 /**
  * EraseDialog — summariseDisk → typed label → eraseDisk (files-disk.md §4 / §8,
- * idea#136). Used by "Erase this disk…" and the Files "Erase the disk first"
- * shortcut (erase, then createFilesDisk once the disk is republished ['empty']).
+ * idea#136). Used by "Erase this disk…", the Files "Erase the disk first"
+ * shortcut (erase, then createFilesDisk once the disk is republished ['empty']),
+ * and "Make a Backup Disk" on a blank stick (typed confirm, then makeBackupDisk).
  */
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type Component } from 'solid-js';
 import {
   createFilesDisk,
   eraseDisk,
+  makeBackupDisk,
   summariseDisk,
   DEFAULT_SHARE_NAME,
   validateShareName,
 } from '../store/commands';
+import {
+  MAKE_BACKUP_DISK_BLANK_CONFIRM,
+  MAKE_BACKUP_DISK_SUCCESS_MESSAGE,
+  MAKE_BACKUP_TIMEOUT_MESSAGE,
+  findMakeBackupDiskOp,
+  makeBackupDiskErrorText,
+} from '../store/makeBackupDisk';
+import MakeBackupDiskProgress from './MakeBackupDiskProgress';
 import { createCommandResult, FILES_TIMEOUT_MESSAGE } from '../store/commandResult';
 import { traceIdSnapshot } from '../store/ejectResult';
 import { mergeCommandLogs, remoteCommandLog } from '../store/remoteCommandLogs';
@@ -36,7 +46,7 @@ import type { CommandLogState } from '../store/commandLog';
 import type { ContentSummary, Store } from '../types/store';
 import { plainEngineText } from '../store/plainError';
 
-export type EraseMode = 'erase' | 'erase-then-files';
+export type EraseMode = 'erase' | 'erase-then-files' | 'make-backup-disk';
 
 interface EraseDialogProps {
   /** Disk ID or unformattedDisks[].candidateId. */
@@ -56,6 +66,8 @@ interface EraseDialogProps {
   onBecameFiles?: (diskId: string) => void;
   /** erase-then-files: createFilesDisk failed; disk is empty — land on Empty Disk with error. */
   onFilesFailed?: (diskId: string, message: string) => void;
+  /** make-backup-disk: diskTypes now includes 'backup'. */
+  onBecameBackup?: (diskId: string) => void;
 }
 
 type Phase =
@@ -63,7 +75,9 @@ type Phase =
   | { kind: 'summary'; summary: ContentSummary; traceId: string }
   | { kind: 'summary-error'; message: string }
   | { kind: 'erasing'; summary: ContentSummary; startedAt: number }
+  | { kind: 'making-backup'; summary: ContentSummary; startedAt: number }
   | { kind: 'success'; summary: ContentSummary }
+  | { kind: 'backup-success'; summary: ContentSummary }
   | { kind: 'error'; message: string }
   | { kind: 'removed' };
 
@@ -130,7 +144,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   createEffect(() => {
     const p = phase();
     if (!startedAsDisk) return;
-    if (p.kind === 'erasing' || p.kind === 'success' || p.kind === 'removed' || p.kind === 'error') return;
+    if (p.kind === 'erasing' || p.kind === 'making-backup' || p.kind === 'success' || p.kind === 'backup-success' || p.kind === 'removed' || p.kind === 'error') return;
     if (!props.store()?.diskDB[props.targetId]) setPhase({ kind: 'removed' });
   });
 
@@ -238,7 +252,75 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     }
   });
 
-  const progressStep = createMemo((): string | null => {
+
+  // ── makeBackupDisk (blank-stick path, idea#404) ──────────────────────────
+  const isMakeBackup = () => props.mode === 'make-backup-disk';
+  const backupResult = createCommandResult({
+    commandLog: cls,
+    command: 'makeBackupDisk',
+    argKey: 'diskId',
+    matchMode: 'includes',
+    longRunning: true,
+    isSuccess: () => (props.store()?.diskDB[props.targetId]?.diskTypes ?? []).includes('backup'),
+  });
+  const makeBackupOp = createMemo(() => {
+    if (!isMakeBackup() || phase().kind !== 'making-backup') return null;
+    return findMakeBackupDiskOp(props.store(), props.engineId, props.targetId);
+  });
+
+  let backupNoResponseTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearBackupTimer = () => {
+    if (backupNoResponseTimer !== null) { clearTimeout(backupNoResponseTimer); backupNoResponseTimer = null; }
+  };
+  onCleanup(clearBackupTimer);
+
+  const startMakeBackup = () => {
+    const p = phase();
+    if (p.kind !== 'summary' || stale() || !labelMatches()) return;
+    clearBackupTimer();
+    setSlow(false);
+    const startedAt = Date.now();
+    setPhase({ kind: 'making-backup', summary: p.summary, startedAt });
+    backupResult.start(props.targetId, () => makeBackupDisk(props.engineId, props.targetId), {
+      command: 'makeBackupDisk',
+      matchMode: 'includes',
+      longRunning: true,
+    });
+    backupNoResponseTimer = setTimeout(() => {
+      backupNoResponseTimer = null;
+      const cur = phase();
+      if (cur.kind !== 'making-backup') return;
+      const op = findMakeBackupDiskOp(props.store(), props.engineId, props.targetId);
+      const s = backupResult.state();
+      if (!op && s.kind === 'pending') {
+        setPhase({ kind: 'error', message: MAKE_BACKUP_TIMEOUT_MESSAGE });
+      }
+    }, ERASE_NO_RESPONSE_MS);
+    eraseSlowTimer = setTimeout(() => {
+      eraseSlowTimer = null;
+      if (phase().kind === 'making-backup') setSlow(true);
+    }, ERASE_SLOW_MS);
+  };
+
+  createEffect(() => {
+    if (!isMakeBackup()) return;
+    const s = backupResult.state();
+    const p = phase();
+    if (p.kind !== 'making-backup') return;
+    if (s.kind === 'success') {
+      clearBackupTimer();
+      setPhase({ kind: 'backup-success', summary: p.summary });
+    } else if (s.kind === 'error') {
+      clearBackupTimer();
+      setPhase({ kind: 'error', message: makeBackupDiskErrorText(s.message) });
+    } else if (s.kind === 'timeout') {
+      clearBackupTimer();
+      setPhase({ kind: 'error', message: MAKE_BACKUP_TIMEOUT_MESSAGE });
+    }
+  });
+
+
+    const progressStep = createMemo((): string | null => {
     if (makingFiles()) {
       const s = filesResult.state();
       if (s.kind === 'pending') return MAKING_FILES_STEP;
@@ -253,13 +335,20 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
 
   const titleLabel = () => {
     const p = phase();
-    if (p.kind === 'summary' || p.kind === 'erasing' || p.kind === 'success') return p.summary.label;
+    if (p.kind === 'summary' || p.kind === 'erasing' || p.kind === 'making-backup' || p.kind === 'success' || p.kind === 'backup-success') return p.summary.label;
     return props.fallbackLabel;
   };
 
   return (
-    <div class="erase-dialog" role="dialog" data-testid="erase-dialog" aria-label={`Erase ${titleLabel()}`}>
-      <h2 class="erase-dialog__title">Erase {titleLabel()}?</h2>
+    <div
+      class="erase-dialog"
+      role="dialog"
+      data-testid={isMakeBackup() ? 'make-backup-disk-dialog' : 'erase-dialog'}
+      aria-label={isMakeBackup() ? `Make a Backup Disk from ${titleLabel()}` : `Erase ${titleLabel()}`}
+    >
+      <h2 class="erase-dialog__title">
+        {isMakeBackup() ? `Make a Backup Disk from ${titleLabel()}?` : `Erase ${titleLabel()}?`}
+      </h2>
 
       <Show when={phase().kind === 'summarising'}>
         <p class="edp-form__hint">Reading the disk…</p>
@@ -287,6 +376,9 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
             <>
               <SummaryBody summary={summary} />
               <p class="erase-dialog__warning" role="alert">{ERASE_WARNING}</p>
+              <Show when={isMakeBackup()}>
+                <p class="edp-form__hint" data-testid="make-backup-disk-blank-confirm">{MAKE_BACKUP_DISK_BLANK_CONFIRM}</p>
+              </Show>
               <Show
                 when={!stale()}
                 fallback={
@@ -313,9 +405,13 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                     class="btn btn--danger"
                     data-testid="erase-confirm-ok"
                     disabled={!labelMatches()}
-                    onClick={startErase}
+                    onClick={() => isMakeBackup() ? startMakeBackup() : startErase()}
                   >
-                    {props.mode === 'erase-then-files' ? 'Erase and make a Files Disk' : 'Erase this disk'}
+                    {props.mode === 'erase-then-files'
+                      ? 'Erase and make a Files Disk'
+                      : isMakeBackup()
+                        ? 'Erase and make a Backup Disk'
+                        : 'Erase this disk'}
                   </button>
                 </Show>
                 <Show when={stale()}>
@@ -325,6 +421,16 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
             </>
           );
         }}
+      </Show>
+
+      <Show when={phase().kind === 'making-backup'}>
+        <MakeBackupDiskProgress
+          op={makeBackupOp}
+          waiting={backupResult.state().kind === 'pending' || backupResult.state().kind === 'sent'}
+        />
+        <Show when={slow()}>
+          <p class="edp-form__hint" role="status">{ERASE_SLOW_MESSAGE}</p>
+        </Show>
       </Show>
 
       <Show when={phase().kind === 'erasing' || (phase().kind === 'success' && makingFiles())}>
@@ -346,6 +452,24 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
         <p class="edp-form__error" role="alert">{(phase() as { message: string }).message}</p>
         <div class="edp-form__actions">
           <button class="btn" onClick={() => props.onClose()}>Close</button>
+        </div>
+      </Show>
+
+      <Show when={phase().kind === 'backup-success'}>
+        <div class="erase-dialog__result" role="status" data-testid="make-backup-disk-success">
+          <p>Done. {MAKE_BACKUP_DISK_SUCCESS_MESSAGE}</p>
+        </div>
+        <div class="edp-form__actions">
+          <button
+            class="btn btn--primary"
+            data-testid="make-backup-disk-done"
+            onClick={() => {
+              props.onBecameBackup?.(props.targetId);
+              props.onClose();
+            }}
+          >
+            Done
+          </button>
         </div>
       </Show>
 

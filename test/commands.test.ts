@@ -5,6 +5,7 @@ import {
   buildEjectDiskCommand,
   buildBackupAppCommand,
   buildCreateBackupDiskCommand,
+  buildMakeBackupDiskCommand,
   buildCopyAppCommand,
   buildMoveAppCommand,
   buildInstallAppCommand,
@@ -333,5 +334,13 @@ describe('rebootEngine', () => {
 
     expect(mock).toHaveBeenCalledOnce();
     expect(mock).toHaveBeenCalledWith('ENGINE_001', 'reboot');
+  });
+});
+
+
+describe('buildMakeBackupDiskCommand', () => {
+  it('is makeBackupDisk <diskOrCandidateId>', () => {
+    expect(buildMakeBackupDiskCommand('CAND_INTENSO')).toBe('makeBackupDisk CAND_INTENSO');
+    expect(buildMakeBackupDiskCommand('DISK_EMPTY')).toBe('makeBackupDisk DISK_EMPTY');
   });
 });

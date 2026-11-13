@@ -138,6 +138,7 @@ const OP_LABEL: Record<OperationKind, string> = {
   stopApp:       'Stopping',
   flashCard:     'Flashing card',
   initialiseDisk: 'Initialising disk',
+  makeBackupDisk: 'Making a Backup Disk',
 };
 
 // ---------------------------------------------------------------------------

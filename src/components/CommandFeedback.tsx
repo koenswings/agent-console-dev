@@ -40,6 +40,8 @@ export const COMMAND_VERBS: Record<string, string> = {
   eraseDisk: 'erase',
   createFilesDisk: 'set up',
   createBackupDisk: 'set up',
+  // idea#404 — agreed makeBackupDisk
+  makeBackupDisk: 'set up',
 };
 
 export const commandVerb = (command: string | null): string =>

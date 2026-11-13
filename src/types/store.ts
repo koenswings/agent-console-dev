@@ -426,7 +426,9 @@ export type OperationKind =
   | 'stopApp'
   // idea#201 §10 (Engine API contract v2)
   | 'flashCard'
-  | 'initialiseDisk';
+  | 'initialiseDisk'
+  // idea#404: agreed Operation kind makeBackupDisk
+  | 'makeBackupDisk';
 
 export type OperationCause =
   | 'console-command'

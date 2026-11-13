@@ -1,11 +1,12 @@
 /**
  * UnformattedDiskView — right pane for an Engine.unformattedDisks candidate
- * (files-disk.md §8, idea#136): Make this a Files Disk (erase-first only) and
- * Erase this disk….
+ * (files-disk.md §8, idea#136): Make this a Files Disk (erase-first only),
+ * Make a Backup Disk (when the Engine has 'makeBackupDisk'), and Erase this disk….
  */
 import { Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import { DEFAULT_SHARE_NAME, UPDATE_ENGINE_TOOLTIP, engineHasCapability, validateShareName } from '../store/commands';
+import { MAKE_BACKUP_DISK_CAPABILITY, makeBackupDiskBlockedReason } from '../store/makeBackupDisk';
 import { eraseBlockedReason, findUnformatted } from '../store/erase';
 import { formatBytes as fmt } from '../store/diskRoles';
 import { STICK_FS_LINE, stickForCandidate, stickRowLabel } from '../store/usbSticks';
@@ -32,6 +33,12 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   const filesBlocked = createMemo((): string | undefined =>
     engineHasCapability(engine(), 'filesDisk') ? undefined : UPDATE_ENGINE_TOOLTIP
   );
+  const canMakeBackupDisk = createMemo(() =>
+    engineHasCapability(engine(), MAKE_BACKUP_DISK_CAPABILITY)
+  );
+  const makeBackupBlocked = createMemo(() =>
+    makeBackupDiskBlockedReason(engine(), props.store(), props.candidateId)
+  );
 
   const [dialog, setDialog] = createSignal<{ mode: EraseMode; shareName?: string } | null>(null);
   const [shareName, setShareName] = createSignal(DEFAULT_SHARE_NAME);
@@ -39,6 +46,11 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   const [filesOpen, setFilesOpen] = createSignal(false);
 
   const openErase = (mode: EraseMode) => {
+    if (mode === 'make-backup-disk') {
+      if (makeBackupBlocked()) return;
+      setDialog({ mode });
+      return;
+    }
     if (eraseBlocked()) return;
     if (mode === 'erase-then-files' && (filesBlocked() || shareErr())) return;
     setDialog({ mode, shareName: shareName() });
@@ -125,6 +137,21 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
           </Show>
         </section>
 
+        <Show when={canMakeBackupDisk()}>
+          <section class="disk-section" aria-label="Make a Backup Disk">
+            <button
+              class="btn"
+              data-testid="make-backup-disk-unformatted"
+              disabled={!!makeBackupBlocked()}
+              title={makeBackupBlocked()}
+              onClick={() => openErase('make-backup-disk')}
+            >
+              Make a Backup Disk
+            </button>
+            <p class="edp-form__hint">Erases this stick, then sets it up to back up every App daily at 02:30.</p>
+          </section>
+        </Show>
+
         <div class="disk-view__erase">
           <button
             class="btn-text btn-text--danger"
@@ -157,6 +184,10 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
               props.onSelect({ type: 'disk', id });
             }}
             onFilesFailed={(id, _msg) => {
+              setDialog(null);
+              props.onSelect({ type: 'disk', id });
+            }}
+            onBecameBackup={(id) => {
               setDialog(null);
               props.onSelect({ type: 'disk', id });
             }}
