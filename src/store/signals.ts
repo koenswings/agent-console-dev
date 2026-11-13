@@ -11,19 +11,30 @@ import type {
   Disk,
   EngineID,
 } from '../types/store';
-import { isOnline, live, type LiveState } from './live';
+import { engineStatus, isOnline, live, liveSince, type EngineStatus, type LiveState } from './live';
 
 // ---------------------------------------------------------------------------
 // Pure helpers — safe to call in any context, including unit tests
 // ---------------------------------------------------------------------------
 
 /**
- * Online badge. Engines with live heartbeats (ephemeral 'idea/hb' every 10 s):
- * online while one arrived within 30 s (Console clock). Old Engines: the stored
- * lastRun within 90 s. See live.ts. Pass `now` so the comparison is reactive.
+ * Engine badge status. See live.ts engineStatus: connecting until a heartbeat
+ * (or the lastRun fallback after the connecting grace) is known, then online
+ * or offline. Pass `now` so the comparison is reactive.
  */
-export const isEngineOnline = (engine: Engine, now: number = Date.now(), liveState: LiveState = live()): boolean =>
-  isOnline(engine, liveState, now);
+export const engineLiveness = (
+  engine: Engine | undefined,
+  now: number = Date.now(),
+  liveState: LiveState = live(),
+  listeningSince: number = liveSince(),
+): EngineStatus => engineStatus(engine, liveState, now, listeningSince);
+
+export const isEngineOnline = (
+  engine: Engine,
+  now: number = Date.now(),
+  liveState: LiveState = live(),
+  listeningSince: number = liveSince(),
+): boolean => isOnline(engine, liveState, now, listeningSince);
 
 export interface EngineTreeNode {
   engine: Engine;

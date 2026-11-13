@@ -13,7 +13,7 @@ import { createSocketLiveness, forceReconnect, type ReconnectableAdapter, type S
 import { singleSocketAdapterClass, type WsClientAdapterCtor, type WsClientAdapterLike } from './singleSocketAdapter';
 import { forgetLearnedEngine, setServedEngineId } from './connectedEngine';
 import { createSignal, type Accessor } from 'solid-js';
-import { receiveEphemeral, resetLive } from './live';
+import { beginLiveListen, receiveEphemeral, resetLive } from './live';
 import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
@@ -353,6 +353,7 @@ export async function createEngineConnection(
     // ephemeral 'idea/hb' and 'idea/metrics' messages on the store handle and
     // relay them across peers; they are never stored. See live.ts.
     resetLive();
+    beginLiveListen();
     handle.addListener?.('ephemeral-message', ({ message }: { message: unknown }) => {
       if (disposed) return;
       if ((message as { type?: unknown } | null)?.type === 'idea/hb') liveness?.beat();

@@ -438,6 +438,10 @@ body {
 }
 .tree-item__status-dot--online  { background: #22c55e; }
 .tree-item__status-dot--offline { background: #ef4444; }
+.tree-item__status-dot--connecting {
+  background: var(--colour-text-dim);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
 
 .tree-item__eject-btn {
   font-size: var(--font-size-xs);
@@ -3861,6 +3865,25 @@ body {
   margin-top: 0.25rem;
   font-size: 0.8em;
   color: var(--color-text-muted, #666);
+}
+
+/* idea#190: neutral connecting state until Engine liveness is known */
+.app-card--connecting {
+  background: var(--colour-surface-alt);
+  border-color: var(--colour-border);
+}
+.app-card--connecting .app-card__open-btn {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: var(--colour-text-muted);
+  color: #fff;
+}
+.app-connecting-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8em;
+  color: var(--colour-text-muted);
+  font-style: italic;
 }
 
 /* Technical details toggle: raw Engine text under the plain sentence (idea#76) */
