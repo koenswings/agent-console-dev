@@ -1,6 +1,7 @@
 import { Show, type Component } from 'solid-js';
 import type { Instance, App, Engine } from '../types/store';
 import { appEngineOffline, engineDisplayName, offlineAppHint } from '../store/appUrl';
+import { instanceCardTitle } from '../store/instanceTitle';
 
 interface AppCardProps {
   instance: () => Instance | undefined;
@@ -14,6 +15,7 @@ interface AppCardProps {
 const AppCard: Component<AppCardProps> = (props) => {
   const isRunning = () => props.instance()?.status === 'Running';
   const engineName = () => engineDisplayName(props.engine?.()?.hostname);
+  const cardTitle = () => instanceCardTitle(props.instance(), props.app());
   /** The app's Engine is offline: Open is greyed out and not clickable. */
   const offline = () => appEngineOffline(props.engine?.());
 
@@ -33,9 +35,12 @@ const AppCard: Component<AppCardProps> = (props) => {
       data-engine-lan={props.engine?.()?.lanAddress ?? ''}
     >
       <div class="app-card__header">
-        <span class="app-card__title">
-          {props.app()?.title ?? props.instance()?.name}
-        </span>
+        <div class="app-card__titles">
+          <span class="app-card__title">{cardTitle().title}</span>
+          <Show when={cardTitle().subtitle}>
+            <span class="app-card__subtitle">{cardTitle().subtitle}</span>
+          </Show>
+        </div>
         {props.app()?.category && (
           <span class="app-card__category">{props.app()!.category}</span>
         )}

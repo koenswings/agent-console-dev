@@ -6,7 +6,7 @@ import type { Instance, App } from '../src/types/store';
 const baseInstance: Instance = {
   id: 'inst-001',
   instanceOf: 'app-001',
-  name: 'kolibri',
+  name: 'Grade 5A and Form 3',
   status: 'Running',
   port: 8080,
   serviceImages: [],
@@ -34,7 +34,7 @@ const baseApp: App = {
 };
 
 describe('AppCard', () => {
-  it('renders app title and description', () => {
+  it('renders the instance display name as the title and the app title as a subtitle', () => {
     render(() => (
       <AppCard
         instance={() => baseInstance}
@@ -42,8 +42,24 @@ describe('AppCard', () => {
         appUrl={() => 'http://appdocker01:8080'}
       />
     ));
+    expect(screen.getByText('Grade 5A and Form 3')).toBeInTheDocument();
     expect(screen.getByText('Kolibri Learning Platform')).toBeInTheDocument();
     expect(screen.getByText('Offline learning platform')).toBeInTheDocument();
+    expect(document.querySelector('.app-card__title')?.textContent).toBe('Grade 5A and Form 3');
+    expect(document.querySelector('.app-card__subtitle')?.textContent).toBe('Kolibri Learning Platform');
+  });
+
+  it('falls back to the app title with no subtitle when the name is a generated id', () => {
+    const generated = { ...baseInstance, id: 'kolibri-0123456789abcdefghi', name: 'kolibri-0123456789abcdefghi' };
+    render(() => (
+      <AppCard
+        instance={() => generated}
+        app={() => baseApp}
+        appUrl={() => 'http://appdocker01:8080'}
+      />
+    ));
+    expect(document.querySelector('.app-card__title')?.textContent).toBe('Kolibri Learning Platform');
+    expect(document.querySelector('.app-card__subtitle')).toBeNull();
   });
 
   it('renders category badge', () => {
@@ -131,6 +147,6 @@ describe('AppCard', () => {
         appUrl={() => 'http://appdocker01:8080'}
       />
     ));
-    expect(screen.getByText('kolibri')).toBeInTheDocument();
+    expect(screen.getByText('Grade 5A and Form 3')).toBeInTheDocument();
   });
 });
