@@ -49,7 +49,10 @@ export type EngineCapability =
   | 'updateAppFetch'
   // idea#347 (option A: quarantine)
   | 'removeInstance'
-  // idea#404: agreed capability (own flag, not scheduledBackups)
+  // idea#79 (cross-Engine Move, see store/moveApp.ts)
+  | 'moveAppCrossEngine'
+  // idea#404: agreed capability (own flag, not scheduledBackups).
+  // Not advertised on Engine main f114a28 yet; the UI stays gated on this flag.
   | 'makeBackupDisk';
 
 /** Tooltip for an action an old Engine can't be sent safely. */

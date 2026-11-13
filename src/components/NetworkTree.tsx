@@ -1,10 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type Component } from 'solid-js';
 import { sameIds } from '../store/sameIds';
-import { isEngineOnline } from '../store/signals';
-
-// Reactive clock — ticks every 15 s so online badges flip promptly
-const [now, setNow] = createSignal(Date.now());
-const _clockInterval = setInterval(() => setNow(Date.now()), 15_000);
+import { engineLiveness } from '../store/signals';
+import { liveNow } from '../store/live';
 import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
@@ -115,10 +112,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
       <For each={engineIds()}>
         {(engineId) => {
           const engine = () => props.store()?.engineDB[engineId];
-          const online = () => {
-            const e = engine();
-            return e ? isEngineOnline(e, now()) : false;
-          };
+          const liveness = () => engineLiveness(engine(), liveNow());
 
           // Disk IDs docked to this engine
           const diskIds = createMemo(() =>
@@ -189,9 +183,9 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   ↺
                 </button>
                 <span
-                  class={`tree-item__status-dot ${online() ? 'tree-item__status-dot--online' : 'tree-item__status-dot--offline'}`}
-                  title={online() ? 'Online' : 'Offline'}
-                  aria-label={online() ? 'Online' : 'Offline'}
+                  class={`tree-item__status-dot tree-item__status-dot--${liveness()}`}
+                  title={liveness() === 'online' ? 'Online' : liveness() === 'offline' ? 'Offline' : 'Connecting'}
+                  aria-label={liveness() === 'online' ? 'Online' : liveness() === 'offline' ? 'Offline' : 'Connecting'}
                 />
               </div>
 

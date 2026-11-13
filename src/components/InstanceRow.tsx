@@ -23,7 +23,7 @@ import {
   remoteWatchFor,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
-import { buildAppUrl, appHostContextFor, appEngineOffline, offlineAppHint } from '../store/appUrl';
+import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, offlineAppHint } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
@@ -439,14 +439,20 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const hostCtx = createMemo(() => appHostContextFor(props.store?.()));
 
   const isRunningInst = () => props.instance()?.status === 'Running' && !!props.engine();
-  /** The instance's Engine is offline: Open is greyed out (follow-up to PR #162). */
-  const appOffline = () => appEngineOffline(props.engine());
-  /** Open link (appUrl.ts); null when not running, Engine offline, or no usable host/port. */
+  const engineLiveness = () => appEngineStatus(props.engine());
+  const appOffline = () => engineLiveness() === 'offline';
+  const appConnecting = () => engineLiveness() === 'connecting';
+  /** Open link (appUrl.ts); null when not running, Engine not known online, or no usable host/port. */
   const openUrl = () => {
     const inst = props.instance();
-    if (!inst || !isRunningInst() || appOffline()) return null;
+    if (!inst || !isRunningInst() || appOffline() || appConnecting()) return null;
     return buildAppUrl(props.engine(), inst.port, hostCtx());
   };
+  const openTitle = () => appOffline()
+    ? offlineAppHint(props.engine()?.hostname)
+    : appConnecting()
+      ? connectingAppHint(props.engine()?.hostname)
+      : 'No address or port known for this app yet';
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
 
@@ -615,7 +621,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               <button
                 class="btn--open" data-testid={`open-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
                 disabled
-                title={appOffline() ? offlineAppHint(props.engine()?.hostname) : 'No address or port known for this app yet'}
+                title={openTitle()}
                 aria-label={`Open ${props.instance()?.name} in browser (unavailable)`}
               >
                 Open ↗
@@ -637,6 +643,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           <Show when={appOffline()}>
             <span class="app-offline-hint" data-testid={`app-offline-hint-${props.instanceId ?? props.instance()?.id ?? ''}`}>
               {offlineAppHint(props.engine()?.hostname)}
+            </span>
+          </Show>
+          <Show when={appConnecting()}>
+            <span class="app-connecting-hint" data-testid={`app-connecting-hint-${props.instanceId ?? props.instance()?.id ?? ''}`}>
+              {connectingAppHint(props.engine()?.hostname)}
             </span>
           </Show>
         </Show>
