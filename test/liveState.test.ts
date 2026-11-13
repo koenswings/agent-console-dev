@@ -5,8 +5,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  applyEphemeral, emptyLive, isOnline, metricsFor, engineClockOf,
-  LIVE_OFFLINE_MS, LIVE_METRICS_STALE_MS,
+  applyEphemeral, emptyLive, engineStatus, isOnline, metricsFor, engineClockOf,
+  LIVE_OFFLINE_MS, LIVE_METRICS_STALE_MS, LIVE_CONNECTING_MS,
 } from '../src/store/live';
 import { isEngineOnline } from '../src/store/signals';
 import { snapshotAtSend } from '../src/store/remoteConfirm';
@@ -66,5 +66,27 @@ describe('live state (ephemeral hb + metrics)', () => {
   it('snapshotAtSend falls back to the stored lastRun when no hb was received', () => {
     const store = () => ({ engineDB: { E9: { lastRun: 1234 } }, operationDB: {}, instanceDB: {} } as any);
     expect(snapshotAtSend(store, 'E9').engineClock).toBe(1234);
+  });
+
+  it('stale lastRun is connecting until the grace ends, then offline (idea#190)', () => {
+    const e = { id: 'E1' as any, lastRun: 0 as any };
+    expect(engineStatus(e, emptyLive(), T, T)).toBe('connecting');
+    expect(isOnline(e, emptyLive(), T, T)).toBe(false);
+    expect(engineStatus(e, emptyLive(), T + LIVE_CONNECTING_MS - 1, T)).toBe('connecting');
+    expect(engineStatus(e, emptyLive(), T + LIVE_CONNECTING_MS, T)).toBe('offline');
+  });
+
+  it('fresh lastRun is online even during the connecting grace (old Engines)', () => {
+    const e = { id: 'OLD' as any, lastRun: (T - 1_000) as any };
+    expect(engineStatus(e, emptyLive(), T, T)).toBe('online');
+  });
+
+  it('an expired heartbeat is offline immediately, with no connecting grace', () => {
+    const s = applyEphemeral(emptyLive(), { type: 'idea/hb', engineId: 'E1', now: T }, T);
+    expect(engineStatus({ id: 'E1' as any, lastRun: 0 as any }, s, T + LIVE_OFFLINE_MS + 1, T + LIVE_OFFLINE_MS + 1)).toBe('offline');
+  });
+
+  it('no Engine record is connecting, not offline', () => {
+    expect(engineStatus(undefined, emptyLive(), T, T)).toBe('connecting');
   });
 });

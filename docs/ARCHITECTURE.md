@@ -185,7 +185,7 @@ Key exports:
 
 | Export | Returns |
 |---|---|
-| `isEngineOnline(engine)` | `boolean` — `lastRun` within last 2 minutes |
+| `engineLiveness(engine)` / `isEngineOnline(engine)` | `connecting` / `online` / `offline` (see live.ts); `isEngineOnline` is true only when online |
 | `getEngineTree(store)` | `EngineTreeNode[]` for rendering the network tree |
 | `getInstancesForEngine(store, engineId)` | `Instance[]` for one engine |
 | `getInstancesForSelection(store, sel)` | `Instance[]` filtered by network / engine / disk |
@@ -415,7 +415,7 @@ User {
 }
 ```
 
-Engine online status: `engine.lastRun` within the last 2 minutes (matches Engine heartbeat).
+Engine liveness (`src/store/live.ts` `engineStatus`): `connecting` until a heartbeat has been observed or the connecting grace (`LIVE_CONNECTING_MS`, 15 s after the Console starts listening) has passed with a stale `lastRun`; `online` when a live heartbeat arrived within 30 s (Console clock), or — for old Engines that never send heartbeats — when stored `lastRun` is within 90 s; `offline` only once that status is known (heartbeat expired, or grace over and `lastRun` stale).
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

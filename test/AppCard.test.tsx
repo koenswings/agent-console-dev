@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
 import AppCard from '../src/components/AppCard';
-import type { Instance, App } from '../src/types/store';
+import type { Instance, App, Engine } from '../src/types/store';
+import { beginLiveListen, resetLive } from '../src/store/live';
 
 const baseInstance: Instance = {
   id: 'inst-001',
@@ -34,6 +35,8 @@ const baseApp: App = {
 };
 
 describe('AppCard', () => {
+  afterEach(() => { resetLive(); });
+
   it('renders the instance display name as the title and the app title as a subtitle', () => {
     render(() => (
       <AppCard
@@ -148,5 +151,26 @@ describe('AppCard', () => {
       />
     ));
     expect(screen.getByText('Grade 5A and Form 3')).toBeInTheDocument();
+  });
+
+  it('renders the display name and subtitle together with a connecting Engine hint', () => {
+    beginLiveListen();
+    const engine: Engine = {
+      id: 'eng-1', hostname: 'kind-panda', version: '1.0', hostOS: 'Linux',
+      created: 0, lastBooted: 0, lastRun: 0, lastHalted: null, commands: [],
+    };
+    render(() => (
+      <AppCard
+        instance={() => baseInstance}
+        app={() => baseApp}
+        appUrl={() => 'http://kind-panda:8080'}
+        engine={() => engine}
+      />
+    ));
+    expect(document.querySelector('.app-card__title')?.textContent).toBe('Grade 5A and Form 3');
+    expect(document.querySelector('.app-card__subtitle')?.textContent).toBe('Kolibri Learning Platform');
+    expect(screen.getByTestId('instance-inst-001').classList.contains('app-card--connecting')).toBe(true);
+    expect(screen.getByTestId('app-connecting-hint-inst-001').textContent).toBe('Connecting to kind-panda…');
+    expect((screen.getByRole('button', { name: 'Open' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
