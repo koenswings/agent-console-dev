@@ -16,6 +16,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // Never wipe a live dist/ the Engine may be serving. pnpm build writes to
+    // dist.new-<ts> (emptyOutDir true there) and swaps onto dist/ only on success.
+    emptyOutDir: false,
     rollupOptions: {
       input: {
         index: resolve(__dirname, 'index.html'),
