@@ -12,8 +12,8 @@
 import { plainEngineText } from './plainError';
 import type { BackupMode } from '../types/store';
 
-/** Capability that gates the schedule controls. Engine f114a28. */
-export const SCHEDULED_BACKUPS_CAPABILITY = 'scheduledBackups' as const;
+/** Same flag #186 uses to gate status lines. Re-exported so there is one definition. */
+export { SCHEDULED_BACKUPS_CAPABILITY } from './backupStatus';
 
 export const SET_BACKUP_MODE_COMMAND = 'setBackupMode';
 
@@ -111,10 +111,20 @@ export interface SetBackupModeTraceResult {
 /**
  * Plain success line from the Engine result's `changed` and `note` fields
  * (mode and schedule). The raw note is not shown: it can name commands.
+ *
+ * `lastAttempt` is Disk.lastAttempt, the store field #186 reads for the last
+ * scheduled run (Engine lastRun stays on the disk, not in the store). A
+ * scheduled disk with no lastAttempt starts a first backup at once.
  */
-export const plainSetBackupModeSuccess = (result: SetBackupModeTraceResult): string => {
+export const plainSetBackupModeSuccess = (
+  result: SetBackupModeTraceResult,
+  opts?: { lastAttempt?: number | null },
+): string => {
   const daily = result.schedule?.daily;
   const time = daily && parseDailyTime(daily) ? normalizeDailyTime(daily) : DEFAULT_BACKUP_TIME;
+  if (result.mode === 'scheduled' && opts && opts.lastAttempt == null) {
+    return `A first backup starts now, then daily at ${time}.`;
+  }
   let body: string;
   if (result.mode === 'scheduled') {
     body = `This disk will back up every day at ${time} (this Pi's local time).`;

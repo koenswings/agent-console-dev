@@ -201,7 +201,7 @@ describe('BackupModeControls — flag on', () => {
     expect(sent).toEqual([{ engineId: MOCK_IDS.ENGINE_1_ID, command: 'setBackupMode DISK004 on-demand' }]);
   });
 
-  it('shows the result changed and note fields in plain wording', () => {
+  it('shows a first-backup message when saving scheduled on a disk with no lastAttempt', () => {
     const { setCls } = renderControls();
     fireEvent.click(screen.getByTestId('backup-mode-scheduled').querySelector('input')!);
     fireEvent.input(screen.getByTestId('backup-mode-time'), { target: { value: '07:15' } });
@@ -218,7 +218,53 @@ describe('BackupModeControls — flag on', () => {
       }),
     })));
     expect(screen.getByTestId('backup-mode-success').textContent)
+      .toBe('A first backup starts now, then daily at 07:15.');
+  });
+
+  it('keeps the normal scheduled wording when Disk.lastAttempt is already set', () => {
+    const store = flaggedStore({
+      disk: {
+        lastAttempt: 1_700_000_000_000,
+        backupConfig: { mode: 'on-demand', links: backupDisk.backupConfig!.links },
+      },
+    });
+    const { setCls } = renderControls({ store });
+    fireEvent.click(screen.getByTestId('backup-mode-scheduled').querySelector('input')!);
+    fireEvent.input(screen.getByTestId('backup-mode-time'), { target: { value: '07:15' } });
+    fireEvent.click(screen.getByTestId('backup-mode-save'));
+    setCls(log(trace({
+      result: JSON.stringify({
+        backupDiskId: backupDisk.id,
+        previousMode: 'on-demand',
+        mode: 'scheduled',
+        schedule: { daily: '07:15' },
+        scheduleError: null,
+        changed: true,
+        note: 'daily at 07:15 (Engine local time)',
+      }),
+    })));
+    expect(screen.getByTestId('backup-mode-success').textContent)
       .toBe('Saved. This disk will back up every day at 07:15 (this Pi\'s local time).');
+  });
+
+  it('leaves immediate wording unchanged when the disk has no lastAttempt', () => {
+    const { setCls } = renderControls();
+    fireEvent.click(screen.getByTestId('backup-mode-immediate').querySelector('input')!);
+    fireEvent.click(screen.getByTestId('backup-mode-save'));
+    setCls(log(trace({
+      args: { backupDiskId: backupDisk.id, mode: 'immediate', time: [] },
+      result: JSON.stringify({
+        backupDiskId: backupDisk.id,
+        previousMode: 'on-demand',
+        mode: 'immediate',
+        schedule: { daily: '02:30' },
+        scheduleError: null,
+        changed: true,
+        note: 'backs up on the next dock',
+      }),
+    })));
+    expect(screen.getByTestId('backup-mode-success').textContent)
+      .toBe('Saved. This disk will back up when it is next plugged in.');
   });
 
   it('shows Already set this way when changed is false', () => {

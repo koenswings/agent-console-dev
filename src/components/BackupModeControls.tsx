@@ -56,6 +56,9 @@ const BackupModeControls: Component<BackupModeControlsProps> = (props) => {
   const [draftMode, setDraftMode] = createSignal<BackupMode | null>(null);
   const [draftTime, setDraftTime] = createSignal<string | null>(null);
   const [baseline, setBaseline] = createSignal<Set<string> | null>(null);
+  // Captured at send: Disk.lastAttempt is the last scheduled run (#186). A
+  // first scheduled run may write it after we show the success line.
+  const [sentLastAttempt, setSentLastAttempt] = createSignal<number | null | undefined>(undefined);
 
   const mode = (): BackupMode => draftMode() ?? storedMode() ?? 'on-demand';
   const time = (): string => draftTime() ?? storedDaily() ?? DEFAULT_BACKUP_TIME;
@@ -83,16 +86,17 @@ const BackupModeControls: Component<BackupModeControlsProps> = (props) => {
     const diskId = props.disk()?.id;
     const ids = baseline();
     const log = props.commandLogStore?.() ?? null;
+    const lastAttempt = sentLastAttempt();
     if (diskId && ids && log) {
       const trace = findCommandTrace(log, ids, SET_BACKUP_MODE_COMMAND, 'backupDiskId', diskId);
       const parsed = trace ? parseTraceResult(trace) : null;
-      if (parsed) return plainSetBackupModeSuccess(parsed);
+      if (parsed) return plainSetBackupModeSuccess(parsed, { lastAttempt });
     }
     return plainSetBackupModeSuccess({
       mode: mode(),
       schedule: mode() === 'scheduled' ? { daily: normalizeDailyTime(time()) ?? DEFAULT_BACKUP_TIME } : null,
       changed: true,
-    });
+    }, { lastAttempt });
   };
 
   const submit = () => {
@@ -102,6 +106,7 @@ const BackupModeControls: Component<BackupModeControlsProps> = (props) => {
     const nextMode = mode();
     const nextTime = nextMode === 'scheduled' ? normalizeDailyTime(time()) : undefined;
     if (nextMode === 'scheduled' && !nextTime) return;
+    setSentLastAttempt(disk.lastAttempt ?? null);
     setBaseline(traceIdSnapshot(props.commandLogStore?.() ?? null));
     const timeArg = nextTime ?? undefined;
     result.start(disk.id, () => setBackupMode(target, disk.id, nextMode, timeArg), {

@@ -108,6 +108,43 @@ describe('plainSetBackupModeSuccess', () => {
     })).toBe('Saved. This disk will back up when it is next plugged in.');
   });
 
+  it('uses the first-backup line when scheduled and Disk.lastAttempt is absent', () => {
+    expect(plainSetBackupModeSuccess({
+      mode: 'scheduled',
+      schedule: { daily: '07:15' },
+      changed: true,
+    }, { lastAttempt: null })).toBe('A first backup starts now, then daily at 07:15.');
+
+    expect(plainSetBackupModeSuccess({
+      mode: 'scheduled',
+      schedule: { daily: '02:30' },
+      changed: true,
+    }, { lastAttempt: undefined })).toBe('A first backup starts now, then daily at 02:30.');
+  });
+
+  it('keeps the normal scheduled wording when Disk.lastAttempt is set', () => {
+    expect(plainSetBackupModeSuccess({
+      mode: 'scheduled',
+      schedule: { daily: '07:15' },
+      changed: true,
+      note: 'daily at 07:15 (Engine local time)',
+    }, { lastAttempt: 1_700_000_000_000 }))
+      .toBe('Saved. This disk will back up every day at 07:15 (this Pi\'s local time).');
+  });
+
+  it('leaves on-demand and immediate wording unchanged even with no lastAttempt', () => {
+    expect(plainSetBackupModeSuccess({
+      mode: 'on-demand',
+      changed: true,
+    }, { lastAttempt: null }))
+      .toBe('Saved. This disk will back up only when you press Back up.');
+    expect(plainSetBackupModeSuccess({
+      mode: 'immediate',
+      changed: false,
+    }, { lastAttempt: null }))
+      .toBe('Already set this way. This disk will back up when it is next plugged in.');
+  });
+
   it('never shows the Engine command name or a result-code token', () => {
     const text = plainSetBackupModeSuccess({
       mode: 'on-demand',

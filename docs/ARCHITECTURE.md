@@ -463,8 +463,11 @@ with `scheduled` and is also validated on the client (`HH:MM` or `H:MM`,
 00:00–23:59). The result's `changed` and `note` fields are shown in plain
 wording; refusals `NOT_DOCKED`, `AMBIGUOUS`, `SYSTEM_DISK`, `NOT_A_BACKUP_DISK`,
 `BAD_BACKUP_YAML`, `BAD_MODE`, `BAD_TIME` and `BUSY` are mapped the same way.
-The Console never writes `lastRun`. Without the flag the existing read-only
-mode badge is unchanged. See `src/store/setBackupMode.ts`.
+Saving `scheduled` on a disk with no `Disk.lastAttempt` (the store field #186
+reads for the last scheduled run; Engine `lastRun` is not in the store) shows
+"A first backup starts now, then daily at HH:MM." The Console never writes
+`lastRun`. Without the flag the existing read-only mode badge is unchanged.
+See `src/store/setBackupMode.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 
