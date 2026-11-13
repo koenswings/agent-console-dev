@@ -13,6 +13,7 @@ interface PendingMove {
   targetDiskId: string;
   targetDiskName: string;
   targetEngineHostname: string;
+  crossMoveNote?: string | null;
 }
 
 interface MobileLayoutProps {
@@ -119,6 +120,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
               <p class="copy-move-modal__desc">
                 <strong>{pm().data.instanceName}</strong> from <em>{pm().data.sourceDiskName}</em> → <em>{pm().targetDiskName}</em> on <em>{pm().targetEngineHostname}</em>
               </p>
+              <Show when={pm().crossMoveNote}>{(note) => <p class="copy-move-modal__note">{note()}</p>}</Show>
               <div class="copy-move-modal__actions">
                 <button class="btn" onClick={props.onCancelMove}>Cancel</button>
                 <button class="btn" onClick={() => props.onCopyMoveChoice('move')}>Move</button>

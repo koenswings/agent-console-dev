@@ -49,6 +49,8 @@ export type EngineCapability =
   | 'updateAppFetch'
   // idea#347 (option A: quarantine)
   | 'removeInstance'
+  // idea#79 (cross-Engine Move, see store/moveApp.ts)
+  | 'moveAppCrossEngine'
   /**
    * idea#400 / scheduled-backup-disk.md §3.1 (agreed on idea#400 and Steve's decisions).
    * scheduledBackups: this Engine publishes the §3.6 store summary and runs the schedule.

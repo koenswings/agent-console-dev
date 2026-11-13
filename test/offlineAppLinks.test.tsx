@@ -5,8 +5,8 @@ import { render, cleanup } from '@solidjs/testing-library';
 import MobileAppList from '../src/components/MobileAppList';
 import AppBrowser from '../src/components/AppBrowser';
 import InstanceRow from '../src/components/InstanceRow';
-import { isAppEngineOffline, offlineAppHint } from '../src/store/appUrl';
-import { emptyLive, receiveEphemeral, resetLive } from '../src/store/live';
+import { isAppEngineOffline, offlineAppHint, connectingAppHint } from '../src/store/appUrl';
+import { beginLiveListen, emptyLive, receiveEphemeral, resetLive, LIVE_CONNECTING_MS } from '../src/store/live';
 import { KIT, KIT_APP, kitStore } from './fixtures/kitStore';
 import type { Store } from '../src/types/store';
 
@@ -44,6 +44,15 @@ describe('offline rule (same as the Engine badge)', () => {
   it('plain hint names the Engine', () => {
     expect(offlineAppHint('happy-zebra.local')).toBe(HINT);
     expect(offlineAppHint(undefined)).toBe("This Engine is offline, so this app can't be opened right now.");
+    expect(connectingAppHint('happy-zebra.local')).toBe('Connecting to happy-zebra…');
+    expect(connectingAppHint(undefined)).toBe('Connecting…');
+  });
+  it('stale lastRun during the connecting grace is not offline', () => {
+    const e = { id: 'e1', lastRun: 0 };
+    const now = 1_000_000;
+    expect(isAppEngineOffline(e, emptyLive(), now, now)).toBe(false);
+    expect(isAppEngineOffline(e, emptyLive(), now + LIVE_CONNECTING_MS - 1, now)).toBe(false);
+    expect(isAppEngineOffline(e, emptyLive(), now + LIVE_CONNECTING_MS, now)).toBe(true);
   });
 });
 
@@ -79,5 +88,63 @@ describe('greyed-out Open controls', () => {
     receiveEphemeral({ type: 'idea/hb', v: 1, engineId: KIT.HZ, now: Date.now(), bootedAt: 0 });
     expect(r.getByTestId(`open-instance-${HZ}`).tagName).toBe('A');
     expect(r.queryByTestId(`app-offline-hint-${HZ}`)).toBeNull();
+  });
+});
+
+const CONNECT_HINT = 'Connecting to happy-zebra…';
+
+describe('connecting state until liveness is known (idea#190)', () => {
+  it('AppBrowser card: stale lastRun while listening → connecting, not offline; a live hb turns Open on', () => {
+    beginLiveListen();
+    const s = storeWithOfflineHZ();
+    const r = render(() => <AppBrowser store={() => s} connected={() => true} loadHidden={async () => []} />);
+    const hz = r.getByTestId(`open-instance-${HZ}`) as HTMLButtonElement;
+    expect(hz.disabled).toBe(true);
+    expect(hz.title).toBe(CONNECT_HINT);
+    expect(r.getByTestId(`app-connecting-hint-${HZ}`).textContent).toBe(CONNECT_HINT);
+    expect(r.getByTestId(`instance-${HZ}`).classList.contains('app-card--connecting')).toBe(true);
+    expect(r.getByTestId(`instance-${HZ}`).classList.contains('app-card--offline')).toBe(false);
+    expect(r.queryByTestId(`app-offline-hint-${HZ}`)).toBeNull();
+    expect((r.getByTestId(`open-instance-${KP}`) as HTMLButtonElement).disabled).toBe(false);
+    receiveEphemeral({ type: 'idea/hb', v: 1, engineId: KIT.HZ, now: Date.now(), bootedAt: 0 });
+    expect((r.getByTestId(`open-instance-${HZ}`) as HTMLButtonElement).disabled).toBe(false);
+    expect(r.queryByTestId(`app-connecting-hint-${HZ}`)).toBeNull();
+    expect(r.getByTestId(`instance-${HZ}`).classList.contains('app-card--connecting')).toBe(false);
+  });
+
+  it('MobileAppList: connecting hint and a disabled Open, not the offline wording', () => {
+    beginLiveListen();
+    const s = storeWithOfflineHZ();
+    const r = render(() => <MobileAppList store={() => s} loadHidden={async () => []} />);
+    const hz = r.getByTestId(`mobile-open-instance-${HZ}`);
+    expect(hz.tagName).toBe('BUTTON');
+    expect(hz.hasAttribute('href')).toBe(false);
+    expect(r.getByTestId(`mobile-app-connecting-hint-${HZ}`).textContent).toBe(CONNECT_HINT);
+    expect(r.queryByTestId(`mobile-app-offline-hint-${HZ}`)).toBeNull();
+    expect(r.getByTestId(`mobile-open-instance-${KP}`).tagName).toBe('A');
+  });
+
+  it('InstanceRow: connecting hint until a live hb turns Open into a link', () => {
+    beginLiveListen();
+    const s = storeWithOfflineHZ();
+    const inst = s.instanceDB[HZ];
+    const r = render(() => (
+      <InstanceRow instance={() => inst} app={() => s.appDB[inst.instanceOf]} engine={() => s.engineDB[KIT.HZ]} store={() => s} />
+    ));
+    expect(r.getByTestId(`open-instance-${HZ}`).tagName).toBe('BUTTON');
+    expect(r.getByTestId(`app-connecting-hint-${HZ}`).textContent).toBe(CONNECT_HINT);
+    expect(r.queryByTestId(`app-offline-hint-${HZ}`)).toBeNull();
+    receiveEphemeral({ type: 'idea/hb', v: 1, engineId: KIT.HZ, now: Date.now(), bootedAt: 0 });
+    expect(r.getByTestId(`open-instance-${HZ}`).tagName).toBe('A');
+    expect(r.queryByTestId(`app-connecting-hint-${HZ}`)).toBeNull();
+  });
+
+  it('after the connecting grace, a still-silent Engine is shown offline', () => {
+    beginLiveListen(Date.now() - LIVE_CONNECTING_MS - 10_000);
+    const s = storeWithOfflineHZ();
+    const r = render(() => <AppBrowser store={() => s} connected={() => true} loadHidden={async () => []} />);
+    expect(r.getByTestId(`app-offline-hint-${HZ}`).textContent).toBe(HINT);
+    expect(r.getByTestId(`instance-${HZ}`).classList.contains('app-card--offline')).toBe(true);
+    expect(r.queryByTestId(`app-connecting-hint-${HZ}`)).toBeNull();
   });
 });

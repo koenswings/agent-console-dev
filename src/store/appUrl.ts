@@ -26,7 +26,7 @@
 import { isProductionWebMode } from './engine';
 import { pageEngineId } from './connectedEngine';
 import type { Engine, Store } from '../types/store';
-import { isOnline, live, liveNow, type LiveState } from './live';
+import { engineStatus, live, liveNow, liveSince, type EngineStatus, type LiveState } from './live';
 
 /** Add .local suffix if hostname is a bare name (not an IP, not already .local). */
 export function ensureLocal(hostname: string): string {
@@ -154,21 +154,42 @@ export function engineDisplayName(hostname: string | null | undefined): string {
   return String(hostname ?? '').trim().replace(/\.local\.?$/i, '');
 }
 
-// ── Offline Engine (follow-up to Console PR #162) ───────────────────────────
-// App links to an Engine that is offline are greyed out and not clickable.
-// Same online rule as the Engine badge (live.ts isOnline: hb within 30 s, or
-// the stored lastRun within 90 s for old Engines), on the 5 s liveNow tick.
+// ── Engine liveness on App cards (PR #162, idea#190) ────────────────────────
+// App links are greyed out when the Engine is known offline, and show a
+// neutral connecting state until status is known (store synced / first hb).
+// Same rule as the Engine badge (live.ts engineStatus), on the 5 s liveNow tick.
 
-/** Pure: is this Engine offline at `now`? No Engine known → not "offline". */
-export const isAppEngineOffline = (engine: Pick<Engine, 'id' | 'lastRun'> | undefined, liveState: LiveState, now: number): boolean =>
-  !!engine && !isOnline(engine, liveState, now);
+/** Pure: connecting / online / offline at `now`. */
+export const appEngineStatusOf = (
+  engine: Pick<Engine, 'id' | 'lastRun'> | undefined,
+  liveState: LiveState,
+  now: number,
+  listeningSince: number = 0,
+): EngineStatus => engineStatus(engine, liveState, now, listeningSince);
 
-/** Reactive: reads the live beats and the 5 s clock (use inside a component). */
+/** Pure: is this Engine known offline at `now`? Connecting or no Engine → not "offline". */
+export const isAppEngineOffline = (
+  engine: Pick<Engine, 'id' | 'lastRun'> | undefined,
+  liveState: LiveState,
+  now: number,
+  listeningSince: number = 0,
+): boolean => appEngineStatusOf(engine, liveState, now, listeningSince) === 'offline';
+
+/** Reactive: reads live beats, the connecting grace, and the 5 s clock (use inside a component). */
+export const appEngineStatus = (engine: Pick<Engine, 'id' | 'lastRun'> | undefined): EngineStatus =>
+  engineStatus(engine, live(), liveNow(), liveSince());
+
 export const appEngineOffline = (engine: Pick<Engine, 'id' | 'lastRun'> | undefined): boolean =>
-  isAppEngineOffline(engine, live(), liveNow());
+  appEngineStatus(engine) === 'offline';
 
 /** Plain hint shown next to a greyed-out Open control. */
 export const offlineAppHint = (hostname: string | undefined | null): string => {
   const name = engineDisplayName(hostname);
   return `${name || 'This Engine'} is offline, so this app can't be opened right now.`;
+};
+
+/** Plain hint while Engine status is not yet known. */
+export const connectingAppHint = (hostname: string | undefined | null): string => {
+  const name = engineDisplayName(hostname);
+  return name ? `Connecting to ${name}…` : 'Connecting…';
 };

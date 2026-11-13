@@ -186,7 +186,7 @@ Key exports:
 
 | Export | Returns |
 |---|---|
-| `isEngineOnline(engine)` | `boolean` — `lastRun` within last 2 minutes |
+| `engineLiveness(engine)` / `isEngineOnline(engine)` | `connecting` / `online` / `offline` (see live.ts); `isEngineOnline` is true only when online |
 | `getEngineTree(store)` | `EngineTreeNode[]` for rendering the network tree |
 | `getInstancesForEngine(store, engineId)` | `Instance[]` for one engine |
 | `getInstancesForSelection(store, sel)` | `Instance[]` filtered by network / engine / disk |
@@ -424,7 +424,7 @@ User {
 }
 ```
 
-Engine online status: `engine.lastRun` within the last 2 minutes (matches Engine heartbeat).
+Engine liveness (`src/store/live.ts` `engineStatus`): `connecting` until a heartbeat has been observed or the connecting grace (`LIVE_CONNECTING_MS`, 15 s after the Console starts listening) has passed with a stale `lastRun`; `online` when a live heartbeat arrived within 30 s (Console clock), or — for old Engines that never send heartbeats — when stored `lastRun` is within 90 s; `offline` only once that status is known (heartbeat expired, or grace over and `lastRun` stale).
 
 ### Backup Disk status lines (idea#404)
 
@@ -506,6 +506,14 @@ Key Vite config:
 - `cacheDir: '/tmp/idea-console-vite-cache'` — avoids ownership conflicts on Pi
 - `server.allowedHosts: true` — permits Tailscale hostname in dev mode
 - `build.outDir: 'dist'` — Chrome Extension loads from here; also served by Engine HTTP server
+- `build.emptyOutDir: false` — a direct `vite build` must not wipe a live `dist/` the Engine is serving
+
+`pnpm build` runs `scripts/build.mjs`: Vite writes to a fresh `dist.new-<timestamp>/` (with
+`emptyOutDir: true` only for that folder) and, only on success, swaps it into `dist/`
+(`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one previous tree is kept
+for rollback. A failed build leaves the live `dist/` in place, so the Engine never serves
+an empty or half-written Console. The Chrome Extension entry (`src/background/background.ts`
+→ `background.js`) is unchanged.
 
 `pnpm package`: builds, zips `dist/` to `/tmp/idea-console-pkg/extension.zip`, serves on
 port 8080 for download from the Pi.

@@ -8,7 +8,7 @@ import { For, Show, createEffect, createMemo, createSignal, type Accessor, type 
 import { sendRawCommand } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import type { CommandLogState } from '../store/commandLog';
-import { isOnline, live, liveNow } from '../store/live';
+import { engineStatus, live, liveNow, liveSince } from '../store/live';
 import {
   COMMAND, MAKE_BACKUP_FIRST_TEXT, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
@@ -42,7 +42,7 @@ const UpdateAppControl: Component<Props> = (props) => {
     const sid = offer()?.sourceEngineId;
     if (!sid) return false;
     const e = props.store()?.engineDB?.[sid];
-    return !e || !isOnline(e, live(), liveNow());
+    return !e || engineStatus(e, live(), liveNow(), liveSince()) === 'offline';
   });
   const diskName = () => {
     const d = props.instance()?.storedOn;
