@@ -76,6 +76,40 @@ export const isUnversioned = (raw: string | null | undefined): boolean => {
   return Number(m[1].split('.')[0]) >= 1000;
 };
 
+/** Numeric parts of a proper tag; null when unversioned. Mirror of Engine Version.ts. */
+export const parseVersion = (raw: string | null | undefined): number[] | null => {
+  if (isUnversioned(raw)) return null;
+  const m = /(\d+(?:\.\d+)*)/.exec(String(raw ?? ''))!;
+  return m[1].split('.').map((n) => Number(n));
+};
+
+/**
+ * <0, 0, >0 like a comparator between two proper tags; null when either side is
+ * unversioned (Engine `compareVersions`). Missing trailing parts count as 0, so
+ * 1.0 equals 1.0.0, and 1.10 is newer than 1.9.
+ */
+export const compareVersions = (a: string, b: string): number | null => {
+  const x = parseVersion(a);
+  const y = parseVersion(b);
+  if (!x || !y) return null;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+};
+
+/**
+ * Whether `to` is newer than `from`. An unversioned `from` sorts as 0.0 (Engine
+ * `isUpgrade`). Returns null when `to` (or a versioned `from`) can't be parsed:
+ * the caller should keep showing the offer rather than hide it (idea#459).
+ */
+export const isNewerVersion = (from: string, to: string): boolean | null => {
+  if (!parseVersion(to)) return null;
+  const c = compareVersions(to, isUnversioned(from) ? '0.0' : from);
+  return c === null ? null : c > 0;
+};
+
 /** Major part; an unversioned version counts as 0, so unversioned -> 1.x is major (as on the Engine). */
 const majorOf = (v: string): string => (isUnversioned(v) ? '0' : (/(\d+)/.exec(v)?.[1] ?? v));
 
@@ -86,16 +120,24 @@ export const engineIdOfInstance = (store: Store | null, inst: Instance | undefin
 };
 
 /**
- * The update on offer for `inst`, or null (no field, no capability, or a
- * cross-Engine source the Engine can't fetch).
+ * The update on offer for `inst`, or null (no field, no capability, a
+ * cross-Engine source the Engine can't fetch, or a stale offer of the version
+ * already running / an older one — optional Console guard, agent-engine-dev#337).
  */
 export const updateOfferFor = (store: Store | null, inst: Instance | undefined, engine: Engine | undefined): UpdateOffer | null => {
   if (!inst || !canUpdate(engine)) return null;
   const u = rawOf((inst as unknown as Raw).updateAvailable);
   const toAppId = str(u.appId);
   if (!toAppId) return null;
-  const fromVersion = str(u.fromVersion) ?? versionOf(store?.appDB, String(inst.instanceOf));
+  // Same bundle id as the running instance: a stale dock-time offer left on
+  // an older Engine after a successful update (idea#459).
+  if (toAppId === String(inst.instanceOf)) return null;
+  const runningVersion = versionOf(store?.appDB, String(inst.instanceOf));
+  const fromVersion = str(u.fromVersion) ?? runningVersion;
   const toVersion = str(u.toVersion) ?? versionOf(store?.appDB, toAppId);
+  // Hide only when we can tell the target isn't newer than what's running.
+  // If a version can't be parsed, keep the offer (idea#459).
+  if (isNewerVersion(runningVersion, toVersion) === false) return null;
   const src = str(u.sourceEngineId) ?? str(u.engineId);
   const sourceEngineId = src && src !== engine?.id ? src : null;
   if (sourceEngineId && !canFetch(engine)) return null;
