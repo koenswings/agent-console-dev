@@ -50,7 +50,13 @@ export type EngineCapability =
   // idea#347 (option A: quarantine)
   | 'removeInstance'
   // idea#79 (cross-Engine Move, see store/moveApp.ts)
-  | 'moveAppCrossEngine';
+  | 'moveAppCrossEngine'
+  /**
+   * idea#400 / Engine f114a28: this Engine publishes the store summary, runs the
+   * schedule, and accepts setBackupMode. Engine does not advertise backupCleanup;
+   * a skipped cleanup is recorded as lastResult HELPER_OUTDATED.
+   */
+  | 'scheduledBackups';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -249,6 +255,32 @@ export const validateShareName = (name: string): string | null => {
   if (name.length > 16) return 'At most 16 characters.';
   if (name !== name.trim()) return 'No space at the start or end.';
   return null;
+};
+
+/**
+ * Build "setBackupMode <backupDiskId> <immediate|on-demand|scheduled> [HH:MM]"
+ * (idea#400, Engine f114a28). Always the disk id, never the name. A time is
+ * valid only with scheduled and is omitted for the other modes.
+ */
+export const buildSetBackupModeCommand = (
+  backupDiskId: string,
+  mode: string,
+  time?: string,
+): string => {
+  const t = time?.trim();
+  return t && mode === 'scheduled'
+    ? `setBackupMode ${backupDiskId} ${mode} ${t}`
+    : `setBackupMode ${backupDiskId} ${mode}`;
+};
+
+/** Switch a docked Backup Disk's mode and, for scheduled, its daily time. */
+export const setBackupMode = (
+  engineId: string,
+  backupDiskId: string,
+  mode: string,
+  time?: string,
+): void => {
+  _sendCommand(engineId, buildSetBackupModeCommand(backupDiskId, mode, time));
 };
 
 /** Configure an empty disk as a Backup Disk on the given engine. */

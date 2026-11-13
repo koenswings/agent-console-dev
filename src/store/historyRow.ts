@@ -8,6 +8,7 @@
  */
 import type { CommandTrace } from '../types/commandLog';
 import { plainEngineText } from './plainError';
+import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
 
 export type HistoryRowTone = 'ok' | 'error' | 'info';
 
@@ -34,6 +35,17 @@ export const parseTraceResult = (trace: CommandTrace): Record<string, unknown> |
 
 /** Icon, tone and collapsed-row message for a finished command trace. */
 export const historyRowView = (trace: CommandTrace): HistoryRowView => {
+  if (trace.command === 'setBackupMode') {
+    if (trace.status === 'ok') {
+      const result = parseTraceResult(trace);
+      const message = plainSetBackupModeSuccess(result ?? {});
+      const tone = result?.changed === false ? 'info' : 'ok';
+      const icon = tone === 'info' ? 'ℹ' : '✓';
+      return { tone, icon, message };
+    }
+    const raw = trace.errorMessage ? stripAnsi(trace.errorMessage).trim() : '';
+    return { tone: 'error', icon: '✗', message: raw ? setBackupModeErrorText(raw) : null };
+  }
   if (trace.command === 'clearBackupLock' && trace.status === 'ok') {
     const result = parseTraceResult(trace);
     if (result && result.cleared === false) {

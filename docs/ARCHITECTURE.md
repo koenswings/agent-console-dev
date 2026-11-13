@@ -103,7 +103,8 @@ src/
 │   ├── InstanceRow.tsx          Single instance row with start/stop/backup/eject actions
 │   ├── DiskView.tsx             Right pane for a disk: role badges, one section per role, Add Files
 │   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files / Backup Disk, Install App
-│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk)
+│   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk; idea#400 schedule controls)
+│   ├── BackupModeControls.tsx   setBackupMode: mode + daily time, gated on scheduledBackups (idea#400)
 │   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
@@ -115,6 +116,7 @@ src/
 │   ├── engine.ts                Real Automerge WebSocket connection
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
+│   ├── setBackupMode.ts         setBackupMode validation, error wording, success copy (idea#400)
 │   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
 │   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
 │   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
@@ -388,6 +390,8 @@ Disk {
   dockedTo:     EngineID | null
   diskTypes:    DiskType[]           // 'app' | 'backup' | 'empty' | 'upgrade' | 'files' | 'system'; several roles possible
   backupConfig: BackupConfig | null  // set on backup disks; null otherwise
+                                        // backupConfig.schedule?: { daily: "02:30" } | null
+                                        // backupConfig.scheduleError?: string | null — invalid schedule (Engine f114a28)
   filesConfig?:  { shareName; readOnly; passwordProtected; error } | null   // Files role (idea#131)
   unmountError?: { engineId; mountPoint; fsUuid; message } | null          // busy unmount (idea#126)
   sizeBytes?, freeBytes?: number | null                                    // docked disks (idea#131)
@@ -395,7 +399,8 @@ Disk {
 
 App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
-Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk'
+Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk',
+                                                     // 'scheduledBackups' (Engine f114a28; no backupCleanup flag)
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
@@ -416,6 +421,22 @@ User {
 ```
 
 Engine liveness (`src/store/live.ts` `engineStatus`): `connecting` until a heartbeat has been observed or the connecting grace (`LIVE_CONNECTING_MS`, 15 s after the Console starts listening) has passed with a stale `lastRun`; `online` when a live heartbeat arrived within 30 s (Console clock), or — for old Engines that never send heartbeats — when stored `lastRun` is within 90 s; `offline` only once that status is known (heartbeat expired, or grace over and `lastRun` stale).
+
+### Backup Disk schedule controls (idea#400)
+
+When the docked Engine advertises a fresh `scheduledBackups` capability
+(`capabilitiesBootedAt === lastBooted`; Engine main f114a28), `RestorePanel`
+shows mode and daily-time controls (`BackupModeControls`). The current mode
+and time are read from `Disk.backupConfig` (`mode`, `schedule.daily`, and
+`scheduleError` when the stored time is invalid). Saving sends
+`setBackupMode <backupDiskId> <immediate|on-demand|scheduled> [HH:MM]` to the
+Engine in `Disk.dockedTo`, always by id, never by name. A time is sent only
+with `scheduled` and is also validated on the client (`HH:MM` or `H:MM`,
+00:00–23:59). The result's `changed` and `note` fields are shown in plain
+wording; refusals `NOT_DOCKED`, `AMBIGUOUS`, `SYSTEM_DISK`, `NOT_A_BACKUP_DISK`,
+`BAD_BACKUP_YAML`, `BAD_MODE`, `BAD_TIME` and `BUSY` are mapped the same way.
+The Console never writes `lastRun`. Without the flag the existing read-only
+mode badge is unchanged. See `src/store/setBackupMode.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

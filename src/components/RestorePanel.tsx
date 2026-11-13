@@ -4,6 +4,7 @@ import { createCommandResult, type CommandResult } from '../store/commandResult'
 import type { CommandLogState } from '../store/commandLog';
 import { isInstanceLocked } from '../store/operations';
 import CommandFeedback from './CommandFeedback';
+import BackupModeControls from './BackupModeControls';
 import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
 import {
   backupDateText, currentDiskName, isSameDiskRestore, otherDiskButton, otherDiskSummary, type RestoreWords,
@@ -120,6 +121,13 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
           </div>
         </div>
       </header>
+
+      <BackupModeControls
+        disk={props.disk}
+        store={props.store}
+        engineId={props.engineId}
+        commandLogStore={props.commandLogStore}
+      />
 
       {/* No backup configuration */}
       <Show when={!backupConfig()}>

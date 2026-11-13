@@ -29,6 +29,22 @@ export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
 export interface BackupConfig {
   mode: BackupMode;
   links: InstanceID[]; // instance IDs this backup disk is configured for
+  /**
+   * Daily local time on the docked Pi, e.g. `{ daily: "02:30" }`.
+   * Mirrors Engine Disk.backupConfig (f114a28). Null/absent when not set.
+   */
+  schedule?: BackupSchedule | null;
+  /**
+   * Set when BACKUP.yaml has a schedule that does not parse (BAD_TIME / BAD_SCHEDULE
+   * text); null when valid or absent (Engine f114a28). A scheduled disk with an
+   * error still runs at 02:30 until the file is fixed. Shown in plain wording.
+   */
+  scheduleError?: string | null;
+}
+
+/** Daily "HH:MM" local to the docked Pi. Mirrors Engine BackupConfig.schedule. */
+export interface BackupSchedule {
+  daily: string;
 }
 
 // ---------------------------------------------------------------------------
