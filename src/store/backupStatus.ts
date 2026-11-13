@@ -3,9 +3,10 @@
  *
  * Derives operator-facing copy from the idea#400 store summary. Field and
  * capability names follow scheduled-backup-disk.md §3.6 / §3.1 and are
- * provisional until Axle's #400 lands. All new store fields are optional:
+ * agreed on idea#400 and Steve's decisions. All new store fields are optional:
  * when the `scheduledBackups` flag is missing or stale, this module returns
- * no lines and the existing UI is unchanged.
+ * no lines and the existing UI is unchanged. Instance.lastAttempt is not a
+ * field; lastResult.time is the result time. Disk.lastAttempt is kept.
  *
  * Operator copy has no jargon (no borg, YAML, helper, or result-code tokens).
  */
@@ -20,10 +21,10 @@ import type {
   Store,
 } from '../types/store';
 
-/** Capability that gates every new status line. From proposal §3.1; pending #400. */
+/** Capability that gates every new status line. Agreed, proposal §3.1. */
 export const SCHEDULED_BACKUPS_CAPABILITY = 'scheduledBackups' as const;
 
-/** Advertised only when root helper v6+ is present (proposal §3.1; pending #400). */
+/** Advertised only when the cleanup helper is present (agreed, proposal §3.1). */
 export const BACKUP_CLEANUP_CAPABILITY = 'backupCleanup' as const;
 
 export type BackupStatusTone = 'ok' | 'warn' | 'error' | 'neutral' | 'unknown';
@@ -41,10 +42,14 @@ export const DISK_FULL_COPY = 'Backup Disk full: add a bigger disk';
 export const CLEANING_COPY = 'Cleaning up old backups';
 export const HELPER_OUTDATED_COPY = 'Cleanup paused: Pi needs an update';
 export const HOOK_FALLBACK_COPY = 'Backed up, but the App was briefly stopped';
+export const HOOK_POST_WARNING_COPY = 'Done, with a warning';
+export const APP_DISK_NOT_DOCKED_COPY = "This App's disk isn't plugged in.";
 export const METHOD_NONE_COPY = 'Not backed up: its content is on the App Disk';
 
 const RESULT_OK = 'OK';
 const RESULT_HOOK_FALLBACK = 'HOOK_FALLBACK';
+const RESULT_HOOK_POST_WARNING = 'HOOK_POST_WARNING';
+const RESULT_APP_DISK_NOT_DOCKED = 'APP_DISK_NOT_DOCKED';
 const RESULT_INTERRUPTED = 'INTERRUPTED';
 const RESULT_SKIPPED_LOCKED = 'SKIPPED_LOCKED';
 const RESULT_BACKUP_DISK_FULL = 'BACKUP_DISK_FULL';
@@ -133,6 +138,10 @@ export const plainBackupResult = (
       };
     case RESULT_HOOK_FALLBACK:
       return { text: HOOK_FALLBACK_COPY, tone: 'warn' };
+    case RESULT_HOOK_POST_WARNING:
+      return { text: HOOK_POST_WARNING_COPY, tone: 'warn' };
+    case RESULT_APP_DISK_NOT_DOCKED:
+      return { text: APP_DISK_NOT_DOCKED_COPY, tone: 'warn' };
     case RESULT_INTERRUPTED:
       return { text: 'The backup was interrupted.', tone: 'error' };
     case RESULT_SKIPPED_LOCKED:
@@ -160,7 +169,7 @@ const latestAttempt = (disk: Disk, instances: Instance[]): { time: number; resul
   };
   consider(disk.lastAttempt);
   for (const inst of instances) {
-    consider(inst.lastAttempt, inst.lastResult ?? undefined);
+    // Agreed: no Instance.lastAttempt; lastResult.time is the result time.
     if (inst.lastResult) consider(inst.lastResult.time, inst.lastResult);
   }
   return best;
@@ -249,6 +258,14 @@ export const diskBackupStatusLines = (opts: {
   if (anyFallback) {
     lines.push({ id: 'hook-fallback', tone: 'warn', text: HOOK_FALLBACK_COPY });
   }
+  const anyPostWarning = instances.some((i) => i.lastResult?.result === RESULT_HOOK_POST_WARNING);
+  if (anyPostWarning) {
+    lines.push({ id: 'hook-post-warning', tone: 'warn', text: HOOK_POST_WARNING_COPY });
+  }
+  const anyAppDiskGone = instances.some((i) => i.lastResult?.result === RESULT_APP_DISK_NOT_DOCKED);
+  if (anyAppDiskGone) {
+    lines.push({ id: 'app-disk-not-docked', tone: 'warn', text: APP_DISK_NOT_DOCKED_COPY });
+  }
 
   const locks = staleLocks(disk);
   const interruptedIds = new Set<string>();
@@ -301,7 +318,8 @@ export const instanceBackupStatusLines = (opts: {
       const text = (plain.text === METHOD_NONE_COPY
         || plain.text === HOOK_FALLBACK_COPY
         || plain.text === DISK_FULL_COPY
-        || plain.text === HELPER_OUTDATED_COPY)
+        || plain.text === HELPER_OUTDATED_COPY
+        || plain.text === APP_DISK_NOT_DOCKED_COPY)
         ? plain.text
         : `${prefix}${plain.text}`.trim();
       lines.push({ id: 'last-result', tone: plain.tone, text });

@@ -389,12 +389,12 @@ Disk {
   dockedTo:     EngineID | null
   diskTypes:    DiskType[]           // 'app' | 'backup' | 'empty' | 'upgrade' | 'files' | 'system'; several roles possible
   backupConfig: BackupConfig | null  // set on backup disks; null otherwise
-                                        // backupConfig.schedule?: { daily: "02:30" } — provisional, idea#400
+                                        // backupConfig.schedule?: { daily: "02:30" } — agreed, idea#400
   filesConfig?:  { shareName; readOnly; passwordProtected; error } | null   // Files role (idea#131)
   unmountError?: { engineId; mountPoint; fsUuid; message } | null          // busy unmount (idea#126)
   sizeBytes?, freeBytes?: number | null                                    // docked disks (idea#131)
   backupStaleLocks?: { instanceId; startedAt; detectedAt }[] | null        // idea#446; Engine 71fc2c6 shape
-  // idea#400 store summary — all optional, provisional names pending Axle's Engine PR:
+  // idea#400 store summary — all optional, agreed names:
   freePct?, clockTrusted?, clockReason?, missedRuns?, cleaning?,
   cleaningStartedAt?, lastAttempt?
 }
@@ -402,7 +402,7 @@ Disk {
 App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
 Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk',
-                                                     // 'scheduledBackups', 'backupCleanup' (latter two provisional, idea#400)
+                                                     // 'scheduledBackups', 'backupCleanup' (agreed, idea#400)
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
@@ -410,8 +410,9 @@ CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
 Instance {
   ...                               // standard fields
   status:     Status                // includes 'Missing' in addition to standard statuses
-  lastBackup: Timestamp | null      // null = never backed up
-  lastAttempt?, lastResult?, backupHistory?  // idea#400 summary, optional / provisional
+  lastBackup: Timestamp | null      // last successful backup; null = never backed up
+  lastResult?, backupHistory?       // idea#400 summary, optional; lastResult.time is the result time
+                                    // (no Instance.lastAttempt)
 }
 
 User {
@@ -427,12 +428,15 @@ Engine online status: `engine.lastRun` within the last 2 minutes (matches Engine
 
 ### Backup Disk status lines (idea#404)
 
-When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400; name
-provisional), `RestorePanel` and the instance row show store-summary status lines: schedule
-and next run, last attempt and result, missed runs, clock not trusted, cleaning / Backup Disk
-full, "Pi needs an update", "App was briefly stopped", and interrupted backups (including
-`backupStaleLocks`). All new store fields are optional; with the flag absent the UI is
-unchanged. Copy is plain language (no borg, YAML, helper, or result-code tokens). See
+When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400; agreed
+on #400 and Steve's decisions), `RestorePanel` and the instance row show store-summary
+status lines: schedule and next run, last attempt (Disk.lastAttempt or lastResult.time)
+and result, missed runs, clock not trusted, cleaning / Backup Disk full, "Pi needs an
+update", "App was briefly stopped", "Done, with a warning" (`HOOK_POST_WARNING`),
+"This App's disk isn't plugged in." (`APP_DISK_NOT_DOCKED`), and interrupted backups
+(including `backupStaleLocks`). There is no Instance.lastAttempt. All new store fields
+are optional; with the flag absent the UI is unchanged. Copy is plain language (no borg,
+YAML, helper, or result-code tokens). See
 `src/store/backupStatus.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)

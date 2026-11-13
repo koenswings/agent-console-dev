@@ -50,9 +50,9 @@ export type EngineCapability =
   // idea#347 (option A: quarantine)
   | 'removeInstance'
   /**
-   * idea#400 / scheduled-backup-disk.md §3.1 (provisional names pending Axle's #400).
+   * idea#400 / scheduled-backup-disk.md §3.1 (agreed on idea#400 and Steve's decisions).
    * scheduledBackups: this Engine publishes the §3.6 store summary and runs the schedule.
-   * backupCleanup: advertised only when root helper v6 or newer is present.
+   * backupCleanup: advertised only when the cleanup helper is present.
    */
   | 'scheduledBackups'
   | 'backupCleanup';

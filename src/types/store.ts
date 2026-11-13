@@ -53,8 +53,9 @@ export interface BackupStaleLock {
 
 /**
  * One backup attempt in the idea#400 store summary (time, method, result).
- * Field names are provisional pending Axle's #400; result is a plain string
- * so unknown Engine codes still type-check. Do not show the raw code in the UI.
+ * Field names are agreed on idea#400 and Steve's decisions. result is a plain
+ * string so unknown Engine codes still type-check. Do not show the raw code
+ * in the UI. lastResult.time is the result time (there is no Instance.lastAttempt).
  */
 export interface BackupRunResult {
   time: Timestamp;
@@ -151,8 +152,9 @@ export interface Disk {
    */
   backupStaleLocks?: BackupStaleLock[] | null;
   /**
-   * idea#400 store summary (provisional field names pending Axle's Engine PR).
+   * idea#400 store summary (agreed on idea#400 and Steve's decisions).
    * All optional: today's Engines omit them and the Console looks as before.
+   * lastAttempt is a Disk field (BACKUP.yaml mirror); it is not on Instance.
    */
   freePct?: number | null;
   clockTrusted?: boolean | null;
@@ -423,10 +425,11 @@ export interface Instance {
   created: Timestamp;
   lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
   /**
-   * idea#400 per-instance backup summary (provisional names pending Axle's Engine PR).
+   * idea#400 per-instance backup summary (agreed on idea#400 and Steve's decisions).
    * All optional: today's Engines omit them and the Console looks as before.
+   * There is no Instance.lastAttempt; use lastResult.time. lastBackup (last
+   * successful backup) is unchanged.
    */
-  lastAttempt?: Timestamp | null;
   lastResult?: BackupRunResult | null;
   backupHistory?: BackupRunResult[] | null;
   lastStarted: Timestamp;

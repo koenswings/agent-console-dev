@@ -6,6 +6,8 @@ import {
   DISK_FULL_COPY,
   HELPER_OUTDATED_COPY,
   HOOK_FALLBACK_COPY,
+  HOOK_POST_WARNING_COPY,
+  APP_DISK_NOT_DOCKED_COPY,
   METHOD_NONE_COPY,
   SCHEDULED_BACKUPS_CAPABILITY,
   diskBackupStatusLines,
@@ -106,16 +108,19 @@ describe('parseDailyTime / nextScheduledRun', () => {
 describe('plainBackupResult', () => {
   it('uses the proposal copy and never returns a result-code token', () => {
     expect(plainBackupResult('HOOK_FALLBACK')?.text).toBe(HOOK_FALLBACK_COPY);
+    expect(plainBackupResult('HOOK_POST_WARNING')?.text).toBe(HOOK_POST_WARNING_COPY);
+    expect(plainBackupResult('HOOK_POST_WARNING')?.text).toBe('Done, with a warning');
+    expect(plainBackupResult('APP_DISK_NOT_DOCKED')?.text).toBe(APP_DISK_NOT_DOCKED_COPY);
     expect(plainBackupResult('BACKUP_DISK_FULL')?.text).toBe(DISK_FULL_COPY);
     expect(plainBackupResult('HELPER_OUTDATED')?.text).toBe(HELPER_OUTDATED_COPY);
     expect(plainBackupResult('OK', 'none')?.text).toBe(METHOD_NONE_COPY);
     expect(plainBackupResult('INTERRUPTED')?.text).toMatch(/interrupted/i);
     expect(plainBackupResult('SKIPPED_LOCKED')?.text).toMatch(/already running/i);
-    const all = ['OK', 'HOOK_FALLBACK', 'INTERRUPTED', 'SKIPPED_LOCKED', 'BACKUP_DISK_FULL', 'HELPER_OUTDATED', 'WEIRD']
+    const all = ['OK', 'HOOK_FALLBACK', 'HOOK_POST_WARNING', 'APP_DISK_NOT_DOCKED', 'INTERRUPTED', 'SKIPPED_LOCKED', 'BACKUP_DISK_FULL', 'HELPER_OUTDATED', 'WEIRD']
       .map((c) => plainBackupResult(c)!.text)
       .join(' ');
     expect(all).not.toMatch(/borg|\bYAML\b|helper/i);
-    expect(all).not.toMatch(/HOOK_FALLBACK|BACKUP_DISK_FULL|HELPER_OUTDATED|SKIPPED_LOCKED/);
+    expect(all).not.toMatch(/HOOK_FALLBACK|HOOK_POST_WARNING|APP_DISK_NOT_DOCKED|BACKUP_DISK_FULL|HELPER_OUTDATED|SKIPPED_LOCKED/);
     expect(all).not.toContain('INTERRUPTED');
   });
 });
@@ -263,6 +268,42 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     expect(lines.find((l) => l.id === 'hook-fallback')?.tone).toBe('warn');
   });
 
+  it('shows HOOK_POST_WARNING as “Done, with a warning”', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine,
+      instances: [inst({ lastResult: result({ result: 'HOOK_POST_WARNING', method: 'hook' }) })],
+      now: NOW,
+    });
+    expect(lines.find((l) => l.id === 'hook-post-warning')?.text).toBe(HOOK_POST_WARNING_COPY);
+    expect(lines.find((l) => l.id === 'hook-post-warning')?.text).toBe('Done, with a warning');
+    expect(JSON.stringify(lines)).not.toMatch(/HOOK_POST_WARNING/);
+  });
+
+  it("shows APP_DISK_NOT_DOCKED as the App's disk isn't plugged in", () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine,
+      instances: [inst({ lastResult: result({ result: 'APP_DISK_NOT_DOCKED' }) })],
+      now: NOW,
+    });
+    expect(lines.find((l) => l.id === 'app-disk-not-docked')?.text).toBe(APP_DISK_NOT_DOCKED_COPY);
+    expect(lines.find((l) => l.id === 'app-disk-not-docked')?.text).toBe("This App's disk isn't plugged in.");
+    expect(JSON.stringify(lines)).not.toMatch(/APP_DISK_NOT_DOCKED/);
+  });
+
+  it('uses lastResult.time for last attempt when Disk.lastAttempt is absent (no Instance.lastAttempt)', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true }),
+      engine,
+      instances: [inst({ lastResult: result({ time: BOOT, result: 'OK', method: 'live' }) })],
+      now: NOW,
+    });
+    const line = lines.find((l) => l.id === 'last-attempt');
+    expect(line?.text).toMatch(/^Last attempt:/);
+    expect(line?.text).toMatch(/The backup completed/);
+  });
+
   it('shows interrupted / stale lock copy without saying lock', () => {
     const lines = diskBackupStatusLines({
       disk: disk({
@@ -334,5 +375,26 @@ describe('instanceBackupStatusLines', () => {
       disks: [disk({ clockTrusted: false })],
     });
     expect(clock.find((l) => l.id === 'clock')?.text).toBe(CLOCK_UNKNOWN_COPY);
+  });
+
+  it('shows HOOK_POST_WARNING as “Done, with a warning”, using lastResult.time', () => {
+    const lines = instanceBackupStatusLines({
+      instance: inst({ lastResult: result({ time: BOOT, result: 'HOOK_POST_WARNING', method: 'hook' }) }),
+      engine,
+    });
+    const line = lines.find((l) => l.id === 'last-result');
+    expect(line?.text).toMatch(/Done, with a warning/);
+    expect(line?.text).toMatch(/^Last backup:/);
+    expect(line?.text).not.toMatch(/HOOK_POST_WARNING/);
+    expect(line?.tone).toBe('warn');
+  });
+
+  it("shows APP_DISK_NOT_DOCKED as the App's disk isn't plugged in", () => {
+    const lines = instanceBackupStatusLines({
+      instance: inst({ lastResult: result({ result: 'APP_DISK_NOT_DOCKED' }) }),
+      engine,
+    });
+    expect(lines.find((l) => l.id === 'last-result')?.text).toBe(APP_DISK_NOT_DOCKED_COPY);
+    expect(JSON.stringify(lines)).not.toMatch(/APP_DISK_NOT_DOCKED/);
   });
 });
