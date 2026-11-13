@@ -11,6 +11,10 @@
  *   leading result codes: TOO_SMALL, NOT_DOCKED, SYSTEM_DISK,
  *     NOT_EMPTY / erase guards, UNKNOWN (`CODE: text`)
  *
+ * Engine main f114a28 has createBackupDisk, summariseDisk and eraseDisk, but
+ * not makeBackupDisk (no command, capability, or Operation kind). This module
+ * stays gated on MAKE_BACKUP_DISK_CAPABILITY and invents no Engine fields.
+ *
  * MAKE_BACKUP_DISK_CAPABILITY and MAKE_BACKUP_DISK_STEPS each hold the
  * agreed flag / the four step tokens and their Console labels, so a later
  * Engine typo fix is still a single swap.

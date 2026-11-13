@@ -459,13 +459,20 @@ same dialog then `createFilesDisk` once the empty disk appears.
 
 ### Make a Backup Disk (idea#404)
 
-Agreed on [idea#400](https://github.com/koenswings/idea/issues/400) and [idea#404](https://github.com/koenswings/idea/issues/404) (Axle's contract
-comment) and Steve's decisions. The command is `makeBackupDisk <diskOrCandidateId>`
-(always an id). It is offered only when the target Engine advertises a fresh
-`'makeBackupDisk'` capability (`capabilitiesBootedAt === lastBooted`) — its own
-flag, not `scheduledBackups`. Today's Engines without the flag are unchanged:
-empty disks still use the `createBackupDisk` form (mode and linked apps); there
-is no Make a Backup Disk action on an unformatted candidate.
+Aligned to Engine main f114a28 (idea#400 PR D / Engine PR #353). That sha has
+`createBackupDisk`, `summariseDisk` and `eraseDisk`, but it does **not** yet
+register `makeBackupDisk`, advertise a `makeBackupDisk` capability, or define a
+`makeBackupDisk` Operation kind. The Console therefore keeps this flow behind
+the `'makeBackupDisk'` capability (`capabilitiesBootedAt === lastBooted`) — its
+own flag, not `scheduledBackups` — and does not invent Engine fields. Today's
+Engines, including f114a28, are unchanged: empty disks still use the
+`createBackupDisk` form (mode and linked apps); there is no Make a Backup Disk
+action on an unformatted candidate.
+
+The command, once the Engine advertises the flag, is `makeBackupDisk
+<diskOrCandidateId>` (always an id). Step tokens and refusal codes below are
+the agreed contract (idea#400 / idea#404) and stay gated until they exist on
+Engine main.
 
 When the flag is present:
 
