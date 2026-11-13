@@ -32,6 +32,11 @@ import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
 import { plainEngineText } from '../store/plainError';
 import TechnicalDetails from './TechnicalDetails';
+import BackupStatusLines from './BackupStatusLines';
+import {
+  engineShowsBackupStatus,
+  instanceBackupStatusLines,
+} from '../store/backupStatus';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -455,6 +460,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
 
+  const backupStatusLines = createMemo(() => {
+    const inst = props.instance();
+    if (!inst || !engineShowsBackupStatus(props.engine())) return [];
+    return instanceBackupStatusLines({
+      instance: inst,
+      engine: props.engine(),
+      disks: props.backupDisks?.() ?? [],
+    });
+  });
+
   const dragData = (): DragAppData | null => {
     const inst = props.instance();
     const disk = inst?.storedOn ? props.store?.()?.diskDB[String(inst.storedOn)] : undefined;
@@ -708,6 +723,14 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               <dt>Last backup</dt>
               <dd>{formatTs(props.instance()?.lastBackup)}</dd>
             </div>
+            <Show when={backupStatusLines().length > 0}>
+              <div class="instance-details__item instance-details__item--full" data-testid="instance-backup-status-item">
+                <dt>Backup status</dt>
+                <dd>
+                  <BackupStatusLines lines={backupStatusLines} testId="instance-backup-status" />
+                </dd>
+              </div>
+            </Show>
             <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition}>
               <div class="instance-details__item instance-details__item--full instance-details__item--error">
                 <dt>

@@ -3947,3 +3947,40 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* idea#404: space the existing RestorePanel header/row so status lines can sit cleanly */
+.restore-panel__subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.restore-panel__instance-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* idea#404: Backup Disk status lines (gated on scheduledBackups) */
+.backup-status {
+  list-style: none;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.restore-panel__instance-info .backup-status,
+.instance-details .backup-status {
+  margin: 0.35rem 0 0;
+}
+.backup-status__line {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.backup-status__line--ok { color: var(--colour-running); }
+.backup-status__line--warn { color: var(--colour-pauzed); }
+.backup-status__line--error { color: var(--colour-error); }
+.backup-status__line--unknown { color: var(--colour-text-dim); }
+.backup-status__line--neutral { color: var(--colour-text-muted); }
