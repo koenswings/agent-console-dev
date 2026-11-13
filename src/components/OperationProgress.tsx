@@ -32,6 +32,7 @@ const KIND_LABEL: Record<OperationKind, string> = {
   stopApp:       'Stopping',
   flashCard:     'Flash client card',
   initialiseDisk: 'Initialise disk',
+  makeBackupDisk: 'Make Backup Disk',
 };
 
 const argsSummary = (op: Operation, store: Store | null): string => {

@@ -108,13 +108,15 @@ src/
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
 │   ├── EjectConfirm.tsx         Eject confirmation for combined disks: roles + everything affected
-│   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk (and Files erase-first)
-│   ├── UnformattedDiskView.tsx  Right pane for Engine.unformattedDisks candidates
+│   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk, Files erase-first, or makeBackupDisk
+│   ├── UnformattedDiskView.tsx  Right pane for unformatted candidates (Files, Make a Backup Disk, Erase)
+│   ├── MakeBackupDiskProgress.tsx  makeBackupDisk Operation steps (Check, Erase, Re-dock, Create)
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
+│   ├── makeBackupDisk.ts        makeBackupDisk command helpers, error wording, step labels (idea#404)
 │   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
 │   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
 │   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
@@ -204,7 +206,7 @@ Automerge document. The commands module:
 - Holds a module-level `sendCommand` function set by `App.tsx` after connection.
 - Exports typed command builders (`buildStartInstanceCommand`, etc.) as pure functions.
 - Exports dispatching functions (`startInstance`, `stopInstance`, `ejectDisk`, `backupApp`,
-  `createBackupDisk`).
+  `createBackupDisk`, `makeBackupDisk`).
 
 Command string format: `"<commandName> <arg1> <arg2>"` — mirrors Engine's `commandUtils.ts`.
 
@@ -226,6 +228,11 @@ Engine refused to clear anything but did not throw; result shape `{ cleared, mes
 agent-engine-dev#332) is shown on the collapsed History row as a neutral info line
 with `result.message`, not a green check and not red (`historyRow.ts`, idea#454).
 `clearBackupLock` is not wired through `commandResult`.
+
+A finished `makeBackupDisk` trace (idea#404) uses the same History row helper:
+success shows “This disk is now a Backup Disk.”; a failure shows the plain
+wording for its leading result code (for example TOO_SMALL → “This stick is too
+small to be a Backup Disk”), never the code token.
 
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
 
@@ -252,6 +259,7 @@ a neutral "Sent to <engine>, waiting for confirmation" and resolve:
 | ejectDisk | disk gone / undocked / no device | — | 3 min |
 | cancelOperation | op no longer Pending / Running | — | 3 min |
 | createBackupDisk / createFilesDisk | disk gets the backup / files role | — | 10 min (default) |
+| makeBackupDisk | diskTypes includes 'backup' | error trace (plain wording) | 15 s to first trace, then until the op closes (longRunning) |
 
 "New" / "newly created" means created after the send, never a record that already
 existed: the op / instance id was not in the store at send time (Engine ids are fresh
@@ -395,7 +403,7 @@ Disk {
 
 App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
-Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk'
+Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk', 'makeBackupDisk', …
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
@@ -448,6 +456,39 @@ unknown"), requires typing the summary `label` exactly, then sends
 (15 s no-response / 5 min slow warning on the Console clock). On success the disk is republished
 `['empty']` and the Empty Disk panel opens. The Files shortcut **Erase the disk first** runs the
 same dialog then `createFilesDisk` once the empty disk appears.
+
+### Make a Backup Disk (idea#404)
+
+Agreed on [idea#400](https://github.com/koenswings/idea/issues/400) and [idea#404](https://github.com/koenswings/idea/issues/404) (Axle's contract
+comment) and Steve's decisions. The command is `makeBackupDisk <diskOrCandidateId>`
+(always an id). It is offered only when the target Engine advertises a fresh
+`'makeBackupDisk'` capability (`capabilitiesBootedAt === lastBooted`) — its own
+flag, not `scheduledBackups`. Today's Engines without the flag are unchanged:
+empty disks still use the `createBackupDisk` form (mode and linked apps); there
+is no Make a Backup Disk action on an unformatted candidate.
+
+When the flag is present:
+
+- **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” is a simple
+  confirm — the stick will back up every App daily at 02:30, and apps are linked
+  afterwards. Nothing is erased. Confirm sends `makeBackupDisk <diskId>`.
+- **Unformatted / blank candidate** (`UnformattedDiskView`): a new “Make a Backup
+  Disk” action reuses `EraseDialog` (names the stick, warns that it erases,
+  type the label), then sends `makeBackupDisk <candidateId>` — not `eraseDisk`.
+  The Engine performs Check, Erase, Re-dock and Create as one operation.
+- The Console has no size rule; a stick that is too small is refused by the
+  Engine at the Check step (`TOO_SMALL`).
+- Progress comes from the `makeBackupDisk` Operation (`currentStep` /
+  `stepLabel` / `progressPercent`). Agreed step tokens are **Check, Erase,
+  Re-dock, Create**, shown as “Checking the stick”, “Erasing the disk”,
+  “Waiting for the disk to come back”, “Setting up the Backup Disk”. Erase is
+  skipped on an adopted empty IDEA stick.
+- The result uses `createCommandResult`: a new trace of `makeBackupDisk` whose
+  args include the id, then `diskTypes` includes `'backup'`. Failures (`TOO_SMALL`,
+  `NOT_DOCKED`, `SYSTEM_DISK`, `NOT_EMPTY` / erase guards, `UNKNOWN`) are mapped
+  to plain wording (no borg, YAML, helper, or code tokens).
+- `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (it does
+  not go through `makeBackupDisk`).
 
 ---
 

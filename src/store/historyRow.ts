@@ -8,6 +8,11 @@
  */
 import type { CommandTrace } from '../types/commandLog';
 import { plainEngineText } from './plainError';
+import {
+  MAKE_BACKUP_DISK_COMMAND,
+  MAKE_BACKUP_DISK_SUCCESS_MESSAGE,
+  makeBackupDiskErrorText,
+} from './makeBackupDisk';
 
 export type HistoryRowTone = 'ok' | 'error' | 'info';
 
@@ -42,6 +47,13 @@ export const historyRowView = (trace: CommandTrace): HistoryRowView => {
         : null;
       return { tone: 'info', icon: 'ℹ', message };
     }
+  }
+  if (trace.command === MAKE_BACKUP_DISK_COMMAND) {
+    if (trace.status === 'ok') {
+      return { tone: 'ok', icon: '✓', message: MAKE_BACKUP_DISK_SUCCESS_MESSAGE };
+    }
+    const raw = trace.errorMessage ? stripAnsi(trace.errorMessage).trim() : '';
+    return { tone: 'error', icon: '✗', message: raw ? makeBackupDiskErrorText(raw) : null };
   }
   if (trace.status === 'ok') {
     return { tone: 'ok', icon: '✓', message: null };

@@ -48,7 +48,9 @@ export type EngineCapability =
   | 'updateApp'
   | 'updateAppFetch'
   // idea#347 (option A: quarantine)
-  | 'removeInstance';
+  | 'removeInstance'
+  // idea#404: agreed capability (own flag, not scheduledBackups)
+  | 'makeBackupDisk';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -257,6 +259,19 @@ export const createBackupDisk = (
   instanceNames: string[]
 ): void => {
   _sendCommand(engineId, buildCreateBackupDiskCommand(diskArg, mode, instanceNames));
+};
+
+/**
+ * Build "makeBackupDisk <diskOrCandidateId>" (idea#404, agreed on #400 and
+ * Steve's decisions). Always the ID — gated by the 'makeBackupDisk' capability
+ * (capabilitiesBootedAt === lastBooted), same rule as disk-id args and eraseDisk.
+ */
+export const buildMakeBackupDiskCommand = (diskOrCandidateId: string): string =>
+  `makeBackupDisk ${diskOrCandidateId}`;
+
+/** Prepare a blank stick or empty IDEA disk as a scheduled Backup Disk (02:30). */
+export const makeBackupDisk = (engineId: string, diskOrCandidateId: string): void => {
+  _sendCommand(engineId, buildMakeBackupDiskCommand(diskOrCandidateId));
 };
 
 /** Add the Files role to a disk (empty, App or Backup Disk) on the given engine. */

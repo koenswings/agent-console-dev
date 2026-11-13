@@ -3,7 +3,9 @@
  *
  * Lets the operator choose what to do with the disk:
  *   1. Make this a Files Disk   — share name → createFilesDisk <diskId> <shareName> (idea#132)
- *   2. Make this a Backup Disk  — pick instances + backup mode → createBackupDisk command
+ *   2. Make this a Backup Disk  — when the Engine has 'makeBackupDisk', a simple
+ *      confirm sends makeBackupDisk (scheduled 02:30, no linking). Otherwise
+ *      the existing createBackupDisk form (instances + mode) is unchanged.
  *   3. Install App              — pick from appDB → installApp command
  *
  * Disk arguments go through diskArgFor (idea#129): the disk ID on an Engine
@@ -18,9 +20,19 @@ import {
   diskArgFor,
   engineHasCapability,
   installApp,
+  makeBackupDisk,
   type DiskArg,
   UPDATE_ENGINE_TOOLTIP,
 } from '../store/commands';
+import {
+  MAKE_BACKUP_DISK_CAPABILITY,
+  MAKE_BACKUP_DISK_EMPTY_CONFIRM,
+  MAKE_BACKUP_TIMEOUT_MESSAGE,
+  findMakeBackupDiskOp,
+  makeBackupDiskBlockedReason,
+  makeBackupDiskErrorText,
+} from '../store/makeBackupDisk';
+import MakeBackupDiskProgress from './MakeBackupDiskProgress';
 import { canEraseDisk, eraseBlockedReason } from '../store/erase';
 import {
   KOLIBRI_CATALOG_ERROR,
@@ -122,6 +134,16 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     return eraseBlockedReason(targetEngine(), props.store(), d.id);
   });
   const [eraseDialog, setEraseDialog] = createSignal<{ mode: EraseMode; shareName?: string } | null>(null);
+  const canMakeBackupDisk = createMemo(() =>
+    engineHasCapability(targetEngine(), MAKE_BACKUP_DISK_CAPABILITY)
+  );
+  const makeBackupBlocked = createMemo((): string | undefined => {
+    const d = props.disk();
+    if (!d) return undefined;
+    return makeBackupDiskBlockedReason(targetEngine(), props.store(), d.id);
+  });
+  const backupCardBlocked = (): string | undefined =>
+    canMakeBackupDisk() ? makeBackupBlocked() : diskBlocked();
 
   // ── Backup Disk configuration ─────────────────────────────────────────────
   const [backupMode, setBackupMode] = createSignal<BackupMode>('on-demand');
@@ -195,6 +217,40 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
       remote: remoteWatchFor(props.store, engineId, 'createBackupDisk',
         () => ((props.store()?.diskDB[disk.id]?.diskTypes ?? []).includes('backup') ? 'ok' : null)),
     });
+  };
+
+  const handleMakeBackupDisk = () => {
+    setError('');
+    const engineId = props.engineId();
+    const disk = props.disk();
+    if (!engineId || !disk) return;
+    backupResult.start(disk.id, () => makeBackupDisk(engineId, disk.id), {
+      command: 'makeBackupDisk',
+      matchMode: 'includes',
+      longRunning: true,
+      engineId,
+      remote: remoteWatchFor(props.store, engineId, 'makeBackupDisk',
+        () => ((props.store()?.diskDB[disk.id]?.diskTypes ?? []).includes('backup') ? 'ok' : null)),
+    });
+  };
+
+  const makeBackupOp = createMemo(() => {
+    if (!canMakeBackupDisk()) return null;
+    if (!['pending', 'sent'].includes(backupResult.state().kind)) return null;
+    const disk = props.disk();
+    return findMakeBackupDiskOp(
+      props.store(),
+      props.engineId() ?? targetEngine()?.id,
+      disk?.id,
+    );
+  });
+
+  const backupErrorText = (): string | null => {
+    const s = backupResult.state();
+    if (s.kind !== 'error') return null;
+    return backupResult.command() === 'makeBackupDisk'
+      ? makeBackupDiskErrorText(s.message)
+      : plainEngineText(s.message);
   };
 
   const handleInstallApp = () => {
@@ -322,8 +378,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <button
               class="edp-card"
               data-testid="make-backup-disk"
-              disabled={!!diskBlocked()}
-              title={diskBlocked()}
+              disabled={!!backupCardBlocked()}
+              title={backupCardBlocked()}
               onClick={() => setPanel('backup')}
             >
               <div class="edp-card__icon edp-card__icon--backup">
@@ -333,7 +389,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
               <div class="edp-card__text">
                 <span class="edp-card__title">Make this a Backup Disk</span>
-                <span class="edp-card__desc">Link instances and choose a backup schedule</span>
+                <span class="edp-card__desc">
+                  {canMakeBackupDisk()
+                    ? 'Back up every App daily at 02:30'
+                    : 'Link instances and choose a backup schedule'}
+                </span>
               </div>
               <span class="edp-card__chevron">›</span>
             </button>
@@ -362,7 +422,37 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         </Show>
 
         {/* ── Backup Disk form ─────────────────────────────────────────────── */}
-        <Show when={!actionDone() && panel() === 'backup'}>
+        <Show when={!actionDone() && panel() === 'backup' && canMakeBackupDisk()}>
+          <div class="edp-form" data-testid="make-backup-disk-confirm">
+            <h3 class="disk-section__title">Make this a Backup Disk</h3>
+            <p class="edp-form__hint">{MAKE_BACKUP_DISK_EMPTY_CONFIRM}</p>
+            <Show when={backupErrorText()}>
+              {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
+            </Show>
+            <Show when={backupResult.state().kind === 'timeout'}>
+              <p class="edp-form__error" role="status" data-testid="backup-timeout">{MAKE_BACKUP_TIMEOUT_MESSAGE}</p>
+            </Show>
+            <Show when={sentTo(backupResult)}>
+              {(engine) => <p class="edp-form__hint" role="status" data-testid="backup-sent">Sent to {engine()}, waiting for confirmation…</p>}
+            </Show>
+            <Show when={backupPending()}>
+              <MakeBackupDiskProgress op={makeBackupOp} waiting={true} skipErase={true} />
+            </Show>
+            <div class="edp-form__actions">
+              <button
+                class="btn btn--primary"
+                data-testid="confirm-make-backup-disk"
+                disabled={backupPending() || !!makeBackupBlocked()}
+                title={makeBackupBlocked()}
+                onClick={handleMakeBackupDisk}
+              >
+                Make this a Backup Disk
+              </button>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={!actionDone() && panel() === 'backup' && !canMakeBackupDisk()}>
           <div class="edp-form">
 
             <p class="edp-form__label">Backup mode</p>
