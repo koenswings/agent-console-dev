@@ -40,6 +40,13 @@ export interface BackupConfig {
    * error still runs at 02:30 until the file is fixed. Shown in plain wording.
    */
   scheduleError?: string | null;
+  /**
+   * Instance ids listed in BACKUP.yaml (and in `links`) that are not in the
+   * store (Engine #356 / idea#400 follow-up). Optional: missing on older
+   * Engines. The yaml is never rewritten or pruned for this; scheduled and
+   * immediate runs still skip those links. This list is how the Console shows why.
+   */
+  orphanLinks?: InstanceID[];
 }
 
 /** Daily "HH:MM" local to the docked Pi. Mirrors Engine BackupConfig.schedule. */

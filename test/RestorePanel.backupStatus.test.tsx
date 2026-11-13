@@ -11,6 +11,7 @@ import {
   HOOK_FALLBACK_COPY,
   SCHEDULED_BACKUPS_CAPABILITY,
   BACKUP_CLEANUP_CAPABILITY,
+  orphanLinksCopy,
 } from '../src/store/backupStatus';
 import type { Disk, Engine, Instance, Store } from '../src/types/store';
 
@@ -210,5 +211,55 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
     expect(screen.getByTestId(`restore-instance-${other.id}`)).toBeInTheDocument();
     expect(screen.getByText('kolibri')).toBeInTheDocument();
     expect(screen.getByText('nextcloud')).toBeInTheDocument();
+  });
+});
+
+describe('RestorePanel — orphanLinks (Engine #356)', () => {
+  const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY, BACKUP_CLEANUP_CAPABILITY]);
+
+  const diskWith = (orphanLinks?: string[]): Disk => ({
+    ...baseDisk,
+    backupConfig: {
+      mode: 'scheduled',
+      links: [MOCK_IDS.INST_KOLIBRI_ID, ...(orphanLinks ?? [])],
+      schedule: { daily: '02:30' },
+      ...(orphanLinks !== undefined ? { orphanLinks } : {}),
+    },
+    clockTrusted: true,
+  });
+
+  it('shows nothing when orphanLinks is missing', () => {
+    const missing = diskWith(undefined);
+    expect(missing.backupConfig?.orphanLinks).toBeUndefined();
+    renderPanel(storeWith({ engine, disk: missing }), missing);
+    expect(screen.queryByTestId('restore-disk-status-orphan-links')).not.toBeInTheDocument();
+    expect(screen.queryByText(/older backup/)).not.toBeInTheDocument();
+  });
+
+  it('shows nothing when orphanLinks is empty', () => {
+    const empty = diskWith([]);
+    renderPanel(storeWith({ engine, disk: empty }), empty);
+    expect(screen.queryByTestId('restore-disk-status-orphan-links')).not.toBeInTheDocument();
+    expect(screen.queryByText(/older backup/)).not.toBeInTheDocument();
+  });
+
+  it('uses singular wording for one orphan and has no delete button', () => {
+    const one = diskWith(['gone-1']);
+    renderPanel(storeWith({ engine, disk: one }), one);
+    const line = screen.getByTestId('restore-disk-status-orphan-links');
+    expect(line.textContent).toBe(orphanLinksCopy(['gone-1']));
+    expect(line.getAttribute('data-tone')).toBe('info');
+    expect(line.querySelector('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete|remove|forget|prune/i })).toBeNull();
+  });
+
+  it('uses plural wording for two orphans and has no delete button', () => {
+    const two = diskWith(['gone-1', 'gone-2']);
+    renderPanel(storeWith({ engine, disk: two }), two);
+    const plural = screen.getByTestId('restore-disk-status-orphan-links');
+    expect(plural.textContent).toBe(orphanLinksCopy(['gone-1', 'gone-2']));
+    expect(plural.getAttribute('data-tone')).toBe('info');
+    expect(plural.querySelector('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete|remove|forget|prune/i })).toBeNull();
   });
 });
