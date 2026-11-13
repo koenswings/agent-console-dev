@@ -16,6 +16,7 @@ import {
 import { getActiveOpsForInstance } from '../store/operations';
 import { live, liveNow, metricsFor } from '../store/live';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
+import { instanceCardTitle } from '../store/instanceTitle';
 import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
@@ -263,6 +264,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           const disk = () => { const i = inst(); return i ? resolveDisk(i) : undefined; };
           const engine = () => { const i = inst(); return i ? resolveEngine(i) : undefined; };
           const engineName = () => engineDisplayName(engine()?.hostname);
+          const app = () => { const i = inst(); return i ? props.store()?.appDB[i.instanceOf] : undefined; };
+          const cardTitle = () => instanceCardTitle(inst(), app());
           const backupOp = () => { const i = inst(); return i ? getBackupOp(i) : undefined; };
           const isOpRunning = () => getActiveOpsForInstance(props.store(), id).length > 0;
           const hasBackupDisks = () => {
@@ -296,7 +299,12 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               <div class="mobile-app-card__top">
                 <StatusDot status={i().status} size={9} />
                 <span class="mobile-app-card__name">
-                  {i().name}
+                  {cardTitle().title}
+                  <Show when={cardTitle().subtitle}>
+                    <span class="mobile-app-card__app" data-testid={`mobile-app-title-${id}`}>
+                      {cardTitle().subtitle}
+                    </span>
+                  </Show>
                   <Show when={engineName()}>
                     <span class="mobile-app-card__engine" data-testid={`mobile-app-engine-${id}`}>
                       on {engineName()}
