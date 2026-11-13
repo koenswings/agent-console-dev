@@ -2760,6 +2760,18 @@ body {
   line-height: 1.5;
 }
 
+.copy-move-modal__note {
+  font-size: 0.875rem;
+  color: var(--colour-text);
+  margin: -8px 0 20px;
+  line-height: 1.5;
+}
+
+/* idea#79: moved, but the old copy is still on the source */
+.cross-move--warning {
+  color: var(--colour-warning, #b26a00);
+}
+
 .copy-move-modal__desc strong {
   color: var(--colour-text);
 }
