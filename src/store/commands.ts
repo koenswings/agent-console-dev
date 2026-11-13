@@ -53,10 +53,17 @@ export type EngineCapability =
   | 'moveAppCrossEngine'
   /**
    * idea#400 / Engine f114a28: this Engine publishes the store summary, runs the
-   * schedule, and accepts setBackupMode. Engine does not advertise backupCleanup;
-   * a skipped cleanup is recorded as lastResult HELPER_OUTDATED.
+   * schedule, and accepts setBackupMode.
    */
-  | 'scheduledBackups';
+  | 'scheduledBackups'
+  /**
+   * idea#400 / Engine PR #354: fullness-driven Backup Disk cleanup. Helper-gated
+   * like flashCard: advertised only when the app-data root helper is at
+   * BACKUP_CLEANUP_HELPER_MIN (v10) or newer, checked once at startup.
+   * Freshness is capabilitiesBootedAt === lastBooted. A skipped cleanup is still
+   * recorded as lastResult HELPER_OUTDATED (runtime fallback).
+   */
+  | 'backupCleanup';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';

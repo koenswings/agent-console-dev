@@ -406,7 +406,8 @@ Disk {
 App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app.filesMount)
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
 Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk',
-                                                     // 'scheduledBackups' (Engine f114a28; no backupCleanup flag)
+                                                     // 'scheduledBackups' (Engine f114a28 / PR #353);
+                                                     // 'backupCleanup' helper-gated like flashCard (Engine PR #354)
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
@@ -439,8 +440,12 @@ schedule is absent or invalid, and only while `clockTrusted` is true),
 `backupConfig.scheduleError` (plain wording; the disk still runs at 02:30 until
 it is fixed), last attempt (`Disk.lastAttempt` or `lastResult.time`) and result,
 missed runs, clock not trusted (grey "Backup time unknown: this Pi's clock may be
-wrong"), cleaning / Backup Disk full, "Pi needs an update" (`HELPER_OUTDATED` on
-a result, not a `backupCleanup` flag — Engine f114a28 does not advertise one),
+wrong"), cleaning / Backup Disk full, a pre-run "This Pi needs an update before
+backups can clean up old copies" when `scheduledBackups` is fresh but
+`backupCleanup` is not (Engine PR #354; omitted when capabilities are stale or
+`scheduledBackups` is missing), "Cleanup paused: Pi needs an update"
+(`HELPER_OUTDATED` on a result, the runtime fallback; not shown again when the
+pre-run warning already applies),
 "App was briefly stopped" (`HOOK_FALLBACK`), "Done, with a warning"
 (`HOOK_POST_WARNING`), "This App's disk isn't plugged in." (`APP_DISK_NOT_DOCKED`),
 `FAILED` ("The backup did not finish."), and interrupted backups (including
