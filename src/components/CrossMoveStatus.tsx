@@ -8,7 +8,7 @@
 import { Show, createMemo, type Accessor, type Component } from 'solid-js';
 import type { Operation, Store } from '../types/store';
 import type { CrossMove } from '../store/dragCopyMove';
-import { isMoveRunning, latestMoveOp, moveOutcome, movePlacement, moveStepText, type MoveOutcome } from '../store/moveApp';
+import { isMoveRunning, latestMoveOp, moveEngineNow, moveOutcome, movePlacement, moveStepText, type MoveOutcome } from '../store/moveApp';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 import { liveNow } from '../store/live';
 
@@ -34,7 +34,7 @@ export const createCrossMoveView = (store: Accessor<Store | null>, move: Accesso
   const checking = createMemo(() => (step() ? moveCheckingLine(op(), moveChecking(), liveNow()) : null));
   const outcome = createMemo(() => {
     const m = move();
-    const o = m ? moveOutcome(op(), { app: m.app, targetEngine: m.targetEngine, sourceEngine: m.sourceEngine }, movePlacement(store(), op())) : null;
+    const o = m ? moveOutcome(op(), { app: m.app, targetEngine: m.targetEngine, sourceEngine: m.sourceEngine }, movePlacement(store(), op()), moveEngineNow(store(), op())) : null;
     return o && o.kind !== 'failed' ? o : null;
   });
   return { op, step, checking, outcome };

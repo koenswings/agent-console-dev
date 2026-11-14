@@ -18,7 +18,7 @@ import { createCommandResult, type CommandResult } from './commandResult';
 import { confirmNewOperation, instanceStoredOn, newInstanceOnDisk, remoteWatchFor } from './remoteConfirm';
 import { copyApp, moveApp } from './commands';
 import { ENGINE_CLOCK_SLACK_MS } from './remoteConfirm';
-import { crossMoveSupported, moveConfirmText, moveErrorLineFor, settleMoveOutcome } from './moveApp';
+import { crossMoveSupported, moveConfirmText, moveErrorLineFor, moveWarningLineFor, settleMoveOutcome } from './moveApp';
 
 export interface PendingMove {
   data: DragAppData;
@@ -46,6 +46,8 @@ export interface DragCopyMove {
   sourceEngine: Accessor<string>;
   /** CommandFeedback formatLine for the copy/move result: the plain Move sentence, or null. */
   formatLine: (message: string, code: string | null) => string | null;
+  /** CommandFeedback formatWarning: the Move warning from the newest op (engine#395), or null. */
+  formatWarning: () => string | null;
 }
 
 export const createDragCopyMove = (
@@ -130,5 +132,12 @@ export const createDragCopyMove = (
     return m ? moveErrorLineFor(store(), m.instanceId, m.since, message, code, ctx) : moveErrorLineFor(null, '', 0, message, code, ctx);
   };
 
-  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine, formatLine };
+  // engine#395: the warning follows the newest op (targetCleanup lands after the op settles).
+  const formatWarning = (): string | null => {
+    const m = crossMove();
+    if (!m || result.command() !== 'moveApp') return null;
+    return moveWarningLineFor(store(), m.instanceId, m.since, { app: subject(), sourceEngine: sourceEngine(), targetEngine: m.targetEngine });
+  };
+
+  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine, formatLine, formatWarning };
 };

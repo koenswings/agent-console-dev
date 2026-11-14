@@ -106,7 +106,7 @@ describe('CopyMoveFeedback panel', () => {
     const { store, setStore, ctl } = renderDesktop();
     startMove(ctl());
     setStore({ ...store(), operationDB: { mv1: mv('Failed', { error: 'MOVE FAILED: x; source kept', move: { sourceInstanceId: NEXTCLOUD, code: 'VERIFY_SIZE' } }) } });
-    expect(inPanel('copy-move-feedback-error')?.textContent).toBe("Couldn't move nextcloud: the copy on appdocker01 is not complete. Nothing was removed: it is still on appdocker02.");
+    expect(inPanel('copy-move-feedback-error')?.textContent).toBe("Couldn't move nextcloud: the copy on appdocker01 is not complete. Nothing was removed: it is still on appdocker02. Cleaning up the copy on appdocker01…");
     expect(screen.queryByTestId('cross-move-step')).toBeNull();
   });
 

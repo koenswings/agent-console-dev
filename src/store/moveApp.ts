@@ -17,6 +17,12 @@
  *             with an ok trace that did NOT move the app (storedOn stays on the source); other
  *             pre-flip errors in the Removing step are Failed SOURCE_KEPT. Only MOVED and
  *             SOURCE_NOT_REMOVED (storedOn on the target when known) count as moved (moveOutcome).
+ *  - engine#395 (fd52c8a): the op turns Failed / Done BEFORE targetCleanup lands (up to the
+ *             Engine's 60 s cleanup timeout). Until then a cleanup code (MOVE_CLEANUP_CODES) with a
+ *             code present says "Cleaning up the copy on <target>…" (cleanupView 'pending'); it
+ *             switches reactively when the field lands, and falls back to the leftover sentence
+ *             MOVE_CLEANUP_WAIT_MS (70 s) after the op ended on its Engine clock, or when the text
+ *             says the cleanup timed out. Codeless older Engines keep the leftover fallback.
  *  - refusals trace errorMessage `MOVE FAILED: <reason>; source kept` (no op)
  *  - identity the instance keeps its id and name (engine#381, 53f151d): one instanceDB row,
  *             move.targetInstanceId equals sourceInstanceId, and the Backup Disk link follows.
@@ -27,6 +33,8 @@
 import { engineHasCapability } from './commands';
 import type { Engine, Operation, Store } from '../types/store';
 import type { TraceOutcome } from './commandResult';
+import { engineClockOf, live, liveNow } from './live';
+import { opFinishedAt } from './rowFailure';
 
 export const CAP_MOVE_CROSS = 'moveAppCrossEngine' as const;
 export const MOVE_FAILED_PREFIX = 'MOVE FAILED:';
@@ -151,11 +159,58 @@ export const MOVE_CODE_TEXT: Record<string, (c: MoveCtx) => string> = {
 /** Codes after which the Engine tries to clean up the target copy (engine#388); only these get a cleanup sentence. */
 export const MOVE_CLEANUP_CODES: ReadonlySet<string> = new Set(['SOURCE_KEPT', 'SOURCE_CHANGED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED']);
 
-/** The sentence about the target copy by move.targetCleanup (engine#388); null = not reported. */
-export const targetCleanupLine = (cleanup: TargetCleanup, targetEngine: string): string | null =>
-  cleanup === 'quarantined' ? MOVE_TARGET_SET_ASIDE(targetEngine) : cleanup === 'failed' ? MOVE_TARGET_LEFTOVER(targetEngine) : null;
+/**
+ * What the target-copy sentence says: the Engine's targetCleanup, or 'pending' while a
+ * cleanup code waits for it (engine#395); null = no sentence / older Engine wording.
+ */
+export type CleanupView = TargetCleanup | 'pending';
 
-const withCleanup = (line: string, code: string | null, cleanup: TargetCleanup, c: MoveCtx): string => {
+/** engine#395: wait this long after the op ended (Engine clock) before giving up on targetCleanup (Engine waits 60 s). */
+export const MOVE_CLEANUP_WAIT_MS = 70_000;
+const CLEANUP_TIMED_OUT_TEXT = /timed out waiting for .+ to confirm the target cleanup/i;
+
+/** The Engine says it stopped waiting for the target cleanup (detail, op error or result text). */
+export const cleanupTimedOut = (op: Operation | null): boolean => {
+  const info = moveInfo(op);
+  if (!op || !info) return false;
+  if (info.targetCleanupDetail && /timed out/i.test(info.targetCleanupDetail)) return true;
+  return [op.error, info.resultText].some((t) => typeof t === 'string' && CLEANUP_TIMED_OUT_TEXT.test(t));
+};
+
+/**
+ * The target-copy state to show for a finished move op (engine#395). `engineNow` is the op's
+ * Engine clock (moveEngineNow); null = unknown, so it stays 'pending' until the field lands.
+ */
+export const cleanupView = (op: Operation | null, engineNow: number | null): CleanupView => {
+  const info = moveInfo(op);
+  if (!op || !info) return null;
+  if (info.targetCleanup) return info.targetCleanup;
+  // No code = an older Engine that never reports cleanup: keep its storedOn-based wording.
+  if (!info.code || !MOVE_CLEANUP_CODES.has(info.code) || isMoveRunning(op)) return null;
+  if (cleanupTimedOut(op)) return 'failed';
+  if (engineNow != null && engineNow - opFinishedAt(op) >= MOVE_CLEANUP_WAIT_MS) return 'failed';
+  return 'pending';
+};
+
+/**
+ * The op's Engine clock now: its last hb plus the time since (engineClockOf, as the 24 h row
+ * expiry), else the Console clock. Not the stored lastRun here: it does not advance between
+ * writes, so the 70 s could never pass. Reads live() and the shared 5 s liveNow tick, so a
+ * memo that calls it re-runs on its own (no timer of its own to clean up).
+ */
+export const moveEngineNow = (_store: Store | null, op: Operation | null): number => {
+  const now = liveNow();
+  const engineId = op?.engineId == null ? null : String(op.engineId);
+  return engineClockOf(engineId, live(), undefined, now) ?? now;
+};
+
+/** The sentence about the target copy by cleanupView (engine#388 / #395); null = not reported. */
+export const targetCleanupLine = (cleanup: CleanupView, targetEngine: string): string | null =>
+  cleanup === 'quarantined' ? MOVE_TARGET_SET_ASIDE(targetEngine)
+    : cleanup === 'failed' ? MOVE_TARGET_LEFTOVER(targetEngine)
+      : cleanup === 'pending' ? MOVE_TARGET_CLEANING(targetEngine) : null;
+
+const withCleanup = (line: string, code: string | null, cleanup: CleanupView, c: MoveCtx): string => {
   const extra = code && MOVE_CLEANUP_CODES.has(code) ? targetCleanupLine(cleanup, c.targetEngine) : null;
   return extra ? `${line} ${extra}` : line;
 };
@@ -173,7 +228,7 @@ export const moveFailedLine = (message: string, app: string, sourceEngine: strin
  * The whole line for a failed / refused Move: the code first (trace errorCode,
  * result.code or op.move.code), else the `MOVE FAILED:` text; null = not ours.
  */
-export const moveErrorLine = (message: string, code: string | null, c: MoveCtx, cleanup: TargetCleanup = null): string | null => {
+export const moveErrorLine = (message: string, code: string | null, c: MoveCtx, cleanup: CleanupView = null): string | null => {
   const byCode = code ? MOVE_CODE_TEXT[code]?.(c) : undefined;
   return byCode ? withCleanup(byCode, code, cleanup, c) : moveFailedLine(message, c.app, c.sourceEngine);
 };
@@ -213,12 +268,14 @@ export const movePlacement = (store: Store | null, op: Operation | null): MovePl
 export const MOVE_TARGET_LEFTOVER = (targetEngine: string): string => `A leftover copy is on ${targetEngine}.`;
 /** engine#388 targetCleanup 'quarantined': the target copy was stopped and set aside. */
 export const MOVE_TARGET_SET_ASIDE = (targetEngine: string): string => `The unfinished copy on ${targetEngine} was set aside.`;
+/** engine#395: the op ended, the target cleanup is not reported yet. */
+export const MOVE_TARGET_CLEANING = (targetEngine: string): string => `Cleaning up the copy on ${targetEngine}…`;
 
 /**
  * Done with the source not removed (SOURCE_CHANGED / SOURCE_NOT_REMOVED): one sentence per placement.
  * `cleanup` (engine#388) picks the target-copy sentence; null keeps the older storedOn-based wording.
  */
-export const sourceNotRemovedLine = (code: string | null, placement: MovePlacement, c: MoveCtx, cleanup: TargetCleanup = null): string => {
+export const sourceNotRemovedLine = (code: string | null, placement: MovePlacement, c: MoveCtx, cleanup: CleanupView = null): string => {
   if (code === 'SOURCE_CHANGED' && cleanup) return withCleanup(MOVE_CODE_TEXT.SOURCE_CHANGED(c), code, cleanup, c);
   if (placement === 'target' && code !== 'SOURCE_CHANGED') return `${c.app} moved to ${c.targetEngine}. The old copy on ${c.sourceEngine} couldn't be removed.`;
   if (placement === 'source') {
@@ -237,13 +294,14 @@ export const sourceNotRemovedLine = (code: string | null, placement: MovePlaceme
  * Moved (success) ONLY for MOVED or SOURCE_NOT_REMOVED, and then only when the row is on the
  * target or its place is unknown. SOURCE_CHANGED is a Done op with an ok trace that did not move
  * the app (engine#388): a warning, never a success. No code (older Engine): the storedOn logic.
+ * `engineNow` (moveEngineNow) ends the "Cleaning up…" sentence after MOVE_CLEANUP_WAIT_MS (engine#395).
  */
-export const moveOutcome = (op: Operation | null, c: MoveCtx, placement: MovePlacement = null): MoveOutcome | null => {
+export const moveOutcome = (op: Operation | null, c: MoveCtx, placement: MovePlacement = null, engineNow: number | null = null): MoveOutcome | null => {
   if (!op || isMoveRunning(op)) return null;
   const info = moveInfo(op);
   const text = (op.error ?? info?.resultText ?? '').trim();
   const code = info?.code ?? null;
-  const cleanup = info?.targetCleanup ?? null;
+  const cleanup = cleanupView(op, engineNow);
   if (op.status === 'Done') {
     if (code === 'SOURCE_CHANGED') return { kind: 'warning', text: sourceNotRemovedLine(code, placement, c, cleanup), moved: false };
     if (code === 'MOVED') {
@@ -276,7 +334,7 @@ export const moveCtxOf = (store: Store | null, op: Operation): MoveCtx => {
 
 /** Outcome of a finished moveApp op with names from the store; null while running or for another kind. */
 export const moveOpOutcome = (store: Store | null, op: Operation | null): MoveOutcome | null =>
-  op && op.kind === 'moveApp' ? moveOutcome(op, moveCtxOf(store, op), movePlacement(store, op)) : null;
+  op && op.kind === 'moveApp' ? moveOutcome(op, moveCtxOf(store, op), movePlacement(store, op), moveEngineNow(store, op)) : null;
 
 /** A Done moveApp op that did not move the app (e.g. SOURCE_CHANGED): shown as a warning, not a success. */
 export const isMoveDoneNotMoved = (store: Store | null, op: Operation | null): boolean =>
@@ -301,8 +359,23 @@ export const settleMoveOutcome = (store: () => Store | null, instanceId: string,
     return o;
   };
 
-/** The failure sentence for a sent moveApp, with the target-copy sentence from the newest move op. */
+/**
+ * The failure sentence for a sent moveApp, with the target-copy sentence from the newest move op.
+ * Call it while rendering (it reads the store and the clock): it follows targetCleanup as it lands (engine#395).
+ */
 export const moveErrorLineFor = (store: Store | null, instanceId: string, since: number, message: string, code: string | null, ctx: MoveCtx): string | null => {
-  const info = moveInfo(latestMoveOp(store, instanceId, since));
-  return moveErrorLine(message, code ?? info?.code ?? null, ctx, info?.targetCleanup ?? null);
+  const op = latestMoveOp(store, instanceId, since);
+  const info = moveInfo(op);
+  return moveErrorLine(message, code ?? info?.code ?? null, ctx, op ? cleanupView(op, moveEngineNow(store, op)) : null);
+};
+
+/**
+ * The warning sentence for a sent moveApp (e.g. SOURCE_CHANGED) from the newest finished move op,
+ * so it is not the text frozen when commandResult settled (engine#395); null = keep the message.
+ */
+export const moveWarningLineFor = (store: Store | null, instanceId: string, since: number, ctx: MoveCtx): string | null => {
+  const op = latestMoveOp(store, instanceId, since);
+  if (!op || isMoveRunning(op)) return null;
+  const out = moveOutcome(op, ctx, movePlacement(store, op), moveEngineNow(store, op));
+  return out && out.kind === 'warning' ? out.text : null;
 };

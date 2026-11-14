@@ -697,6 +697,34 @@ older Engines). The Console reads only these codes:
   - Failed move cards show the same Console sentence instead of the raw Engine text.
 - **Older Engines:** no code means the storedOn logic above applies unchanged.
 
+**engine#395 (fd52c8a): the cleanup lands after the op ends.** The source Engine marks the op
+Failed (or Done for SOURCE_CHANGED) first, then asks the target to clean up and waits up to 60 s.
+So `move.targetCleanup` / `targetCleanupDetail` arrive after the op is terminal. A failure after a
+finished copy is SOURCE_KEPT with the cleanup set later; COPY_FAILED always has null cleanup.
+
+- **Pending sentence (`cleanupView` in `moveApp.ts`):** a MOVE_CLEANUP_CODES code with
+  `targetCleanup` still null says "Cleaning up the copy on <target>…" (`MOVE_TARGET_CLEANING`).
+  It never shows the leftover sentence first. When the field lands, the sentence becomes the
+  set-aside or leftover one.
+- **Not forever:** the leftover sentence replaces it `MOVE_CLEANUP_WAIT_MS` (70 s) after the op
+  ended, or as soon as `targetCleanupDetail` or the op / result text says it timed out ("timed out
+  waiting for <Engine> to confirm the target cleanup").
+  - The 70 s are measured from `completedAt` on the op's Engine clock (`moveEngineNow`: its last hb,
+    as the 24 h row expiry), else the Console clock. Not the stored `lastRun`: it does not advance,
+    so the 70 s could never pass.
+  - It reads the shared 5 s `liveNow` tick, so the sentence flips without user action and there is
+    no extra timer.
+- **Codeless older Engines** keep the storedOn-based leftover fallback; "Cleaning up…" needs a code.
+- **Reactive, never frozen at settle:** `commandResult` stores the warning or error once. The panel
+  re-derives the sentence from the newest move op while rendering:
+  - the outcome line (`createCrossMoveView`);
+  - the error line (`formatLine` → `moveErrorLineFor`);
+  - the warning line (the new `CommandFeedback.formatWarning` → `moveWarningLineFor`; desktop
+    `dragCopyMove` and the mobile Move sheet).
+  - Op cards (`moveOpOutcome` in an `OpCard` memo) follow the same way.
+  - The app row (`InstanceRow`) shows no move text: moveApp is not one of its row-failure kinds.
+- The amber "⚠ Not moved" card behaviour is unchanged.
+
 ### Disk roles in the right pane (Files Disk, idea#132)
 
 A disk can have several roles (`['app', 'backup', 'files']`). The tree row and the disk header

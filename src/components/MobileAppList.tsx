@@ -15,7 +15,7 @@ import {
   type RemoteCheck,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
-import { moveErrorLineFor, settleMoveOutcome, type MoveCtx } from '../store/moveApp';
+import { moveErrorLineFor, moveWarningLineFor, settleMoveOutcome, type MoveCtx } from '../store/moveApp';
 import { live, liveNow, metricsFor } from '../store/live';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
@@ -341,6 +341,10 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 formatLine={(message, code) => {
                   const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
                   return m ? moveErrorLineFor(props.store(), id, m.since, message, code, m.ctx) : null;
+                }}
+                formatWarning={() => {
+                  const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
+                  return m ? moveWarningLineFor(props.store(), id, m.since, m.ctx) : null;
                 }}
               />
 
