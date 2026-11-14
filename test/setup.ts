@@ -6,8 +6,10 @@ import '@testing-library/jest-dom';
 import { beforeEach } from 'vitest';
 import { resetConnectedEngine, setConnectedEngineHost } from '../src/store/connectedEngine';
 import { setRemoteCommandLogFn } from '../src/store/remoteCommandLogs';
+import { resetDismissedOps } from '../src/store/dismissedOps';
 beforeEach(() => {
   resetConnectedEngine();
   setConnectedEngineHost('appdocker01');
   setRemoteCommandLogFn(() => null);
+  resetDismissedOps();
 });

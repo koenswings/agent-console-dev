@@ -2814,6 +2814,19 @@ body {
   justify-content: flex-end;
 }
 
+/* idea#498: copy/move feedback (Sent to…, Move steps, live Checking line, result)
+   in one panel above the Operations panel, desktop and mobile. */
+.copy-move-feedback {
+  background: var(--colour-surface-alt);
+  border: 1px solid var(--colour-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* ── Operation progress panel ───────────────────────────────────────────── */
 .operation-progress {
   background: var(--colour-surface-alt);

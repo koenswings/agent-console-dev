@@ -603,7 +603,7 @@ message, never stored, about once a second:
 `src/store/moveChecking.ts` keeps the latest message for each `opId`. It accepts the
 message from any Engine, because the target Engine sends it and Engines relay
 ephemeral messages to each other. The desktop and mobile Move feedback
-(`CrossMoveStatus`) adds one line under "Step 2 of 3: Checking the copy on <Engine>".
+(`CrossMoveStatus`, inside `CopyMoveFeedback`) adds one line under "Step 2 of 3: Checking the copy on <Engine>".
 The operation card (`OperationProgress`, desktop and mobile) shows the same line in
 place of the stored `stepLabel`:
 
@@ -617,6 +617,38 @@ The line shows only while the op is Pending or Running on the Checking step, and
 for up to 15 s after the last message (`MOVE_CHECKING_STALE_MS`, checked with
 `liveNow`). Engines that don't send it show the plain Checking step as before.
 The stored `stepLabel` / `currentStep` are unchanged.
+
+### Copy/move feedback panel and operation cards (idea#498)
+
+`CopyMoveFeedback` holds the copy/move `CommandFeedback` and the cross-Engine Move lines
+(`CrossMoveStatus`) in one `.copy-move-feedback` panel. Desktop mounts it above the
+Operations panel in the right pane; mobile mounts it at the top of the tab content. It
+renders nothing when it has nothing to say. "Sent to <engine>, waiting for confirmation…"
+shows only until the Engine's moveApp op is in the store; from then on the step line
+replaces it. A Failed op still ends in the CommandFeedback error line.
+
+Operation cards (`OperationProgress`, desktop and mobile Activity tab) are keyed by op id.
+Dismissing a finished card (the Done auto-dismiss after 3 s, or ✕ on a Failed card) only
+hides it in this browser (`store/dismissedOps.ts`, localStorage `idea.dismissedOps`, newest
+200 ids; Done ids are not stored). It never sends a command. Only Cancel on a Pending or
+Running op sends `cancelOperation`. Before idea#498 the ✕ on a Failed card sent
+`cancelOperation`, which marked the op Cancelled for every Console; now a Failed card stays
+visible in other browsers until each one dismisses it.
+
+When a cross-Engine Move ends Done with the source not removed (`SOURCE_CHANGED`,
+`SOURCE_NOT_REMOVED`, or the `MOVED, source not removed:` text), the wording follows where
+the instance row is when the op ends (`movePlacement`), never the result text (engine#388):
+
+- row on the target disk (removeSource failed after storedOn flipped):
+  "<app> moved to <target>. The old copy on <source> couldn't be removed."
+- row on the source disk, `SOURCE_CHANGED`: "<app> was not moved: it changed on <source>
+  while it was being copied, so it stays there. A leftover copy is on <target>."
+- row on the source disk, any other code: "<app> was not moved, so it stays on <source>.
+  A leftover copy is on <target>."
+- row on neither: "The move of <app> didn't finish cleanly. Check <source> and <target>
+  to see where it is."
+
+The target-copy sentence is the single constant `MOVE_TARGET_LEFTOVER`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

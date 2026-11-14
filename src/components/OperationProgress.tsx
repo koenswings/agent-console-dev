@@ -3,8 +3,10 @@
  * - Pending / Running: shown with progress bar
  * - Done: shown briefly with ✓, auto-dismissed after 3s
  * - Failed: shown with error, dismissed manually
+ * Dismissing a card only hides it in this browser (store/dismissedOps.ts); only
+ * the Cancel button on a Pending / Running op sends cancelOperation (idea#498).
  */
-import { For, Show, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import type { Operation, OperationKind, Store } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
@@ -18,6 +20,7 @@ import { plainEngineText } from '../store/plainError';
 import { demoErrorText, demoHeartbeat } from '../store/demoApps';
 import { live, liveNow } from '../store/live';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
+import { dismissOp, isCancellable, isOpDismissed } from '../store/dismissedOps';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,11 +115,12 @@ const OpCard: Component<OpCardProps> = (props) => {
     return candidates.reduce((a, b) => (b.startedAt > a.startedAt ? b : a));
   });
 
-  // Auto-dismiss Done cards after 3s
-  if (isDone()) {
+  // Auto-dismiss Done cards after 3s (also when a card that was Running turns Done)
+  createEffect(() => {
+    if (!isDone()) return;
     const t = setTimeout(() => props.onDismiss(), 3000);
     onCleanup(() => clearTimeout(t));
-  }
+  });
 
   return (
     <div
@@ -140,10 +144,10 @@ const OpCard: Component<OpCardProps> = (props) => {
             {logExpanded() ? '▲' : '▼'}
           </button>
           <Show when={isActive()}>
-            <button class="operation-card__cancel" onClick={props.onCancel} title="Cancel operation" aria-label="Cancel">✕</button>
+            <button class="operation-card__cancel" data-testid={`operation-cancel-${props.op.id}`} onClick={props.onCancel} title="Cancel operation" aria-label="Cancel">✕</button>
           </Show>
           <Show when={isFailed()}>
-            <button class="operation-card__dismiss" onClick={props.onDismiss} title="Dismiss and release lock" aria-label="Dismiss">✕</button>
+            <button class="operation-card__dismiss" data-testid={`operation-dismiss-${props.op.id}`} onClick={props.onDismiss} title="Dismiss" aria-label="Dismiss">✕</button>
           </Show>
         </div>
       </div>
@@ -193,13 +197,6 @@ interface OperationProgressProps {
 }
 
 const OperationProgress: Component<OperationProgressProps> = (props) => {
-  // Track dismissed op IDs locally (Done auto-dismissed, Failed manually dismissed)
-  const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
-
-  const dismiss = (opId: string) => {
-    setDismissed((prev) => new Set([...prev, opId]));
-  };
-
   // Resolve which engine to send cancelOperation to (source engine)
   const engineIdForOp = (op: Operation): string | null => {
     const s = props.store();
@@ -225,32 +222,28 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
   });
   const [cancelSubject, setCancelSubject] = createSignal('');
 
+  // The user's Cancel on a Pending / Running op: the only path that sends cancelOperation.
   const cancel = (op: Operation) => {
+    if (!isCancellable(op)) { dismissOp(op.id); return; }
     const engineId = engineIdForOp(op);
     if (engineId) {
-      if (op.status === 'Done') {
-        // Dismissing a finished card: the Engine treats it as a no-op.
-        cancelOperation(engineId, op.id);
-      } else {
-        setCancelSubject(KIND_LABEL[op.kind] ?? op.kind);
-        cancelResult.start(op.id, () => cancelOperation(engineId, op.id), {
-          engineId,
-          remote: remoteWatchFor(props.store, engineId, 'cancelOperation', confirmCancelled(props.store, op.id)),
-        });
-      }
+      setCancelSubject(KIND_LABEL[op.kind] ?? op.kind);
+      cancelResult.start(op.id, () => cancelOperation(engineId, op.id), {
+        engineId,
+        remote: remoteWatchFor(props.store, engineId, 'cancelOperation', confirmCancelled(props.store, op.id)),
+      });
     }
     // Optimistically dismiss from view
-    dismiss(op.id);
+    dismissOp(op.id);
   };
 
   const visibleOps = createMemo((): Operation[] => {
     const db = props.store()?.operationDB;
     if (!db) return [];
-    const d = dismissed();
     const now = Date.now();
     return Object.values(db).filter(
       (op) =>
-        !d.has(op.id) &&
+        !isOpDismissed(op.id) &&
         // startApp/stopApp feedback is shown inline on the app row — exclude from this panel
         op.kind !== 'startApp' &&
         op.kind !== 'stopApp' &&
@@ -262,21 +255,29 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
     );
   });
 
+  // Keyed by op id: a store update keeps the same card (and its timers / log toggle).
+  const visibleIds = createMemo(() => visibleOps().map((op) => op.id));
+  const opOf = (id: string): Operation | undefined => props.store()?.operationDB?.[id];
+
   return (
     <>
     <CommandFeedback result={cancelResult} subject={cancelSubject} testId="cancel-operation" />
     <Show when={visibleOps().length > 0}>
       <div class="operation-progress" role="status" aria-label="Operation progress" data-testid="operation-progress">
         <div class="operation-progress__header">Operations</div>
-        <For each={visibleOps()}>
-          {(op) => (
-            <OpCard
-              op={op}
-              store={props.store()}
-              commandLogStore={props.commandLogStore}
-              onDismiss={() => { cancel(op); }}
-              onCancel={() => cancel(op)}
-            />
+        <For each={visibleIds()}>
+          {(id) => (
+            <Show when={opOf(id)}>
+              {(op) => (
+                <OpCard
+                  op={op()}
+                  store={props.store()}
+                  commandLogStore={props.commandLogStore}
+                  onDismiss={() => dismissOp(id, opOf(id)?.status !== 'Done')}
+                  onCancel={() => { const o = opOf(id); if (o) cancel(o); }}
+                />
+              )}
+            </Show>
           )}
         </For>
       </div>
