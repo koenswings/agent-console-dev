@@ -221,14 +221,18 @@ they need the Engine fix that resolves both id-first (`resolveInstanceArg` / `re
 idea#168). `startInstance` / `stopInstance` / `copyApp` / `moveApp` keep the instance
 **name**, because no Engine resolves an instance id for them yet.
 
-Cross-Engine `moveApp` keeps the instance id and name (engine#381), including its
-Backup Disk link; plain `copyApp` still gets a fresh id. The Engine flips `storedOn`
-only after verification, before source-folder cleanup. For move feedback, a matching
-new operation takes precedence over `storedOn` proof: Pending/Running keeps waiting,
-Done confirms, and Failed/Cancelled fails. The `storedOn` fallback confirms only
-when no matching new move operation is visible. This also applies to mobile Move.
-`TARGET_EXISTS` refuses a move when the same id already exists on the target disk
-or Engine; the Console shows a plain sentence rather than the raw Engine error.
+Cross-Engine `moveApp` keeps the instance id and name (engine#381, Engine 53f151d),
+including its Backup Disk link. A plain `copyApp` still gets a fresh id. There is one
+`instanceDB` row, and `move.targetInstanceId` equals `sourceInstanceId`. During Copying
+and Checking, that row stays on the source disk. At the start of "Removing the old copy",
+after verification and the source-changed checks, the Engine flips `storedOn` to the
+target disk and clears the port and metrics. It then quarantines the source folder.
+For move feedback, a matching new operation takes precedence over `storedOn` proof:
+Pending or Running keeps waiting, Done confirms, and Failed or Cancelled fails. The
+`storedOn` fallback confirms only when no matching new move operation is visible,
+on desktop and mobile. `TARGET_EXISTS` is a refusal (trace `errorCode`, no operation):
+the id is already stored on a disk of the target Engine, or its folder is already on
+the target disk. The Console shows a plain sentence instead of the raw Engine error.
 
 ### Technical details (`TechnicalDetails.tsx`)
 
