@@ -17,6 +17,8 @@ import { connectedEngineId } from '../store/connectedEngine';
 import { live } from '../store/live';
 import {
   DEMO_APPS_CAPABILITY,
+  DEMO_REFRESH_HINT,
+  DEMO_SETUP_LABEL,
   DEMO_STEP_STATUS_TEXT,
   REMOVE_DEMO_COMMAND,
   SETUP_DEMO_COMMAND,
@@ -171,10 +173,13 @@ const DemoAppsSection: Component<Props> = (props) => {
           title={gate().reason ?? undefined}
           onClick={sendSetup}
         >
-          {gate().resume ? 'Continue setting up demo apps' : 'Set up demo apps'}
+          {DEMO_SETUP_LABEL[gate().mode]}
         </button>
         <Show when={gate().reason}>
           <p class="edp-form__hint" data-testid="demo-apps-setup-reason">{gate().reason}</p>
+        </Show>
+        <Show when={!gate().reason && gate().mode === 'refresh'}>
+          <p class="edp-form__hint" data-testid="demo-apps-refresh-hint">{DEMO_REFRESH_HINT}</p>
         </Show>
       </div>
 

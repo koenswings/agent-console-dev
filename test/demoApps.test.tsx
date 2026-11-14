@@ -4,20 +4,23 @@
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
+import { createSignal } from 'solid-js';
 import DemoAppsSection from '../src/components/DemoAppsSection';
 import AppCard from '../src/components/AppCard';
 import { buildRemoveDemoCommand, buildSetupDemoCommand, setSendCommandFn } from '../src/store/commands';
 import { applyEphemeral, emptyLive, receiveEphemeral, resetLive, type LiveState } from '../src/store/live';
 import { resetConnectedEngine } from '../src/store/connectedEngine';
 import {
-  DEMO_ALREADY_TEXT,
   DEMO_AMBIGUOUS_TEXT,
   DEMO_BUSY_TEXT,
   DEMO_ERROR_TEXT,
   DEMO_NO_SOURCE_TEXT,
   DEMO_NO_TARGET_TEXT,
+  DEMO_REFRESH_HINT,
+  DEMO_SETUP_LABEL,
   DEMO_STEP_TEXT,
   canOfferDemoApps,
+  demoAppIdOf,
   demoEnginesElsewhere,
   demoErrorText,
   demoExistsText,
@@ -118,7 +121,7 @@ describe('gating', () => {
     expect(demoTargetDisks(store(), 'E1').map((d) => d.id)).toEqual(['BIG', 'SMALL']);
   });
   it('setup is open on a clean Engine with unknown hb fields (the Engine decides)', () => {
-    expect(demoSetupGate({ store: store(), engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, resume: false });
+    expect(demoSetupGate({ store: store(), engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, mode: 'setup' });
   });
   it('greys out with Koen\'s text when no internet and no local pack', () => {
     const g = demoSetupGate({ store: store(), engineId: 'E1', live: hb('E1', { internet: false, demoLocal: false }), targetDiskId: 'BIG' });
@@ -129,9 +132,26 @@ describe('gating', () => {
     expect(demoSetupGate({ store: store({ diskDB: {} }), engineId: 'E1', live: emptyLive(), targetDiskId: null }).reason).toBe(DEMO_NO_TARGET_TEXT);
     expect(demoSetupGate({ store: store(), engineId: 'E1', live: emptyLive(), targetDiskId: 'SYS' }).reason).toBe(DEMO_NO_TARGET_TEXT);
   });
-  it('one demo per Engine: complete set → already set up', () => {
+  it('complete set → re-press allowed as a refresh (addendum decision 5: re-verify or download)', () => {
     const s = store({ instanceDB: { k: inst('k', 'kolibri', 'BIG', true), n: inst('n', 'nextcloud', 'BIG', true) } });
-    expect(demoSetupGate({ store: s, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' }).reason).toBe(DEMO_ALREADY_TEXT);
+    expect(demoSetupGate({ store: s, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, mode: 'refresh' });
+  });
+  it('versioned app ids (instanceOf changes on updateApp) still group per demo app', () => {
+    const apps = {
+      'kolibri-1.1': { id: 'kolibri-1.1', name: 'kolibri', version: '1.1', title: 'Kolibri', description: null, url: null, category: 'edu', icon: null, author: null },
+      'kolibri-channel-builder-1.0': { id: 'kolibri-channel-builder-1.0', name: 'kolibri-channel-builder', version: '1.0', title: 'CB', description: null, url: null, category: 'edu', icon: null, author: null },
+    };
+    const s = store({
+      appDB: apps,
+      instanceDB: { k: inst('k', 'kolibri-1.1', 'BIG', true), n: inst('n', 'nextcloud-1.0', 'BIG', true) },
+    });
+    expect(demoAppIdOf(s, { instanceOf: 'kolibri-1.1' })).toBe('kolibri');
+    expect(demoAppIdOf(s, { instanceOf: 'nextcloud-1.0' })).toBe('nextcloud');
+    expect(demoAppIdOf(s, { instanceOf: 'kolibri-channel-builder-1.0' })).toBeNull();
+    expect(demoAppIdOf(store(), { instanceOf: 'kolibri-channel-builder-1.0' })).toBeNull();
+    expect(demoSetupGate({ store: s, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' }).mode).toBe('refresh');
+    const two = store({ appDB: apps, instanceDB: { k: inst('k', 'kolibri-1.0', 'BIG', true), k2: inst('k2', 'kolibri-1.1', 'BIG', true) } });
+    expect(demoSetupGate({ store: two, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' }).reason).toBe(DEMO_AMBIGUOUS_TEXT);
   });
   it('demo on another disk of this Engine → DEMO_EXISTS mirror naming the disk', () => {
     const s = store({ instanceDB: { k: inst('k', 'kolibri', 'SMALL', true) } });
@@ -143,12 +163,12 @@ describe('gating', () => {
   });
   it('partial set on the chosen disk, or a failed last setup → resume (engine#369 §8)', () => {
     const partial = store({ instanceDB: { k: inst('k', 'kolibri', 'BIG', true) } });
-    expect(demoSetupGate({ store: partial, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, resume: true });
+    expect(demoSetupGate({ store: partial, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, mode: 'resume' });
     const failed = store({
       instanceDB: { k: inst('k', 'kolibri', 'BIG', true), n: inst('n', 'nextcloud', 'BIG', true) },
       operationDB: { op1: demoOp('op1', 'setupDemo', 'Failed', { error: 'INTERRUPTED: engine restarted' }) },
     });
-    expect(demoSetupGate({ store: failed, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, resume: true });
+    expect(demoSetupGate({ store: failed, engineId: 'E1', live: emptyLive(), targetDiskId: 'BIG' })).toEqual({ reason: null, mode: 'resume' });
   });
   it('busy while a setupDemo/removeDemo Operation runs', () => {
     const s = store({ operationDB: { op1: demoOp('op1', 'removeDemo', 'Running') } });
@@ -176,6 +196,17 @@ describe('badge source: Instance.demo only, never the name', () => {
     expect(r.getByTestId('demo-badge-k').textContent).toBe('DEMO');
     expect(r.container.querySelector('.app-card__title')!.textContent).toContain('Kolibri Demo');
     expect(r.container.querySelector('.app-card__subtitle')!.textContent).toBe('Kolibri');
+  });
+  it('the badge survives updateApp (addendum A: instanceOf changes, demo kept)', () => {
+    const [cur, setCur] = createSignal(inst('k', 'kolibri-1.0', 'BIG', true, 'Kolibri Demo'));
+    const r = render(() => <AppCard instance={cur} app={() => app} appUrl={() => null} />);
+    expect(r.getByTestId('demo-badge-k')).toBeTruthy();
+    setCur({ ...cur(), instanceOf: 'kolibri-1.1', status: 'Stopped' });
+    expect(r.getByTestId('demo-badge-k').textContent).toBe('DEMO');
+    // An Engine without the addendum fix would drop the field: the badge goes too (never inferred from the name).
+    const { demo: _dropped, ...withoutDemo } = cur();
+    setCur(withoutDemo as Instance);
+    expect(r.queryByTestId('demo-badge-k')).toBeNull();
   });
   it('a real instance named "Kolibri Demo" gets no badge', () => {
     const r = render(() => <AppCard instance={() => inst('k', 'kolibri', 'BIG', false, 'Kolibri Demo')} app={() => app} appUrl={() => null} />);
@@ -237,6 +268,13 @@ describe('DemoAppsSection with a fake Engine', () => {
     const r = mount(store());
     fireEvent.click(r.getByTestId('demo-apps-setup'));
     expect(sent).toEqual([{ engineId: 'E1', command: 'setupDemo BIG' }]);
+  });
+  it('with the full set there, the button refreshes (same setupDemo command)', () => {
+    const r = mount(store({ instanceDB: { k: inst('k', 'kolibri', 'SMALL', true), n: inst('n', 'nextcloud', 'SMALL', true) } }));
+    expect(r.getByTestId('demo-apps-setup').textContent).toBe(DEMO_SETUP_LABEL.refresh);
+    expect(r.getByTestId('demo-apps-refresh-hint').textContent).toBe(DEMO_REFRESH_HINT);
+    fireEvent.click(r.getByTestId('demo-apps-setup'));
+    expect(sent).toEqual([{ engineId: 'E1', command: 'setupDemo SMALL' }]);
   });
   it('is disabled with the reason when the hb says no internet and no pack', () => {
     receiveEphemeral({ type: 'idea/hb', v: 1, engineId: 'E1', now: T, bootedAt: T, internet: false, demoLocal: false });

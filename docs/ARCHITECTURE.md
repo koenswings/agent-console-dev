@@ -498,14 +498,20 @@ with the connected Engine first.
   - there is no usable disk;
   - two demo instances of one app are docked there (mirrors `DEMO_AMBIGUOUS`);
   - demo apps are on another disk of that Engine (mirrors `DEMO_EXISTS`);
-  - every demo app is already there and the last setup did not fail;
   - the Engine's ephemeral `idea/hb` says `internet: false` **and**
     `demoLocal: false` ("Set up demo apps needs internet. Connect the Engine,
     or insert a disk with the IDEA demo pack.").
   Missing hb fields (older Engine, or no hb yet) count as unknown, and the
   Engine decides (`NO_SOURCE`). When some demo apps exist on the chosen disk,
   or the last setup failed (for example `INTERRUPTED`), the button reads
-  "Continue setting up demo apps": setupDemo is idempotent and resumes.
+  "Continue setting up demo apps": setupDemo is idempotent and resumes. When
+  the full set is there, it reads "Check and refresh demo apps" and sends the
+  same `setupDemo`: the Engine re-verifies the demo content (downloading it
+  when needed) and re-runs the idempotent seed steps, never installing a second
+  copy. This is how a demo pack that fell below a new `minVersion` after
+  `updateApp` is brought up to date (engine#369 addendum, decision 5).
+  Demo apps are matched by their App record's `name` (`kolibri`, `nextcloud`),
+  because app ids are versioned and `instanceOf` changes on `updateApp`.
 - **Remove** opens a confirm that names the exact demo instances, then sends
   `removeDemo <instanceId>...` with those ids. The bare `removeDemo` (all demo
   instances) is never sent.
@@ -520,7 +526,9 @@ with the connected Engine first.
 - **DEMO badge:** app cards and the mobile list show a DEMO badge next to the
   instance-name title (#192) only when `Instance.demo === true`, which the
   Engine mirrors from `x-app.demo` in the instance's compose.yaml. It is never
-  inferred from the name.
+  inferred from the name. `updateApp` keeps `x-app.demo` (engine#369 addendum
+  A), and the Console never writes instance records, so the badge stays after
+  an update.
 
 All new store fields (`Instance.demo`, `Operation.demo`, the `setupDemo` and
 `removeDemo` kinds) and hb fields are optional, so older Engines look as

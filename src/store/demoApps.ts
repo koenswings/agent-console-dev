@@ -56,7 +56,6 @@ export const DEMO_NO_SOURCE_TEXT =
   'Set up demo apps needs internet. Connect the Engine, or insert a disk with the IDEA demo pack.';
 export const DEMO_NO_TARGET_TEXT = 'Plug an App Disk or an empty disk into this Engine to set up demo apps.';
 export const DEMO_BUSY_TEXT = 'Demo apps are being set up or removed on this Engine. Wait until that has finished.';
-export const DEMO_ALREADY_TEXT = 'Demo apps are already set up on this Engine. Remove them first to set them up again.';
 export const DEMO_AMBIGUOUS_TEXT =
   'This Engine has more than one copy of a demo app. Remove the demo apps first, then set them up again.';
 export const demoExistsText = (diskName: string): string =>
@@ -223,12 +222,49 @@ export const latestDemoOperation = (store: Store | null | undefined, engineId: s
 
 export const isDemoOperationActive = (op: Operation | null | undefined): boolean => !!op && ACTIVE.has(op.status);
 
+export type DemoSetupMode = 'setup' | 'resume' | 'refresh';
+
+/** Button label per mode. */
+export const DEMO_SETUP_LABEL: Record<DemoSetupMode, string> = {
+  setup: 'Set up demo apps',
+  resume: 'Continue setting up demo apps',
+  refresh: 'Check and refresh demo apps',
+};
+
+/**
+ * Shown under the button when the full demo set is already there. A re-press
+ * re-verifies (and, when needed, re-downloads) the demo content and re-runs
+ * the idempotent seed steps; it never installs a second copy (engine#369 §8,
+ * addendum decision 5: an outdated pack after updateApp is fixed this way).
+ */
+export const DEMO_REFRESH_HINT =
+  'Demo apps are already set up. Press to check the demo content and add anything missing. Nothing is installed twice.';
+
 export interface DemoSetupGate {
-  /** Why Set up is greyed out, or null when it can be sent. */
+  /** Why the button is greyed out, or null when it can be sent. */
   reason: string | null;
-  /** True when some demo apps already exist on the chosen disk (the press resumes, engine#369 §8). */
-  resume: boolean;
+  /**
+   * setup: nothing there yet; resume: a partial set on the chosen disk or the
+   * last setup failed (engine#369 §8); refresh: the full set is there, so a
+   * press re-verifies and re-seeds (addendum decision 5).
+   */
+  mode: DemoSetupMode;
 }
+
+/**
+ * Which demo app an instance is, from its App record's `name` (app ids are
+ * versioned, e.g. `kolibri-1.0`, and `instanceOf` changes to the new app id
+ * after updateApp, engine#369 addendum A). Without an App record, the id's
+ * `<name>-<digit>` prefix is used. Null when it isn't a demo app's instance.
+ */
+export const demoAppIdOf = (store: Store | null | undefined, inst: Pick<Instance, 'instanceOf'>): DemoAppId | null => {
+  const appId = String(inst.instanceOf ?? '');
+  const name = store?.appDB?.[appId]?.name;
+  for (const a of DEMO_APPS) {
+    if (name != null ? String(name) === a.id : appId === a.id || new RegExp(`^${a.id}-\\d`).test(appId)) return a.id;
+  }
+  return null;
+};
 
 /**
  * Whether Set up demo apps can be sent to this Engine for `targetDiskId`.
@@ -243,26 +279,28 @@ export const demoSetupGate = (input: {
 }): DemoSetupGate => {
   const { store, engineId, live, targetDiskId } = input;
   const op = latestDemoOperation(store, engineId);
-  if (isDemoOperationActive(op)) return { reason: DEMO_BUSY_TEXT, resume: false };
+  if (isDemoOperationActive(op)) return { reason: DEMO_BUSY_TEXT, mode: 'setup' };
   const targets = demoTargetDisks(store, engineId);
   if (targets.length === 0 || !targetDiskId || !targets.some((d) => d.id === targetDiskId)) {
-    return { reason: DEMO_NO_TARGET_TEXT, resume: false };
+    return { reason: DEMO_NO_TARGET_TEXT, mode: 'setup' };
   }
   const existing = demoInstancesOnEngine(store, engineId);
   const perApp = new Map<string, Instance[]>();
-  for (const i of existing) perApp.set(String(i.instanceOf), [...(perApp.get(String(i.instanceOf)) ?? []), i]);
-  if ([...perApp.values()].some((l) => l.length > 1)) return { reason: DEMO_AMBIGUOUS_TEXT, resume: false };
+  for (const i of existing) {
+    const key = demoAppIdOf(store, i) ?? String(i.instanceOf);
+    perApp.set(key, [...(perApp.get(key) ?? []), i]);
+  }
+  if ([...perApp.values()].some((l) => l.length > 1)) return { reason: DEMO_AMBIGUOUS_TEXT, mode: 'setup' };
   const elsewhere = existing.find((i) => i.storedOn !== targetDiskId);
   if (elsewhere) {
     const disk = elsewhere.storedOn ? store?.diskDB?.[elsewhere.storedOn] : undefined;
-    return { reason: demoExistsText(String(disk?.name ?? elsewhere.storedOn ?? '')), resume: false };
+    return { reason: demoExistsText(String(disk?.name ?? elsewhere.storedOn ?? '')), mode: 'setup' };
   }
-  // Every demo app present and the last setup did not fail: nothing to resume.
   const complete = DEMO_APPS.every((a) => perApp.has(a.id));
   const lastFailed = op?.kind === 'setupDemo' && op.status === 'Failed';
-  if (complete && !lastFailed) return { reason: DEMO_ALREADY_TEXT, resume: false };
-  if (noDemoSource(demoHeartbeat(live, engineId))) return { reason: DEMO_NO_SOURCE_TEXT, resume: existing.length > 0 };
-  return { reason: null, resume: existing.length > 0 || lastFailed };
+  const mode: DemoSetupMode = lastFailed || (existing.length > 0 && !complete) ? 'resume' : complete ? 'refresh' : 'setup';
+  if (noDemoSource(demoHeartbeat(live, engineId))) return { reason: DEMO_NO_SOURCE_TEXT, mode };
+  return { reason: null, mode };
 };
 
 // ── Progress (Operation.demo) ───────────────────────────────────────────────
