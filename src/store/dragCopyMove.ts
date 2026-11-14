@@ -17,6 +17,7 @@ import type { CommandLogState } from './commandLog';
 import { createCommandResult, type CommandResult } from './commandResult';
 import { confirmNewOperation, instanceStoredOn, newInstanceOnDisk, remoteWatchFor } from './remoteConfirm';
 import { copyApp, moveApp } from './commands';
+import { traceInstanceMatch } from './traceInstance';
 import { ENGINE_CLOCK_SLACK_MS } from './remoteConfirm';
 import { crossMoveSupported, moveConfirmText, moveErrorLineFor, moveWarningLineFor, settleMoveOutcome } from './moveApp';
 
@@ -94,12 +95,15 @@ export const createDragCopyMove = (
       ? { instanceId, app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname, since: Date.now() - ENGINE_CLOCK_SLACK_MS }
       : null);
     // Instance by NAME: copyApp/moveApp resolve the instance by name on every
-    // Engine (8d98718 and Axle's fix); the disks go by ID.
+    // Engine (8d98718 and Axle's fix); the disks go by ID. engine#399: an Engine
+    // with traceInstanceId traces the resolved id, so match the trace by id.
+    const match = traceInstanceMatch(s, engineId, instanceId, instanceName);
     if (op === 'copy') {
       const instanceOf = s?.instanceDB[instanceId]?.instanceOf;
       const instanceOfStr = instanceOf === undefined ? undefined : String(instanceOf);
-      result.start(instanceName, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), {
+      result.start(match.argValue, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'copyApp',
+        argKey: match.argKey,
         engineId,
         remote: remoteWatchFor(store, engineId, 'copyApp', confirmNewOperation(store, 'copyApp', instanceId, {
           engineId,
@@ -110,8 +114,9 @@ export const createDragCopyMove = (
       });
     } else {
       const since = Date.now() - ENGINE_CLOCK_SLACK_MS;
-      result.start(instanceName, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
+      result.start(match.argValue, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'moveApp',
+        argKey: match.argKey,
         engineId,
         // engine#388: a Done op / ok trace is green only when the app moved (not SOURCE_CHANGED).
         settle: settleMoveOutcome(store, instanceId, since, () => ({ app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname })),

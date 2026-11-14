@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import { restoreApp } from '../store/commands';
 import { createCommandResult, type CommandResult } from '../store/commandResult';
+import { traceInstanceMatch } from '../store/traceInstance';
 import type { CommandLogState } from '../store/commandLog';
 import { isInstanceLocked } from '../store/operations';
 import CommandFeedback from './CommandFeedback';
@@ -115,8 +116,10 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     // share a name). The Engine's answer (e.g. "Too many arguments", "Target
     // disk … not found") is shown on this row by CommandFeedback — never
     // silent. On another Engine: "Sent to …" until the restore op is Done.
-    result.start(inst.id, () => restoreApp(engineId, inst.id, targetDisk.id), {
+    const match = traceInstanceMatch(s, engineId, inst.id, inst.id); // engine#399
+    result.start(match.argValue, () => restoreApp(engineId, inst.id, targetDisk.id), {
       engineId,
+      argKey: match.argKey,
       remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id, { engineId, args: { targetDiskId: targetDisk.id } })),
     });
     onSent?.();

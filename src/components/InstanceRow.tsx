@@ -10,6 +10,7 @@ import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
+import { traceInstanceMatch } from '../store/traceInstance';
 import CommandFeedback from './CommandFeedback';
 import RenameInstanceName from './RenameInstanceName';
 import UpdateAppControl from './UpdateAppControl';
@@ -409,8 +410,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const sendBackup = (engineId: string, instanceId: string, backupDiskId: string) => {
     // Instance and backup disk by ID (see buildBackupAppCommand).
-    cmdResult.start(instanceId, () => backupApp(engineId, instanceId, backupDiskId), {
+    // engine#399: the trace's instanceName is the display name on a new Engine.
+    const match = traceInstanceMatch(storeAcc(), engineId, instanceId, instanceId);
+    cmdResult.start(match.argValue, () => backupApp(engineId, instanceId, backupDiskId), {
       command: 'backupApp',
+      argKey: match.argKey,
       longRunning: true,
       engineId,
       remote: remoteWatchFor(storeAcc, engineId, 'backupApp',

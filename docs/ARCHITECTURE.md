@@ -122,6 +122,7 @@ src/
 │   ├── demoApps.ts              Demo apps gating, targets, step/error wording (idea#235, engine#369)
 │   ├── backupStatus.ts          Backup Disk status-line copy (idea#404 / Engine f114a28)
 │   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
+│   ├── traceInstance.ts         Which trace arg names the instance: instanceId (traceInstanceId) or instanceName (engine#399)
 │   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
 │   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
 │   └── auth.ts                  Client-side authentication and operator management
@@ -257,6 +258,25 @@ a neutral "Sent to <engine>, waiting for confirmation" and resolve:
 1. from the target Engine's command log when the Console could load it (approach i,
    `StoreConnection.commandLogFor` / `remoteCommandLogs.ts`; red on its error trace), else
 2. from the store change that proves the command worked (approach ii).
+
+**Which trace is ours (instance commands, engine#399).** A trace is matched by a new
+trace id plus one named arg (or, for a pre-execute refusal, a token of the positional
+args array). For backupApp, restoreApp, copyApp and moveApp the arg is chosen by
+`traceInstanceMatch` (`store/traceInstance.ts`), asking the Engine the command goes to
+(the trace producer; for copy/move the source Engine):
+
+- the Engine advertises a fresh `traceInstanceId` capability (agent-engine-dev#403):
+  match `args.instanceId` against the instance id. That Engine writes the resolved id
+  there (or the raw argument when it does not resolve) and the display name, or null,
+  in `args.instanceName`, so two instances that share a name are told apart;
+- otherwise (an older Engine): match `args.instanceName` against the value sent (the id
+  for backup / restore, the name for copy / move), as before.
+
+startInstance / stopInstance still match `args.instanceName` against the name sent: both
+Engine shapes put the resolved name there. The InstanceRow trace list (expanded steps)
+matches either `args.instanceId` or `args.instanceName`. renameInstance, removeInstance
+and updateApp match the id anywhere in the raw args (`matchMode: 'includes'`), which
+works with both shapes. The OperationProgress log matches by command kind only.
 
 | command | store confirmation (ok) | store failure (red) | timeout → red |
 |---|---|---|---|
@@ -424,6 +444,7 @@ Instance.filesMounts?: DiskID[]                      // Files Disks mounted into
 Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk',
                                                      // 'scheduledBackups' (Engine f114a28 / PR #353);
                                                      // 'backupCleanup' helper-gated like flashCard (Engine PR #354)
+                                                     // 'traceInstanceId' (engine#399 / PR #403, see Command feedback)
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
