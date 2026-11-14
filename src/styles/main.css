@@ -214,7 +214,7 @@ body {
   50%       { opacity: 0.35; transform: scale(0.75); }
 }
 
-.status-bar__demo-badge {
+.status-bar__preview-badge {
   font-size: var(--font-size-xs);
   font-weight: 700;
   padding: 1px 7px;
@@ -2339,7 +2339,7 @@ body {
   align-self: flex-start;
 }
 
-.change-engine-dialog__demo-section {
+.change-engine-dialog__preview-section {
   border-top: 1px solid var(--colour-border);
   padding-top: 12px;
   display: flex;

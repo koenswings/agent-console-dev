@@ -11,7 +11,7 @@ export const RECONNECTING_LABEL = 'Connection lost, reconnecting…';
 export interface IndicatorInput {
   connected: boolean;
   socketState: SocketState;
-  demo: boolean;
+  preview: boolean;
   discovering: boolean;
   hostname: string | null;
   engineName: () => string;
@@ -24,9 +24,9 @@ export const connectionIndicator = (i: IndicatorInput): Indicator => {
     return { dotClass: 'status-bar__dot--reconnecting', label: RECONNECTING_LABEL };
   }
   if (i.connected) return { dotClass: 'status-bar__dot--connected', label: i.engineName() };
-  const searching = i.discovering || (!!i.hostname && !i.demo);
+  const searching = i.discovering || (!!i.hostname && !i.preview);
   const dotClass = searching ? 'status-bar__dot--searching' : 'status-bar__dot--disconnected';
-  if (i.demo) return { dotClass, label: '' };
+  if (i.preview) return { dotClass, label: '' };
   if (i.discovering) return { dotClass, label: 'Scanning for engines...' };
   if (i.hostname) return { dotClass, label: 'Connecting…' };
   return { dotClass, label: 'No engine found' };

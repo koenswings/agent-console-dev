@@ -10,14 +10,14 @@ export interface SettingsPanelProps {
   store: Store | null;
   connection: StoreConnection | null;
   hostname: string;
-  demo: boolean;
+  preview: boolean;
   onClose: () => void;
   onComplete: () => void;
   onConnect: (hostname: string, storeUrl: string) => void;
   /** Open ConnectionManagement to pick another Engine (Prefer A switch_engine). */
   onChangeEngine?: () => void;
-  onDemoMode: () => void;
-  onDemoToggle?: (val: boolean) => Promise<void>;
+  onPreviewMode: () => void;
+  onPreviewToggle?: (val: boolean) => Promise<void>;
 }
 
 const SettingsPanel: Component<SettingsPanelProps> = (props) => {
@@ -102,30 +102,30 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
 
             {/* Status row */}
             <div class="settings-panel__current-engine" data-testid="settings-engine-status">
-              <Show when={props.demo}>
+              <Show when={props.preview}>
                 <span class="settings-panel__status-dot" style="background:var(--colour-text-dim)" />
-                <span class="settings-panel__current-label">Demo mode — simulated data, no engine connected</span>
+                <span class="settings-panel__current-label">Preview mode — simulated data, no engine connected</span>
               </Show>
-              <Show when={!props.demo && props.hostname}>
+              <Show when={!props.preview && props.hostname}>
                 <span class="settings-panel__status-dot settings-panel__status-dot--connected" />
                 <span class="settings-panel__current-label">Connected to <strong>{props.hostname.replace(/\.local$/i, '')}</strong></span>
               </Show>
-              <Show when={!props.demo && !props.hostname}>
+              <Show when={!props.preview && !props.hostname}>
                 <span class="settings-panel__status-dot" style="background:var(--colour-error)" />
                 <span class="settings-panel__current-label">Not connected</span>
               </Show>
             </div>
 
-            {/* Demo mode toggle — always visible */}
+            {/* Preview mode toggle — always visible */}
             <div class="settings-panel__toggle-row">
               <label class="toggle-row">
                 <input
                   type="checkbox"
-                  data-testid="settings-demo-toggle"
-                  checked={props.demo}
-                  onChange={(e) => void props.onDemoToggle?.(e.currentTarget.checked)}
+                  data-testid="settings-preview-toggle"
+                  checked={props.preview}
+                  onChange={(e) => void props.onPreviewToggle?.(e.currentTarget.checked)}
                 />
-                <span class="toggle-row__label">Demo mode</span>
+                <span class="toggle-row__label">Preview mode</span>
               </label>
               <span class="form-field__hint">Simulated data, no engine required</span>
             </div>

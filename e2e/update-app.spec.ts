@@ -45,7 +45,8 @@ async function openAllApps(page: Page): Promise<void> {
   await page.addInitScript((h: string) => {
     localStorage.clear();
     localStorage.setItem('engineHostname', h);
-    localStorage.setItem('demoMode', 'false');
+    localStorage.setItem('previewMode', 'false');
+    localStorage.removeItem('demoMode');
   }, HOST);
   await page.goto('/');
   await page.locator('.status-bar__dot--connected').waitFor({ state: 'visible', timeout: 30_000 });
