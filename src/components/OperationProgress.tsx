@@ -16,7 +16,8 @@ import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { plainEngineText } from '../store/plainError';
 import { demoErrorText, demoHeartbeat } from '../store/demoApps';
-import { live } from '../store/live';
+import { live, liveNow } from '../store/live';
+import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,6 +92,8 @@ const OpCard: Component<OpCardProps> = (props) => {
   const pct      = () => props.op.progressPercent ?? 0;
 
   const isActive = () => props.op.status === 'Pending' || props.op.status === 'Running';
+  // idea#498: cross-Engine Move Checking step, live from the target Engine (null = stored label).
+  const checkingLine = createMemo(() => (props.op.kind === 'moveApp' ? moveCheckingLine(props.op, moveChecking(), liveNow()) : null));
 
   const [logExpanded, setLogExpanded] = createSignal(false);
 
@@ -149,8 +152,8 @@ const OpCard: Component<OpCardProps> = (props) => {
         <div class="operation-card__args">{argsSummary(props.op, props.store)}</div>
       </Show>
 
-      <Show when={props.op.stepLabel}>
-        <div class="operation-card__step-label">{props.op.stepLabel}</div>
+      <Show when={checkingLine() ?? props.op.stepLabel}>
+        {(label) => <div class="operation-card__step-label" data-testid={`operation-step-label-${props.op.id}`}>{label()}</div>}
       </Show>
 
       <Show when={!isFailed()}>
