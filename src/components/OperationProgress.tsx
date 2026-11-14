@@ -15,6 +15,7 @@ import { confirmCancelled, remoteWatchFor } from '../store/remoteConfirm';
 import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { plainEngineText } from '../store/plainError';
+import { demoErrorText } from '../store/demoApps';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,6 +33,8 @@ const KIND_LABEL: Record<OperationKind, string> = {
   stopApp:       'Stopping',
   flashCard:     'Flash client card',
   initialiseDisk: 'Initialise disk',
+  setupDemo:     'Set up demo apps',
+  removeDemo:    'Remove demo apps',
 };
 
 const argsSummary = (op: Operation, store: Store | null): string => {
@@ -159,7 +162,7 @@ const OpCard: Component<OpCardProps> = (props) => {
       </Show>
 
       <Show when={isFailed() && props.op.error}>
-        <div class="operation-card__error">{plainEngineText(props.op.error)}</div>
+        <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo' ? demoErrorText(props.op.error) : plainEngineText(props.op.error)}</div>
       </Show>
 
       <Show when={logExpanded()}>

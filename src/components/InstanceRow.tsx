@@ -143,6 +143,8 @@ const OP_LABEL: Record<OperationKind, string> = {
   stopApp:       'Stopping',
   flashCard:     'Flashing card',
   initialiseDisk: 'Initialising disk',
+  setupDemo:     'Setting up demo apps',
+  removeDemo:    'Removing demo apps',
 };
 
 // ---------------------------------------------------------------------------

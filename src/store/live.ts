@@ -6,6 +6,7 @@
  * the Engines relay them to every peer of the doc, so a Console connected to ANY
  * Engine receives them from EVERY Engine:
  *   { type: 'idea/hb', v: 1, engineId, now, bootedAt }                every 10 s
+ *       optional (engine#369 §4, idea#235 Demo apps): internet, demoLocal
  *   { type: 'idea/metrics', v: 1, engineId, sampledAt, instances }    every 15 s
  *       instances: { [instanceId]: DockerMetrics } (Running instances only)
  *
@@ -27,13 +28,24 @@ export const LIVE_METRICS_STALE_MS = 45_000;
 /** Stored lastRun rule for old Engines (heartbeat every 30 s, 3x tolerance). */
 export const LEGACY_ONLINE_MS = 90_000;
 
-export interface LiveBeat { receivedAt: number; engineNow: number | null; bootedAt: number | null }
+export interface LiveBeat {
+  receivedAt: number;
+  engineNow: number | null;
+  bootedAt: number | null;
+  /**
+   * engine#369 §4: optional hb fields. null = not sent (older Engine) or not a
+   * boolean, which the Console treats as unknown (the Engine decides).
+   */
+  internet?: boolean | null;
+  demoLocal?: boolean | null;
+}
 export interface LiveMetrics { receivedAt: number; sampledAt: number | null; instances: Record<string, DockerMetrics> }
 export interface LiveState { beats: Record<string, LiveBeat>; metrics: Record<string, LiveMetrics> }
 
 export const emptyLive = (): LiveState => ({ beats: {}, metrics: {} });
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const bool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null);
 
 /**
  * Pure: the state after an ephemeral message received at `receivedAt`
@@ -44,14 +56,29 @@ export const applyEphemeral = (state: LiveState, message: unknown, receivedAt: n
   if (!m || typeof m !== 'object' || typeof m.engineId !== 'string' || !m.engineId) return state;
   const engineId = m.engineId;
   if (m.type === 'idea/hb') {
-    return { ...state, beats: { ...state.beats, [engineId]: { receivedAt, engineNow: num(m.now), bootedAt: num(m.bootedAt) } } };
+    return {
+      ...state,
+      beats: {
+        ...state.beats,
+        [engineId]: { receivedAt, engineNow: num(m.now), bootedAt: num(m.bootedAt), internet: bool(m.internet), demoLocal: bool(m.demoLocal) },
+      },
+    };
   }
   if (m.type === 'idea/metrics' && m.instances && typeof m.instances === 'object') {
     const live: LiveMetrics = { receivedAt, sampledAt: num(m.sampledAt), instances: m.instances as Record<string, DockerMetrics> };
     // a metrics message also proves the Engine is alive
     const beat = state.beats[engineId];
     return {
-      beats: { ...state.beats, [engineId]: { receivedAt, engineNow: beat?.engineNow ?? null, bootedAt: beat?.bootedAt ?? null } },
+      beats: {
+        ...state.beats,
+        [engineId]: {
+          receivedAt,
+          engineNow: beat?.engineNow ?? null,
+          bootedAt: beat?.bootedAt ?? null,
+          internet: beat?.internet ?? null,
+          demoLocal: beat?.demoLocal ?? null,
+        },
+      },
       metrics: { ...state.metrics, [engineId]: live },
     };
   }

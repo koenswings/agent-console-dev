@@ -105,6 +105,7 @@ src/
 │   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files / Backup Disk, Install App
 │   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk; idea#400 controls, idea#404 status lines)
 │   ├── BackupModeControls.tsx   setBackupMode: mode + daily time, gated on scheduledBackups (idea#400)
+│   ├── DemoAppsSection.tsx      Settings → Demo apps: setupDemo / removeDemo and progress, operators only (idea#235)
 │   ├── BackupStatusLines.tsx    Schedule, last run, missed runs, clock, full/cleaning, interrupted
 │   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
@@ -118,6 +119,7 @@ src/
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
 │   ├── setBackupMode.ts         setBackupMode validation, error wording, success copy (idea#400)
+│   ├── demoApps.ts              Demo apps gating, targets, step/error wording (idea#235, engine#369)
 │   ├── backupStatus.ts          Backup Disk status-line copy (idea#404 / Engine f114a28)
 │   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
 │   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
@@ -476,6 +478,53 @@ reads for the last scheduled run; Engine `lastRun` is not in the store) shows
 "A first backup starts now, then daily at HH:MM." The Console never writes
 `lastRun`. Without the flag the existing read-only mode badge is unchanged.
 See `src/store/setBackupMode.ts`.
+
+### Demo apps (idea#235, Engine design engine#369)
+
+Settings → **Demo apps** sets up and removes separate "Kolibri Demo" and
+"Nextcloud Demo" instances. Real instances are never touched. The tab is shown
+only to **operators** (`isOperator()`; Koen, idea#235, 14 Nov 2026 10:15). The
+Engine has no role model, so this check lives only in the Console. The tab
+also needs at least one Engine with a fresh `demoApps` capability
+(`capabilitiesBootedAt === lastBooted`); the section offers only such Engines,
+with the connected Engine first.
+
+- **Set up** sends `setupDemo <targetDiskId>` to that Engine, by disk id. The
+  disk picker lists only disks docked to that Engine whose `diskTypes` include
+  `app` or `empty`, never `system` (engine#369 Q1). The default is the disk that
+  already holds demo apps (a resume), else the one with the most `freeBytes`.
+  The button is greyed out, with the reason shown, when:
+  - a `setupDemo`/`removeDemo` Operation for that Engine is Pending or Running;
+  - there is no usable disk;
+  - two demo instances of one app are docked there (mirrors `DEMO_AMBIGUOUS`);
+  - demo apps are on another disk of that Engine (mirrors `DEMO_EXISTS`);
+  - every demo app is already there and the last setup did not fail;
+  - the Engine's ephemeral `idea/hb` says `internet: false` **and**
+    `demoLocal: false` ("Set up demo apps needs internet. Connect the Engine,
+    or insert a disk with the IDEA demo pack.").
+  Missing hb fields (older Engine, or no hb yet) count as unknown, and the
+  Engine decides (`NO_SOURCE`). When some demo apps exist on the chosen disk,
+  or the last setup failed (for example `INTERRUPTED`), the button reads
+  "Continue setting up demo apps": setupDemo is idempotent and resumes.
+- **Remove** opens a confirm that names the exact demo instances, then sends
+  `removeDemo <instanceId>...` with those ids. The bare `removeDemo` (all demo
+  instances) is never sent.
+- **Progress** comes from the newest `setupDemo`/`removeDemo` Operation for that
+  Engine (`Operation.demo`): one block per app, one row per step id (`install`,
+  `download`, `verify`, `seed`, `start`, `ready`, `classwork`; removal `stop`,
+  `remove`), with plain wording. Every engine#369 §9 code (refusals, failures,
+  `DEMO_READY`, `DEMO_REMOVED`) has a plain sentence; `REMOVE_FAILED` adds the
+  inner removeInstance reason. Unknown codes go through `plainEngineText`.
+- **Network:** when another Engine's docked disks hold demo instances, a note
+  says "IDEA demo apps already run on <engine>." It never blocks (engine#369 Q2).
+- **DEMO badge:** app cards and the mobile list show a DEMO badge next to the
+  instance-name title (#192) only when `Instance.demo === true`, which the
+  Engine mirrors from `x-app.demo` in the instance's compose.yaml. It is never
+  inferred from the name.
+
+All new store fields (`Instance.demo`, `Operation.demo`, the `setupDemo` and
+`removeDemo` kinds) and hb fields are optional, so older Engines look as
+before. See `src/store/demoApps.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

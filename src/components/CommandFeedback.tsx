@@ -42,6 +42,9 @@ export const COMMAND_VERBS: Record<string, string> = {
   createBackupDisk: 'set up',
   // idea#400 / Engine f114a28
   setBackupMode: 'change the backup settings of',
+  // idea#235 / engine#369
+  setupDemo: 'set up demo apps on',
+  removeDemo: 'remove demo apps from',
 };
 
 export const commandVerb = (command: string | null): string =>
