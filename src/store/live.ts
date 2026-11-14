@@ -21,6 +21,7 @@ import { createSignal } from 'solid-js';
 import type { DockerMetrics, Engine, Instance } from '../types/store';
 import { receiveUpdateProgress } from './updateApp';
 import { receiveDemoProgress, resetDemoProgress } from './demoApps';
+import { receiveMoveChecking, resetMoveChecking } from './moveChecking';
 
 /** No hb for this long: the Engine is offline (3 x 10 s). */
 export const LIVE_OFFLINE_MS = 30_000;
@@ -172,8 +173,9 @@ export const receiveEphemeral = (message: unknown, receivedAt: number = Date.now
   setLive((s) => applyEphemeral(s, message, receivedAt));
   receiveUpdateProgress(message, receivedAt);
   receiveDemoProgress(message, receivedAt);
+  receiveMoveChecking(message, receivedAt);
 };
 /** Forget everything (new connection / dispose). Clears the connecting grace. */
-export const resetLive = (): void => { setLive(emptyLive()); setLiveSince(0); resetDemoProgress(); };
+export const resetLive = (): void => { setLive(emptyLive()); setLiveSince(0); resetDemoProgress(); resetMoveChecking(); };
 /** Mark that we are now listening for ephemeral hb/metrics (engine.ts after resetLive). */
 export const beginLiveListen = (at: number = Date.now()): void => { setLiveSince(at); };

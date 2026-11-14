@@ -7,6 +7,8 @@ import { Show, createMemo, type Accessor, type Component } from 'solid-js';
 import type { Store } from '../types/store';
 import type { CrossMove } from '../store/dragCopyMove';
 import { isMoveRunning, latestMoveOp, moveOutcome, moveStepText } from '../store/moveApp';
+import { moveChecking, moveCheckingLine } from '../store/moveChecking';
+import { liveNow } from '../store/live';
 
 const CrossMoveStatus: Component<{ store: Accessor<Store | null>; move: Accessor<CrossMove | null> }> = (props) => {
   const op = createMemo(() => {
@@ -18,6 +20,8 @@ const CrossMoveStatus: Component<{ store: Accessor<Store | null>; move: Accessor
     const o = op();
     return m && isMoveRunning(o) ? moveStepText(o, m.targetEngine) : null;
   });
+  // idea#498: live stay-up check from the target Engine (ephemeral; null on older Engines).
+  const checking = createMemo(() => (step() ? moveCheckingLine(op(), moveChecking(), liveNow()) : null));
   const outcome = createMemo(() => {
     const m = props.move();
     const o = m ? moveOutcome(op(), { app: m.app, targetEngine: m.targetEngine, sourceEngine: m.sourceEngine }) : null;
@@ -27,6 +31,9 @@ const CrossMoveStatus: Component<{ store: Accessor<Store | null>; move: Accessor
     <>
       <Show when={step()}>
         {(t) => <p class="edp-form__hint" role="status" data-testid="cross-move-step">{t()}</p>}
+      </Show>
+      <Show when={checking()}>
+        {(t) => <p class="edp-form__hint" data-testid="cross-move-checking">{t()}</p>}
       </Show>
       <Show when={outcome()}>
         {(o) => (
