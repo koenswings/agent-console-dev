@@ -3986,3 +3986,82 @@ body {
 .backup-status__line--neutral { color: var(--colour-text-muted); }
 /* idea#400 / Engine #356: orphan-links line uses --neutral (info, not a warning). */
 .backup-status__line--info { color: var(--colour-text-muted); }
+
+/* ── Demo apps (idea#235, engine#369) ─────────────────────────────────────── */
+.demo-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--colour-pauzed);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.demo-apps__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 1rem;
+}
+
+.demo-apps__note {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--colour-text-muted);
+}
+
+.demo-apps__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.demo-apps__progress {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.demo-apps__app-name {
+  font-weight: 600;
+}
+
+.demo-apps__steps {
+  margin: 4px 0 0;
+  padding-left: 1.2rem;
+}
+
+.demo-apps__step {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.demo-apps__step-status {
+  color: var(--colour-text-dim);
+}
+
+.demo-apps__step--running .demo-apps__step-status {
+  color: var(--colour-starting);
+}
+
+.demo-apps__step--done .demo-apps__step-status,
+.demo-apps__step--skipped .demo-apps__step-status {
+  color: var(--colour-running);
+}
+
+.demo-apps__step--failed .demo-apps__step-status {
+  color: var(--colour-error);
+}
+
+.demo-warning {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--colour-pauzed);
+}

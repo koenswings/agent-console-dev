@@ -464,6 +464,29 @@ export interface Instance {
   metrics: DockerMetrics | null;
   /** Files Disks mounted into this instance, written after a successful compose up (idea#133). */
   filesMounts?: DiskID[];
+  /**
+   * engine#369 §3 (idea#235 Demo apps): present only when true, never false.
+   * Mirrored by the Engine from `x-app.demo: true` in the instance's
+   * compose.yaml, which only setupDemo writes. The DEMO badge comes from this
+   * flag, never from the name. Absent on older Engines.
+   */
+  demo?: true;
+  /**
+   * engine#369 Pixel Q1 answer (comment 6875670232): set by updateApp when the
+   * on-disk pack.json packVersion is below the new bundle's demo.pack.minVersion;
+   * cleared when a setupDemo verify succeeds. A warning only, no auto-download
+   * (addendum decision 5). Absent or null = nothing to warn about.
+   */
+  demoPackWarning?: DemoPackWarning | null;
+}
+
+/** engine#369 comment 6875670232: exact shape of Instance.demoPackWarning. */
+export interface DemoPackWarning {
+  code: 'PACK_OUTDATED';
+  /** On-disk pack.json packVersion. */
+  packVersion: number;
+  /** The new bundle's app.yaml demo.pack.minVersion. */
+  minVersion: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,7 +523,48 @@ export type OperationKind =
   | 'stopApp'
   // idea#201 §10 (Engine API contract v2)
   | 'flashCard'
-  | 'initialiseDisk';
+  | 'initialiseDisk'
+  // engine#369 §3 (idea#235 Demo apps)
+  | 'setupDemo'
+  | 'removeDemo';
+
+// ---------------------------------------------------------------------------
+// Demo apps progress — engine#369 §3 (`Operation.demo`, like `Operation.move`).
+// All optional on Operation, so older Engines type-check unchanged.
+// ---------------------------------------------------------------------------
+/** Stable step ids. Setup: install … classwork; removal: stop, remove. */
+export type DemoStepId =
+  | 'install' | 'download' | 'verify' | 'seed' | 'start' | 'ready' | 'classwork' | 'stop' | 'remove';
+export type DemoStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'failed';
+export type DemoAppId = 'kolibri' | 'nextcloud';
+/** engine#369 §9 codes. Kept as string so a new Engine code still type-checks. */
+export type DemoCode = string;
+
+export interface DemoStep {
+  id: DemoStepId;
+  status: DemoStepStatus;
+  /** Set once with the download step; bytesDone is never stored (engine#369 §3). */
+  bytesTotal?: number | null;
+}
+
+export interface DemoAppProgress {
+  app: DemoAppId;
+  /** Set once install registered the instance. */
+  instanceId: InstanceID | null;
+  steps: DemoStep[];
+  source: 'local' | 'github' | null;
+  packVersion: string | null;
+  code: DemoCode | null;
+  /** Hook exit code / stderr tail in plain words (operator diagnostics). */
+  detail: string | null;
+}
+
+export interface DemoProgress {
+  targetDiskId: DiskID | null;
+  apps: DemoAppProgress[];
+  code: DemoCode | null;
+  resultText: string | null;
+}
 
 export type OperationCause =
   | 'console-command'
@@ -526,6 +590,7 @@ export type OperationID = string;
 export interface Operation {
   id: OperationID;
   kind: OperationKind;
+  /** Every value is a string; setupDemo's `apps` is a comma string (engine#369 answer 3). */
   args: Record<string, string>;
   /** What triggered this operation. */
   cause: OperationCause;
@@ -546,6 +611,8 @@ export interface Operation {
    * off, safe to pull; false = eject first (POWER_OFF_FAILED). Absent on other kinds.
    */
   safeToRemove?: boolean;
+  /** engine#369 §3: setupDemo / removeDemo progress. Absent on other kinds and older Engines. */
+  demo?: DemoProgress | null;
 }
 
 // ---------------------------------------------------------------------------

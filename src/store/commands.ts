@@ -63,7 +63,12 @@ export type EngineCapability =
    * Freshness is capabilitiesBootedAt === lastBooted. A skipped cleanup is still
    * recorded as lastResult HELPER_OUTDATED (runtime fallback).
    */
-  | 'backupCleanup';
+  | 'backupCleanup'
+  /**
+   * engine#369 §1 (idea#235): setupDemo / removeDemo. Advertised when
+   * removeInstance is and python3 is on PATH, checked once at startup.
+   */
+  | 'demoApps';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -468,4 +473,30 @@ export const buildRemoveInstanceCommand = (instanceId: string): string =>
 
 export const removeInstance = (engineId: string, instanceId: string): void => {
   _sendCommand(engineId, buildRemoveInstanceCommand(instanceId));
+};
+
+/**
+ * Build the "setupDemo" command string (engine#369 §2, idea#235).
+ * Format: "setupDemo <targetDiskId> [--apps kolibri,nextcloud]". Sent to the
+ * Engine the disk is docked to, always by disk id. `--apps` is omitted when
+ * no subset is given (the Engine default is both apps).
+ */
+export const buildSetupDemoCommand = (targetDiskId: string, apps?: readonly string[]): string =>
+  apps && apps.length > 0 ? `setupDemo ${targetDiskId} --apps ${apps.join(',')}` : `setupDemo ${targetDiskId}`;
+
+export const setupDemo = (engineId: string, targetDiskId: string, apps?: readonly string[]): void => {
+  _sendCommand(engineId, buildSetupDemoCommand(targetDiskId, apps));
+};
+
+/**
+ * Build the "removeDemo" command string (engine#369 §2, idea#235).
+ * Format: "removeDemo <instanceId>...". The Console always names the exact
+ * instance ids it showed in the confirm, never the bare form (which removes
+ * every demo instance docked to that Engine).
+ */
+export const buildRemoveDemoCommand = (instanceIds: readonly string[]): string =>
+  ['removeDemo', ...instanceIds].join(' ');
+
+export const removeDemo = (engineId: string, instanceIds: readonly string[]): void => {
+  _sendCommand(engineId, buildRemoveDemoCommand(instanceIds));
 };

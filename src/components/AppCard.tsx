@@ -2,6 +2,7 @@ import { Show, type Component } from 'solid-js';
 import type { Instance, App, Engine } from '../types/store';
 import { appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
+import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
 
 interface AppCardProps {
   instance: () => Instance | undefined;
@@ -47,7 +48,12 @@ const AppCard: Component<AppCardProps> = (props) => {
     >
       <div class="app-card__header">
         <div class="app-card__titles">
-          <span class="app-card__title">{cardTitle().title}</span>
+          <span class="app-card__title">
+            {cardTitle().title}
+            <Show when={isDemoInstance(props.instance())}>
+              <span class="demo-badge" data-testid={`demo-badge-${props.instance()?.id ?? ''}`} title="Demo app: for training, not a real school app">DEMO</span>
+            </Show>
+          </span>
           <Show when={cardTitle().subtitle}>
             <span class="app-card__subtitle">{cardTitle().subtitle}</span>
           </Show>
@@ -60,6 +66,11 @@ const AppCard: Component<AppCardProps> = (props) => {
         <span class="app-card__engine" data-testid={`app-engine-${props.instance()?.id ?? ''}`}>
           on {engineName()}
         </span>
+      </Show>
+      <Show when={demoPackWarningText(props.instance())}>
+        <p class="demo-warning" role="status" data-testid={`demo-pack-warning-${props.instance()?.id ?? ''}`}>
+          {demoPackWarningText(props.instance())}
+        </p>
       </Show>
       {props.app()?.description && (
         <p class="app-card__description">{props.app()!.description}</p>

@@ -1,10 +1,13 @@
-import { createSignal, Show, For, type Component } from 'solid-js';
+import { createMemo, createSignal, Show, For, type Component } from 'solid-js';
 import pkg from '../../package.json';
 import { currentUser, isOperator, changePassword } from '../store/auth';
 import type { Store } from '../types/store';
+import { engineHasCapability } from '../store/commands';
+import { DEMO_APPS_CAPABILITY } from '../store/demoApps';
+import DemoAppsSection from './DemoAppsSection';
 import type { StoreConnection } from '../mock/mockStore';
 
-type Tab = 'engine' | 'account' | 'about';
+type Tab = 'engine' | 'account' | 'demo' | 'about';
 
 export interface SettingsPanelProps {
   store: Store | null;
@@ -68,9 +71,16 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
     }
   };
 
+  /** idea#235: any Engine with a fresh demoApps capability (engine#369 §1). */
+  const anyDemoEngine = createMemo(() =>
+    Object.values(props.store?.engineDB ?? {}).some((e) => engineHasCapability(e, DEMO_APPS_CAPABILITY)));
+  /** Operators only (Koen, idea#235, 14 Nov 2026 10:15); hidden for everyone else. */
+  const showDemoApps = () => isOperator() && anyDemoEngine();
+
   const tabs = (): { id: Tab; label: string }[] => {
     const t: { id: Tab; label: string }[] = [{ id: 'engine', label: 'Engine Connection' }];
     if (isOperator()) t.push({ id: 'account', label: 'Account' });
+    if (showDemoApps()) t.push({ id: 'demo', label: 'Demo apps' });
     t.push({ id: 'about', label: 'About' });
     return t;
   };
@@ -197,6 +207,14 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               </button>
             </form>
           </div>
+        </Show>
+
+        {/* Demo apps (idea#235): operators only, Engine capability demoApps */}
+        <Show when={activeTab() === 'demo' && showDemoApps()}>
+          <DemoAppsSection
+            store={() => props.store}
+            commandLog={() => props.connection?.commandLogStore() ?? null}
+          />
         </Show>
 
         {/* About */}
