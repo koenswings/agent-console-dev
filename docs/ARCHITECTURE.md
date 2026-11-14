@@ -539,7 +539,7 @@ with the connected Engine first.
   Done setupDemo the section keeps the success wording and adds a note per
   skipped app, e.g. "Nextcloud Demo was skipped: its demo content isn't
   available on this Engine yet.", or, when the heartbeat says `internet` is
-  false, "Nextcloud Demo was skipped: because the Engine has no internet and
+  false, "Nextcloud Demo was skipped because the Engine has no internet and
   no local demo pack." That note is never shown as a failure. The trace
   `skipped` arg is a comma string (`nextcloud:NO_SOURCE`) or an array of the
   same tokens.

@@ -443,7 +443,7 @@ export const demoSkippedApps = (op: Operation | null | undefined): DemoSkipped[]
 export const demoSkippedText = (app: string, internet?: boolean | null): string => {
   const name = demoAppName(app);
   return internet === false
-    ? `${name} was skipped: because the Engine has no internet and no local demo pack.`
+    ? `${name} was skipped because the Engine has no internet and no local demo pack.`
     : `${name} was skipped: its demo content isn't available on this Engine yet.`;
 };
 

@@ -336,7 +336,7 @@ describe('skipped apps (Operation.demo.skipped, engine#369 follow-up)', () => {
     }]);
     expect(demoSkippedText('nextcloud', true)).toBe("Nextcloud Demo was skipped: its demo content isn't available on this Engine yet.");
     expect(demoSkippedText('nextcloud', false)).toBe(
-      'Nextcloud Demo was skipped: because the Engine has no internet and no local demo pack.',
+      'Nextcloud Demo was skipped because the Engine has no internet and no local demo pack.',
     );
     expect(demoSkippedText('nextcloud', null)).toBe("Nextcloud Demo was skipped: its demo content isn't available on this Engine yet.");
     expect(demoOperationResultText(op)).toBe(DEMO_ERROR_TEXT.DEMO_READY);
