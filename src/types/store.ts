@@ -73,6 +73,9 @@ export interface BackupStaleLock {
  * APP_DISK_NOT_DOCKED and INTERRUPTED occur alone. Do not show the raw code
  * in the UI. lastResult.time is the result time (there is no Instance.lastAttempt).
  */
+/** x-app.backup.method published on the Instance (idea#403). */
+export type BackupMethod = 'stop' | 'hook' | 'none';
+
 export interface BackupRunResult {
   time: Timestamp;
   method: string | null;
@@ -447,6 +450,11 @@ export interface Instance {
    * successful backup) is unchanged.
    */
   lastResult?: BackupRunResult | null;
+  /**
+   * The App's x-app.backup.method as the Engine resolved it (idea#403, agent-engine-dev#404).
+   * Defaults to 'stop'; unset on an invalid backup spec or an older Engine/record.
+   */
+  backupMethod?: BackupMethod;
   backupHistory?: BackupRunResult[] | null;
   lastStarted: Timestamp;
   storedOn: DiskID | null;

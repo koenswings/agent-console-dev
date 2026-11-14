@@ -64,13 +64,16 @@ export const BACKUP_METHOD_NONE = 'none';
 /**
  * True when the instance's App uses `x-app.backup.method: none` (idea#403): its
  * content is on the App Disk, so it never gets a `lastBackup` and needs no backup.
- * The store does not mirror the App's or compose's backup method, so the only
- * signal is the recorded result: `lastResult.method === 'none'` (the Engine writes
- * `{method: 'none', result: 'OK'}` per attempt, including the pre-update backup).
- * A none App that has never run a backup is not known yet and counts as not none.
+ * `Instance.backupMethod` (agent-engine-dev#404) decides when set, so a fresh none
+ * App that never ran a backup is covered, and a 'stop' / 'hook' method wins over an
+ * older `lastResult.method: 'none'` (the method changed). Only when it is unset
+ * (older Engine or record, invalid spec) the recorded result decides:
+ * `lastResult.method === 'none'` (the Engine writes `{method: 'none', result: 'OK'}`).
  */
-export const isBackupMethodNone = (inst: Pick<Instance, 'lastResult'> | null | undefined): boolean =>
-  inst?.lastResult?.method === BACKUP_METHOD_NONE;
+export const isBackupMethodNone = (inst: Pick<Instance, 'lastResult' | 'backupMethod'> | null | undefined): boolean =>
+  inst?.backupMethod != null
+    ? inst.backupMethod === BACKUP_METHOD_NONE
+    : inst?.lastResult?.method === BACKUP_METHOD_NONE;
 export const FAILED_COPY = 'The backup did not finish.';
 export const SCHEDULE_ERROR_COPY =
   'The saved backup time is not valid, so this disk runs at 02:30 until it is fixed.';

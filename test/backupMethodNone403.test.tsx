@@ -3,6 +3,7 @@
  * lastBackup; its Instance.lastResult is {method: 'none', result: 'OK'}. The major-update
  * gate needs no backup for it, and RestorePanel shows the neutral method-none line and
  * offers no restore. stop / hook instances without a lastBackup are unchanged.
+ * Instance.backupMethod (when set) decides; unset falls back to lastResult.method.
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library';
@@ -36,6 +37,25 @@ describe('isBackupMethodNone', () => {
     expect(isBackupMethodNone({ lastResult: null })).toBe(false);
     expect(isBackupMethodNone({})).toBe(false);
     expect(isBackupMethodNone(null)).toBe(false);
+  });
+});
+
+describe('isBackupMethodNone with Instance.backupMethod (agent-engine-dev#404)', () => {
+  it("backupMethod 'none' with no lastResult: none (a fresh none App is covered)", () => {
+    expect(isBackupMethodNone({ backupMethod: 'none' })).toBe(true);
+    expect(isBackupMethodNone({ backupMethod: 'none', lastResult: null })).toBe(true);
+  });
+  it("backupMethod 'stop' / 'hook' wins over an older lastResult none (the method changed)", () => {
+    expect(isBackupMethodNone({ backupMethod: 'stop', lastResult: NONE_RESULT })).toBe(false);
+    expect(isBackupMethodNone({ backupMethod: 'hook', lastResult: NONE_RESULT })).toBe(false);
+  });
+  it('backupMethod none wins over an older stop result', () => {
+    expect(isBackupMethodNone({ backupMethod: 'none', lastResult: STOP_RESULT })).toBe(true);
+  });
+  it('unset backupMethod (older Engine, invalid spec) falls back to lastResult', () => {
+    expect(isBackupMethodNone({ backupMethod: undefined, lastResult: NONE_RESULT })).toBe(true);
+    expect(isBackupMethodNone({ backupMethod: undefined, lastResult: STOP_RESULT })).toBe(false);
+    expect(isBackupMethodNone({ backupMethod: undefined, lastResult: null })).toBe(false);
   });
 });
 
@@ -100,6 +120,20 @@ describe('UpdateAppControl', () => {
     fireEvent.click(screen.getByTestId('update-badge-i1'));
     expect(confirmBtn().disabled).toBe(false);
     expect(screen.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
+  });
+
+  it("fresh none App (backupMethod 'none', no lastResult), major: Update enabled", () => {
+    setup(inst({ backupMethod: 'none', updateAvailable: { appId: 'kiwix-1.0.0' } }));
+    fireEvent.click(screen.getByTestId('update-badge-i1'));
+    expect(confirmBtn().disabled).toBe(false);
+    expect(screen.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
+  });
+
+  it("negative: backupMethod 'stop' with an older lastResult none, major: still needs a backup", () => {
+    setup(inst({ backupMethod: 'stop', lastResult: NONE_RESULT, updateAvailable: { appId: 'kiwix-1.0.0' } }));
+    fireEvent.click(screen.getByTestId('update-badge-i1'));
+    expect(confirmBtn().disabled).toBe(true);
+    expect(screen.getByTestId('update-confirm-needs-backup-i1').textContent).toBe('Make a backup first');
   });
 
   for (const [label, lastResult] of [['stop', STOP_RESULT], ['hook', HOOK_RESULT], ['never run', null]] as const) {
@@ -174,6 +208,24 @@ describe('RestorePanel', () => {
       expect(screen.getByTestId(`restore-btn-${KOLIBRI}`)).toBeInTheDocument();
     });
   }
+
+  it("fresh none App (backupMethod 'none', no lastResult): the neutral line, no restore", () => {
+    panel({ lastBackup: null, lastResult: null, backupMethod: 'none' });
+    expect(backupLine()).toBe(METHOD_NONE_COPY);
+    expect(screen.queryByTestId(`restore-btn-${KOLIBRI}`)).toBeNull();
+  });
+
+  it("negative: backupMethod 'stop' with an older lastResult none: 'Never backed up', restore offered", () => {
+    panel({ lastBackup: null, lastResult: NONE_RESULT, backupMethod: 'stop' });
+    expect(backupLine()).toBe('Never backed up');
+    expect(screen.getByTestId(`restore-btn-${KOLIBRI}`)).toBeInTheDocument();
+  });
+
+  it("backupMethod 'none' with a real older archive (lastBackup): date and restore kept", () => {
+    panel({ lastBackup: T - 86_400_000, lastResult: null, backupMethod: 'none' });
+    expect(backupLine()).toMatch(/^Last backup: /);
+    expect(screen.getByTestId(`restore-btn-${KOLIBRI}`)).toBeInTheDocument();
+  });
 
   it('a none instance that still has an older lastBackup keeps its date and restore', () => {
     panel({ lastBackup: T - 86_400_000, lastResult: NONE_RESULT });

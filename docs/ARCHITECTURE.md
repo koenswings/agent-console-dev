@@ -472,6 +472,7 @@ Instance {
   lastBackup: Timestamp | null      // last successful backup; null = never backed up
   lastResult?, backupHistory?       // idea#400 summary, optional; lastResult.time is the result time
                                     // (no Instance.lastAttempt)
+  backupMethod?                     // 'stop' | 'hook' | 'none' (idea#403, Engine PR #404); unset on older Engines
 }
 
 User {
@@ -514,9 +515,12 @@ Copy is plain language (no borg, YAML, helper, or result-code tokens). See
 **Backup method `none` (idea#403, agent-engine-dev#404).** An App with
 `x-app.backup.method: none` copies nothing and never gets `lastBackup`; each attempt
 (including the pre-update backup) records `lastResult = {method: 'none', result: 'OK'}`.
-The store mirrors no App or compose backup method, so `isBackupMethodNone(instance)`
-(`backupStatus.ts`) reads only `lastResult.method === 'none'`; a none App that has never
-run a backup is not recognised until its first attempt. For such an instance:
+`isBackupMethodNone(instance)` (`backupStatus.ts`) reads `Instance.backupMethod`
+(`'stop' | 'hook' | 'none'`, agent-engine-dev#404; defaults to `'stop'`, unset on an
+invalid spec or an older Engine/record) when it is set, so a fresh none App that has
+never run a backup is covered, and `'stop'` / `'hook'` win over an older
+`lastResult.method: 'none'` (the method changed). Only when `backupMethod` is unset does
+it fall back to `lastResult.method === 'none'`. For such an instance:
 
 - the update gate needs no backup: `majorNeedsBackup(..., methodNone)` is false and an
   Engine `NEEDS_BACKUP` refusal does not lock the badge (`UpdateAppControl`; the
@@ -524,8 +528,8 @@ run a backup is not recognised until its first attempt. For such an instance:
 - `RestorePanel` shows "Not backed up: its content is on the App Disk"
   (`METHOD_NONE_COPY`, once: the same status line is not repeated) instead of
   "Never backed up", and offers no target disk or Restore. A none instance that still
-  has an older `lastBackup` (an archive from before the method changed) keeps its date
-  and Restore.
+  has an older `lastBackup` (a real archive from before the method changed) keeps its
+  date and Restore.
 
 ### Backup Disk schedule controls (idea#400)
 
