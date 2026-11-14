@@ -31,6 +31,7 @@ import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
 import { plainEngineText } from '../store/plainError';
+import { isDemoInstance } from '../store/demoApps';
 import TechnicalDetails from './TechnicalDetails';
 import BackupStatusLines from './BackupStatusLines';
 import {
@@ -513,12 +514,21 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       </button>
 
       <div class="instance-row__info">
-        <RenameInstanceName
-          instance={props.instance}
-          engine={props.engine}
-          store={() => props.store?.() ?? null}
-          commandLog={() => props.commandLogStore?.() ?? null}
-        />
+        <div class="instance-row__title">
+          <RenameInstanceName
+            instance={props.instance}
+            engine={props.engine}
+            store={() => props.store?.() ?? null}
+            commandLog={() => props.commandLogStore?.() ?? null}
+          />
+          <Show when={isDemoInstance(props.instance())}>
+            <span
+              class="demo-badge"
+              data-testid={`demo-badge-${props.instance()?.id ?? ''}`}
+              title="Demo app: for training, not a real school app"
+            >DEMO</span>
+          </Show>
+        </div>
         <div class="instance-row__app">
           {props.app() ? props.app()!.title : props.instance()?.instanceOf}
         </div>

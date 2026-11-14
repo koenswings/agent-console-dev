@@ -97,6 +97,9 @@ export const demoNoSourceText = (raw: string | null | undefined, internet?: bool
 
 export const DEMO_NO_TARGET_TEXT = 'Plug an App Disk or an empty disk into this Engine to set up demo apps.';
 export const DEMO_BUSY_TEXT = 'Demo apps are being set up or removed on this Engine. Wait until that has finished.';
+/** Failed removeDemo whose inner code is BUSY: do not promise a retry. */
+export const DEMO_REMOVE_BUSY_TEXT =
+  "A demo app couldn't be removed because the Engine reported it as busy. If this keeps happening, the Engine may need an update.";
 export const DEMO_AMBIGUOUS_TEXT =
   'This Engine has more than one copy of a demo app. Remove the demo apps first, then set them up again.';
 export const demoExistsText = (diskName: string): string =>
@@ -179,6 +182,7 @@ export const demoErrorText = (raw: string | null | undefined, internet?: boolean
   if (code === 'REMOVE_FAILED') {
     const rest = String(raw ?? '').replace(LEADING_CODE_RE, '');
     const inner = removeRefusalCode(rest);
+    if (inner === 'BUSY') return DEMO_REMOVE_BUSY_TEXT;
     return inner ? `${DEMO_ERROR_TEXT.REMOVE_FAILED} ${REMOVE_REFUSALS[inner]}` : DEMO_ERROR_TEXT.REMOVE_FAILED;
   }
   if (code === 'NO_SOURCE') return demoNoSourceText(raw, internet);

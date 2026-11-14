@@ -7,6 +7,8 @@ import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import DemoAppsSection from '../src/components/DemoAppsSection';
 import AppCard from '../src/components/AppCard';
+import InstanceRow from '../src/components/InstanceRow';
+import MobileAppList from '../src/components/MobileAppList';
 import { buildRemoveDemoCommand, buildSetupDemoCommand, setSendCommandFn } from '../src/store/commands';
 import { applyEphemeral, emptyLive, receiveEphemeral, resetLive, type LiveState } from '../src/store/live';
 import { resetConnectedEngine } from '../src/store/connectedEngine';
@@ -16,6 +18,7 @@ import {
   DEMO_ERROR_TEXT,
   DEMO_NO_SOURCE_ONLINE_GENERIC,
   DEMO_NO_SOURCE_TEXT,
+  DEMO_REMOVE_BUSY_TEXT,
   DEMO_NO_TARGET_TEXT,
   DEMO_REFRESH_HINT,
   DEMO_SETUP_LABEL,
@@ -218,6 +221,29 @@ describe('badge source: Instance.demo only, never the name', () => {
     const r = render(() => <AppCard instance={() => inst('k', 'kolibri', 'BIG', false, 'Kolibri Demo')} app={() => app} appUrl={() => null} />);
     expect(r.queryByTestId('demo-badge-k')).toBeNull();
   });
+  it('InstanceRow shows DEMO when demo:true, not for a same-named real instance', () => {
+    const eng = engine('E1');
+    const r = render(() => (
+      <InstanceRow instance={() => inst('k', 'kolibri', 'BIG', true, 'Kolibri Demo')} app={() => app} engine={() => eng} />
+    ));
+    expect(r.getByTestId('demo-badge-k').textContent).toBe('DEMO');
+    r.unmount();
+    const r2 = render(() => (
+      <InstanceRow instance={() => inst('k', 'kolibri', 'BIG', false, 'Kolibri Demo')} app={() => app} engine={() => eng} />
+    ));
+    expect(r2.queryByTestId('demo-badge-k')).toBeNull();
+  });
+  it('the mobile list shows DEMO when demo:true, not for a same-named real instance', () => {
+    const r = render(() => (
+      <MobileAppList store={() => store({ instanceDB: { k: inst('k', 'kolibri', 'BIG', true, 'Kolibri Demo') } })} loadHidden={async () => []} />
+    ));
+    expect(r.getByTestId('mobile-demo-badge-k').textContent).toBe('DEMO');
+    r.unmount();
+    const r2 = render(() => (
+      <MobileAppList store={() => store({ instanceDB: { k: inst('k', 'kolibri', 'BIG', false, 'Kolibri Demo') } })} loadHidden={async () => []} />
+    ));
+    expect(r2.queryByTestId('mobile-demo-badge-k')).toBeNull();
+  });
 });
 
 describe('step and error mapping (engine#369 §3, §9)', () => {
@@ -267,6 +293,10 @@ describe('step and error mapping (engine#369 §3, §9)', () => {
   });
   it('REMOVE_FAILED adds the inner removeInstance reason', () => {
     expect(demoErrorText('REMOVE_FAILED: k1: COMPOSE_DOWN_FAILED')).toContain("couldn't be shut down");
+  });
+  it('REMOVE_FAILED with inner BUSY does not promise a retry', () => {
+    expect(demoErrorText('REMOVE_FAILED: k1: BUSY')).toBe(DEMO_REMOVE_BUSY_TEXT);
+    expect(demoErrorText('REMOVE_FAILED: k1: BUSY')).not.toMatch(/Try again/);
   });
   it('unknown codes never leak', () => {
     expect(demoErrorText('WEIRD_NEW_CODE: The disk is tired.')).toBe('The disk is tired.');

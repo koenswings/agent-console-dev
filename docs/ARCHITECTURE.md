@@ -545,12 +545,12 @@ with the connected Engine first.
   same tokens.
 - **Network:** when another Engine's docked disks hold demo instances, a note
   says "IDEA demo apps already run on <engine>." It never blocks (engine#369 Q2).
-- **DEMO badge:** app cards and the mobile list show a DEMO badge next to the
-  instance-name title (#192) only when `Instance.demo === true`, which the
-  Engine mirrors from `x-app.demo` in the instance's compose.yaml. It is never
-  inferred from the name. `updateApp` keeps `x-app.demo` (engine#369 addendum
-  A), and the Console never writes instance records, so the badge stays after
-  an update.
+- **DEMO badge:** the signed-in operator instance list (`InstanceRow`), app
+  cards, and the mobile list show a DEMO badge next to the instance-name title
+  (#192) only when `Instance.demo === true`, which the Engine mirrors from
+  `x-app.demo` in the instance's compose.yaml. It is never inferred from the
+  name. `updateApp` keeps `x-app.demo` (engine#369 addendum A), and the Console
+  never writes instance records, so the badge stays after an update.
 
 - **Outdated demo content:** `Instance.demoPackWarning`
   (`{ code: 'PACK_OUTDATED', packVersion, minVersion }`) is set by `updateApp`
@@ -565,8 +565,12 @@ with the connected Engine first.
   whole list; an array of the same ids is also accepted).
   The trace `errorCode` and `Operation.demo.code` are bare codes; the trace
   `errorMessage` and `Operation.error` are `CODE: text`. Only the plain sentence
-  is shown, never the code. `Operation.args.apps` is a comma string and is not
-  read; the per-app list comes from `Operation.demo.apps`.
+  is shown, never the code, and only once: when an Operation exists the
+  progress result shows it, and command feedback is used only for a refusal
+  (no Operation). A failed `removeDemo` whose inner code is `BUSY` says "A
+  demo app couldn't be removed because the Engine reported it as busy. If this
+  keeps happening, the Engine may need an update." `Operation.args.apps` is a
+  comma string and is not read; the per-app list comes from `Operation.demo.apps`.
 - **Live download bytes:** while the `download` step runs, an ephemeral
   `{ type: 'idea/progress', opId, step, bytesDone, bytesTotal }` (when the
   Engine sends it) shows "X of Y MB". Without it the step shows `bytesTotal` only.
