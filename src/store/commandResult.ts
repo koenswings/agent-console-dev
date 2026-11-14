@@ -84,6 +84,68 @@ const orderedTraces = (cls: CommandLogStore): CommandTrace[] => {
 export type ArgMatchMode = 'key' | 'includes';
 
 /**
+ * A second value that also identifies our trace (engine#399): the value that was
+ * SENT when the primary match is on something else (an instance sent by name,
+ * matched by id on a `traceInstanceId` Engine). Only used in 'key' mode.
+ */
+export interface TraceAltMatch {
+  /** The value sent, e.g. an instance name; may contain spaces. */
+  value: string;
+  /** Named args: the arg that holds `value` (default: the primary argKey). */
+  argKey?: TraceArgKey;
+  /**
+   * Named args: only match while this arg is null or absent. A traceInstanceId
+   * Engine leaves `instanceName` null when the instance did not resolve, so a
+   * resolved trace of another instance (whose id happens to equal the value) is not ours.
+   */
+  nullKey?: TraceArgKey;
+  /**
+   * The value sent right after it (the instance's disk: diskId, or the copy/move
+   * source). In the args, in order, the name's tokens must be followed by it, so a
+   * namesake on another disk never matches.
+   */
+  followedBy?: string;
+}
+
+/** The trace's args as tokens in order: a positional array, or the named values (lists flattened, nulls skipped). */
+const argTokens = (args: unknown): string[] => {
+  if (Array.isArray(args)) return args.map(String);
+  if (!args || typeof args !== 'object') return [];
+  return Object.values(args as Record<string, unknown>)
+    .flatMap((v) => (Array.isArray(v) ? v : [v]))
+    .filter((v) => v != null)
+    .map(String);
+};
+
+/**
+ * True when the trace matches the second value. The Engine splits an unquoted
+ * command line on single spaces, so a name "My App" arrives as the tokens `My`,
+ * `App`: a refusal before execution ("Too many arguments") holds them as a run,
+ * and so do the named values of startInstance (its variadic `options` swallow the
+ * shifted rest). So the name matches as a contiguous run of the args in order,
+ * followed by `followedBy`. A refusal holding only the name ("Insufficient
+ * arguments") matches too: nothing in it tells namesakes apart.
+ */
+const traceMatchesAlt = (trace: CommandTrace, argKey: TraceArgKey, alt: TraceAltMatch): boolean => {
+  const words = alt.value.split(' ').filter((w) => w.length > 0);
+  if (words.length === 0) return false;
+  const args = parsedArgs(trace);
+  const tokens = argTokens(args);
+  const positional = Array.isArray(args);
+  if (!positional) {
+    if (!args || typeof args !== 'object') return false;
+    const rec = args as Record<string, unknown>;
+    if (alt.nullKey && rec[alt.nullKey] != null) return false;
+    const v = rec[alt.argKey ?? argKey];
+    if (words.length === 1 && (v == null || String(v) !== alt.value)) return false;
+  }
+  if (positional && tokens.length === words.length) return words.every((w, j) => tokens[j] === w);
+  return tokens.some((_, i) =>
+    words.every((w, j) => tokens[i + j] === w)
+    && (alt.followedBy == null || tokens[i + words.length] === alt.followedBy));
+};
+
+/**
  * True when this trace is the one we sent: exact named arg, or an exact
  * token of a positional args array (pre-execute refusals), or (includes)
  * the value appears anywhere in the serialized args — needed for installApp,
@@ -93,10 +155,14 @@ export const traceMatchesArg = (
   trace: CommandTrace,
   argKey: TraceArgKey,
   argValue: string,
-  mode: ArgMatchMode = 'key'
+  mode: ArgMatchMode = 'key',
+  alt?: TraceAltMatch | null
 ): boolean => {
   if (mode === 'key') {
+    if (alt && traceMatchesAlt(trace, argKey, alt)) return true;
     const args = parsedArgs(trace);
+    // Sent by name with a second value: the positional match above is the guarded one.
+    if (alt && Array.isArray(args)) return false;
     // Pre-execute refusals: positional tokens. An instanceIds list (a,b) needs every id.
     if (Array.isArray(args)) {
       const wanted = argKey === 'instanceIds' ? argValue.split(',') : [argValue];
@@ -105,7 +171,9 @@ export const traceMatchesArg = (
     // A named list arg (removeDemo `instanceIds`, engine#369): the same ids in order.
     const named = args && typeof args === 'object' ? (args as Record<string, unknown>)[argKey] : undefined;
     if (Array.isArray(named)) return named.map(String).join(',') === argValue;
-    return traceArg(trace, argKey) === argValue;
+    if (traceArg(trace, argKey) !== argValue) return false;
+    // The primary IS the sent name (an older Engine): only with the disk, i.e. the alt above.
+    return !alt || alt.value !== argValue;
   }
   const raw = typeof trace.args === 'string' ? trace.args : JSON.stringify(trace.args ?? '');
   return raw.includes(argValue);
@@ -118,11 +186,12 @@ export const findCommandTrace = (
   command: string,
   argKey: TraceArgKey,
   argValue: string,
-  matchMode: ArgMatchMode = 'key'
+  matchMode: ArgMatchMode = 'key',
+  alt?: TraceAltMatch | null
 ): CommandTrace | null => {
   if (!cls || 'error' in cls) return null;
   return orderedTraces(cls).find((t) =>
-    !baseline.has(t.traceId) && t.command === command && traceMatchesArg(t, argKey, argValue, matchMode)
+    !baseline.has(t.traceId) && t.command === command && traceMatchesArg(t, argKey, argValue, matchMode, alt)
   ) ?? null;
 };
 
@@ -163,9 +232,10 @@ export const findCommandOutcome = (
   command: string,
   argKey: TraceArgKey,
   argValue: string,
-  matchMode: ArgMatchMode = 'key'
+  matchMode: ArgMatchMode = 'key',
+  alt?: TraceAltMatch | null
 ): TraceOutcome | null => {
-  const trace = findCommandTrace(cls, baseline, command, argKey, argValue, matchMode);
+  const trace = findCommandTrace(cls, baseline, command, argKey, argValue, matchMode, alt);
   return trace ? traceOutcome(trace, command) : null;
 };
 
@@ -185,6 +255,8 @@ export interface CommandResultTarget {
   command?: string;
   argKey?: TraceArgKey;
   matchMode?: ArgMatchMode;
+  /** A second value that also matches (engine#399), e.g. the name sent when matching by id. */
+  altMatch?: TraceAltMatch | null;
   longRunning?: boolean;
   /** Target Engine: a trace in our own log proves it is the connected one. */
   engineId?: string;
@@ -232,6 +304,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     command: string;
     argKey: TraceArgKey;
     matchMode: ArgMatchMode;
+    altMatch: TraceAltMatch | null;
     longRunning: boolean;
     engineId: string | null;
     remote: RemoteWatch | null;
@@ -249,7 +322,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
   const found = createMemo(() => {
     const p = pending();
     if (!p) return null;
-    const trace = findCommandTrace(opts.commandLog(), p.baseline, p.command, p.argKey, p.argValue, p.matchMode);
+    const trace = findCommandTrace(opts.commandLog(), p.baseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
     if (!trace) return null;
     return { accepted: true, outcome: traceOutcome(trace, p.command) };
   });
@@ -259,7 +332,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     const p = pending();
     if (!p?.remote) return null;
     if (p.remote.log) {
-      const t = findCommandTrace(p.remote.log(), p.remoteBaseline, p.command, p.argKey, p.argValue, p.matchMode);
+      const t = findCommandTrace(p.remote.log(), p.remoteBaseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
       const o = t ? traceOutcome(t, p.command) : null;
       if (o) return o;
     }
@@ -320,6 +393,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
       command: cmd,
       argKey: target?.argKey ?? opts.argKey ?? 'diskId',
       matchMode: target?.matchMode ?? opts.matchMode ?? 'key',
+      altMatch: target?.altMatch ?? null,
       longRunning: target?.longRunning ?? opts.longRunning ?? false,
       engineId: target?.engineId ?? null,
       remote,

@@ -97,13 +97,16 @@ export const createDragCopyMove = (
     // Instance by NAME: copyApp/moveApp resolve the instance by name on every
     // Engine (8d98718 and Axle's fix); the disks go by ID. engine#399: an Engine
     // with traceInstanceId traces the resolved id, so match the trace by id.
-    const match = traceInstanceMatch(s, engineId, instanceId, instanceName);
+    // The sent name also matches (unresolved, or a refusal before execution) with the
+    // source disk sent: the instance's own disk is what tells namesakes apart.
+    const match = traceInstanceMatch(s, engineId, instanceId, instanceName, sourceDiskId);
     if (op === 'copy') {
       const instanceOf = s?.instanceDB[instanceId]?.instanceOf;
       const instanceOfStr = instanceOf === undefined ? undefined : String(instanceOf);
       result.start(match.argValue, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'copyApp',
         argKey: match.argKey,
+        altMatch: match.altMatch,
         engineId,
         remote: remoteWatchFor(store, engineId, 'copyApp', confirmNewOperation(store, 'copyApp', instanceId, {
           engineId,
@@ -117,6 +120,7 @@ export const createDragCopyMove = (
       result.start(match.argValue, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'moveApp',
         argKey: match.argKey,
+        altMatch: match.altMatch,
         engineId,
         // engine#388: a Done op / ok trace is green only when the app moved (not SOURCE_CHANGED).
         settle: settleMoveOutcome(store, instanceId, since, () => ({ app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname })),

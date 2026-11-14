@@ -3,7 +3,7 @@ import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import CommandFeedback from './CommandFeedback';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
-import { createCommandResult, type CommandResult, type CommandResultTarget, type TraceArgKey } from '../store/commandResult';
+import { createCommandResult, type CommandResult, type CommandResultTarget, type TraceAltMatch, type TraceArgKey } from '../store/commandResult';
 import { traceInstanceMatch } from '../store/traceInstance';
 import {
   confirmInstanceStatus,
@@ -185,13 +185,14 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     inst: Instance,
     command: string,
     send: () => void,
-    o: { engineId: string; argValue: string; argKey?: TraceArgKey; longRunning?: boolean; confirm: () => RemoteCheck; settle?: CommandResultTarget['settle'] },
+    o: { engineId: string; argValue: string; argKey?: TraceArgKey; altMatch?: TraceAltMatch; longRunning?: boolean; confirm: () => RemoteCheck; settle?: CommandResultTarget['settle'] },
   ) => {
     const r = cardResults.get(inst.id);
     if (!r) { send(); return; }
     r.start(o.argValue, send, {
       command,
       ...(o.argKey ? { argKey: o.argKey } : {}),
+      altMatch: o.altMatch ?? null,
       longRunning: o.longRunning ?? false,
       engineId: o.engineId,
       remote: remoteWatchFor(props.store, o.engineId, command, o.confirm),
@@ -204,8 +205,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const diskId = inst.storedOn;
     if (!engine || !diskId) return;
     // Disk ID (storedOn), never the display name: names may contain spaces.
+    // engine#399: by id on a traceInstanceId Engine; the sent name (with the disk) also matches.
     sendTracked(inst, 'startInstance', () => startInstance(engine.id, inst.name, String(diskId)), {
-      engineId: engine.id, argValue: inst.name,
+      engineId: engine.id, ...traceInstanceMatch(props.store(), engine.id, inst.id, inst.name, String(diskId)),
       confirm: confirmInstanceStatus(props.store, inst.id, ['Running'], 'startApp'),
     });
     setPending(inst.id, 'starting');
@@ -216,7 +218,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const diskId = inst.storedOn;
     if (!engine || !diskId) return;
     sendTracked(inst, 'stopInstance', () => stopInstance(engine.id, inst.name, String(diskId)), {
-      engineId: engine.id, argValue: inst.name,
+      engineId: engine.id, ...traceInstanceMatch(props.store(), engine.id, inst.id, inst.name, String(diskId)),
       confirm: confirmInstanceStatus(props.store, inst.id, ['Stopped', 'Docked'], 'stopApp'),
     });
     setPending(inst.id, 'stopping');
@@ -481,7 +483,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
             if (move) lastMoves.set(i.id, move);
             // engine#399: sent by name; an Engine with traceInstanceId traces the resolved id.
             sendTracked(i, command, send, {
-              engineId: target.engineId, ...traceInstanceMatch(s, target.engineId, i.id, String(i.name)), longRunning: true,
+              engineId: target.engineId, ...traceInstanceMatch(s, target.engineId, i.id, String(i.name), i.storedOn == null ? null : String(i.storedOn)), longRunning: true,
               confirm: confirmNewOperation(props.store, command, i.id, {
                 engineId: target.engineId, args: { targetDiskId: target.targetDiskId }, fallbackOk: fallback,
               }),

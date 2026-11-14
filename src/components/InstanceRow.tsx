@@ -387,8 +387,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     if (!engine || !inst || !diskId) return;
     // Disk ID (storedOn), never the display name: names may contain spaces.
     // Instance by NAME: no Engine (8d98718 nor Axle's fix) resolves an id here.
-    cmdResult.start(inst.name, () => startInstance(engine.id, inst.name, String(diskId)), {
+    // engine#399: match by id on a traceInstanceId Engine; the sent name (with the disk) also matches.
+    const match = traceInstanceMatch(storeAcc(), engine.id, inst.id, inst.name, String(diskId));
+    cmdResult.start(match.argValue, () => startInstance(engine.id, inst.name, String(diskId)), {
       command: 'startInstance',
+      argKey: match.argKey,
+      altMatch: match.altMatch,
       engineId: engine.id,
       remote: remoteWatchFor(storeAcc, engine.id, 'startInstance', confirmInstanceStatus(storeAcc, inst.id, ['Running'], 'startApp')),
     });
@@ -400,8 +404,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const inst = props.instance();
     const diskId = inst?.storedOn;
     if (!engine || !inst || !diskId) return;
-    cmdResult.start(inst.name, () => stopInstance(engine.id, inst.name, String(diskId)), {
+    const match = traceInstanceMatch(storeAcc(), engine.id, inst.id, inst.name, String(diskId));
+    cmdResult.start(match.argValue, () => stopInstance(engine.id, inst.name, String(diskId)), {
       command: 'stopInstance',
+      argKey: match.argKey,
+      altMatch: match.altMatch,
       engineId: engine.id,
       remote: remoteWatchFor(storeAcc, engine.id, 'stopInstance', confirmInstanceStatus(storeAcc, inst.id, ['Stopped', 'Docked'], 'stopApp')),
     });

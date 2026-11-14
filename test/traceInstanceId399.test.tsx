@@ -68,10 +68,18 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 describe('traceInstanceMatch', () => {
   it('an Engine with traceInstanceId → instanceId + the instance id', () => {
-    expect(traceInstanceMatch(storeFor(true), E1, KOLIBRI, 'kolibri')).toEqual({ argKey: 'instanceId', argValue: KOLIBRI });
+    expect(traceInstanceMatch(storeFor(true), E1, KOLIBRI, KOLIBRI)).toEqual({ argKey: 'instanceId', argValue: KOLIBRI });
+    // Sent by name (follow-up): the name is a second match value, only while it did not resolve.
+    expect(traceInstanceMatch(storeFor(true), E1, KOLIBRI, 'kolibri', D1)).toEqual({
+      argKey: 'instanceId', argValue: KOLIBRI,
+      altMatch: { value: 'kolibri', argKey: 'instanceId', nullKey: 'instanceName', followedBy: D1 },
+    });
   });
   it('an older Engine → instanceName + the value sent', () => {
-    expect(traceInstanceMatch(storeFor(false), E1, KOLIBRI, 'kolibri')).toEqual({ argKey: 'instanceName', argValue: 'kolibri' });
+    expect(traceInstanceMatch(storeFor(false), E1, KOLIBRI, 'kolibri', D1)).toEqual({
+      argKey: 'instanceName', argValue: 'kolibri',
+      altMatch: { value: 'kolibri', argKey: 'instanceName', followedBy: D1 },
+    });
     expect(traceInstanceMatch(storeFor(false), E1, KOLIBRI, KOLIBRI)).toEqual({ argKey: 'instanceName', argValue: KOLIBRI });
   });
   it('asks the Engine the command goes to, not another one', () => {
