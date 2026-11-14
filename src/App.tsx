@@ -15,8 +15,7 @@ import HistoryPanel from './components/HistoryPanel';
 import AppBrowser from './components/AppBrowser';
 import MobileLayout from './components/MobileLayout';
 import FirstTimeSetup from './components/FirstTimeSetup';
-import CommandFeedback from './components/CommandFeedback';
-import CrossMoveStatus from './components/CrossMoveStatus';
+import CopyMoveFeedback from './components/CopyMoveFeedback';
 import CopyMoveModal from './components/CopyMoveModal';
 import { createDragCopyMove } from './store/dragCopyMove';
 import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
@@ -100,8 +99,6 @@ const App: Component = () => {
   // and the Copy-or-Move choice (store/dragCopyMove.ts; component-tested there).
   const dragCopyMove = createDragCopyMove(store, () => commandLogStore());
   const { dragData, setDragData, pendingMove, handleDrop } = dragCopyMove;
-  const copyMoveResult = dragCopyMove.result;
-  const copyMoveSubject = dragCopyMove.subject;
   const handleCopyMoveChoice = dragCopyMove.choose;
 
   // ── Cross-engine feedback: which Engine we talk to, other Engines' logs ────
@@ -602,8 +599,7 @@ const App: Component = () => {
                   commandLogStore={commandLogStore}
                 />
                 <div class="main-layout__right">
-                  <CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" formatLine={dragCopyMove.formatLine} />
-                  <CrossMoveStatus store={store} move={dragCopyMove.crossMove} />
+                  <CopyMoveFeedback store={store} ctl={dragCopyMove} />
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
                   <Switch>
                     <Match when={selection().type === 'unformatted' ? `${selection().engineId}:${selection().id}` : null} keyed>
@@ -686,8 +682,7 @@ const App: Component = () => {
               pendingMove={pendingMove}
               onCopyMoveChoice={handleCopyMoveChoice}
               onCancelMove={dragCopyMove.cancel}
-              copyMoveFeedback={<><CommandFeedback result={copyMoveResult} subject={copyMoveSubject} testId="copy-move-feedback" formatLine={dragCopyMove.formatLine} />
-                  <CrossMoveStatus store={store} move={dragCopyMove.crossMove} /></>}
+              copyMoveFeedback={<CopyMoveFeedback store={store} ctl={dragCopyMove} />}
             />
           </Show>
         </Match>

@@ -195,8 +195,9 @@ export const rebootEngine = (engineId: string): void => {
 // ---------------------------------------------------------------------------
 
 /**
- * Cancel a Pending or Running operation (also releases the resource lock on
- * Failed ops). Sent to the engine that owns the operation.
+ * Cancel a Pending or Running operation. Sent to the engine that owns the
+ * operation. Only the user's Cancel sends it; dismissing a finished card never
+ * does (idea#498, store/dismissedOps.ts).
  * Format: "cancelOperation <operationId>"
  */
 export const cancelOperation = (engineId: string, operationId: string): void => {

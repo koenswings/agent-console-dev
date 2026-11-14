@@ -9,7 +9,8 @@
  *             stepLabel Copying | Checking | Removing the old copy, and
  *             `move: { phase, targetEngineId, sourceInstanceId, targetInstanceId, code, resultText, … }`
  *  - results  Done `MOVED to <hostname>`; Failed `MOVE FAILED: <reason>; source kept` (op.error);
- *             Done + op.error `MOVED, source not removed: <reason>` (a warning, not a failure)
+ *             Done + op.error `MOVED, source not removed: <reason>` (a warning, not a failure);
+ *             its wording follows the row's storedOn at the end (movePlacement), not the text
  *  - refusals trace errorMessage `MOVE FAILED: <reason>; source kept` (no op)
  *  - identity the instance keeps its id and name (engine#381, 53f151d): one instanceDB row,
  *             move.targetInstanceId equals sourceInstanceId, and the Backup Disk link follows.
@@ -149,19 +150,57 @@ export type MoveOutcome =
   | { kind: 'warning'; text: string }
   | { kind: 'failed'; text: string };
 
-/** Final outcome of a finished cross-Engine move (null while running). Code first, text as fallback. */
-export const moveOutcome = (op: Operation | null, c: MoveCtx): MoveOutcome | null => {
+/** Where the app's instanceDB row is when the op ends: on the source disk, the target disk, or unknown. */
+export type MovePlacement = 'source' | 'target' | null;
+
+/**
+ * Engine 53f151d (Axle): SOURCE_CHANGED and a SOURCE_NOT_REMOVED thrown before
+ * storedOn flips leave the row on the source disk; only SOURCE_NOT_REMOVED after
+ * the flip (removeSource failed) leaves it on the target. The result text is not
+ * reliable (engine#388), so the outcome branches on the row's storedOn.
+ */
+export const movePlacement = (store: Store | null, op: Operation | null): MovePlacement => {
+  if (!store || !op) return null;
+  const info = moveInfo(op);
+  const sourceDiskId = String(op.args?.sourceDiskId ?? '');
+  const targetDiskId = String(op.args?.targetDiskId ?? '');
+  const sourceId = info?.sourceInstanceId ?? String(op.args?.instanceId ?? '');
+  const targetId = info?.targetInstanceId ?? sourceId;
+  const at = (id: string): string | null => {
+    const v = store.instanceDB?.[id]?.storedOn;
+    return v == null ? null : String(v);
+  };
+  if (targetId && targetDiskId && at(targetId) === targetDiskId) return 'target';
+  if (sourceId && sourceDiskId && at(sourceId) === sourceDiskId) return 'source';
+  return null;
+};
+
+/** The sentence about the copy left on the target. One constant: it may become "The unfinished copy on <target> was set aside." after engine#388. */
+export const MOVE_TARGET_LEFTOVER = (targetEngine: string): string => `A leftover copy is on ${targetEngine}.`;
+
+/** Done with the source not removed (SOURCE_CHANGED / SOURCE_NOT_REMOVED): one sentence per placement. */
+export const sourceNotRemovedLine = (code: string | null, placement: MovePlacement, c: MoveCtx): string => {
+  if (placement === 'target') return `${c.app} moved to ${c.targetEngine}. The old copy on ${c.sourceEngine} couldn't be removed.`;
+  if (placement === 'source') {
+    return code === 'SOURCE_CHANGED'
+      ? `${c.app} was not moved: it changed on ${c.sourceEngine} while it was being copied, so it stays there. ${MOVE_TARGET_LEFTOVER(c.targetEngine)}`
+      : `${c.app} was not moved, so it stays on ${c.sourceEngine}. ${MOVE_TARGET_LEFTOVER(c.targetEngine)}`;
+  }
+  return `The move of ${c.app} didn't finish cleanly. Check ${c.sourceEngine} and ${c.targetEngine} to see where it is.`;
+};
+
+/**
+ * Final outcome of a finished cross-Engine move (null while running). Code first, text as fallback.
+ * `placement` (movePlacement at the end of the op) decides the wording when the source wasn't removed.
+ */
+export const moveOutcome = (op: Operation | null, c: MoveCtx, placement: MovePlacement = null): MoveOutcome | null => {
   if (!op || isMoveRunning(op)) return null;
   const info = moveInfo(op);
   const text = (op.error ?? info?.resultText ?? '').trim();
   const code = info?.code ?? null;
   if (op.status === 'Done') {
-    if (code === 'SOURCE_CHANGED') {
-      return { kind: 'warning', text: `${c.app} moved to ${c.targetEngine} and works there. The old copy on ${c.sourceEngine} was kept because it changed during the move. Nothing is lost; ask for help to remove the old copy.` };
-    }
-    if (code === 'SOURCE_NOT_REMOVED' || (code !== 'MOVED' && text.startsWith(NOT_REMOVED_PREFIX))) {
-      const reason = text.startsWith(NOT_REMOVED_PREFIX) ? reasonOf(text, NOT_REMOVED_PREFIX) : '';
-      return { kind: 'warning', text: `${c.app} moved to ${c.targetEngine} and works there, but the old copy could not be removed${reason ? ` (${reason})` : ''}. Nothing is lost; ask for help to remove the old copy.` };
+    if (code === 'SOURCE_CHANGED' || code === 'SOURCE_NOT_REMOVED' || (code !== 'MOVED' && text.startsWith(NOT_REMOVED_PREFIX))) {
+      return { kind: 'warning', text: sourceNotRemovedLine(code, placement, c) };
     }
     return { kind: 'moved', text: `${c.app} moved to ${c.targetEngine}.` };
   }

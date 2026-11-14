@@ -60,6 +60,8 @@ interface CommandFeedbackProps {
   formatError?: (message: string) => string;
   /** Optional: a complete sentence for this error (replaces "Couldn't <verb> <subject>: …"); null = default line. */
   formatLine?: (message: string, code: string | null) => string | null;
+  /** Optional: hide the "Sent to …, waiting for confirmation" line (the caller shows progress instead). */
+  hideSent?: Accessor<boolean>;
 }
 
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
@@ -69,7 +71,7 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
   };
   const sentTo = () => {
     const s = props.result.state();
-    return s.kind === 'sent' ? s.engine : null;
+    return s.kind === 'sent' && !props.hideSent?.() ? s.engine : null;
   };
   return (
     <>
