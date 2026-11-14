@@ -198,7 +198,6 @@ export interface NewOperationMatch {
   args?: Record<string, string>;
   /** Store proof when the op record is late (also "created after send" based). */
   fallbackOk?: () => boolean;
-
 }
 
 /**
