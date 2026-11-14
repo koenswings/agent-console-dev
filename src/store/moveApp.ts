@@ -11,6 +11,12 @@
  *  - results  Done `MOVED to <hostname>`; Failed `MOVE FAILED: <reason>; source kept` (op.error);
  *             Done + op.error `MOVED, source not removed: <reason>` (a warning, not a failure);
  *             its wording follows the row's storedOn at the end (movePlacement), not the text
+ *  - engine#388 (agent-engine-dev #390, merged 4a30798): a pre-flip failure stops and quarantines
+ *             the target copy and records `move.targetCleanup` 'quarantined' | 'failed' (null
+ *             when not tried, e.g. COPY_FAILED, or an older Engine). SOURCE_CHANGED is a Done op
+ *             with an ok trace that did NOT move the app (storedOn stays on the source); other
+ *             pre-flip errors in the Removing step are Failed SOURCE_KEPT. Only MOVED and
+ *             SOURCE_NOT_REMOVED (storedOn on the target when known) count as moved (moveOutcome).
  *  - refusals trace errorMessage `MOVE FAILED: <reason>; source kept` (no op)
  *  - identity the instance keeps its id and name (engine#381, 53f151d): one instanceDB row,
  *             move.targetInstanceId equals sourceInstanceId, and the Backup Disk link follows.
@@ -20,6 +26,7 @@
  */
 import { engineHasCapability } from './commands';
 import type { Engine, Operation, Store } from '../types/store';
+import type { TraceOutcome } from './commandResult';
 
 export const CAP_MOVE_CROSS = 'moveAppCrossEngine' as const;
 export const MOVE_FAILED_PREFIX = 'MOVE FAILED:';
@@ -58,13 +65,21 @@ type Raw = Record<string, unknown>;
 const rawOf = (o: unknown): Raw => (o && typeof o === 'object' ? (o as Raw) : {});
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
-export interface MoveInfo { phase: string | null; sourceInstanceId: string | null; targetInstanceId: string | null; targetEngineId: string | null; code: string | null; resultText: string | null }
+export type TargetCleanup = 'quarantined' | 'failed' | null;
+export interface MoveInfo {
+  phase: string | null; sourceInstanceId: string | null; targetInstanceId: string | null; targetEngineId: string | null;
+  code: string | null; resultText: string | null;
+  /** engine#388: what happened to the target copy after a pre-flip failure (null = not tried / older Engine). */
+  targetCleanup: TargetCleanup; targetCleanupDetail: string | null;
+}
 export const moveInfo = (op: Operation | null): MoveInfo | null => {
   if (!op) return null;
   const m = rawOf((op as unknown as Raw).move);
   return {
     phase: str(m.phase), sourceInstanceId: str(m.sourceInstanceId), targetInstanceId: str(m.targetInstanceId),
     targetEngineId: str(m.targetEngineId), code: str(m.code), resultText: str(m.resultText),
+    targetCleanup: m.targetCleanup === 'quarantined' || m.targetCleanup === 'failed' ? m.targetCleanup : null,
+    targetCleanupDetail: str(m.targetCleanupDetail),
   };
 };
 
@@ -97,9 +112,9 @@ export const moveStepText = (op: Operation | null, targetEngine: string): string
 const reasonOf = (text: string, prefix: string): string =>
   text.trim().slice(prefix.length).replace(/;\s*source kept\s*\.?$/i, '').trim().replace(/[.;\s]+$/, '');
 
-// ── Codes (engine#289 b5429d6 + engine#381 53f151d, MOVE_CODES in src/data/MoveAppShapes.ts) ─
+// ── Codes (engine#289 b5429d6, engine#381 53f151d, engine#388 4a30798; MOVE_CODES in src/data/MoveAppShapes.ts) ─
 export const MOVE_REFUSAL_CODES = ['NOT_FOUND', 'AMBIGUOUS', 'SOURCE_REMOTE', 'TARGET_UNREACHABLE', 'PEER_ACCESS', 'TARGET_OUTDATED', 'HELPER_OUTDATED', 'BUSY', 'INVALID', 'TARGET_EXISTS'] as const;
-export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED', 'INTERRUPTED'] as const;
+export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED', 'INTERRUPTED', 'SOURCE_KEPT'] as const;
 export const MOVE_DONE_CODES = ['MOVED', 'SOURCE_NOT_REMOVED', 'SOURCE_CHANGED'] as const;
 
 export interface MoveCtx { app: string; sourceEngine: string; targetEngine: string }
@@ -127,6 +142,22 @@ export const MOVE_CODE_TEXT: Record<string, (c: MoveCtx) => string> = {
   VERIFY_TIMEOUT: (c) => `Couldn't move ${c.app}: ${c.targetEngine} didn't confirm the copy in time. ${kept(c)}`,
   VERIFY_FAILED: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} couldn't be checked. ${kept(c)}`,
   INTERRUPTED: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} restarted during the move. ${kept(c)}`,
+  // engine#388: any other pre-flip error in the Removing step (op Failed)
+  SOURCE_KEPT: (c) => `${c.app} was not moved, so it stays on ${c.sourceEngine}.`,
+  // engine#388: op Done with an ok trace, but NOT a move (the source was started or written to)
+  SOURCE_CHANGED: (c) => `${c.app} was not moved: it changed on ${c.sourceEngine} while it was being copied, so it stays there.`,
+};
+
+/** Codes after which the Engine tries to clean up the target copy (engine#388); only these get a cleanup sentence. */
+export const MOVE_CLEANUP_CODES: ReadonlySet<string> = new Set(['SOURCE_KEPT', 'SOURCE_CHANGED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED']);
+
+/** The sentence about the target copy by move.targetCleanup (engine#388); null = not reported. */
+export const targetCleanupLine = (cleanup: TargetCleanup, targetEngine: string): string | null =>
+  cleanup === 'quarantined' ? MOVE_TARGET_SET_ASIDE(targetEngine) : cleanup === 'failed' ? MOVE_TARGET_LEFTOVER(targetEngine) : null;
+
+const withCleanup = (line: string, code: string | null, cleanup: TargetCleanup, c: MoveCtx): string => {
+  const extra = code && MOVE_CLEANUP_CODES.has(code) ? targetCleanupLine(cleanup, c.targetEngine) : null;
+  return extra ? `${line} ${extra}` : line;
 };
 
 /** Fallback for an unknown code: the Engine's reason in the approved sentence (Steve, #179). */
@@ -142,13 +173,16 @@ export const moveFailedLine = (message: string, app: string, sourceEngine: strin
  * The whole line for a failed / refused Move: the code first (trace errorCode,
  * result.code or op.move.code), else the `MOVE FAILED:` text; null = not ours.
  */
-export const moveErrorLine = (message: string, code: string | null, c: MoveCtx): string | null =>
-  (code && MOVE_CODE_TEXT[code]?.(c)) || moveFailedLine(message, c.app, c.sourceEngine);
+export const moveErrorLine = (message: string, code: string | null, c: MoveCtx, cleanup: TargetCleanup = null): string | null => {
+  const byCode = code ? MOVE_CODE_TEXT[code]?.(c) : undefined;
+  return byCode ? withCleanup(byCode, code, cleanup, c) : moveFailedLine(message, c.app, c.sourceEngine);
+};
 
+/** `moved`: the app ended on the target (only MOVED / SOURCE_NOT_REMOVED, engine#388); never from op Done or trace ok alone. */
 export type MoveOutcome =
-  | { kind: 'moved'; text: string }
-  | { kind: 'warning'; text: string }
-  | { kind: 'failed'; text: string };
+  | { kind: 'moved'; text: string; moved: true }
+  | { kind: 'warning'; text: string; moved: boolean }
+  | { kind: 'failed'; text: string; moved: false };
 
 /** Where the app's instanceDB row is when the op ends: on the source disk, the target disk, or unknown. */
 export type MovePlacement = 'source' | 'target' | null;
@@ -175,16 +209,23 @@ export const movePlacement = (store: Store | null, op: Operation | null): MovePl
   return null;
 };
 
-/** The sentence about the copy left on the target. One constant: it may become "The unfinished copy on <target> was set aside." after engine#388. */
+/** The sentence about the copy left on the target (engine#388 targetCleanup 'failed', and older Engines). */
 export const MOVE_TARGET_LEFTOVER = (targetEngine: string): string => `A leftover copy is on ${targetEngine}.`;
+/** engine#388 targetCleanup 'quarantined': the target copy was stopped and set aside. */
+export const MOVE_TARGET_SET_ASIDE = (targetEngine: string): string => `The unfinished copy on ${targetEngine} was set aside.`;
 
-/** Done with the source not removed (SOURCE_CHANGED / SOURCE_NOT_REMOVED): one sentence per placement. */
-export const sourceNotRemovedLine = (code: string | null, placement: MovePlacement, c: MoveCtx): string => {
-  if (placement === 'target') return `${c.app} moved to ${c.targetEngine}. The old copy on ${c.sourceEngine} couldn't be removed.`;
+/**
+ * Done with the source not removed (SOURCE_CHANGED / SOURCE_NOT_REMOVED): one sentence per placement.
+ * `cleanup` (engine#388) picks the target-copy sentence; null keeps the older storedOn-based wording.
+ */
+export const sourceNotRemovedLine = (code: string | null, placement: MovePlacement, c: MoveCtx, cleanup: TargetCleanup = null): string => {
+  if (code === 'SOURCE_CHANGED' && cleanup) return withCleanup(MOVE_CODE_TEXT.SOURCE_CHANGED(c), code, cleanup, c);
+  if (placement === 'target' && code !== 'SOURCE_CHANGED') return `${c.app} moved to ${c.targetEngine}. The old copy on ${c.sourceEngine} couldn't be removed.`;
   if (placement === 'source') {
+    const target = targetCleanupLine(cleanup, c.targetEngine) ?? MOVE_TARGET_LEFTOVER(c.targetEngine);
     return code === 'SOURCE_CHANGED'
-      ? `${c.app} was not moved: it changed on ${c.sourceEngine} while it was being copied, so it stays there. ${MOVE_TARGET_LEFTOVER(c.targetEngine)}`
-      : `${c.app} was not moved, so it stays on ${c.sourceEngine}. ${MOVE_TARGET_LEFTOVER(c.targetEngine)}`;
+      ? `${MOVE_CODE_TEXT.SOURCE_CHANGED(c)} ${target}`
+      : `${c.app} was not moved, so it stays on ${c.sourceEngine}. ${target}`;
   }
   return `The move of ${c.app} didn't finish cleanly. Check ${c.sourceEngine} and ${c.targetEngine} to see where it is.`;
 };
@@ -192,17 +233,76 @@ export const sourceNotRemovedLine = (code: string | null, placement: MovePlaceme
 /**
  * Final outcome of a finished cross-Engine move (null while running). Code first, text as fallback.
  * `placement` (movePlacement at the end of the op) decides the wording when the source wasn't removed.
+ *
+ * Moved (success) ONLY for MOVED or SOURCE_NOT_REMOVED, and then only when the row is on the
+ * target or its place is unknown. SOURCE_CHANGED is a Done op with an ok trace that did not move
+ * the app (engine#388): a warning, never a success. No code (older Engine): the storedOn logic.
  */
 export const moveOutcome = (op: Operation | null, c: MoveCtx, placement: MovePlacement = null): MoveOutcome | null => {
   if (!op || isMoveRunning(op)) return null;
   const info = moveInfo(op);
   const text = (op.error ?? info?.resultText ?? '').trim();
   const code = info?.code ?? null;
+  const cleanup = info?.targetCleanup ?? null;
   if (op.status === 'Done') {
-    if (code === 'SOURCE_CHANGED' || code === 'SOURCE_NOT_REMOVED' || (code !== 'MOVED' && text.startsWith(NOT_REMOVED_PREFIX))) {
-      return { kind: 'warning', text: sourceNotRemovedLine(code, placement, c) };
+    if (code === 'SOURCE_CHANGED') return { kind: 'warning', text: sourceNotRemovedLine(code, placement, c, cleanup), moved: false };
+    if (code === 'MOVED') {
+      return placement === 'source'
+        ? { kind: 'warning', text: sourceNotRemovedLine(null, null, c), moved: false }
+        : { kind: 'moved', text: `${c.app} moved to ${c.targetEngine}.`, moved: true };
     }
-    return { kind: 'moved', text: `${c.app} moved to ${c.targetEngine}.` };
+    if (code === 'SOURCE_NOT_REMOVED' || text.startsWith(NOT_REMOVED_PREFIX)) {
+      // Unknown placement never claims it is on the target (idea#498).
+      return { kind: 'warning', text: sourceNotRemovedLine(code, placement, c, cleanup), moved: placement === 'target' };
+    }
+    if (code) return { kind: 'warning', text: moveErrorLine(text, code, c, cleanup) ?? sourceNotRemovedLine(null, null, c), moved: false };
+    return { kind: 'moved', text: `${c.app} moved to ${c.targetEngine}.`, moved: true };
   }
-  return { kind: 'failed', text: moveErrorLine(text || MOVE_FAILED_PREFIX, code, c) ?? text };
+  return { kind: 'failed', text: moveErrorLine(text || MOVE_FAILED_PREFIX, code, c, cleanup) ?? text, moved: false };
+};
+
+/** App and Engine names of a moveApp op, from the store (for op cards and store confirmation). */
+export const moveCtxOf = (store: Store | null, op: Operation): MoveCtx => {
+  const info = moveInfo(op);
+  const host = (id: string | null | undefined): string | null => (id ? String(store?.engineDB?.[id]?.hostname ?? '') || null : null);
+  const instanceId = info?.sourceInstanceId ?? String(op.args?.instanceId ?? '');
+  const targetDisk = store?.diskDB?.[String(op.args?.targetDiskId ?? '')];
+  return {
+    app: String(store?.instanceDB?.[instanceId]?.name ?? op.args?.instanceName ?? instanceId) || 'The app',
+    sourceEngine: host(String(op.engineId ?? '')) ?? 'the source Engine',
+    targetEngine: host(info?.targetEngineId ?? (targetDisk?.dockedTo ? String(targetDisk.dockedTo) : null)) ?? 'the other Engine',
+  };
+};
+
+/** Outcome of a finished moveApp op with names from the store; null while running or for another kind. */
+export const moveOpOutcome = (store: Store | null, op: Operation | null): MoveOutcome | null =>
+  op && op.kind === 'moveApp' ? moveOutcome(op, moveCtxOf(store, op), movePlacement(store, op)) : null;
+
+/** A Done moveApp op that did not move the app (e.g. SOURCE_CHANGED): shown as a warning, not a success. */
+export const isMoveDoneNotMoved = (store: Store | null, op: Operation | null): boolean =>
+  !!op && op.status === 'Done' && moveOpOutcome(store, op)?.moved === false;
+
+/**
+ * commandResult `settle` for a sent moveApp (desktop drag and mobile Move sheet): an ok
+ * trace or Done op is a success only when the app moved (engine#388). The newest move op
+ * of the instance decides; before it is visible, an ok trace's result code does.
+ */
+export const settleMoveOutcome = (store: () => Store | null, instanceId: string, since: number, ctx: () => MoveCtx) =>
+  (o: TraceOutcome): TraceOutcome => {
+    if (o.kind !== 'ok') return o;
+    const s = store();
+    const op = latestMoveOp(s, instanceId, since);
+    if (op && op.status === 'Done') {
+      const out = moveOpOutcome(s, op);
+      const code = moveInfo(op)?.code ?? null;
+      return out && !out.moved ? { kind: 'warning', message: out.text, ...(code ? { code } : {}) } : o;
+    }
+    if (o.code === 'SOURCE_CHANGED') return { kind: 'warning', message: MOVE_CODE_TEXT.SOURCE_CHANGED(ctx()), code: o.code };
+    return o;
+  };
+
+/** The failure sentence for a sent moveApp, with the target-copy sentence from the newest move op. */
+export const moveErrorLineFor = (store: Store | null, instanceId: string, since: number, message: string, code: string | null, ctx: MoveCtx): string | null => {
+  const info = moveInfo(latestMoveOp(store, instanceId, since));
+  return moveErrorLine(message, code ?? info?.code ?? null, ctx, info?.targetCleanup ?? null);
 };

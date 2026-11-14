@@ -2800,7 +2800,8 @@ body {
 }
 
 /* idea#79: moved, but the old copy is still on the source */
-.cross-move--warning {
+.cross-move--warning,
+.command-feedback--warning {
   color: var(--colour-warning, #b26a00);
 }
 
@@ -2900,6 +2901,20 @@ body {
 .operation-card__error {
   font-size: 0.78rem;
   color: var(--colour-danger, #e05);
+}
+
+/* engine#388: a Done move that did not move the app (amber, stays until dismissed) */
+.operation-card--warning {
+  border-color: var(--colour-warning, #b26a00);
+}
+
+.operation-card--warning .operation-card__status,
+.operation-card__warning {
+  color: var(--colour-warning, #b26a00);
+}
+
+.operation-card__warning {
+  font-size: 0.78rem;
 }
 
 .operation-card__step-label {

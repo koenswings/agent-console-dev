@@ -13,8 +13,10 @@
  *   restoreApp       new restoreApp op Done                          new restoreApp op Failed / Cancelled
  *   copyApp          new copyApp op Done, or a newly created instance  new copyApp op Failed / Cancelled
  *                    (same app + name) on the target disk
- *   moveApp          new moveApp op Done, or storedOn changed to target new moveApp op Failed / Cancelled
- *                    (only while no new moveApp op is visible; engine#381)
+ *   moveApp          new moveApp op Done that moved the app       new moveApp op Failed / Cancelled;
+ *                    (MOVED / SOURCE_NOT_REMOVED, engine#388), or   a Done op that did not move it
+ *                    storedOn changed to target (only while no     (SOURCE_CHANGED) is a warning
+ *                    new moveApp op is visible; engine#381)
  *   installApp       a newly created instance of the app on the disk —
  *   reboot           engine.lastBooted changed (went down, came up)  —
  *   ejectDisk        disk record gone / undocked / no device         —
@@ -35,8 +37,13 @@ import { isRemoteEngine } from './connectedEngine';
 import { engineClockOf, live } from './live';
 import { isLoadedLog, remoteCommandLog } from './remoteCommandLogs';
 import type { CommandLogState } from './commandLog';
+import { moveInfo, moveOpOutcome } from './moveApp';
 
-export type RemoteCheck = 'ok' | { error: string } | null;
+/**
+ * 'ok' = proved success; { error } = proved failure; { warning } = finished but not
+ * what was asked (a Done moveApp that did not move the app, engine#388); null = not yet.
+ */
+export type RemoteCheck = 'ok' | { error: string; code?: string | null } | { warning: string; code?: string | null } | null;
 
 export interface RemoteWatch {
   /** Target Engine hostname, for "Sent to <engine>". */
@@ -225,8 +232,18 @@ export const confirmNewOperation = (
       && freshByEngineClock(op.startedAt, snap));
     // 'Cancelled' is written by the Engine's cancelOperation (not in OperationStatus here).
     const failed = ops.find((op) => op.status === 'Failed' || String(op.status) === 'Cancelled');
-    if (failed) return { error: failed.error || `${kind} ${String(failed.status) === 'Cancelled' ? 'was cancelled' : 'failed'}.` };
-    if (ops.some((op) => op.status === 'Done')) return 'ok';
+    const code = (op: typeof failed) => (kind === 'moveApp' ? moveInfo(op ?? null)?.code ?? null : null);
+    if (failed) {
+      const error = failed.error || `${kind} ${String(failed.status) === 'Cancelled' ? 'was cancelled' : 'failed'}.`;
+      const c = code(failed);
+      return c ? { error, code: c } : { error };
+    }
+    const done = ops.find((op) => op.status === 'Done');
+    if (done) {
+      // engine#388: a Done moveApp is a success only when it moved the app (never op Done alone).
+      const o = kind === 'moveApp' ? moveOpOutcome(store(), done) : null;
+      return o && !o.moved ? { warning: o.text, code: code(done) } : 'ok';
+    }
     // A kept-id move flips storedOn before source cleanup ends (engine#381).
     if (kind === 'moveApp' && ops.length > 0) return null;
     if (match.fallbackOk?.()) return 'ok';

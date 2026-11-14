@@ -635,6 +635,23 @@ Running op sends `cancelOperation`. Before idea#498 the ✕ on a Failed card sen
 `cancelOperation`, which marked the op Cancelled for every Console; now a Failed card stays
 visible in other browsers until each one dismisses it.
 
+The failed-op message on an app's row (`InstanceRow`, "Failed: … - Try again", for
+backupApp, restoreApp, upgradeApp and updateApp) clears on its own, since a Failed op is
+no longer marked Cancelled for everyone (`store/rowFailure.ts`):
+
+- the newest finished op (Done, Failed or Cancelled, any kind) of that instance decides,
+  compared by `completedAt`, else `startedAt`. A newer Failed op of a shown kind replaces
+  the message; any other newer finished op clears it.
+- otherwise it hides `ROW_FAILURE_TTL_MS` (24 h) after the op failed, measured on that
+  op's Engine clock (`engineClockOf`: last hb, else stored lastRun), falling back to the
+  Console clock only when the Engine's clock is unknown. No new timer: it re-checks on the
+  shared 5 s `liveNow` tick.
+- it hides when this browser dismissed that op's card (`isOpDismissed`).
+
+Per row it is two memos: one picks the newest finished op (store changes only), the
+other applies the expiry and dismiss on the clock tick. moveApp and copyApp failures are
+not shown on the row (they stay in the copy/move panel and the op cards).
+
 When a cross-Engine Move ends Done with the source not removed (`SOURCE_CHANGED`,
 `SOURCE_NOT_REMOVED`, or the `MOVED, source not removed:` text), the wording follows where
 the instance row is when the op ends (`movePlacement`), never the result text (engine#388):
@@ -649,6 +666,35 @@ the instance row is when the op ends (`movePlacement`), never the result text (e
   to see where it is."
 
 The target-copy sentence is the single constant `MOVE_TARGET_LEFTOVER`.
+
+**engine#388 (agent-engine-dev #390, merged as 4a30798).** If a cross-Engine Move fails before
+storedOn flips, the target Engine stops the copy and quarantines it. It records
+`move.targetCleanup`: `'quarantined'`, `'failed'`, or null when it didn't try (COPY_FAILED, refusals,
+older Engines). The Console reads only these codes:
+
+- **Success** (`moveOutcome(...).moved`): only MOVED or SOURCE_NOT_REMOVED, and only when the row is
+  on the target disk. MOVED with the row's place unknown also counts. Op Done or an ok trace alone
+  never counts. SOURCE_CHANGED is a Done op with an ok trace that left the app on the source.
+  - **Desktop and mobile:** `confirmNewOperation` (store confirmation) returns `{ warning }` for it.
+    The `settle` hook of `commandResult` turns an ok trace into a `warning` state. That covers the
+    desktop drag (`dragCopyMove`) and the mobile Move sheet (`MobileAppList`).
+  - **Warning line:** `CommandFeedback` shows the warning as an amber line (`command-feedback--warning`).
+    `CopyMoveFeedback` hides that line once the outcome line shows the same sentence.
+  - **Op cards:** `OperationProgress` shows such a card as "⚠ Not moved" (amber) with its sentence.
+    The card has no 3 s auto-dismiss and stays like a Failed card until it is dismissed locally.
+- **Target-copy sentence by `targetCleanup`:** `'quarantined'` gives "The unfinished copy on
+  <target> was set aside." (`MOVE_TARGET_SET_ASIDE`). `'failed'` gives "A leftover copy is on
+  <target>." (`MOVE_TARGET_LEFTOVER`). Null keeps the older storedOn-based wording.
+  - It is added only after SOURCE_KEPT, SOURCE_CHANGED and the VERIFY_* codes
+    (`MOVE_CLEANUP_CODES`), never after COPY_FAILED or a refusal.
+- **Sentences:**
+  - SOURCE_KEPT (Failed): "<app> was not moved, so it stays on <source>."
+  - SOURCE_CHANGED: "<app> was not moved: it changed on <source> while it was being copied, so it
+    stays there."
+  - VERIFY_*: keep their "Nothing was removed: it is still on <source>." sentences.
+  - Each of these gets the target-copy sentence after it.
+  - Failed move cards show the same Console sentence instead of the raw Engine text.
+- **Older Engines:** no code means the storedOn logic above applies unchanged.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

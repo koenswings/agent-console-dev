@@ -69,12 +69,12 @@ describe('moveApp adapter', () => {
   it('outcomes: moved, warning (Done with error), failed', () => {
     expect(moveOutcome(op('Running'), C)).toBeNull();
     expect(moveOutcome(op('Done', { move: { code: 'MOVED', resultText: 'MOVED to appdocker01' } }), C))
-      .toEqual({ kind: 'moved', text: 'nextcloud moved to appdocker01.' });
+      .toEqual({ kind: 'moved', text: 'nextcloud moved to appdocker01.', moved: true });
     const w = moveOutcome(op('Done', { error: 'MOVED, source not removed: quarantine failed' }), C, 'target')!;
     expect(w.kind).toBe('warning');
     expect(w.text).toBe("nextcloud moved to appdocker01. The old copy on appdocker02 couldn't be removed.");
     expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: the copy did not finish; source kept' }), C))
-      .toEqual({ kind: 'failed', text: "Couldn't move nextcloud (the copy did not finish). Nothing was removed: it is still on appdocker02." });
+      .toEqual({ kind: 'failed', text: "Couldn't move nextcloud (the copy did not finish). Nothing was removed: it is still on appdocker02.", moved: false });
   });
   it('refusal text (trace errorMessage) becomes a plain sentence; other text is unchanged', () => {
     expect(moveFailedLine('MOVE FAILED: the target Engine is not connected; source kept', 'nextcloud', 'appdocker02'))
@@ -107,18 +107,20 @@ const EXPECTED: Record<string, string> = {
   VERIFY_TIMEOUT: "Couldn't move nextcloud: appdocker01 didn't confirm the copy in time. Nothing was removed: it is still on appdocker02.",
   VERIFY_FAILED: "Couldn't move nextcloud: the copy on appdocker01 couldn't be checked. Nothing was removed: it is still on appdocker02.",
   INTERRUPTED: "Couldn't move nextcloud: appdocker02 restarted during the move. Nothing was removed: it is still on appdocker02.",
+  SOURCE_KEPT: 'nextcloud was not moved, so it stays on appdocker02.',
+  SOURCE_CHANGED: 'nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there.',
 };
 
 describe('moveApp codes (engine#289 b5429d6)', () => {
   it('every refusal and failure code has its sentence, code wins over text', () => {
-    expect(Object.keys(MOVE_CODE_TEXT).sort()).toEqual([...MOVE_REFUSAL_CODES, ...MOVE_FAILURE_CODES].sort());
+    expect(Object.keys(MOVE_CODE_TEXT).sort()).toEqual([...MOVE_REFUSAL_CODES, ...MOVE_FAILURE_CODES, 'SOURCE_CHANGED'].sort());
     for (const [code, text] of Object.entries(EXPECTED)) {
       expect(moveErrorLine('MOVE FAILED: engine words; source kept', code, C)).toBe(text);
     }
   });
   it('failed op: op.move.code picks the sentence', () => {
     for (const code of MOVE_FAILURE_CODES) {
-      expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: x; source kept', move: { code } }), C)).toEqual({ kind: 'failed', text: EXPECTED[code] });
+      expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: x; source kept', move: { code } }), C)).toEqual({ kind: 'failed', text: EXPECTED[code], moved: false });
     }
   });
   it('unknown code or none: the Engine reason in the approved sentence; not a move text: null', () => {
@@ -134,10 +136,10 @@ describe('moveApp codes (engine#289 b5429d6)', () => {
     expect(traceErrorCode(t({}))).toBeNull();
   });
   it('Done codes: MOVED, SOURCE_NOT_REMOVED and SOURCE_CHANGED (amber warnings)', () => {
-    expect(moveOutcome(op('Done', { move: { code: 'MOVED' } }), C)).toEqual({ kind: 'moved', text: 'nextcloud moved to appdocker01.' });
+    expect(moveOutcome(op('Done', { move: { code: 'MOVED' } }), C)).toEqual({ kind: 'moved', text: 'nextcloud moved to appdocker01.', moved: true });
     expect(moveOutcome(op('Done', { error: 'MOVED, source not removed: helper error', move: { code: 'SOURCE_NOT_REMOVED' } }), C, 'target')!.kind).toBe('warning');
     expect(moveOutcome(op('Done', { error: 'MOVED, source not removed: the source was started during the move', move: { code: 'SOURCE_CHANGED' } }), C, 'source'))
-      .toEqual({ kind: 'warning', text: 'nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. A leftover copy is on appdocker01.' });
+      .toEqual({ kind: 'warning', text: 'nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. A leftover copy is on appdocker01.', moved: false });
   });
 });
 
@@ -160,18 +162,20 @@ describe('source not removed: wording by storedOn (idea#498)', () => {
     expect(movePlacement(at(D2), old)).toBe('source');
   });
   it('storedOn = target (removeSource failed after the flip): moved, old copy not removed', () => {
-    for (const code of ['SOURCE_NOT_REMOVED', 'SOURCE_CHANGED']) {
-      expect(moveOutcome(done(code), C, 'target')).toEqual({ kind: 'warning', text: "nextcloud moved to appdocker01. The old copy on appdocker02 couldn't be removed." });
-    }
+    expect(moveOutcome(done('SOURCE_NOT_REMOVED'), C, 'target')).toEqual({ kind: 'warning', text: "nextcloud moved to appdocker01. The old copy on appdocker02 couldn't be removed.", moved: true });
+    // engine#388: SOURCE_CHANGED is never a move, even if the row looks moved.
+    const changed = moveOutcome(done('SOURCE_CHANGED'), C, 'target')!;
+    expect(changed.moved).toBe(false);
+    expect(changed.text).not.toMatch(/moved to/);
   });
   it('storedOn = source: SOURCE_CHANGED says it changed while being copied', () => {
     const o = moveOutcome(done('SOURCE_CHANGED'), C, 'source')!;
-    expect(o).toEqual({ kind: 'warning', text: `nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. ${MOVE_TARGET_LEFTOVER('appdocker01')}` });
+    expect(o).toEqual({ kind: 'warning', text: `nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. ${MOVE_TARGET_LEFTOVER('appdocker01')}`, moved: false });
     expect(o.text).not.toContain('works there');
     expect(o.text).not.toContain('moved to');
   });
   it('storedOn = source: another pre-flip failure (SOURCE_NOT_REMOVED, or only the text) stays on the source', () => {
-    const want = { kind: 'warning', text: 'nextcloud was not moved, so it stays on appdocker02. A leftover copy is on appdocker01.' };
+    const want = { kind: 'warning', text: 'nextcloud was not moved, so it stays on appdocker02. A leftover copy is on appdocker01.', moved: false };
     expect(moveOutcome(done('SOURCE_NOT_REMOVED'), C, 'source')).toEqual(want);
     expect(moveOutcome(op('Done', { error: 'MOVED, source not removed: sourceBytes failed', move: { code: null } }), C, 'source')).toEqual(want);
   });

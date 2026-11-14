@@ -176,6 +176,8 @@ export const receiveEphemeral = (message: unknown, receivedAt: number = Date.now
   receiveMoveChecking(message, receivedAt);
 };
 /** Forget everything (new connection / dispose). Clears the connecting grace. */
+/** Test hook: move the shared clock tick to `now` (the 5 s interval does this in the app). */
+export const tickLiveNow = (now: number = Date.now()): void => { setLiveNow(now); };
 export const resetLive = (): void => { setLive(emptyLive()); setLiveSince(0); resetDemoProgress(); resetMoveChecking(); };
 /** Mark that we are now listening for ephemeral hb/metrics (engine.ts after resetLive). */
 export const beginLiveListen = (at: number = Date.now()): void => { setLiveSince(at); };

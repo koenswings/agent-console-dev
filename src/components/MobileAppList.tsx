@@ -3,7 +3,7 @@ import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import CommandFeedback from './CommandFeedback';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
-import { createCommandResult, type CommandResult } from '../store/commandResult';
+import { createCommandResult, type CommandResult, type CommandResultTarget } from '../store/commandResult';
 import {
   confirmInstanceStatus,
   confirmNewOperation,
@@ -11,9 +11,11 @@ import {
   lastBackupAdvanced,
   newInstanceOnDisk,
   remoteWatchFor,
+  ENGINE_CLOCK_SLACK_MS,
   type RemoteCheck,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
+import { moveErrorLineFor, settleMoveOutcome, type MoveCtx } from '../store/moveApp';
 import { live, liveNow, metricsFor } from '../store/live';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
@@ -67,6 +69,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
   // through the card's result so a refusal shows on the card after the sheet
   // closes.
   const cardResults = new Map<string, CommandResult>();
+  // Last Move sent from the sheet per instance: when (Engine-clock slack applied) and the names (engine#388 wording).
+  const lastMoves = new Map<string, { since: number; ctx: MoveCtx }>();
 
   // Auto-clear pending start/stop when instance reaches expected status
   createEffect(() => {
@@ -180,7 +184,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     inst: Instance,
     command: string,
     send: () => void,
-    o: { engineId: string; argValue: string; longRunning?: boolean; confirm: () => RemoteCheck },
+    o: { engineId: string; argValue: string; longRunning?: boolean; confirm: () => RemoteCheck; settle?: CommandResultTarget['settle'] },
   ) => {
     const r = cardResults.get(inst.id);
     if (!r) { send(); return; }
@@ -189,6 +193,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
       longRunning: o.longRunning ?? false,
       engineId: o.engineId,
       remote: remoteWatchFor(props.store, o.engineId, command, o.confirm),
+      settle: o.settle,
     });
   };
 
@@ -333,6 +338,10 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 result={cmdResult}
                 subject={() => i().name}
                 testId={`mobile-instance-cmd-${id}`}
+                formatLine={(message, code) => {
+                  const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
+                  return m ? moveErrorLineFor(props.store(), id, m.since, message, code, m.ctx) : null;
+                }}
               />
 
               {/* Backup progress bar */}
@@ -452,11 +461,24 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
             const fallback = command === 'copyApp'
               ? newInstanceOnDisk(props.store, target.targetDiskId, { instanceOf: String(i.instanceOf), name: String(i.name), engineId: target.engineId })
               : instanceStoredOn(props.store, i.id, target.targetDiskId);
+            const s = props.store();
+            const targetEngineId = s?.diskDB?.[target.targetDiskId]?.dockedTo;
+            const move = command === 'moveApp' ? {
+              since: Date.now() - ENGINE_CLOCK_SLACK_MS,
+              ctx: {
+                app: String(i.name),
+                sourceEngine: String(s?.engineDB?.[target.engineId]?.hostname ?? target.engineId),
+                targetEngine: String((targetEngineId && s?.engineDB?.[String(targetEngineId)]?.hostname) ?? 'the other Engine'),
+              },
+            } : null;
+            if (move) lastMoves.set(i.id, move);
             sendTracked(i, command, send, {
               engineId: target.engineId, argValue: i.name, longRunning: true,
               confirm: confirmNewOperation(props.store, command, i.id, {
                 engineId: target.engineId, args: { targetDiskId: target.targetDiskId }, fallbackOk: fallback,
               }),
+              // engine#388: a Done move / ok trace is green only when the app moved (not SOURCE_CHANGED).
+              settle: move ? settleMoveOutcome(props.store, i.id, move.since, () => move.ctx) : undefined,
             });
           }}
         />

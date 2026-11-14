@@ -31,6 +31,7 @@ import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
 import { plainEngineText } from '../store/plainError';
+import { latestRowFailure, rowFailureVisible } from '../store/rowFailure';
 import { isDemoInstance } from '../store/demoApps';
 import TechnicalDetails from './TechnicalDetails';
 import BackupStatusLines from './BackupStatusLines';
@@ -288,20 +289,18 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   // Copy/move failures are shown in the OperationProgress panel instead.
   const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp', 'updateApp']);
 
-  const failedOp = (): Operation | null => {
+  // idea#498: the newest finished op of this instance decides (no clock here), then
+  // the 24 h expiry and the local dismiss (store/rowFailure.ts) on the existing liveNow tick.
+  const latestFailure = createMemo((): Operation | null => {
     if (!props.instanceId || !props.store) return null;
-    const store = props.store();
-    if (!store) return null;
+    return latestRowFailure(props.store(), String(props.instanceId), (op) =>
+      RUNTIME_OP_KINDS.has(op.kind) && !(op.kind === UPDATE_OP_KIND && updateOwned()));
+  });
+  const failedOp = createMemo((): Operation | null => {
     if (activeOps().length > 0) return null; // active ops take precedence
-    const failed = Object.values(store.operationDB ?? {}).filter(
-      (op) => op.status === 'Failed'
-        && String(op.args['instanceId']) === String(props.instanceId)
-        && RUNTIME_OP_KINDS.has(op.kind)
-        && !(op.kind === UPDATE_OP_KIND && updateOwned())
-    );
-    if (failed.length === 0) return null;
-    return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
-  };
+    const op = latestFailure();
+    return op && rowFailureVisible(op, props.store?.() ?? null, live(), liveNow()) ? op : null;
+  });
 
   // All CommandTraces for this instance - matched by instanceId or instanceName in args, newest first
   const instanceTraces = createMemo((): CommandTrace[] => {
