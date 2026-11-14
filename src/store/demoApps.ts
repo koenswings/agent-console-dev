@@ -12,7 +12,11 @@
  *   - optional `internet` / `demoLocal` on the ephemeral `idea/hb` (§4);
  *   - error codes (§9): Operation.error and the trace errorMessage are
  *     `CODE: text`, the trace errorCode and Operation.demo.code are the bare
- *     code (answer 4, comment 6875670232);
+ *     code (answer 4, comment 6875670232). NO_SOURCE wording depends on the
+ *     target Engine's heartbeat `internet` (names the app when online);
+ *   - Operation.demo.skipped (engine#369 follow-up): apps with no source,
+ *     not listed in Operation.demo.apps; the op still ends Done. The trace
+ *     `skipped` arg is a comma string `app:CODE` or an array of the same;
  *   - trace args `{ targetDiskId, apps }` and `{ instanceIds }` (answer 2);
  *   - `Instance.demoPackWarning` (answer 1) and, once the Engine sends it, the
  *     ephemeral `idea/progress` download bytes (answer 6).
@@ -64,6 +68,33 @@ export const demoAppName = (app: string): string => APP_NAME[app] ?? app;
 /** Koen's text (idea#235 approach comment) when there is no way to get the content. */
 export const DEMO_NO_SOURCE_TEXT =
   'Set up demo apps needs internet. Connect the Engine, or insert a disk with the IDEA demo pack.';
+/** Online NO_SOURCE when the error text does not name a demo app. */
+export const DEMO_NO_SOURCE_ONLINE_GENERIC =
+  "Demo content for one of the apps isn't available on this Engine yet.";
+/** Short names used in the online NO_SOURCE sentence (not "Kolibri Demo"). */
+const DEMO_APP_CONTENT_NAME: Record<string, string> = { kolibri: 'Kolibri', nextcloud: 'Nextcloud' };
+const DEMO_APP_IN_TEXT_RE = new RegExp(`\\b(${DEMO_APPS.map((a) => a.id).join('|')})\\b`, 'i');
+
+/** Display name of a demo app mentioned in Engine error text, or null. */
+export const demoAppContentNameFromText = (raw: string | null | undefined): string | null => {
+  const m = DEMO_APP_IN_TEXT_RE.exec(String(raw ?? ''));
+  return m ? (DEMO_APP_CONTENT_NAME[m[1].toLowerCase()] ?? null) : null;
+};
+
+/** Online NO_SOURCE sentence; names the app when it can be parsed. */
+export const demoNoSourceOnlineText = (appDisplayName: string | null): string =>
+  appDisplayName
+    ? `Demo content for ${appDisplayName} isn't available on this Engine yet.`
+    : DEMO_NO_SOURCE_ONLINE_GENERIC;
+
+/**
+ * NO_SOURCE wording: when the Engine heartbeat says internet is on, name the
+ * missing app (or a generic "one of the apps"). Offline, unknown, or omitted
+ * keeps the original "needs internet" sentence.
+ */
+export const demoNoSourceText = (raw: string | null | undefined, internet?: boolean | null): string =>
+  internet === true ? demoNoSourceOnlineText(demoAppContentNameFromText(raw)) : DEMO_NO_SOURCE_TEXT;
+
 export const DEMO_NO_TARGET_TEXT = 'Plug an App Disk or an empty disk into this Engine to set up demo apps.';
 export const DEMO_BUSY_TEXT = 'Demo apps are being set up or removed on this Engine. Wait until that has finished.';
 export const DEMO_AMBIGUOUS_TEXT =
@@ -143,13 +174,14 @@ export const demoCodeOf = (raw: string | null | undefined): string | null => {
  * removeInstance's inner code in its text (engine#369 §2), which is mapped too.
  * Unknown codes fall back to plainEngineText (never shows a code or CLI words).
  */
-export const demoErrorText = (raw: string | null | undefined): string => {
+export const demoErrorText = (raw: string | null | undefined, internet?: boolean | null): string => {
   const code = demoCodeOf(raw);
   if (code === 'REMOVE_FAILED') {
     const rest = String(raw ?? '').replace(LEADING_CODE_RE, '');
     const inner = removeRefusalCode(rest);
     return inner ? `${DEMO_ERROR_TEXT.REMOVE_FAILED} ${REMOVE_REFUSALS[inner]}` : DEMO_ERROR_TEXT.REMOVE_FAILED;
   }
+  if (code === 'NO_SOURCE') return demoNoSourceText(raw, internet);
   if (code && DEMO_ERROR_TEXT[code]) return DEMO_ERROR_TEXT[code];
   return plainEngineText(raw);
 };
@@ -340,7 +372,7 @@ export const demoStepLabel = (step: { id: DemoStepId | string; bytesTotal?: numb
  * One plain line for a finished or failed demo Operation: the code from
  * Operation.demo.code, else Operation.error (`CODE: text`). Null while running.
  */
-export const demoOperationResultText = (op: Operation | null | undefined): string | null => {
+export const demoOperationResultText = (op: Operation | null | undefined, internet?: boolean | null): string | null => {
   if (!op || isDemoOperationActive(op)) return null;
   const raw = op.demo?.code ?? op.error ?? null;
   if (op.status === 'Done') {
@@ -349,7 +381,82 @@ export const demoOperationResultText = (op: Operation | null | undefined): strin
   }
   // A Failed op's code is the most specific: an app-level code beats the generic one.
   const appCode = (op.demo?.apps ?? []).map((a) => a.code).find((c) => c && c !== 'DEMO_READY' && c !== 'DEMO_REMOVED');
-  return demoErrorText(op.error ?? appCode ?? raw);
+  return demoErrorText(op.error ?? appCode ?? raw, internet);
+};
+
+// ── Skipped apps (Operation.demo.skipped, engine#369 follow-up) ─────────────
+/** One skipped app after parsing Operation.demo.skipped or a trace `skipped` arg. */
+export interface DemoSkipped {
+  app: string;
+  code: string;
+  detail: string | null;
+}
+
+const SKIP_TOKEN_RE = /^\s*([a-z][a-z0-9_-]*):([A-Z][A-Z0-9_]+)\s*$/;
+
+const skippedFromToken = (token: string): DemoSkipped | null => {
+  const m = SKIP_TOKEN_RE.exec(token);
+  return m ? { app: m[1], code: m[2], detail: null } : null;
+};
+
+/**
+ * Parse skipped apps from Operation.demo.skipped, or from a trace/args value:
+ * a comma string (`nextcloud:NO_SOURCE`), an array of those tokens, or an
+ * array of `{ app, code, detail }` objects. Missing, null, or unreadable
+ * values (older Engines) yield [].
+ */
+export const parseDemoSkipped = (raw: unknown): DemoSkipped[] => {
+  if (raw == null) return [];
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return [];
+    const out: DemoSkipped[] = [];
+    for (const token of s.split(',')) {
+      const one = skippedFromToken(token);
+      if (one) out.push(one);
+    }
+    return out;
+  }
+  if (!Array.isArray(raw)) return [];
+  const out: DemoSkipped[] = [];
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      const one = skippedFromToken(item);
+      if (one) out.push(one);
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as { app?: unknown; code?: unknown; detail?: unknown };
+    const app = typeof rec.app === 'string' ? rec.app : '';
+    if (!app) continue;
+    const code = typeof rec.code === 'string' && rec.code ? rec.code : 'NO_SOURCE';
+    const detail = typeof rec.detail === 'string' ? rec.detail : null;
+    out.push({ app, code, detail });
+  }
+  return out;
+};
+
+/** Skipped apps on a finished or in-flight Operation; [] when the field is absent. */
+export const demoSkippedApps = (op: Operation | null | undefined): DemoSkipped[] =>
+  parseDemoSkipped(op?.demo?.skipped);
+
+export const demoSkippedText = (app: string, internet?: boolean | null): string => {
+  const name = demoAppName(app);
+  return internet === false
+    ? `${name} was skipped: because the Engine has no internet and no local demo pack.`
+    : `${name} was skipped: its demo content isn't available on this Engine yet.`;
+};
+
+/**
+ * Plain skip lines to show after a Done setupDemo. Empty while running, on
+ * failure, on removeDemo, when nothing was skipped, or on older Engines.
+ */
+export const demoSkippedLines = (
+  op: Operation | null | undefined,
+  internet?: boolean | null,
+): { app: string; text: string }[] => {
+  if (!op || op.kind !== 'setupDemo' || op.status !== 'Done') return [];
+  return demoSkippedApps(op).map((s) => ({ app: s.app, text: demoSkippedText(s.app, internet) }));
 };
 
 // ── Outdated demo pack (Instance.demoPackWarning) ───────────────────────────

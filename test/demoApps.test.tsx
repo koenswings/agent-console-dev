@@ -14,6 +14,7 @@ import {
   DEMO_AMBIGUOUS_TEXT,
   DEMO_BUSY_TEXT,
   DEMO_ERROR_TEXT,
+  DEMO_NO_SOURCE_ONLINE_GENERIC,
   DEMO_NO_SOURCE_TEXT,
   DEMO_NO_TARGET_TEXT,
   DEMO_REFRESH_HINT,
@@ -26,13 +27,18 @@ import {
   demoExistsText,
   demoHeartbeat,
   demoInstancesOnEngine,
+  demoNoSourceOnlineText,
   demoOperationResultText,
   demoSetupGate,
+  demoSkippedApps,
+  demoSkippedLines,
+  demoSkippedText,
   demoStepLabel,
   demoTargetDisks,
   isDemoInstance,
   latestDemoOperation,
   noDemoSource,
+  parseDemoSkipped,
   removeDemoConfirmText,
 } from '../src/store/demoApps';
 import { GENERIC_ERROR_TEXT } from '../src/store/plainError';
@@ -229,6 +235,27 @@ describe('step and error mapping (engine#369 §3, §9)', () => {
       expect(demoErrorText(c)).not.toMatch(/[A-Z]+_[A-Z]+/);
     }
   });
+  it('NO_SOURCE names the app when the Engine is online, and keeps the internet sentence when it is not', () => {
+    const liveMsg = 'NO_SOURCE: no usable local pack or GitHub asset for nextcloud, and the app bundle has no pack pin';
+    expect(demoErrorText(liveMsg, true)).toBe("Demo content for Nextcloud isn't available on this Engine yet.");
+    expect(demoErrorText('NO_SOURCE: no usable local pack or GitHub asset for kolibri', true)).toBe(
+      "Demo content for Kolibri isn't available on this Engine yet.",
+    );
+    expect(demoErrorText('NO_SOURCE: no usable local pack or GitHub asset, and the app bundle has no pack pin', true)).toBe(
+      DEMO_NO_SOURCE_ONLINE_GENERIC,
+    );
+    expect(demoErrorText(liveMsg, false)).toBe(DEMO_NO_SOURCE_TEXT);
+    expect(demoErrorText(liveMsg, null)).toBe(DEMO_NO_SOURCE_TEXT);
+    expect(demoErrorText(liveMsg)).toBe(DEMO_NO_SOURCE_TEXT);
+    expect(demoNoSourceOnlineText(null)).toBe(DEMO_NO_SOURCE_ONLINE_GENERIC);
+  });
+  it('a Failed setupDemo Operation and a bare demo.code use the same NO_SOURCE wording', () => {
+    const liveMsg = 'NO_SOURCE: no usable local pack or GitHub asset for nextcloud, and the app bundle has no pack pin';
+    const failed = demoOp('a', 'setupDemo', 'Failed', { error: liveMsg, demo: { targetDiskId: 'BIG', apps: [], code: 'NO_SOURCE', resultText: null } });
+    expect(demoOperationResultText(failed, true)).toBe("Demo content for Nextcloud isn't available on this Engine yet.");
+    expect(demoOperationResultText({ ...failed, error: null }, true)).toBe(DEMO_NO_SOURCE_ONLINE_GENERIC);
+    expect(demoOperationResultText(failed, false)).toBe(DEMO_NO_SOURCE_TEXT);
+  });
   it('CHECKSUM_MISMATCH is a sha mismatch; INVALID_PACK is a damaged pack', () => {
     expect(demoErrorText('CHECKSUM_MISMATCH: tar sha256 is abc, pin says def')).toBe(
       "The downloaded demo pack didn't match its checksum. Try again.",
@@ -262,6 +289,59 @@ describe('step and error mapping (engine#369 §3, §9)', () => {
   });
   it('remove confirm names the exact instances', () => {
     expect(removeDemoConfirmText(['Kolibri Demo', 'Nextcloud Demo'])).toContain('Remove Kolibri Demo and Nextcloud Demo?');
+  });
+});
+
+describe('skipped apps (Operation.demo.skipped, engine#369 follow-up)', () => {
+  const kolibriDone = {
+    app: 'kolibri' as const, instanceId: 'k1', source: 'local' as const, packVersion: '3', code: 'DEMO_READY', detail: null,
+    steps: [{ id: 'install' as const, status: 'done' as const }],
+  };
+  const skippedNc = { app: 'nextcloud' as const, code: 'NO_SOURCE', detail: 'no usable local pack or GitHub asset for nextcloud' };
+
+  it('parseDemoSkipped accepts a comma string, an array of tokens, objects, [], and a missing field', () => {
+    expect(parseDemoSkipped('nextcloud:NO_SOURCE')).toEqual([{ app: 'nextcloud', code: 'NO_SOURCE', detail: null }]);
+    expect(parseDemoSkipped('nextcloud:NO_SOURCE,kolibri:NO_SOURCE')).toEqual([
+      { app: 'nextcloud', code: 'NO_SOURCE', detail: null },
+      { app: 'kolibri', code: 'NO_SOURCE', detail: null },
+    ]);
+    expect(parseDemoSkipped(['nextcloud:NO_SOURCE'])).toEqual([{ app: 'nextcloud', code: 'NO_SOURCE', detail: null }]);
+    expect(parseDemoSkipped([skippedNc])).toEqual([{ app: 'nextcloud', code: 'NO_SOURCE', detail: skippedNc.detail }]);
+    expect(parseDemoSkipped([])).toEqual([]);
+    expect(parseDemoSkipped(undefined)).toEqual([]);
+    expect(parseDemoSkipped(null)).toEqual([]);
+    expect(parseDemoSkipped('')).toEqual([]);
+  });
+  it('an Operation with skipped [] or no skipped field (older Engine) has no skip lines', () => {
+    const none = demoOp('a', 'setupDemo', 'Done', { demo: { targetDiskId: 'BIG', apps: [kolibriDone], code: 'DEMO_READY', resultText: 'Kolibri Demo ready', skipped: [] } });
+    const old = demoOp('a', 'setupDemo', 'Done', { demo: { targetDiskId: 'BIG', apps: [kolibriDone], code: 'DEMO_READY', resultText: 'Kolibri Demo ready' } });
+    expect(demoSkippedApps(none)).toEqual([]);
+    expect(demoSkippedLines(none, true)).toEqual([]);
+    expect(demoSkippedApps(old)).toEqual([]);
+    expect(demoSkippedLines(old, true)).toEqual([]);
+    expect(demoOperationResultText(none)).toBe(DEMO_ERROR_TEXT.DEMO_READY);
+  });
+  it('one skipped app becomes a plain note; Done is not a failure', () => {
+    const op = demoOp('a', 'setupDemo', 'Done', {
+      demo: {
+        targetDiskId: 'BIG', apps: [kolibriDone], code: 'DEMO_READY',
+        resultText: 'Kolibri Demo ready; skipped nextcloud (NO_SOURCE: no usable local pack)',
+        skipped: [skippedNc],
+      },
+    });
+    expect(demoSkippedApps(op)).toEqual([{ app: 'nextcloud', code: 'NO_SOURCE', detail: skippedNc.detail }]);
+    expect(demoSkippedLines(op, true)).toEqual([{
+      app: 'nextcloud',
+      text: "Nextcloud Demo was skipped: its demo content isn't available on this Engine yet.",
+    }]);
+    expect(demoSkippedText('nextcloud', true)).toBe("Nextcloud Demo was skipped: its demo content isn't available on this Engine yet.");
+    expect(demoSkippedText('nextcloud', false)).toBe(
+      'Nextcloud Demo was skipped: because the Engine has no internet and no local demo pack.',
+    );
+    expect(demoSkippedText('nextcloud', null)).toBe("Nextcloud Demo was skipped: its demo content isn't available on this Engine yet.");
+    expect(demoOperationResultText(op)).toBe(DEMO_ERROR_TEXT.DEMO_READY);
+    expect(demoSkippedLines({ ...op, status: 'Running' }, true)).toEqual([]);
+    expect(demoSkippedLines(demoOp('b', 'removeDemo', 'Done', { demo: { targetDiskId: 'BIG', apps: [], code: 'DEMO_REMOVED', resultText: null, skipped: [skippedNc] } }), true)).toEqual([]);
   });
 });
 
@@ -325,5 +405,31 @@ describe('DemoAppsSection with a fake Engine', () => {
     const s = store({ operationDB: { op1: demoOp('op1', 'setupDemo', 'Failed', { error: 'DOCK_CHANGED: disk ejected' }) } });
     const r = mount(s);
     expect(r.getByTestId('demo-apps-result').textContent).toBe(DEMO_ERROR_TEXT.DOCK_CHANGED);
+  });
+  it('a Done setupDemo with a skipped app stays a success and names the skipped app', () => {
+    const kolibri: DemoAppProgress = {
+      app: 'kolibri', instanceId: 'k1', source: 'local', packVersion: '3', code: 'DEMO_READY', detail: null,
+      steps: [{ id: 'install', status: 'done' }],
+    };
+    const s = store({
+      operationDB: {
+        op1: demoOp('op1', 'setupDemo', 'Done', {
+          demo: {
+            targetDiskId: 'BIG', apps: [kolibri], code: 'DEMO_READY',
+            resultText: 'Kolibri Demo ready; skipped nextcloud (NO_SOURCE: no pack)',
+            skipped: [{ app: 'nextcloud', code: 'NO_SOURCE', detail: 'no pack' }],
+          },
+        }),
+      },
+    });
+    const r = mount(s);
+    const result = r.getByTestId('demo-apps-result');
+    expect(result.textContent).toBe(DEMO_ERROR_TEXT.DEMO_READY);
+    expect(result.className).toContain('form-success');
+    expect(result.className).not.toContain('edp-form__error');
+    expect(r.getByTestId('demo-apps-skipped-nextcloud').textContent).toBe(
+      "Nextcloud Demo was skipped: its demo content isn't available on this Engine yet.",
+    );
+    expect(r.getByTestId('demo-apps-skipped-nextcloud').className).not.toContain('edp-form__error');
   });
 });

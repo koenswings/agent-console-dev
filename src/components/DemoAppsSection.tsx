@@ -28,10 +28,13 @@ import {
   demoElsewhereText,
   demoEnginesElsewhere,
   demoErrorText,
+  demoHeartbeat,
   demoInstancesOnEngine,
   demoOperationResultText,
   demoProgressAppIds,
   demoSetupGate,
+  demoSkippedLines,
+  demoSkippedText,
   demoStepIds,
   demoLiveBytes,
   demoPackWarningText,
@@ -87,6 +90,7 @@ const DemoAppsSection: Component<Props> = (props) => {
   });
 
   const gate = createMemo(() => demoSetupGate({ store: props.store(), engineId: engineId(), live: live(), targetDiskId: targetDiskId() }));
+  const internet = createMemo(() => demoHeartbeat(live(), engineId()).internet);
   const op = createMemo(() => latestDemoOperation(props.store(), engineId()));
   const opActive = () => isDemoOperationActive(op());
   const elsewhere = createMemo(() => demoEnginesElsewhere(props.store(), engineId()));
@@ -229,7 +233,7 @@ const DemoAppsSection: Component<Props> = (props) => {
         result={result}
         subject={() => engineName(engineId())}
         testId="demo-apps-cmd"
-        formatLine={(message, code) => demoErrorText(code && !demoCodeOf(message) ? `${code}: ${message}` : message)}
+        formatLine={(message, code) => demoErrorText(code && !demoCodeOf(message) ? `${code}: ${message}` : message, internet())}
       />
 
       {/* Progress (Operation.demo, step ids from engine#369) */}
@@ -259,15 +263,22 @@ const DemoAppsSection: Component<Props> = (props) => {
                 </div>
               )}
             </For>
-            <Show when={demoOperationResultText(o())}>
+            <Show when={demoOperationResultText(o(), internet())}>
               <p
                 class={o().status === 'Failed' ? 'edp-form__error' : 'form-success'}
                 role={o().status === 'Failed' ? 'alert' : 'status'}
                 data-testid="demo-apps-result"
               >
-                {demoOperationResultText(o())}
+                {demoOperationResultText(o(), internet())}
               </p>
             </Show>
+            <For each={demoSkippedLines(o(), internet()).map((l) => l.app)}>
+              {(app) => (
+                <p class="demo-apps__note" role="status" data-testid={`demo-apps-skipped-${app}`}>
+                  {demoSkippedText(app, internet())}
+                </p>
+              )}
+            </For>
           </div>
         )}
       </Show>

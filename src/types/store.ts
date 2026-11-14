@@ -559,9 +559,22 @@ export interface DemoAppProgress {
   detail: string | null;
 }
 
+/** An app the Engine skipped because it had no source (engine#369 follow-up). */
+export interface DemoSkippedApp {
+  app: DemoAppId;
+  code: DemoCode;
+  detail: string;
+}
+
 export interface DemoProgress {
   targetDiskId: DiskID | null;
   apps: DemoAppProgress[];
+  /**
+   * Apps not attempted because they had no source. Always present on Engines
+   * that support skipping; [] = nothing skipped. Absent on older Engines.
+   * Skipped apps are not listed in `apps`.
+   */
+  skipped?: DemoSkippedApp[] | null;
   code: DemoCode | null;
   resultText: string | null;
 }

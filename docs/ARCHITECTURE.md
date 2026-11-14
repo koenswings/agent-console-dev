@@ -522,8 +522,27 @@ with the connected Engine first.
   `DEMO_READY`, `DEMO_REMOVED`) has a plain sentence; `REMOVE_FAILED` adds the
   inner removeInstance reason. `CHECKSUM_MISMATCH` is only a sha mismatch of a
   downloaded pack; `INVALID_PACK` is a bad pack.json, a missing or empty CREDITS
-  file, or an unsafe tar member (Steve, 14 Nov 2026, for engine#374). Unknown
-  codes go through `plainEngineText`.
+  file, or an unsafe tar member (Steve, 14 Nov 2026, for engine#374).
+  `NO_SOURCE` (a refusal when no app has a source, or when an app named in
+  `--apps` has none) uses "Set up demo apps needs internet. Connect the Engine,
+  or insert a disk with the IDEA demo pack." when the Engine heartbeat says
+  `internet` is false or unknown. When `internet` is true, it names the app
+  parsed from the error text, e.g. "Demo content for Nextcloud isn't available
+  on this Engine yet.", or "Demo content for one of the apps isn't available
+  on this Engine yet." if the app can't be parsed. The sentence is used for
+  both the command-trace refusal (no Operation) and `Operation.error` /
+  `Operation.demo.code`. Unknown codes go through `plainEngineText`.
+  When the Engine can set up some apps and skips others, `setupDemo` still
+  ends `Done`. `Operation.demo.skipped` lists those apps (`{ app, code:
+  'NO_SOURCE', detail }`; `[]` means nothing was skipped; the field is absent
+  on older Engines). Skipped apps are not in `Operation.demo.apps`. After a
+  Done setupDemo the section keeps the success wording and adds a note per
+  skipped app, e.g. "Nextcloud Demo was skipped: its demo content isn't
+  available on this Engine yet.", or, when the heartbeat says `internet` is
+  false, "Nextcloud Demo was skipped: because the Engine has no internet and
+  no local demo pack." That note is never shown as a failure. The trace
+  `skipped` arg is a comma string (`nextcloud:NO_SOURCE`) or an array of the
+  same tokens.
 - **Network:** when another Engine's docked disks hold demo instances, a note
   says "IDEA demo apps already run on <engine>." It never blocks (engine#369 Q2).
 - **DEMO badge:** app cards and the mobile list show a DEMO badge next to the

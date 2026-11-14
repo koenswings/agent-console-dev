@@ -119,6 +119,21 @@ describe('CODE: text parsing (answer 4)', () => {
     await waitFor(() => expect(r.getByTestId('demo-apps-cmd-error').textContent).toBe(DEMO_ERROR_TEXT.NO_SPACE));
     expect(r.getByTestId('demo-apps-cmd-error').textContent).not.toContain('NO_SPACE');
   });
+  it('NO_SOURCE on the trace (no Operation) names the app when the Engine is online', async () => {
+    receiveEphemeral({ type: 'idea/hb', v: 1, engineId: 'E1', now: T, bootedAt: T, internet: true, demoLocal: false });
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    const r = render(() => <DemoAppsSection store={() => store()} commandLog={cls} />);
+    fireEvent.click(r.getByTestId('demo-apps-setup'));
+    setCls(log(trace({
+      traceId: 'n', args: { targetDiskId: 'BIG' }, status: 'error', errorCode: 'NO_SOURCE',
+      errorMessage: 'NO_SOURCE: no usable local pack or GitHub asset for nextcloud, and the app bundle has no pack pin',
+    })));
+    await waitFor(() => expect(r.getByTestId('demo-apps-cmd-error').textContent).toBe(
+      "Demo content for Nextcloud isn't available on this Engine yet.",
+    ));
+    expect(r.getByTestId('demo-apps-cmd-error').textContent).not.toContain('NO_SOURCE');
+    expect(r.getByTestId('demo-apps-cmd-error').textContent).not.toMatch(/needs internet/i);
+  });
   it('remove sends and follows removeDemo {instanceIds}', async () => {
     const s = store({ instanceDB: { k1: inst('k1', 'kolibri-1.1', { demo: true }), n1: inst('n1', 'nextcloud-1.0', { demo: true }) } });
     const [cls, setCls] = createSignal<CommandLogState>(log());

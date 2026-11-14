@@ -15,7 +15,8 @@ import { confirmCancelled, remoteWatchFor } from '../store/remoteConfirm';
 import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { plainEngineText } from '../store/plainError';
-import { demoErrorText } from '../store/demoApps';
+import { demoErrorText, demoHeartbeat } from '../store/demoApps';
+import { live } from '../store/live';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,7 +163,7 @@ const OpCard: Component<OpCardProps> = (props) => {
       </Show>
 
       <Show when={isFailed() && props.op.error}>
-        <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo' ? demoErrorText(props.op.error) : plainEngineText(props.op.error)}</div>
+        <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo' ? demoErrorText(props.op.error, demoHeartbeat(live(), props.op.engineId).internet) : plainEngineText(props.op.error)}</div>
       </Show>
 
       <Show when={logExpanded()}>
