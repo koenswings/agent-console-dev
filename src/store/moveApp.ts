@@ -126,30 +126,37 @@ export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NO
 export const MOVE_DONE_CODES = ['MOVED', 'SOURCE_NOT_REMOVED', 'SOURCE_CHANGED'] as const;
 
 export interface MoveCtx { app: string; sourceEngine: string; targetEngine: string }
+/**
+ * The app's name when nothing names it (idea#498): the instance row is gone (removed since)
+ * and Engine moveApp / copyApp ops carry only args.instanceId (fd52c8a), so never the raw id.
+ */
+export const MOVE_APP_UNKNOWN = 'The app';
+/** The app inside a sentence: "Couldn't move the app: …" (a real name stays as it is). */
+const midApp = (app: string): string => (app === MOVE_APP_UNKNOWN ? 'the app' : app);
 const kept = (c: MoveCtx): string => `Nothing was removed: it is still on ${c.sourceEngine}.`;
 
 /** Refusals and failures (source kept): one plain sentence per code. */
 export const MOVE_CODE_TEXT: Record<string, (c: MoveCtx) => string> = {
   // Refusals (no op; trace errorCode)
-  NOT_FOUND: (c) => `Couldn't move ${c.app}: it is no longer on this disk. Nothing changed.`,
-  AMBIGUOUS: (c) => `Couldn't move ${c.app}: more than one app matches. ${kept(c)}`,
-  SOURCE_REMOTE: (c) => `Couldn't move ${c.app}: its disk is no longer in ${c.sourceEngine}. Nothing changed.`,
-  TARGET_UNREACHABLE: (c) => `Couldn't move ${c.app}: ${c.targetEngine} can't be reached. Check that ${c.targetEngine} is switched on and connected to the school network, then try again. ${kept(c)}`,
-  PEER_ACCESS: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} and ${c.targetEngine} are not yet allowed to share Apps. Ask for help. ${kept(c)}`,
-  TARGET_OUTDATED: (c) => `Couldn't move ${c.app}: ${c.targetEngine} needs a system update before Apps can be moved to it. ${kept(c)}`,
-  HELPER_OUTDATED: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} needs a system update before Apps can be moved. ${kept(c)}`,
-  BUSY: (c) => `Couldn't move ${c.app}: something else is running on it or on the target disk. Try again when it is done. ${kept(c)}`,
-  INVALID: (c) => `Couldn't move ${c.app} to that disk. ${kept(c)}`,
+  NOT_FOUND: (c) => `Couldn't move ${midApp(c.app)}: it is no longer on this disk. Nothing changed.`,
+  AMBIGUOUS: (c) => `Couldn't move ${midApp(c.app)}: more than one app matches. ${kept(c)}`,
+  SOURCE_REMOTE: (c) => `Couldn't move ${midApp(c.app)}: its disk is no longer in ${c.sourceEngine}. Nothing changed.`,
+  TARGET_UNREACHABLE: (c) => `Couldn't move ${midApp(c.app)}: ${c.targetEngine} can't be reached. Check that ${c.targetEngine} is switched on and connected to the school network, then try again. ${kept(c)}`,
+  PEER_ACCESS: (c) => `Couldn't move ${midApp(c.app)}: ${c.sourceEngine} and ${c.targetEngine} are not yet allowed to share Apps. Ask for help. ${kept(c)}`,
+  TARGET_OUTDATED: (c) => `Couldn't move ${midApp(c.app)}: ${c.targetEngine} needs a system update before Apps can be moved to it. ${kept(c)}`,
+  HELPER_OUTDATED: (c) => `Couldn't move ${midApp(c.app)}: ${c.sourceEngine} needs a system update before Apps can be moved. ${kept(c)}`,
+  BUSY: (c) => `Couldn't move ${midApp(c.app)}: something else is running on it or on the target disk. Try again when it is done. ${kept(c)}`,
+  INVALID: (c) => `Couldn't move ${midApp(c.app)} to that disk. ${kept(c)}`,
   // engine#381 (53f151d): the same id is already stored on the target Engine, or its folder is on the target disk.
-  TARGET_EXISTS: (c) => `Couldn't move ${c.app}: an app with the same id is already on ${c.targetEngine}. ${kept(c)}`,
+  TARGET_EXISTS: (c) => `Couldn't move ${midApp(c.app)}: an app with the same id is already on ${c.targetEngine}. ${kept(c)}`,
   // Failed outcomes (op Failed, source kept)
-  COPY_FAILED: (c) => `Couldn't move ${c.app}: the copy to ${c.targetEngine} didn't finish. ${kept(c)}`,
-  VERIFY_NOT_FOUND: (c) => `Couldn't move ${c.app}: the copy didn't show up on ${c.targetEngine}. ${kept(c)}`,
-  VERIFY_NOT_RUNNING: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} didn't start. ${kept(c)}`,
-  VERIFY_SIZE: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} is not complete. ${kept(c)}`,
-  VERIFY_TIMEOUT: (c) => `Couldn't move ${c.app}: ${c.targetEngine} didn't confirm the copy in time. ${kept(c)}`,
-  VERIFY_FAILED: (c) => `Couldn't move ${c.app}: the copy on ${c.targetEngine} couldn't be checked. ${kept(c)}`,
-  INTERRUPTED: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} restarted during the move. ${kept(c)}`,
+  COPY_FAILED: (c) => `Couldn't move ${midApp(c.app)}: the copy to ${c.targetEngine} didn't finish. ${kept(c)}`,
+  VERIFY_NOT_FOUND: (c) => `Couldn't move ${midApp(c.app)}: the copy didn't show up on ${c.targetEngine}. ${kept(c)}`,
+  VERIFY_NOT_RUNNING: (c) => `Couldn't move ${midApp(c.app)}: the copy on ${c.targetEngine} didn't start. ${kept(c)}`,
+  VERIFY_SIZE: (c) => `Couldn't move ${midApp(c.app)}: the copy on ${c.targetEngine} is not complete. ${kept(c)}`,
+  VERIFY_TIMEOUT: (c) => `Couldn't move ${midApp(c.app)}: ${c.targetEngine} didn't confirm the copy in time. ${kept(c)}`,
+  VERIFY_FAILED: (c) => `Couldn't move ${midApp(c.app)}: the copy on ${c.targetEngine} couldn't be checked. ${kept(c)}`,
+  INTERRUPTED: (c) => `Couldn't move ${midApp(c.app)}: ${c.sourceEngine} restarted during the move. ${kept(c)}`,
   // engine#388: any other pre-flip error in the Removing step (op Failed)
   SOURCE_KEPT: (c) => `${c.app} was not moved, so it stays on ${c.sourceEngine}.`,
   // engine#388: op Done with an ok trace, but NOT a move (the source was started or written to)
@@ -221,7 +228,7 @@ export const moveFailedLine = (message: string, app: string, sourceEngine: strin
   const at = t.indexOf(MOVE_FAILED_PREFIX);
   if (at < 0) return null;
   const reason = reasonOf(t.slice(at), MOVE_FAILED_PREFIX);
-  return `Couldn't move ${app}${reason ? ` (${reason})` : ''}. Nothing was removed: it is still on ${sourceEngine}.`;
+  return `Couldn't move ${midApp(app)}${reason ? ` (${reason})` : ''}. Nothing was removed: it is still on ${sourceEngine}.`;
 };
 
 /**
@@ -284,7 +291,7 @@ export const sourceNotRemovedLine = (code: string | null, placement: MovePlaceme
       ? `${MOVE_CODE_TEXT.SOURCE_CHANGED(c)} ${target}`
       : `${c.app} was not moved, so it stays on ${c.sourceEngine}. ${target}`;
   }
-  return `The move of ${c.app} didn't finish cleanly. Check ${c.sourceEngine} and ${c.targetEngine} to see where it is.`;
+  return `The move of ${midApp(c.app)} didn't finish cleanly. Check ${c.sourceEngine} and ${c.targetEngine} to see where it is.`;
 };
 
 /**
@@ -324,9 +331,13 @@ export const moveCtxOf = (store: Store | null, op: Operation): MoveCtx => {
   const info = moveInfo(op);
   const host = (id: string | null | undefined): string | null => (id ? String(store?.engineDB?.[id]?.hostname ?? '') || null : null);
   const instanceId = info?.sourceInstanceId ?? String(op.args?.instanceId ?? '');
+  const name = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
   const targetDisk = store?.diskDB?.[String(op.args?.targetDiskId ?? '')];
   return {
-    app: String(store?.instanceDB?.[instanceId]?.name ?? op.args?.instanceName ?? instanceId) || 'The app',
+    // The source row's name, else the target row's (an older Engine's fresh-id copy), else a
+    // name in the op args; never the raw id (Engine fd52c8a ops carry only args.instanceId).
+    app: name(store?.instanceDB?.[instanceId]?.name) ?? name(info?.targetInstanceId ? store?.instanceDB?.[info.targetInstanceId]?.name : null)
+      ?? name(op.args?.instanceName) ?? name(op.args?.name) ?? MOVE_APP_UNKNOWN,
     sourceEngine: host(String(op.engineId ?? '')) ?? 'the source Engine',
     targetEngine: host(info?.targetEngineId ?? (targetDisk?.dockedTo ? String(targetDisk.dockedTo) : null)) ?? 'the other Engine',
   };
