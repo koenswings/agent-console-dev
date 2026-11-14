@@ -725,6 +725,13 @@ finished copy is SOURCE_KEPT with the cleanup set later; COPY_FAILED always has 
   - The app row (`InstanceRow`) shows no move text: moveApp is not one of its row-failure kinds.
 - The amber "⚠ Not moved" card behaviour is unchanged.
 
+**App name on a move card whose app is gone (idea#498).** A Not-moved or Failed move card stays until it is
+dismissed, so it can outlive its app. Engine fd52c8a moveApp / copyApp ops carry only `args.instanceId`; no
+name is on the op, its move info or its text. `moveCtxOf` uses the source row's name, then the target row's
+name (an older Engine's fresh-id copy), then `args.instanceName` / `args.name`. Without any of these it uses
+"The app" (`MOVE_APP_UNKNOWN`), or "the app" inside a sentence, and never the raw id. The card's subtitle
+(`argsSummary` in OperationProgress) already leaves the name out when it is unknown.
+
 ### Disk roles in the right pane (Files Disk, idea#132)
 
 A disk can have several roles (`['app', 'backup', 'files']`). The tree row and the disk header
