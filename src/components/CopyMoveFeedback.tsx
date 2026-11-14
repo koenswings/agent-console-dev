@@ -41,6 +41,7 @@ const CopyMoveFeedback: Component<Props> = (props) => {
           subject={props.ctl.subject}
           testId="copy-move-feedback"
           formatLine={props.ctl.formatLine}
+          formatWarning={props.ctl.formatWarning}
           hideSent={opSeen}
           hideWarning={opSeen}
         />

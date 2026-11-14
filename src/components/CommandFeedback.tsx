@@ -63,6 +63,8 @@ interface CommandFeedbackProps {
   formatLine?: (message: string, code: string | null) => string | null;
   /** Optional: hide the "Sent to …, waiting for confirmation" line (the caller shows progress instead). */
   hideSent?: Accessor<boolean>;
+  /** Optional: the warning sentence, re-read while rendering (moveApp: follows the newest op, engine#395); null = the message. */
+  formatWarning?: (message: string, code: string | null) => string | null;
   /** Optional: hide the warning line (the caller shows the same outcome itself). */
   hideWarning?: Accessor<boolean>;
 }
@@ -75,7 +77,8 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
   // A finished command that did not do what was asked (moveApp SOURCE_CHANGED, engine#388): a plain sentence, amber.
   const warning = () => {
     const s = props.result.state();
-    return s.kind === 'warning' && !props.hideWarning?.() ? plainEngineText(s.message) : null;
+    if (s.kind !== 'warning' || props.hideWarning?.()) return null;
+    return props.formatWarning?.(s.message, s.code ?? null) ?? plainEngineText(s.message);
   };
   const sentTo = () => {
     const s = props.result.state();

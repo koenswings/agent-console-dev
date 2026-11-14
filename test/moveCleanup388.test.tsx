@@ -50,7 +50,7 @@ const at = (s: Store, id: string, diskId: string): Store => ({ ...s, instanceDB:
 const CLEANUPS: TargetCleanup[] = ['quarantined', 'failed', null];
 const suffix = (cleanup: TargetCleanup): string =>
   cleanup === 'quarantined' ? ' The unfinished copy on appdocker01 was set aside.'
-    : cleanup === 'failed' ? ' A leftover copy is on appdocker01.' : '';
+    : cleanup === 'failed' ? ' A leftover copy is on appdocker01.' : ' Cleaning up the copy on appdocker01…';
 
 const FAILED_BASE: Record<string, string> = {
   SOURCE_KEPT: 'nextcloud was not moved, so it stays on appdocker02.',
@@ -91,8 +91,8 @@ describe('sentences per code × move.targetCleanup (engine#388)', () => {
   for (const cleanup of CLEANUPS) {
     it(`Done SOURCE_CHANGED (row on the source), targetCleanup ${cleanup}: warning, not moved`, () => {
       const o = moveOutcome(op('Done', { code: 'SOURCE_CHANGED', targetCleanup: cleanup }, { error: 'MOVE STOPPED: the source was started; source kept' }), C, 'source')!;
-      // null (older Engine): today's storedOn-based leftover sentence
-      expect(o).toEqual({ kind: 'warning', text: CHANGED + (cleanup ? suffix(cleanup) : ' A leftover copy is on appdocker01.'), moved: false });
+      // null with a code (engine#395): the cleanup has not landed yet
+      expect(o).toEqual({ kind: 'warning', text: CHANGED + suffix(cleanup), moved: false });
     });
   }
   it('Done SOURCE_CHANGED is never a move, whatever the placement', () => {

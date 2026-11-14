@@ -11,7 +11,7 @@ import CrossMoveStatus from '../src/components/CrossMoveStatus';
 import {
   CAP_MOVE_CROSS, canMoveCrossEngine, crossMoveSupported, moveFailedLine, latestMoveOp, moveConfirmText,
   moveOutcome, moveStepText, moveErrorLine, MOVE_CODE_TEXT, MOVE_REFUSAL_CODES, MOVE_FAILURE_CODES,
-  movePlacement, MOVE_TARGET_LEFTOVER,
+  movePlacement, MOVE_TARGET_LEFTOVER, MOVE_TARGET_CLEANING, MOVE_CLEANUP_CODES,
 } from '../src/store/moveApp';
 import { traceErrorCode } from '../src/store/commandResult';
 import type { CommandTrace } from '../src/types/commandLog';
@@ -120,7 +120,9 @@ describe('moveApp codes (engine#289 b5429d6)', () => {
   });
   it('failed op: op.move.code picks the sentence', () => {
     for (const code of MOVE_FAILURE_CODES) {
-      expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: x; source kept', move: { code } }), C)).toEqual({ kind: 'failed', text: EXPECTED[code], moved: false });
+      // engine#395: a cleanup code without targetCleanup yet says the cleanup is pending
+      const pending = MOVE_CLEANUP_CODES.has(code) ? ' Cleaning up the copy on appdocker01…' : '';
+      expect(moveOutcome(op('Failed', { error: 'MOVE FAILED: x; source kept', move: { code } }), C)).toEqual({ kind: 'failed', text: EXPECTED[code] + pending, moved: false });
     }
   });
   it('unknown code or none: the Engine reason in the approved sentence; not a move text: null', () => {
@@ -139,7 +141,7 @@ describe('moveApp codes (engine#289 b5429d6)', () => {
     expect(moveOutcome(op('Done', { move: { code: 'MOVED' } }), C)).toEqual({ kind: 'moved', text: 'nextcloud moved to appdocker01.', moved: true });
     expect(moveOutcome(op('Done', { error: 'MOVED, source not removed: helper error', move: { code: 'SOURCE_NOT_REMOVED' } }), C, 'target')!.kind).toBe('warning');
     expect(moveOutcome(op('Done', { error: 'MOVED, source not removed: the source was started during the move', move: { code: 'SOURCE_CHANGED' } }), C, 'source'))
-      .toEqual({ kind: 'warning', text: 'nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. A leftover copy is on appdocker01.', moved: false });
+      .toEqual({ kind: 'warning', text: 'nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. Cleaning up the copy on appdocker01…', moved: false });
   });
 });
 
@@ -170,7 +172,7 @@ describe('source not removed: wording by storedOn (idea#498)', () => {
   });
   it('storedOn = source: SOURCE_CHANGED says it changed while being copied', () => {
     const o = moveOutcome(done('SOURCE_CHANGED'), C, 'source')!;
-    expect(o).toEqual({ kind: 'warning', text: `nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. ${MOVE_TARGET_LEFTOVER('appdocker01')}`, moved: false });
+    expect(o).toEqual({ kind: 'warning', text: `nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. ${MOVE_TARGET_CLEANING('appdocker01')}`, moved: false });
     expect(o.text).not.toContain('works there');
     expect(o.text).not.toContain('moved to');
   });
@@ -250,7 +252,7 @@ describe('cross-Engine Move UI', () => {
     fireEvent.click(screen.getByTestId('copy-move-move'));
     setStore({ ...store(), operationDB: { mv1: op('Done', { error: 'MOVED, source not removed: the source was started during the move', move: { sourceInstanceId: NEXTCLOUD, targetInstanceId: NEXTCLOUD, code: 'SOURCE_CHANGED' } }) } });
     const w = screen.getByTestId('cross-move-warning').textContent;
-    expect(w).toBe('nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. A leftover copy is on appdocker01.');
+    expect(w).toBe('nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there. Cleaning up the copy on appdocker01…');
     expect(w).not.toContain('works there');
   });
 
@@ -269,6 +271,6 @@ describe('cross-Engine Move UI', () => {
     drop(ctl());
     fireEvent.click(screen.getByTestId('copy-move-move'));
     setStore({ ...store(), operationDB: { mv1: op('Failed', { error: 'MOVE FAILED: size 1 != 2; source kept', move: { sourceInstanceId: NEXTCLOUD, code: 'VERIFY_SIZE' } }) } });
-    expect(screen.getByTestId('copy-move-feedback-error').textContent).toBe(EXPECTED.VERIFY_SIZE);
+    expect(screen.getByTestId('copy-move-feedback-error').textContent).toBe(`${EXPECTED.VERIFY_SIZE} Cleaning up the copy on appdocker01…`);
   });
 });
