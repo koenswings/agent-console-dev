@@ -1179,7 +1179,7 @@ async function describeSwitchEngineUi(
 /** True when status-bar label is the same Engine host (strips .local / scheme). */
 export function switchHostsMatch(statusLabel: string, host: string): boolean {
   const raw = statusLabel.trim();
-  if (!raw || /connecting|searching|demo|offline|disconnected/i.test(raw)) return false;
+  if (!raw || /connecting|searching|demo|preview|offline|disconnected/i.test(raw)) return false;
   const s = normalizeSwitchHost(raw).toLowerCase();
   const h = normalizeSwitchHost(host).toLowerCase();
   if (!s || !h) return false;
@@ -1198,7 +1198,7 @@ async function readConnectedStatusHostname(
   )
     .replace(/\s+/g, ' ')
     .trim();
-  if (!statusText || /connecting|searching|demo|offline|disconnected/i.test(statusText)) {
+  if (!statusText || /connecting|searching|demo|preview|offline|disconnected/i.test(statusText)) {
     return '';
   }
   const m = statusText.match(
@@ -1268,7 +1268,7 @@ export async function resolveSwitchEngineHostCandidates(
     (await page.locator(`${sel.statusBarIndicator} span`).last().textContent().catch(() => null)) ??
     ''
   ).trim();
-  if (statusText && !/connecting|searching|demo|offline|disconnected/i.test(statusText)) {
+  if (statusText && !/connecting|searching|demo|preview|offline|disconnected/i.test(statusText)) {
     const hostM = statusText.match(/\b(idea\d+|appdocker\d+|engine\d+)\b/i);
     if (hostM) push(hostM[1]!);
     const ipM = statusText.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);

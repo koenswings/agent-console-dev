@@ -78,7 +78,7 @@ When an operator authenticates, the Console switches to operator mode reactively
 
 ### First-time Setup
 
-When `userDB` is empty (fresh install or demo mode before any operator is created), the Console
+When `userDB` is empty (fresh install or preview mode before any operator is created), the Console
 shows a setup screen instead of the login form. Any user can create the initial admin account.
 Once the first operator exists, this screen is never shown again.
 
@@ -91,7 +91,7 @@ src/
 ├── App.tsx                      Root component — connection lifecycle, mode routing
 ├── main.tsx                     Solid.js mount point
 ├── components/
-│   ├── Onboarding.tsx           Settings form — hostname, store URL, demo mode, display mode
+│   ├── Onboarding.tsx           Settings form — hostname, store URL, preview mode, display mode
 │   ├── EnginePickerPanel.tsx    Engine picker — shown when auto-discovery finds multiple engines
 │   ├── AppBrowser.tsx           User mode — grid of app cards
 │   ├── AppCard.tsx              Single app card (running / greyed-out stopped)
@@ -140,13 +140,13 @@ src/
 
 ```
 onMount:
-  read storage (hostname, demoMode)
-  if demo or hostname known → initConnection() immediately
+  read storage (hostname, previewMode)
+  if preview or hostname known → initConnection() immediately
   else → runDiscovery() — probe LAN for engines
     0 found  → show Onboarding form
     1 found  → auto-connect (saveHostname + initConnection)
     2+ found → show EnginePickerPanel
-  initConnection() → createMockConnection() (demo) or createEngineConnection() (real)
+  initConnection() → createMockConnection() (preview) or createEngineConnection() (real)
   restoreSession(store) → set currentUser if stored session is still valid
 
 Render:
@@ -511,19 +511,20 @@ same dialog then `createFilesDisk` once the empty disk appears.
 
 ---
 
-## Demo / Mock Mode
+## Preview / Mock Mode
 
 `createMockConnection()` (`src/mock/mockStore.ts`) returns a `StoreConnection` backed by an
 in-memory store: 2 engines, 3 disks (Kolibri, Nextcloud, Wikipedia), 5 instances in varied
 states (Running, Stopped, Error, Docked). `userDB` starts empty.
 
-Demo mode activates when `demoMode` is `true` in `chrome.storage.local` / `localStorage`.
+Preview mode activates when `previewMode` is `true` in `chrome.storage.local` / `localStorage`.
+A leftover `demoMode` key is read once, copied to `previewMode`, and then removed.
 
 When active:
-- A yellow **DEMO** badge appears in the status bar.
+- A yellow **PREVIEW** badge appears in the status bar.
 - `createEngineConnection` is never imported (no WebSocket attempt, no Automerge loaded).
 - The mock store includes a pre-provisioned operator (`admin` / `admin911!`) so the Console
-  opens directly to the app browser — no first-time setup required in demo mode.
+  opens directly to the app browser — no first-time setup required in preview mode.
 - `changeDoc` mutations (operator creation/removal) apply to the in-memory store and are
   persisted to `localStorage` under `ideaConsole_demoUserDB` — operators survive page reloads.
   If persisted operators exist, they replace the pre-provisioned admin.

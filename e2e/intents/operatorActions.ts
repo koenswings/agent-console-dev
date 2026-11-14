@@ -779,7 +779,7 @@ export const open_settings: IntentFn = async ({ page }) => {
   } catch {
     throw new Error(
       'idea#168 open_settings: Settings panel open but [data-testid="settings-engine-status"] missing. ' +
-        'Engine Connection tab must show connected/demo status for Prefer A.',
+        'Engine Connection tab must show connected/preview status for Prefer A.',
     );
   }
 };

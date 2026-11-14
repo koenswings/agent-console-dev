@@ -8,21 +8,22 @@ export const DEMO_PASSWORD = 'admin911!';
 /**
  * Log in as the pre-provisioned demo operator.
  *
- * Sets demoMode in localStorage before navigation so the app boots with the
- * mock store. Works because IS_EXTENSION=false on localhost and readStoredDemoMode
+ * Sets previewMode in localStorage before navigation so the app boots with the
+ * mock store. Works because IS_EXTENSION=false on localhost and readStoredPreviewMode
  * falls through to localStorage.
  */
 export async function loginAsDemo(page: Page): Promise<void> {
-  // Ensure demo mode regardless of any previous localStorage state
+  // Ensure preview mode regardless of any previous localStorage state
   await page.addInitScript(() => {
-    localStorage.setItem('demoMode', 'true');
+    localStorage.setItem('previewMode', 'true');
+    localStorage.removeItem('demoMode');
     localStorage.removeItem('engineHostname');
   });
 
   await page.goto('/');
 
-  // Wait for the app to boot in demo mode (DEMO badge in status bar)
-  await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
+  // Wait for the app to boot in preview mode (PREVIEW badge in status bar)
+  await page.locator('.status-bar__preview-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
   // Click the account button in the status bar — opens AccountScreen
   await page.locator('.status-bar__account-btn').click();

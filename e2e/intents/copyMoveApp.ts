@@ -3,7 +3,7 @@
  * Prefer A: both duration disks docked on overview (no demo remap).
  *
  * Engine preload (Axle):
- * - demoMode=false; Engine :8080 production web
+ * - previewMode=false; Engine :8080 production web
  * - ≥2 docked disks: duration-kolibri-grade5a-001 + duration-nextcloud-grade5a-001
  * - Source disk has copyable instance card (kolibri-grade5a-001 or nextcloud-…)
  * - Target disk accepts drop (different diskId in NetworkTree)
@@ -90,7 +90,7 @@ const preloadError = (intent: string, detail: string): Error =>
   new Error(
     `idea#168 ${intent}: ${detail} ` +
       `Engine preload: dock BOTH duration-kolibri-grade5a-001 AND duration-nextcloud-grade5a-001 ` +
-      `on overview (Path A / infra_dock_fixture), demoMode=false, source disk must show a ` +
+      `on overview (Path A / infra_dock_fixture), previewMode=false, source disk must show a ` +
       `draggable instance card (data-copyable=true). No demo DISK001 remap.`,
   );
 

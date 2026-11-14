@@ -41,8 +41,8 @@ export async function collectConnectionDiagnostics(page: Page): Promise<string> 
     .catch(() => '');
   if (statusText) bits.push(`statusBar=${JSON.stringify(statusText.replace(/\s+/g, ' ').trim())}`);
 
-  const demo = await page.locator('.status-bar__demo-badge').isVisible().catch(() => false);
-  bits.push(`DEMO=${demo}`);
+  const preview = await page.locator('.status-bar__preview-badge').isVisible().catch(() => false);
+  bits.push(`PREVIEW=${preview}`);
 
   const signIn = page.locator(sel.signIn).first();
   if (await signIn.count()) {
@@ -63,9 +63,10 @@ export async function collectConnectionDiagnostics(page: Page): Promise<string> 
 
   const ws = await page
     .evaluate(() => {
-      // Best-effort: no public WS handle; report online + localStorage demo/host
+      // Best-effort: no public WS handle; report online + localStorage preview/host
       return {
         onLine: navigator.onLine,
+        previewMode: localStorage.getItem('previewMode'),
         demoMode: localStorage.getItem('demoMode'),
         engineHostname: localStorage.getItem('engineHostname'),
       };
@@ -73,7 +74,7 @@ export async function collectConnectionDiagnostics(page: Page): Promise<string> 
     .catch(() => null);
   if (ws) {
     bits.push(
-      `onLine=${ws.onLine} demoMode=${ws.demoMode ?? 'null'} engineHostname=${ws.engineHostname ?? 'null'}`,
+      `onLine=${ws.onLine} previewMode=${ws.previewMode ?? 'null'} demoMode=${ws.demoMode ?? 'null'} engineHostname=${ws.engineHostname ?? 'null'}`,
     );
   }
 

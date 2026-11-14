@@ -10,7 +10,7 @@ import ClientCardsSection from '../src/components/ClientCardsSection';
 import FlashDialog, { SAFE_TO_REMOVE_TEXT, EJECT_FIRST_TEXT, CARD_GONE_TEXT, UNLABELLED_UBUNTU_TEXT } from '../src/components/FlashDialog';
 import { setSendCommandFn } from '../src/store/commands';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
-import { resolveDemoMode } from '../src/store/demoMode';
+import { resolvePreviewMode } from '../src/store/previewMode';
 import {
   ERROR_TEXT,
   buildCancelFlashCommand,
@@ -601,7 +601,7 @@ describe('Adapter commands (ids only, fail loudly)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Demo mode (idea#201)', () => {
+describe('Preview mode (idea#201)', () => {
   const e = MOCK_STORE.engineDB[E];
   it('has a reader with a card, an unknown disk and image versions', () => {
     expect(e.cardReaders).toEqual([expect.objectContaining({ id: READER, hasMedium: true, candidateId: CARD })]);
@@ -614,10 +614,10 @@ describe('Demo mode (idea#201)', () => {
     // every id is space-free (commands are space-split)
     for (const id of [READER, CARD, DISK, CUR, PREV]) expect(id).not.toMatch(/\s/);
   });
-  it('production web never uses demo data', () => {
-    for (const storedDemo of [true, false]) {
-      for (const searchParams of ['', '?demo=1', '?demo=true']) {
-        expect(resolveDemoMode({ productionWeb: true, storedDemo, searchParams }).isDemo).toBe(false);
+  it('production web never uses preview/mock data', () => {
+    for (const storedPreview of [true, false]) {
+      for (const searchParams of ['', '?preview=1', '?preview=true', '?demo=1', '?demo=true']) {
+        expect(resolvePreviewMode({ productionWeb: true, storedPreview, searchParams }).isPreview).toBe(false);
       }
     }
   });

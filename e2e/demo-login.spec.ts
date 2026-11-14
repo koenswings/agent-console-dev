@@ -16,16 +16,17 @@ test.describe('Demo login flow', () => {
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
-    // Fresh demo-mode boot — no engine hostname, demo flag set explicitly
+    // Fresh preview-mode boot — no engine hostname, preview flag set explicitly
     await page.addInitScript(() => {
-      localStorage.setItem('demoMode', 'true');
+      localStorage.setItem('previewMode', 'true');
+      localStorage.removeItem('demoMode');
       localStorage.removeItem('engineHostname');
     });
   });
 
   test('account screen renders with username and password fields', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.status-bar__preview-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
     // Account button opens AccountScreen (replaces login modal)
     await page.locator('.status-bar__account-btn').click();
@@ -41,7 +42,7 @@ test.describe('Demo login flow', () => {
 
   test('logs in with demo credentials and shows operator UI', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.status-bar__preview-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
     await page.locator('.status-bar__account-btn').click();
     await page.locator('.account-screen').waitFor({ state: 'visible' });
@@ -69,7 +70,7 @@ test.describe('Demo login flow', () => {
 
   test('shows error for wrong password', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.status-bar__demo-badge').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.status-bar__preview-badge').waitFor({ state: 'visible', timeout: 15_000 });
 
     await page.locator('.status-bar__account-btn').click();
     await page.locator('.account-screen').waitFor({ state: 'visible' });

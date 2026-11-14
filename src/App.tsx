@@ -36,16 +36,16 @@ import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
 import {
   readStoredHostname,
-  readStoredDemoMode,
+  readStoredPreviewMode,
   saveHostnameAndStoreUrl,
-  saveDemoMode,
+  savePreviewMode,
   STORAGE_KEY_PORT,
   STORAGE_KEY_STORE_URL,
 } from './store/storage';
 import { isProductionWebMode } from './store/engine';
 import { decideFailover, navigateTo, PROD_FAILOVER_MS, PROD_FAILOVER_RETRY_MS } from './store/prodFailover';
 import { defaultEnginePort } from './store/discovery';
-import { resolveDemoMode } from './store/demoMode';
+import { resolvePreviewMode } from './store/previewMode';
 import { discoverAllEngines, enginesFromStore, DISCOVERY_REFRESH_INTERVAL_MS, type DiscoveryResult } from './store/discovery';
 import type { Selection } from './components/NetworkTree';
 import type { Store } from './types/store';
@@ -61,7 +61,7 @@ const App: Component = () => {
   const [store, setStore] = createSignal<Store | null>(null);
   const [connected, setConnected] = createSignal(false);
   const [hasEverConnected, setHasEverConnected] = createSignal(false);
-  const [demo, setDemo] = createSignal(false);
+  const [preview, setPreview] = createSignal(false);
   const [connection, setConnection] = createSignal<StoreConnection | null>(null);
   // commandLogStore is derived reactively from the connection's accessor
   // so it updates automatically as the async connection resolves.
@@ -175,7 +175,7 @@ const App: Component = () => {
   createEffect(() => {
     const s = store();
     const conn = connection();
-    if (!s || !conn || demo() || isOperator() || provisioningRan) return;
+    if (!s || !conn || preview() || isOperator() || provisioningRan) return;
     if (!isFirstTimeSetup(s)) return;
     provisioningRan = true;
     createOperator('admin', 'admin911!', s, conn.changeDoc)
@@ -213,22 +213,22 @@ const App: Component = () => {
 
     const myId = ++currentInitId;
 
-    // Production web (Engine :8080): NEVER honor stale localStorage demoMode —
-    // bootDemo disks (DISK001) break duration Intents (duration-kolibri-grade5a-001).
-    const storedDemo = await readStoredDemoMode();
+    // Production web (Engine :8080): NEVER honor stale localStorage previewMode —
+    // bootPreview disks (DISK001) break duration Intents (duration-kolibri-grade5a-001).
+    const storedPreview = await readStoredPreviewMode();
     if (myId !== currentInitId) return; // superseded
-    const resolved = resolveDemoMode({
+    const resolved = resolvePreviewMode({
       productionWeb: isProductionWebMode(),
-      storedDemo,
+      storedPreview,
       searchParams: typeof window !== 'undefined' ? window.location.search : '',
     });
-    if (resolved.persistFalse) await saveDemoMode(false);
-    else if (resolved.persistTrue) await saveDemoMode(true);
+    if (resolved.persistFalse) await savePreviewMode(false);
+    else if (resolved.persistTrue) await savePreviewMode(true);
     if (myId !== currentInitId) return; // superseded during persist
-    const isDemo = resolved.isDemo;
-    setDemo(isDemo);
+    const isPreview = resolved.isPreview;
+    setPreview(isPreview);
 
-    const conn = isDemo
+    const conn = isPreview
       ? createMockConnection()
       : await (await import('./store/engine')).createEngineConnection(3, { target: pickedTarget });
 
@@ -313,7 +313,7 @@ const App: Component = () => {
   createEffect(() => {
     const host = hostname();
     const everConn = hasEverConnected();
-    if (host && !everConn && !demo() && !isProductionWebMode()) {
+    if (host && !everConn && !preview() && !isProductionWebMode()) {
       const timer = setTimeout(() => {
         if (!hasEverConnected() && hostname()) {
           console.log('[app] Connection timeout — engine unreachable, returning to onboarding');
@@ -324,12 +324,12 @@ const App: Component = () => {
     }
   });
 
-  // Reconnect after 15s of disconnection (not in demo / production mode).
+  // Reconnect after 15s of disconnection (not in preview / production mode).
   // Only fires after first successful connection to avoid cancelling in-progress connects.
   createEffect(() => {
     const isConn = connected();
     const host = hostname();
-    if (!isConn && host && hasEverConnected() && !demo() && !isProductionWebMode()) {
+    if (!isConn && host && hasEverConnected() && !preview() && !isProductionWebMode()) {
       const timer = setTimeout(() => {
         if (!connected() && hostname()) handleConnectionFailure();
       }, 15_000);
@@ -342,7 +342,7 @@ const App: Component = () => {
   // holder) answers again, else open another live Engine's Console.
   createEffect(() => {
     const isConn = connected();
-    if (isConn || !hasEverConnected() || demo() || !isProductionWebMode()) return;
+    if (isConn || !hasEverConnected() || preview() || !isProductionWebMode()) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const attempt = async () => {
@@ -364,7 +364,7 @@ const App: Component = () => {
   onMount(async () => {
     if (isProductionWebMode()) {
       setHostname(window.location.hostname);
-      setDemo(false);
+      setPreview(false);
       setReady(true);
       await initConnection();
       return;
@@ -378,8 +378,8 @@ const App: Component = () => {
     setHostname(host);
     setReady(true);
 
-    const isDemo = await readStoredDemoMode();
-    if (isDemo || host) {
+    const isPreview = await readStoredPreviewMode();
+    if (isPreview || host) {
       await initConnection();
     } else {
       runDiscovery();
@@ -395,7 +395,7 @@ const App: Component = () => {
   };
 
   // ── Computed screen conditions ────────────────────────────────────────────
-  const showOnboarding   = () => ready() && !hostname() && !demo() && discoveryFailed();
+  const showOnboarding   = () => ready() && !hostname() && !preview() && discoveryFailed();
   const showFirstSetup   = () => ready() && !isOperator() && isFirstTimeSetup(store());
   // showAccount overlays above the main layout in the Switch — showMainLayout doesn't
   // need to exclude it; the Switch renders the first matching Match.
@@ -409,7 +409,7 @@ const App: Component = () => {
   const indicator = createMemo(() => connectionIndicator({
     connected: connected(),
     socketState: socketState(),
-    demo: !!demo(),
+    preview: !!preview(),
     discovering: discovering(),
     hostname: hostname() || null,
     engineName: () => connectedEngineName(store(), hostname()),
@@ -429,8 +429,8 @@ const App: Component = () => {
           <span data-testid="status-bar-hostname">{statusLabel()}</span>
         </div>
 
-        <Show when={demo()}>
-          <span class="status-bar__demo-badge">DEMO</span>
+        <Show when={preview()}>
+          <span class="status-bar__preview-badge">PREVIEW</span>
         </Show>
 
         <Show when={isOperator()}>
@@ -438,8 +438,8 @@ const App: Component = () => {
         </Show>
 
         <div class="status-bar__actions">
-          {/* 🔌 Connection Management — hidden in demo mode */}
-          <Show when={!demo()}>
+          {/* 🔌 Connection Management — hidden in preview mode */}
+          <Show when={!preview()}>
             <button
               class="status-bar__connection-btn"
               data-testid="connection-mgmt-btn"
@@ -517,11 +517,11 @@ const App: Component = () => {
             store={store()}
             connection={connection()}
             hostname={hostname()}
-            demo={demo()}
+            preview={preview()}
             onClose={() => setShowSettings(false)}
             onComplete={handleOnboardingComplete}
             onConnect={async (h, s) => {
-              await saveDemoMode(false);
+              await savePreviewMode(false);
               await saveHostnameAndStoreUrl(h, s);
               setHostname(h);
               setShowSettings(false);
@@ -532,26 +532,26 @@ const App: Component = () => {
               setShowSettings(false);
               setShowConnectionMgmt(true);
             }}
-            onDemoMode={async () => {
-              // Production web: refuse demo (duration --live must stay on Engine store)
+            onPreviewMode={async () => {
+              // Production web: refuse preview (duration --live must stay on Engine store)
               if (isProductionWebMode()) {
-                await saveDemoMode(false);
-                setDemo(false);
+                await savePreviewMode(false);
+                setPreview(false);
                 return;
               }
-              await saveDemoMode(true);
+              await savePreviewMode(true);
               await logout();
               setHostname(await readStoredHostname());
               await initConnection();
             }}
-            onDemoToggle={async (val) => {
+            onPreviewToggle={async (val) => {
               if (isProductionWebMode()) {
-                await saveDemoMode(false);
-                setDemo(false);
+                await savePreviewMode(false);
+                setPreview(false);
                 if (!val) await initConnection();
                 return;
               }
-              await saveDemoMode(val);
+              await savePreviewMode(val);
               if (val) {
                 await logout();
                 setHostname(await readStoredHostname());

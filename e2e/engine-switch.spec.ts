@@ -30,9 +30,9 @@ test.describe('Engine switch (operator only)', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('DEMO badge is visible when in demo mode', async ({ page }) => {
-    await expect(page.locator('.status-bar__demo-badge')).toBeVisible();
-    await expect(page.locator('.status-bar__demo-badge')).toHaveText('DEMO');
+  test('PREVIEW badge is visible when in preview mode', async ({ page }) => {
+    await expect(page.locator('.status-bar__preview-badge')).toBeVisible();
+    await expect(page.locator('.status-bar__preview-badge')).toHaveText('PREVIEW');
 
     expect(pageErrors).toHaveLength(0);
   });
@@ -51,11 +51,11 @@ test.describe('Engine switch (operator only)', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('engine tab shows demo toggle and no change-engine button', async ({ page }) => {
+  test('engine tab shows preview toggle and no change-engine button', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    // Engine Connection tab: demo toggle is present
+    // Engine Connection tab: preview toggle is present
     await expect(page.locator('.settings-panel input[type="checkbox"]')).toBeVisible();
 
     // Change Engine dialog button was removed in PR #112
@@ -65,11 +65,11 @@ test.describe('Engine switch (operator only)', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('demo status shown in engine connection tab', async ({ page }) => {
+  test('preview status shown in engine connection tab', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
 
-    // In demo mode, the current engine label says "Demo mode"
-    await expect(page.locator('.settings-panel__current-label')).toContainText('Demo mode');
+    // In preview mode, the current engine label says "Preview mode"
+    await expect(page.locator('.settings-panel__current-label')).toContainText('Preview mode');
 
     expect(pageErrors).toHaveLength(0);
   });
