@@ -8,6 +8,7 @@ import { For, Show, createEffect, createMemo, createSignal, type Accessor, type 
 import { sendRawCommand } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
 import type { CommandLogState } from '../store/commandLog';
+import { isBackupMethodNone } from '../store/backupStatus';
 import { engineStatus, live, liveNow, liveSince } from '../store/live';
 import {
   COMMAND, MAKE_BACKUP_FIRST_TEXT, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
@@ -65,8 +66,10 @@ const UpdateAppControl: Component<Props> = (props) => {
   });
   createEffect(() => { if (running()) setWatching(true); });
 
-  const refusedForBackup = () => backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
-  const majorBackupMissing = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow());
+  // idea#403: a backup-method-none instance never gets lastBackup and needs no backup.
+  const methodNone = () => isBackupMethodNone(props.instance());
+  const refusedForBackup = () => !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
+  const majorBackupMissing = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow(), methodNone());
   const needsBackup = () => refusedForBackup() || majorBackupMissing();
   const backupHint = () => (refusedForBackup() ? NEEDS_BACKUP_TEXT : MAKE_BACKUP_FIRST_TEXT);
   const showBadge = () => {

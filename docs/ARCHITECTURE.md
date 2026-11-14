@@ -511,6 +511,22 @@ field. All new store fields are optional; with the flag absent the UI is unchang
 Copy is plain language (no borg, YAML, helper, or result-code tokens). See
 `src/store/backupStatus.ts`.
 
+**Backup method `none` (idea#403, agent-engine-dev#404).** An App with
+`x-app.backup.method: none` copies nothing and never gets `lastBackup`; each attempt
+(including the pre-update backup) records `lastResult = {method: 'none', result: 'OK'}`.
+The store mirrors no App or compose backup method, so `isBackupMethodNone(instance)`
+(`backupStatus.ts`) reads only `lastResult.method === 'none'`; a none App that has never
+run a backup is not recognised until its first attempt. For such an instance:
+
+- the update gate needs no backup: `majorNeedsBackup(..., methodNone)` is false and an
+  Engine `NEEDS_BACKUP` refusal does not lock the badge (`UpdateAppControl`; the
+  refusal's error line still shows);
+- `RestorePanel` shows "Not backed up: its content is on the App Disk"
+  (`METHOD_NONE_COPY`, once: the same status line is not repeated) instead of
+  "Never backed up", and offers no target disk or Restore. A none instance that still
+  has an older `lastBackup` (an archive from before the method changed) keeps its date
+  and Restore.
+
 ### Backup Disk schedule controls (idea#400)
 
 When the docked Engine advertises a fresh `scheduledBackups` capability
