@@ -11,7 +11,10 @@
  *  - results  Done `MOVED to <hostname>`; Failed `MOVE FAILED: <reason>; source kept` (op.error);
  *             Done + op.error `MOVED, source not removed: <reason>` (a warning, not a failure)
  *  - refusals trace errorMessage `MOVE FAILED: <reason>; source kept` (no op)
- *  - identity the target gets a fresh instance id; the name is kept
+ *  - identity the instance keeps its id and name (engine#381, 53f151d): one instanceDB row,
+ *             move.targetInstanceId equals sourceInstanceId, and the Backup Disk link follows.
+ *             storedOn flips to the target at the start of "Removing the old copy" (after
+ *             verify); a plain copyApp still gets a fresh id. Older Engines minted a fresh id.
  * Same-Engine Move is unchanged and never reaches this module's UI.
  */
 import { engineHasCapability } from './commands';
@@ -93,8 +96,8 @@ export const moveStepText = (op: Operation | null, targetEngine: string): string
 const reasonOf = (text: string, prefix: string): string =>
   text.trim().slice(prefix.length).replace(/;\s*source kept\s*\.?$/i, '').trim().replace(/[.;\s]+$/, '');
 
-// ── Codes (engine#289 b5429d6, MOVE_CODES in src/data/MoveAppShapes.ts) ─────
-export const MOVE_REFUSAL_CODES = ['NOT_FOUND', 'AMBIGUOUS', 'SOURCE_REMOTE', 'TARGET_UNREACHABLE', 'PEER_ACCESS', 'TARGET_OUTDATED', 'HELPER_OUTDATED', 'BUSY', 'INVALID'] as const;
+// ── Codes (engine#289 b5429d6 + engine#381 53f151d, MOVE_CODES in src/data/MoveAppShapes.ts) ─
+export const MOVE_REFUSAL_CODES = ['NOT_FOUND', 'AMBIGUOUS', 'SOURCE_REMOTE', 'TARGET_UNREACHABLE', 'PEER_ACCESS', 'TARGET_OUTDATED', 'HELPER_OUTDATED', 'BUSY', 'INVALID', 'TARGET_EXISTS'] as const;
 export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED', 'INTERRUPTED'] as const;
 export const MOVE_DONE_CODES = ['MOVED', 'SOURCE_NOT_REMOVED', 'SOURCE_CHANGED'] as const;
 
@@ -113,6 +116,8 @@ export const MOVE_CODE_TEXT: Record<string, (c: MoveCtx) => string> = {
   HELPER_OUTDATED: (c) => `Couldn't move ${c.app}: ${c.sourceEngine} needs a system update before Apps can be moved. ${kept(c)}`,
   BUSY: (c) => `Couldn't move ${c.app}: something else is running on it or on the target disk. Try again when it is done. ${kept(c)}`,
   INVALID: (c) => `Couldn't move ${c.app} to that disk. ${kept(c)}`,
+  // engine#381 (53f151d): the same id is already stored on the target Engine, or its folder is on the target disk.
+  TARGET_EXISTS: (c) => `Couldn't move ${c.app}: an app with the same id is already on ${c.targetEngine}. ${kept(c)}`,
   // Failed outcomes (op Failed, source kept)
   COPY_FAILED: (c) => `Couldn't move ${c.app}: the copy to ${c.targetEngine} didn't finish. ${kept(c)}`,
   VERIFY_NOT_FOUND: (c) => `Couldn't move ${c.app}: the copy didn't show up on ${c.targetEngine}. ${kept(c)}`,

@@ -14,6 +14,7 @@
  *   copyApp          new copyApp op Done, or a newly created instance  new copyApp op Failed / Cancelled
  *                    (same app + name) on the target disk
  *   moveApp          new moveApp op Done, or storedOn changed to target new moveApp op Failed / Cancelled
+ *                    (only while no new moveApp op is visible; engine#381)
  *   installApp       a newly created instance of the app on the disk —
  *   reboot           engine.lastBooted changed (went down, came up)  —
  *   ejectDisk        disk record gone / undocked / no device         —
@@ -226,6 +227,8 @@ export const confirmNewOperation = (
     const failed = ops.find((op) => op.status === 'Failed' || String(op.status) === 'Cancelled');
     if (failed) return { error: failed.error || `${kind} ${String(failed.status) === 'Cancelled' ? 'was cancelled' : 'failed'}.` };
     if (ops.some((op) => op.status === 'Done')) return 'ok';
+    // A kept-id move flips storedOn before source cleanup ends (engine#381).
+    if (kind === 'moveApp' && ops.length > 0) return null;
     if (match.fallbackOk?.()) return 'ok';
     return null;
   };
@@ -255,6 +258,8 @@ export const newInstanceOnDisk = (
 /**
  * moveApp fallback: the instance's storedOn CHANGED to the target disk after
  * the send. If it was already on the target at send time it never confirms.
+ * A cross-Engine move keeps the instance id (engine#381), so this also works
+ * across Engines; confirmNewOperation lets a matching moveApp op take precedence.
  */
 export const instanceStoredOn = (store: Accessor<Store | null>, instanceId: string, diskId: string): (() => boolean) => {
   const atSend = String(store()?.instanceDB?.[instanceId]?.storedOn ?? '');
