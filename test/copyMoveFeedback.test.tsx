@@ -95,6 +95,9 @@ describe('CopyMoveFeedback panel', () => {
     const flipped = { ...store().instanceDB, [NEXTCLOUD]: { ...store().instanceDB[NEXTCLOUD], storedOn: D1 } };
     setStore({ ...store(), instanceDB: flipped, operationDB: { mv1: mv('Done', { stepLabel: null, currentStep: null, completedAt: Date.now(), move: { phase: 'done', sourceInstanceId: NEXTCLOUD, targetInstanceId: NEXTCLOUD, code: 'MOVED' } }) } });
     expect(inPanel('cross-move-moved')?.textContent).toBe('nextcloud moved to appdocker01.');
+    // idea#498 re-walk: the success line is green (cross-move--success), not the grey hint alone
+    expect(inPanel('cross-move-moved')?.classList.contains('cross-move--success')).toBe(true);
+    expect(inPanel('cross-move-moved')?.classList.contains('cross-move--warning')).toBe(false);
     expect(screen.queryByTestId('cross-move-step')).toBeNull();
     expect(screen.queryByTestId('copy-move-feedback-sent')).toBeNull();
   });
