@@ -635,6 +635,23 @@ Running op sends `cancelOperation`. Before idea#498 the ✕ on a Failed card sen
 `cancelOperation`, which marked the op Cancelled for every Console; now a Failed card stays
 visible in other browsers until each one dismisses it.
 
+The failed-op message on an app's row (`InstanceRow`, "Failed: … - Try again", for
+backupApp, restoreApp, upgradeApp and updateApp) clears on its own, since a Failed op is
+no longer marked Cancelled for everyone (`store/rowFailure.ts`):
+
+- the newest finished op (Done, Failed or Cancelled, any kind) of that instance decides,
+  compared by `completedAt`, else `startedAt`. A newer Failed op of a shown kind replaces
+  the message; any other newer finished op clears it.
+- otherwise it hides `ROW_FAILURE_TTL_MS` (24 h) after the op failed, measured on that
+  op's Engine clock (`engineClockOf`: last hb, else stored lastRun), falling back to the
+  Console clock only when the Engine's clock is unknown. No new timer: it re-checks on the
+  shared 5 s `liveNow` tick.
+- it hides when this browser dismissed that op's card (`isOpDismissed`).
+
+Per row it is two memos: one picks the newest finished op (store changes only), the
+other applies the expiry and dismiss on the clock tick. moveApp and copyApp failures are
+not shown on the row (they stay in the copy/move panel and the op cards).
+
 When a cross-Engine Move ends Done with the source not removed (`SOURCE_CHANGED`,
 `SOURCE_NOT_REMOVED`, or the `MOVED, source not removed:` text), the wording follows where
 the instance row is when the op ends (`movePlacement`), never the result text (engine#388):
