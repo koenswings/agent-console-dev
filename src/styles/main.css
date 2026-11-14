@@ -2805,6 +2805,11 @@ body {
   color: var(--colour-warning, #b26a00);
 }
 
+/* idea#498: the moved (success) line, same green as the Done op card */
+.cross-move--success {
+  color: var(--colour-success, #22c55e);
+}
+
 .copy-move-modal__desc strong {
   color: var(--colour-text);
 }

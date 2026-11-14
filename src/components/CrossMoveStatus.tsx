@@ -51,7 +51,7 @@ export const CrossMoveLines: Component<{ view: CrossMoveView }> = (props) => (
     <Show when={props.view.outcome()}>
       {(o) => (
         <p
-          class={o().kind === 'warning' ? 'edp-form__hint cross-move--warning' : 'edp-form__hint'}
+          class={`edp-form__hint ${o().kind === 'warning' ? 'cross-move--warning' : 'cross-move--success'}`}
           role={o().kind === 'warning' ? 'alert' : 'status'}
           data-testid={`cross-move-${o().kind}`}
         >

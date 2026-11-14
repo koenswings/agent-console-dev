@@ -186,6 +186,8 @@ describe('desktop drag Move (CopyMoveFeedback)', () => {
     setStore({ ...store(), operationDB: { mv1: op('Done', { code: 'SOURCE_CHANGED', targetCleanup: 'quarantined' }, { error: 'MOVE STOPPED: x; source kept, the copy on appdocker01 was quarantined' }) } });
     expect(screen.queryByTestId('cross-move-moved')).toBeNull();
     expect(screen.getByTestId('cross-move-warning').textContent).toBe(`${CHANGED} The unfinished copy on appdocker01 was set aside.`);
+    expect(screen.getByTestId('cross-move-warning').classList.contains('cross-move--warning')).toBe(true);
+    expect(screen.getByTestId('cross-move-warning').classList.contains('cross-move--success')).toBe(false);
     expect(ctl().result.state()).toEqual({ kind: 'warning', message: `${CHANGED} The unfinished copy on appdocker01 was set aside.`, code: 'SOURCE_CHANGED' });
     // The outcome line already says it: no duplicate CommandFeedback line
     expect(screen.queryByTestId('copy-move-feedback-warning')).toBeNull();
@@ -196,6 +198,7 @@ describe('desktop drag Move (CopyMoveFeedback)', () => {
     const { store, setStore, ctl } = renderDesktop();
     setStore({ ...at(store(), NEXTCLOUD, D1), operationDB: { mv1: op('Done', { code: 'MOVED' }) } });
     expect(screen.getByTestId('cross-move-moved').textContent).toBe('nextcloud moved to appdocker01.');
+    expect(screen.getByTestId('cross-move-moved').className).toBe('edp-form__hint cross-move--success');
     expect(ctl().result.state().kind).toBe('success');
   });
 

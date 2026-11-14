@@ -626,6 +626,7 @@ Operations panel in the right pane; mobile mounts it at the top of the tab conte
 renders nothing when it has nothing to say. "Sent to <engine>, waiting for confirmation…"
 shows only until the Engine's moveApp op is in the store; from then on the step line
 replaces it. A Failed op still ends in the CommandFeedback error line.
+The cross-Engine Move outcome line uses one colour per kind: green `cross-move--success` for moved ("<app> moved to <target>."), amber `cross-move--warning` for a warning, and the error line stays red.
 
 Operation cards (`OperationProgress`, desktop and mobile Activity tab) are keyed by op id.
 Dismissing a finished card (the Done auto-dismiss after 3 s, or ✕ on a Failed card) only
