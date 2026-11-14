@@ -591,6 +591,29 @@ All new store fields (`Instance.demo`, `Instance.demoPackWarning`,
 optional, so older Engines look as before. Contract: engine#369, its addendum,
 and Axle's answers (comment 6875670232). See `src/store/demoApps.ts`.
 
+### Cross-Engine Move: live Checking progress (idea#498)
+
+During a cross-Engine Move's Checking step, the target Engine sends an ephemeral
+message, never stored, about once a second:
+`{ type: 'idea/progress', opId, step: 'Checking', bytesDone, bytesTotal, checking: { phase, label, stableElapsedMs, stableTargetMs } }`.
+`src/store/moveChecking.ts` keeps the latest message for each `opId`. It accepts the
+message from any Engine, because the target Engine sends it and Engines relay
+ephemeral messages to each other. The desktop and mobile Move feedback
+(`CrossMoveStatus`) adds one line under "Step 2 of 3: Checking the copy on <Engine>".
+The operation card (`OperationProgress`, desktop and mobile) shows the same line in
+place of the stored `stepLabel`:
+
+- `starting`: "Starting on the new Engine"
+- `stabilising`: "Checking it stays up: N of 10 seconds". The count is built from
+  `stableElapsedMs` / `stableTargetMs`, and it can go back to 0 and `starting`.
+- `stable`: "It stayed up for 10 seconds"
+- unknown phase: the Engine's `checking.label`
+
+The line shows only while the op is Pending or Running on the Checking step, and
+for up to 15 s after the last message (`MOVE_CHECKING_STALE_MS`, checked with
+`liveNow`). Engines that don't send it show the plain Checking step as before.
+The stored `stepLabel` / `currentStep` are unchanged.
+
 ### Disk roles in the right pane (Files Disk, idea#132)
 
 A disk can have several roles (`['app', 'backup', 'files']`). The tree row and the disk header
