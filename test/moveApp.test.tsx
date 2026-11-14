@@ -89,6 +89,7 @@ describe('moveApp adapter', () => {
 });
 
 const EXPECTED: Record<string, string> = {
+  TARGET_EXISTS: "An app with this id is already on the target disk or Engine, so it wasn't moved.",
   NOT_FOUND: "Couldn't move nextcloud: it is no longer on this disk. Nothing changed.",
   AMBIGUOUS: "Couldn't move nextcloud: more than one app matches. Nothing was removed: it is still on appdocker02.",
   SOURCE_REMOTE: "Couldn't move nextcloud: its disk is no longer in appdocker02. Nothing changed.",
