@@ -15,6 +15,7 @@ import { receiveEphemeral, resetLive } from '../src/store/live';
 import { resetConnectedEngine } from '../src/store/connectedEngine';
 import {
   DEMO_ERROR_TEXT,
+  DEMO_REMOVE_BUSY_TEXT,
   applyDemoProgress,
   canOfferDemoApps,
   demoLiveBytes,
@@ -119,6 +120,21 @@ describe('CODE: text parsing (answer 4)', () => {
     await waitFor(() => expect(r.getByTestId('demo-apps-cmd-error').textContent).toBe(DEMO_ERROR_TEXT.NO_SPACE));
     expect(r.getByTestId('demo-apps-cmd-error').textContent).not.toContain('NO_SPACE');
   });
+  it('NO_SOURCE on the trace (no Operation) names the app when the Engine is online', async () => {
+    receiveEphemeral({ type: 'idea/hb', v: 1, engineId: 'E1', now: T, bootedAt: T, internet: true, demoLocal: false });
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    const r = render(() => <DemoAppsSection store={() => store()} commandLog={cls} />);
+    fireEvent.click(r.getByTestId('demo-apps-setup'));
+    setCls(log(trace({
+      traceId: 'n', args: { targetDiskId: 'BIG' }, status: 'error', errorCode: 'NO_SOURCE',
+      errorMessage: 'NO_SOURCE: no usable local pack or GitHub asset for nextcloud, and the app bundle has no pack pin',
+    })));
+    await waitFor(() => expect(r.getByTestId('demo-apps-cmd-error').textContent).toBe(
+      "Demo content for Nextcloud isn't available on this Engine yet.",
+    ));
+    expect(r.getByTestId('demo-apps-cmd-error').textContent).not.toContain('NO_SOURCE');
+    expect(r.getByTestId('demo-apps-cmd-error').textContent).not.toMatch(/needs internet/i);
+  });
   it('remove sends and follows removeDemo {instanceIds}', async () => {
     const s = store({ instanceDB: { k1: inst('k1', 'kolibri-1.1', { demo: true }), n1: inst('n1', 'nextcloud-1.0', { demo: true }) } });
     const [cls, setCls] = createSignal<CommandLogState>(log());
@@ -128,6 +144,49 @@ describe('CODE: text parsing (answer 4)', () => {
     expect(sent).toEqual([{ engineId: 'E1', command: 'removeDemo k1 n1' }]);
     setCls(log(trace({ traceId: 'x', command: 'removeDemo', args: { instanceIds: 'k1,n1' }, status: 'error', errorCode: 'NOT_DEMO', errorMessage: 'NOT_DEMO: n1 is not a demo instance' })));
     await waitFor(() => expect(r.getByTestId('demo-apps-cmd-error').textContent).toBe(DEMO_ERROR_TEXT.NOT_DEMO));
+  });
+  it('a failed removeDemo Operation shows the sentence once, in the progress result', async () => {
+    const base = store({ instanceDB: { k1: inst('k1', 'kolibri-1.1', { demo: true, name: 'Kolibri Demo' }) } });
+    const [s, setS] = createSignal(base);
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    const r = render(() => <DemoAppsSection store={s} commandLog={cls} />);
+    fireEvent.click(r.getByTestId('demo-apps-remove'));
+    fireEvent.click(r.getByTestId('demo-apps-remove-confirm'));
+    const failed = {
+      id: 'op-rm', kind: 'removeDemo', args: { instanceIds: 'k1' }, cause: 'console-command',
+      subject: { type: 'engine', id: 'E1' }, engineId: 'E1', status: 'Failed',
+      progressPercent: null, currentStep: null, totalSteps: null, stepLabel: null, startedAt: T, completedAt: T,
+      error: 'REMOVE_FAILED: k1: BUSY',
+      demo: { targetDiskId: 'BIG', apps: [], code: 'REMOVE_FAILED', resultText: null },
+    } as Operation;
+    setS({ ...base, operationDB: { 'op-rm': failed } });
+    setCls(log(trace({
+      traceId: 'x', command: 'removeDemo', args: { instanceIds: 'k1' }, status: 'error',
+      errorCode: 'REMOVE_FAILED', errorMessage: 'REMOVE_FAILED: k1: BUSY',
+    })));
+    await waitFor(() => expect(r.getByTestId('demo-apps-result').textContent).toBe(DEMO_REMOVE_BUSY_TEXT));
+    expect(r.queryByTestId('demo-apps-cmd-error')).toBeNull();
+  });
+  it('a failed setupDemo Operation shows the sentence once, in the progress result', async () => {
+    const base = store();
+    const [s, setS] = createSignal(base);
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    const r = render(() => <DemoAppsSection store={s} commandLog={cls} />);
+    fireEvent.click(r.getByTestId('demo-apps-setup'));
+    const failed = {
+      id: 'op-su', kind: 'setupDemo', args: { targetDiskId: 'BIG' }, cause: 'console-command',
+      subject: { type: 'engine', id: 'E1' }, engineId: 'E1', status: 'Failed',
+      progressPercent: null, currentStep: null, totalSteps: null, stepLabel: null, startedAt: T, completedAt: T,
+      error: 'DOCK_CHANGED: disk ejected',
+      demo: { targetDiskId: 'BIG', apps: [], code: 'DOCK_CHANGED', resultText: null },
+    } as Operation;
+    setS({ ...base, operationDB: { 'op-su': failed } });
+    setCls(log(trace({
+      traceId: 'n', args: { targetDiskId: 'BIG' }, status: 'error',
+      errorCode: 'DOCK_CHANGED', errorMessage: 'DOCK_CHANGED: disk ejected',
+    })));
+    await waitFor(() => expect(r.getByTestId('demo-apps-result').textContent).toBe(DEMO_ERROR_TEXT.DOCK_CHANGED));
+    expect(r.queryByTestId('demo-apps-cmd-error')).toBeNull();
   });
   it('Failed op: Operation.error CODE: text beats the bare Operation.demo.code', () => {
     const op = {

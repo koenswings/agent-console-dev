@@ -649,6 +649,20 @@ body {
   min-width: 0;
 }
 
+.instance-row__title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.instance-row__title .instance-row__name {
+  min-width: 0;
+}
+
+.instance-row__title .demo-badge {
+  flex-shrink: 0;
+}
+
 .instance-row__name {
   font-weight: 600;
   font-size: var(--font-size-base);

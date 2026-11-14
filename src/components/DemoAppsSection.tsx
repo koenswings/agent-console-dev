@@ -28,10 +28,13 @@ import {
   demoElsewhereText,
   demoEnginesElsewhere,
   demoErrorText,
+  demoHeartbeat,
   demoInstancesOnEngine,
   demoOperationResultText,
   demoProgressAppIds,
   demoSetupGate,
+  demoSkippedLines,
+  demoSkippedText,
   demoStepIds,
   demoLiveBytes,
   demoPackWarningText,
@@ -87,6 +90,7 @@ const DemoAppsSection: Component<Props> = (props) => {
   });
 
   const gate = createMemo(() => demoSetupGate({ store: props.store(), engineId: engineId(), live: live(), targetDiskId: targetDiskId() }));
+  const internet = createMemo(() => demoHeartbeat(live(), engineId()).internet);
   const op = createMemo(() => latestDemoOperation(props.store(), engineId()));
   const opActive = () => isDemoOperationActive(op());
   const elsewhere = createMemo(() => demoEnginesElsewhere(props.store(), engineId()));
@@ -95,6 +99,18 @@ const DemoAppsSection: Component<Props> = (props) => {
   const [confirming, setConfirming] = createSignal(false);
   const result = createCommandResult({ commandLog: props.commandLog, longRunning: true });
   const sending = () => { const k = result.state().kind; return k === 'pending' || k === 'sent'; };
+  /**
+   * The latest demo Operation id when we sent this command. A different id
+   * means the Engine accepted it and created an Operation: show the sentence
+   * only in the progress result. Unchanged id (or none) is a refusal: show
+   * command feedback.
+   */
+  const [opIdAtSend, setOpIdAtSend] = createSignal<string | null | undefined>(undefined);
+  const preferOpResult = createMemo(() => {
+    const current = op();
+    const before = opIdAtSend();
+    return current != null && before !== undefined && current.id !== before;
+  });
 
   /** Remote watch: a new demo Operation for that Engine proves it accepted the command. */
   const watchFor = (eid: string, command: string) => {
@@ -109,6 +125,7 @@ const DemoAppsSection: Component<Props> = (props) => {
     const eid = engineId();
     const disk = targetDiskId();
     if (!eid || !disk || gate().reason) return;
+    setOpIdAtSend(latestDemoOperation(props.store(), eid)?.id ?? null);
     result.start(disk, () => setupDemo(eid, disk), {
       command: SETUP_DEMO_COMMAND, argKey: 'targetDiskId', matchMode: 'key', longRunning: true,
       engineId: eid, remote: watchFor(eid, SETUP_DEMO_COMMAND),
@@ -120,6 +137,7 @@ const DemoAppsSection: Component<Props> = (props) => {
     const ids = demoIds();
     setConfirming(false);
     if (!eid || ids.length === 0) return;
+    setOpIdAtSend(latestDemoOperation(props.store(), eid)?.id ?? null);
     result.start(ids.join(','), () => removeDemo(eid, ids), {
       command: REMOVE_DEMO_COMMAND, argKey: 'instanceIds', matchMode: 'key', longRunning: true,
       engineId: eid, remote: watchFor(eid, REMOVE_DEMO_COMMAND),
@@ -225,12 +243,14 @@ const DemoAppsSection: Component<Props> = (props) => {
         </div>
       </Show>
 
-      <CommandFeedback
-        result={result}
-        subject={() => engineName(engineId())}
-        testId="demo-apps-cmd"
-        formatLine={(message, code) => demoErrorText(code && !demoCodeOf(message) ? `${code}: ${message}` : message)}
-      />
+      <Show when={!preferOpResult()}>
+        <CommandFeedback
+          result={result}
+          subject={() => engineName(engineId())}
+          testId="demo-apps-cmd"
+          formatLine={(message, code) => demoErrorText(code && !demoCodeOf(message) ? `${code}: ${message}` : message, internet())}
+        />
+      </Show>
 
       {/* Progress (Operation.demo, step ids from engine#369) */}
       <Show when={op()}>
@@ -259,15 +279,22 @@ const DemoAppsSection: Component<Props> = (props) => {
                 </div>
               )}
             </For>
-            <Show when={demoOperationResultText(o())}>
+            <Show when={demoOperationResultText(o(), internet())}>
               <p
                 class={o().status === 'Failed' ? 'edp-form__error' : 'form-success'}
                 role={o().status === 'Failed' ? 'alert' : 'status'}
                 data-testid="demo-apps-result"
               >
-                {demoOperationResultText(o())}
+                {demoOperationResultText(o(), internet())}
               </p>
             </Show>
+            <For each={demoSkippedLines(o(), internet()).map((l) => l.app)}>
+              {(app) => (
+                <p class="demo-apps__note" role="status" data-testid={`demo-apps-skipped-${app}`}>
+                  {demoSkippedText(app, internet())}
+                </p>
+              )}
+            </For>
           </div>
         )}
       </Show>
