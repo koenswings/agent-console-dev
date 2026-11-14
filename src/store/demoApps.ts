@@ -115,7 +115,8 @@ export const DEMO_ERROR_TEXT: Record<string, string> = {
   HELPER_OUTDATED: 'This Engine needs an update before it can set up demo apps.',
   // Failures
   DOWNLOAD_FAILED: "The demo content couldn't be downloaded. Check the internet connection and press the button again.",
-  CHECKSUM_MISMATCH: "The downloaded demo content didn't match what was expected, so it wasn't used.",
+  CHECKSUM_MISMATCH: "The downloaded demo pack didn't match its checksum. Try again.",
+  INVALID_PACK: "The demo app pack is damaged or incomplete, so it can't be used. Try again, or get a fresh pack.",
   INSTALL_FAILED: "The demo app couldn't be installed. Press the button again to retry.",
   HOOK_MISSING: 'The app on this disk is too old for demo apps. Update the app, then try again.',
   HOOK_FAILED: "The demo content couldn't be added. Press the button again to retry.",

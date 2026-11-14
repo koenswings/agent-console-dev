@@ -98,6 +98,11 @@ describe('named trace args (answer 2)', () => {
     expect(findCommandTrace(log(t), none, 'removeDemo', 'instanceIds', 'k1,n1', 'key')?.traceId).toBe('r');
     expect(findCommandTrace(log(t), none, 'removeDemo', 'instanceIds', 'k1', 'key')).toBeNull();
   });
+  it('removeDemo also matches instanceIds as a comma string (engine#374)', () => {
+    const t = trace({ traceId: 'c', command: 'removeDemo', args: { instanceIds: 'k1,n1' } });
+    expect(findCommandTrace(log(t), none, 'removeDemo', 'instanceIds', 'k1,n1', 'key')?.traceId).toBe('c');
+    expect(findCommandTrace(log(t), none, 'removeDemo', 'instanceIds', 'k1', 'key')).toBeNull();
+  });
   it('pre-execute refusals with positional tokens still match', () => {
     const t = trace({ traceId: 'p', command: 'removeDemo', args: ['k1', 'n1'] as unknown as Record<string, string>, status: 'error', errorMessage: 'Unknown command' });
     expect(findCommandTrace(log(t), none, 'removeDemo', 'instanceIds', 'k1,n1', 'key')?.traceId).toBe('p');
@@ -121,17 +126,21 @@ describe('CODE: text parsing (answer 4)', () => {
     fireEvent.click(r.getByTestId('demo-apps-remove'));
     fireEvent.click(r.getByTestId('demo-apps-remove-confirm'));
     expect(sent).toEqual([{ engineId: 'E1', command: 'removeDemo k1 n1' }]);
-    setCls(log(trace({ traceId: 'x', command: 'removeDemo', args: { instanceIds: ['k1', 'n1'] } as unknown as Record<string, string>, status: 'error', errorCode: 'NOT_DEMO', errorMessage: 'NOT_DEMO: n1 is not a demo instance' })));
+    setCls(log(trace({ traceId: 'x', command: 'removeDemo', args: { instanceIds: 'k1,n1' }, status: 'error', errorCode: 'NOT_DEMO', errorMessage: 'NOT_DEMO: n1 is not a demo instance' })));
     await waitFor(() => expect(r.getByTestId('demo-apps-cmd-error').textContent).toBe(DEMO_ERROR_TEXT.NOT_DEMO));
   });
   it('Failed op: Operation.error CODE: text beats the bare Operation.demo.code', () => {
     const op = {
       id: 'o', kind: 'setupDemo', args: { targetDiskId: 'BIG', apps: 'kolibri,nextcloud' }, cause: 'console-command', subject: { type: 'engine', id: 'E1' },
       engineId: 'E1', status: 'Failed', progressPercent: null, currentStep: null, totalSteps: null, stepLabel: null, startedAt: T, completedAt: T,
-      error: 'CHECKSUM_MISMATCH: CREDITS.txt does not match', demo: { targetDiskId: 'BIG', apps: [], code: 'CHECKSUM_MISMATCH', resultText: 'x' },
+      error: 'CHECKSUM_MISMATCH: tar sha256 is abc, pin says def', demo: { targetDiskId: 'BIG', apps: [], code: 'CHECKSUM_MISMATCH', resultText: 'x' },
     } as Operation;
     expect(demoOperationResultText(op)).toBe(DEMO_ERROR_TEXT.CHECKSUM_MISMATCH);
     expect(demoOperationResultText({ ...op, error: null })).toBe(DEMO_ERROR_TEXT.CHECKSUM_MISMATCH);
+    const invalid = { ...op, error: 'INVALID_PACK: CREDITS.txt is empty', demo: { ...op.demo!, code: 'INVALID_PACK' } };
+    expect(demoOperationResultText(invalid)).toBe(DEMO_ERROR_TEXT.INVALID_PACK);
+    expect(demoOperationResultText({ ...invalid, error: null })).toBe(DEMO_ERROR_TEXT.INVALID_PACK);
+    expect(DEMO_ERROR_TEXT.INVALID_PACK).not.toBe(DEMO_ERROR_TEXT.CHECKSUM_MISMATCH);
   });
 });
 

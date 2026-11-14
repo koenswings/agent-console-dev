@@ -520,7 +520,10 @@ with the connected Engine first.
   `download`, `verify`, `seed`, `start`, `ready`, `classwork`; removal `stop`,
   `remove`), with plain wording. Every engine#369 §9 code (refusals, failures,
   `DEMO_READY`, `DEMO_REMOVED`) has a plain sentence; `REMOVE_FAILED` adds the
-  inner removeInstance reason. Unknown codes go through `plainEngineText`.
+  inner removeInstance reason. `CHECKSUM_MISMATCH` is only a sha mismatch of a
+  downloaded pack; `INVALID_PACK` is a bad pack.json, a missing or empty CREDITS
+  file, or an unsafe tar member (Steve, 14 Nov 2026, for engine#374). Unknown
+  codes go through `plainEngineText`.
 - **Network:** when another Engine's docked disks hold demo instances, a note
   says "IDEA demo apps already run on <engine>." It never blocks (engine#369 Q2).
 - **DEMO badge:** app cards and the mobile list show a DEMO badge next to the
@@ -539,7 +542,8 @@ with the connected Engine first.
   the Engine never downloads on its own.
 - **Results:** the Console follows the command trace by its named args:
   setupDemo `{ targetDiskId, apps }` (`apps` absent or null = both) and
-  removeDemo `{ instanceIds }` (a string array, matched as the whole list).
+  removeDemo `{ instanceIds }` (a comma-separated string, matched as the
+  whole list; an array of the same ids is also accepted).
   The trace `errorCode` and `Operation.demo.code` are bare codes; the trace
   `errorMessage` and `Operation.error` are `CODE: text`. Only the plain sentence
   is shown, never the code. `Operation.args.apps` is a comma string and is not

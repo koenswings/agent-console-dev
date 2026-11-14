@@ -218,7 +218,7 @@ describe('step and error mapping (engine#369 §3, §9)', () => {
   const ALL_CODES = [
     'UNKNOWN_APP', 'NOT_FOUND', 'NOT_DOCKED', 'NOT_LOCAL', 'SYSTEM_DISK', 'NOT_APP_DISK', 'DEMO_EXISTS', 'DEMO_AMBIGUOUS',
     'NO_SOURCE', 'PACK_OUTDATED', 'NO_SPACE', 'BUSY', 'NOT_DEMO', 'HELPER_OUTDATED',
-    'DOWNLOAD_FAILED', 'CHECKSUM_MISMATCH', 'INSTALL_FAILED', 'HOOK_MISSING', 'HOOK_FAILED', 'START_FAILED', 'NOT_READY',
+    'DOWNLOAD_FAILED', 'CHECKSUM_MISMATCH', 'INVALID_PACK', 'INSTALL_FAILED', 'HOOK_MISSING', 'HOOK_FAILED', 'START_FAILED', 'NOT_READY',
     'DOCK_CHANGED', 'INTERRUPTED', 'REMOVE_FAILED', 'DEMO_READY', 'DEMO_REMOVED',
   ];
   it('every code has plain wording, with and without text', () => {
@@ -228,6 +228,15 @@ describe('step and error mapping (engine#369 §3, §9)', () => {
       expect(demoErrorText(`${c}: some engine text`)).toBe(DEMO_ERROR_TEXT[c]);
       expect(demoErrorText(c)).not.toMatch(/[A-Z]+_[A-Z]+/);
     }
+  });
+  it('CHECKSUM_MISMATCH is a sha mismatch; INVALID_PACK is a damaged pack', () => {
+    expect(demoErrorText('CHECKSUM_MISMATCH: tar sha256 is abc, pin says def')).toBe(
+      "The downloaded demo pack didn't match its checksum. Try again.",
+    );
+    expect(demoErrorText('INVALID_PACK: CREDITS.txt is empty')).toBe(
+      "The demo app pack is damaged or incomplete, so it can't be used. Try again, or get a fresh pack.",
+    );
+    expect(DEMO_ERROR_TEXT.CHECKSUM_MISMATCH).not.toBe(DEMO_ERROR_TEXT.INVALID_PACK);
   });
   it('REMOVE_FAILED adds the inner removeInstance reason', () => {
     expect(demoErrorText('REMOVE_FAILED: k1: COMPOSE_DOWN_FAILED')).toContain("couldn't be shut down");
