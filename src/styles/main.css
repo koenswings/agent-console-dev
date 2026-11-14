@@ -4059,3 +4059,9 @@ body {
 .demo-apps__step--failed .demo-apps__step-status {
   color: var(--colour-error);
 }
+
+.demo-warning {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--colour-pauzed);
+}

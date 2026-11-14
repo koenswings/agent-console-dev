@@ -530,9 +530,30 @@ with the connected Engine first.
   A), and the Console never writes instance records, so the badge stays after
   an update.
 
-All new store fields (`Instance.demo`, `Operation.demo`, the `setupDemo` and
-`removeDemo` kinds) and hb fields are optional, so older Engines look as
-before. See `src/store/demoApps.ts`.
+- **Outdated demo content:** `Instance.demoPackWarning`
+  (`{ code: 'PACK_OUTDATED', packVersion, minVersion }`) is set by `updateApp`
+  when the demo pack is older than the new app version needs, and cleared by a
+  successful `setupDemo` verify. The card, the mobile row and the Demo apps
+  section then say "Demo content is out of date (pack v3, needs v4). Press
+  Check and refresh demo apps in Settings → Demo apps." It's a warning only;
+  the Engine never downloads on its own.
+- **Results:** the Console follows the command trace by its named args:
+  setupDemo `{ targetDiskId, apps }` (`apps` absent or null = both) and
+  removeDemo `{ instanceIds }` (a string array, matched as the whole list).
+  The trace `errorCode` and `Operation.demo.code` are bare codes; the trace
+  `errorMessage` and `Operation.error` are `CODE: text`. Only the plain sentence
+  is shown, never the code. `Operation.args.apps` is a comma string and is not
+  read; the per-app list comes from `Operation.demo.apps`.
+- **Live download bytes:** while the `download` step runs, an ephemeral
+  `{ type: 'idea/progress', opId, step, bytesDone, bytesTotal }` (when the
+  Engine sends it) shows "X of Y MB". Without it the step shows `bytesTotal` only.
+- **Gate:** the `demoApps` capability with `capabilitiesBootedAt === lastBooted`,
+  never `Engine.version` (that is the system disk's META version).
+
+All new store fields (`Instance.demo`, `Instance.demoPackWarning`,
+`Operation.demo`, the `setupDemo` and `removeDemo` kinds) and hb fields are
+optional, so older Engines look as before. Contract: engine#369, its addendum,
+and Axle's answers (comment 6875670232). See `src/store/demoApps.ts`.
 
 ### Disk roles in the right pane (Files Disk, idea#132)
 

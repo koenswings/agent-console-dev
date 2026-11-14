@@ -2,7 +2,7 @@ import { Show, type Component } from 'solid-js';
 import type { Instance, App, Engine } from '../types/store';
 import { appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
-import { isDemoInstance } from '../store/demoApps';
+import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
 
 interface AppCardProps {
   instance: () => Instance | undefined;
@@ -66,6 +66,11 @@ const AppCard: Component<AppCardProps> = (props) => {
         <span class="app-card__engine" data-testid={`app-engine-${props.instance()?.id ?? ''}`}>
           on {engineName()}
         </span>
+      </Show>
+      <Show when={demoPackWarningText(props.instance())}>
+        <p class="demo-warning" role="status" data-testid={`demo-pack-warning-${props.instance()?.id ?? ''}`}>
+          {demoPackWarningText(props.instance())}
+        </p>
       </Show>
       {props.app()?.description && (
         <p class="app-card__description">{props.app()!.description}</p>

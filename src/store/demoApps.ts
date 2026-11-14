@@ -10,7 +10,15 @@
  *   - `OperationKind` 'setupDemo' | 'removeDemo' with `Operation.demo` progress
  *     and stable step ids (§3);
  *   - optional `internet` / `demoLocal` on the ephemeral `idea/hb` (§4);
- *   - error codes as `CODE: text` (§9).
+ *   - error codes (§9): Operation.error and the trace errorMessage are
+ *     `CODE: text`, the trace errorCode and Operation.demo.code are the bare
+ *     code (answer 4, comment 6875670232);
+ *   - trace args `{ targetDiskId, apps }` and `{ instanceIds }` (answer 2);
+ *   - `Instance.demoPackWarning` (answer 1) and, once the Engine sends it, the
+ *     ephemeral `idea/progress` download bytes (answer 6).
+ *
+ * The gate is the `demoApps` capability with capabilitiesBootedAt ===
+ * lastBooted, never Engine.version (the system disk META version).
  *
  * Permissions (Koen, idea#235, 14 Nov 2026 10:15): only operators may set up
  * and remove demo apps. The Engine has no role model, so the Console enforces
@@ -20,6 +28,7 @@
  * the Console mirrors it to grey the button out early, and only warns
  * (never blocks) when another Engine already runs demo apps (Q2).
  */
+import { createSignal } from 'solid-js';
 import { engineHasCapability, type EngineCapability } from './commands';
 import { plainEngineText } from './plainError';
 import { REMOVE_REFUSALS, removeRefusalCode } from './removeInstance';
@@ -29,6 +38,7 @@ import type {
   DemoAppProgress,
   DemoStepId,
   DemoStepStatus,
+  DemoPackWarning,
   Disk,
   Engine,
   Instance,
@@ -339,4 +349,69 @@ export const demoOperationResultText = (op: Operation | null | undefined): strin
   // A Failed op's code is the most specific: an app-level code beats the generic one.
   const appCode = (op.demo?.apps ?? []).map((a) => a.code).find((c) => c && c !== 'DEMO_READY' && c !== 'DEMO_REMOVED');
   return demoErrorText(op.error ?? appCode ?? raw);
+};
+
+// ── Outdated demo pack (Instance.demoPackWarning) ───────────────────────────
+
+const isPackWarning = (w: unknown): w is DemoPackWarning => {
+  const v = w as Partial<DemoPackWarning> | null | undefined;
+  return !!v && v.code === 'PACK_OUTDATED'
+    && typeof v.packVersion === 'number' && Number.isFinite(v.packVersion)
+    && typeof v.minVersion === 'number' && Number.isFinite(v.minVersion);
+};
+
+/**
+ * Plain warning for a demo instance whose pack is older than its app version
+ * needs, or null. Only for `demo: true` instances with a well-formed warning.
+ */
+export const demoPackWarningText = (inst: Pick<Instance, 'demo' | 'demoPackWarning'> | null | undefined): string | null => {
+  if (!isDemoInstance(inst) || !isPackWarning(inst?.demoPackWarning)) return null;
+  const w = inst!.demoPackWarning!;
+  return `Demo content is out of date (pack v${w.packVersion}, needs v${w.minVersion}). Press ${DEMO_SETUP_LABEL.refresh} in Settings → Demo apps.`;
+};
+
+// ── Live download bytes (ephemeral idea/progress, engine#369 §3) ────────────
+// Not on Engine main yet (answer 6). Until it is sent, the step shows bytesTotal only.
+
+export const DEMO_PROGRESS_TYPE = 'idea/progress';
+
+export interface DemoLiveBytes { step: string; bytesDone: number | null; bytesTotal: number | null; receivedAt: number }
+
+const finiteOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+
+/** Pure: the map (by opId) after one ephemeral message; unchanged unless it is a valid idea/progress. */
+export const applyDemoProgress = (
+  state: Record<string, DemoLiveBytes>, message: unknown, receivedAt: number,
+): Record<string, DemoLiveBytes> => {
+  const m = message as Record<string, unknown> | null;
+  if (!m || typeof m !== 'object' || m.type !== DEMO_PROGRESS_TYPE) return state;
+  if (typeof m.opId !== 'string' || !m.opId || typeof m.step !== 'string') return state;
+  return { ...state, [m.opId]: { step: m.step, bytesDone: finiteOrNull(m.bytesDone), bytesTotal: finiteOrNull(m.bytesTotal), receivedAt } };
+};
+
+const [demoLiveBytes, setDemoLiveBytes] = createSignal<Record<string, DemoLiveBytes>>({});
+export { demoLiveBytes };
+/** Fed from live.ts receiveEphemeral. */
+export const receiveDemoProgress = (message: unknown, receivedAt: number = Date.now()): void => {
+  if ((message as { type?: unknown } | null)?.type !== DEMO_PROGRESS_TYPE) return;
+  setDemoLiveBytes((s) => applyDemoProgress(s, message, receivedAt));
+};
+export const resetDemoProgress = (): void => { setDemoLiveBytes({}); };
+
+/**
+ * Label for one step: demoStepLabel, plus live "X of Y MB" while the download
+ * step runs and an idea/progress for this op and step has arrived.
+ */
+export const demoStepLiveLabel = (
+  step: { id: DemoStepId | string; status?: DemoStepStatus; bytesTotal?: number | null },
+  live: DemoLiveBytes | null | undefined,
+): string => {
+  if (step.id !== 'download' || step.status !== 'running' || !live || live.step !== 'download' || live.bytesDone == null) {
+    return demoStepLabel(step);
+  }
+  const total = live.bytesTotal ?? step.bytesTotal ?? null;
+  const done = Math.round(live.bytesDone / MB);
+  return total && total > 0
+    ? `${DEMO_STEP_TEXT.download} (${done} of ${Math.round(total / MB)} MB)`
+    : `${DEMO_STEP_TEXT.download} (${done} MB)`;
 };

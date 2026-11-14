@@ -17,7 +17,7 @@ import { getActiveOpsForInstance } from '../store/operations';
 import { live, liveNow, metricsFor } from '../store/live';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
-import { isDemoInstance } from '../store/demoApps';
+import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
 import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
@@ -325,6 +325,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               </div>
 
               <div class="mobile-app-card__status">{statusText(i())}</div>
+              <Show when={demoPackWarningText(i())}>
+                <p class="demo-warning" role="status" data-testid={`mobile-demo-pack-warning-${id}`}>{demoPackWarningText(i())}</p>
+              </Show>
 
               <CommandFeedback
                 result={cmdResult}

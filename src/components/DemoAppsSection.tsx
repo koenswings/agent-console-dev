@@ -33,7 +33,9 @@ import {
   demoProgressAppIds,
   demoSetupGate,
   demoStepIds,
-  demoStepLabel,
+  demoLiveBytes,
+  demoPackWarningText,
+  demoStepLiveLabel,
   demoTargetDisks,
   isDemoOperationActive,
   latestDemoOperation,
@@ -108,7 +110,7 @@ const DemoAppsSection: Component<Props> = (props) => {
     const disk = targetDiskId();
     if (!eid || !disk || gate().reason) return;
     result.start(disk, () => setupDemo(eid, disk), {
-      command: SETUP_DEMO_COMMAND, argKey: 'targetDiskId', matchMode: 'includes', longRunning: true,
+      command: SETUP_DEMO_COMMAND, argKey: 'targetDiskId', matchMode: 'key', longRunning: true,
       engineId: eid, remote: watchFor(eid, SETUP_DEMO_COMMAND),
     });
   };
@@ -118,8 +120,8 @@ const DemoAppsSection: Component<Props> = (props) => {
     const ids = demoIds();
     setConfirming(false);
     if (!eid || ids.length === 0) return;
-    result.start(ids[0], () => removeDemo(eid, ids), {
-      command: REMOVE_DEMO_COMMAND, argKey: 'instanceId', matchMode: 'includes', longRunning: true,
+    result.start(ids.join(','), () => removeDemo(eid, ids), {
+      command: REMOVE_DEMO_COMMAND, argKey: 'instanceIds', matchMode: 'key', longRunning: true,
       engineId: eid, remote: watchFor(eid, REMOVE_DEMO_COMMAND),
     });
   };
@@ -187,6 +189,18 @@ const DemoAppsSection: Component<Props> = (props) => {
       <Show when={demoIds().length > 0}>
         <div class="demo-apps__block">
           <p class="form-field__hint" data-testid="demo-apps-list">On this Engine: {demoNames().join(', ')}</p>
+          <For each={demoIds()}>
+            {(id) => {
+              const warning = () => demoPackWarningText(props.store()?.instanceDB?.[id]);
+              return (
+                <Show when={warning()}>
+                  <p class="demo-warning" role="status" data-testid={`demo-apps-pack-warning-${id}`}>
+                    {props.store()?.instanceDB?.[id]?.name ?? id}: {warning()}
+                  </p>
+                </Show>
+              );
+            }}
+          </For>
           <Show
             when={confirming()}
             fallback={
@@ -235,7 +249,7 @@ const DemoAppsSection: Component<Props> = (props) => {
                             class={`demo-apps__step demo-apps__step--${step()?.status ?? 'pending'}`}
                             data-testid={`demo-apps-step-${app}-${stepId}`}
                           >
-                            <span>{demoStepLabel(step() ?? { id: stepId })}</span>
+                            <span>{demoStepLiveLabel(step() ?? { id: stepId }, demoLiveBytes()[o().id])}</span>
                             <span class="demo-apps__step-status">{DEMO_STEP_STATUS_TEXT[step()?.status ?? 'pending']}</span>
                           </li>
                         );

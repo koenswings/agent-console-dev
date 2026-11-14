@@ -35,7 +35,7 @@ export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
 /** Timeout message for the Files actions (files-disk.md §4). */
 export const FILES_TIMEOUT_MESSAGE = "The Engine didn't respond. It may not support Files Disks yet.";
 
-export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId' | 'instanceId' | 'backupDiskId' | 'targetDiskId';
+export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId' | 'instanceId' | 'backupDiskId' | 'targetDiskId' | 'instanceIds';
 
 export type TraceOutcome =
   | { kind: 'ok' }
@@ -95,7 +95,14 @@ export const traceMatchesArg = (
 ): boolean => {
   if (mode === 'key') {
     const args = parsedArgs(trace);
-    if (Array.isArray(args)) return args.some((a) => String(a) === argValue);
+    // Pre-execute refusals: positional tokens. An instanceIds list (a,b) needs every id.
+    if (Array.isArray(args)) {
+      const wanted = argKey === 'instanceIds' ? argValue.split(',') : [argValue];
+      return wanted.every((v) => args.some((a) => String(a) === v));
+    }
+    // A named list arg (removeDemo `instanceIds`, engine#369): the same ids in order.
+    const named = args && typeof args === 'object' ? (args as Record<string, unknown>)[argKey] : undefined;
+    if (Array.isArray(named)) return named.map(String).join(',') === argValue;
     return traceArg(trace, argKey) === argValue;
   }
   const raw = typeof trace.args === 'string' ? trace.args : JSON.stringify(trace.args ?? '');

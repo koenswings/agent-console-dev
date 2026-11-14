@@ -471,6 +471,22 @@ export interface Instance {
    * flag, never from the name. Absent on older Engines.
    */
   demo?: true;
+  /**
+   * engine#369 Pixel Q1 answer (comment 6875670232): set by updateApp when the
+   * on-disk pack.json packVersion is below the new bundle's demo.pack.minVersion;
+   * cleared when a setupDemo verify succeeds. A warning only, no auto-download
+   * (addendum decision 5). Absent or null = nothing to warn about.
+   */
+  demoPackWarning?: DemoPackWarning | null;
+}
+
+/** engine#369 comment 6875670232: exact shape of Instance.demoPackWarning. */
+export interface DemoPackWarning {
+  code: 'PACK_OUTDATED';
+  /** On-disk pack.json packVersion. */
+  packVersion: number;
+  /** The new bundle's app.yaml demo.pack.minVersion. */
+  minVersion: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -574,6 +590,7 @@ export type OperationID = string;
 export interface Operation {
   id: OperationID;
   kind: OperationKind;
+  /** Every value is a string; setupDemo's `apps` is a comma string (engine#369 answer 3). */
   args: Record<string, string>;
   /** What triggered this operation. */
   cause: OperationCause;
