@@ -38,8 +38,10 @@ export const FILES_TIMEOUT_MESSAGE = "The Engine didn't respond. It may not supp
 export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId' | 'instanceId' | 'backupDiskId' | 'targetDiskId' | 'instanceIds';
 
 export type TraceOutcome =
-  | { kind: 'ok' }
-  | { kind: 'error'; message: string; code?: string | null };
+  | { kind: 'ok'; code?: string | null }
+  | { kind: 'error'; message: string; code?: string | null }
+  /** Finished, but not what was asked (e.g. a Done moveApp that did not move the app, engine#388). */
+  | { kind: 'warning'; message: string; code?: string | null };
 
 const ANSI_RE = /\u001b\[[0-9;]*m/g;
 const clean = (s: string): string => s.replace(ANSI_RE, '').trim();
@@ -146,7 +148,9 @@ export const traceOutcome = (trace: CommandTrace, command: string): TraceOutcome
     return { kind: 'error', message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed`, ...(code ? { code } : {}) };
   }
   if (lastErrorLog) return { kind: 'error', message: lastErrorLog };
-  return { kind: 'ok' };
+  // An ok trace may still carry a result code (moveApp SOURCE_CHANGED, engine#388): keep it for `settle`.
+  const code = traceErrorCode(trace);
+  return code ? { kind: 'ok', code } : { kind: 'ok' };
 };
 
 /**
@@ -170,6 +174,8 @@ export type CommandResultState =
   | { kind: 'pending' }
   | { kind: 'success' }
   | { kind: 'error'; message: string; code?: string | null }
+  /** Finished, but not as asked: a plain sentence, shown as a warning (not red, not success). */
+  | { kind: 'warning'; message: string; code?: string | null }
   | { kind: 'timeout' }
   /** Cross-engine: sent to another Engine, waiting for confirmation (neutral, not red). */
   | { kind: 'sent'; engine: string };
@@ -188,6 +194,11 @@ export interface CommandResultTarget {
    * from the target's log (if loaded) or the store, red after its timeout.
    */
   remote?: RemoteWatch | null;
+  /**
+   * Optional: re-read a finished outcome against the store before it is shown (moveApp:
+   * an ok trace or Done op that did not move the app becomes a warning, engine#388).
+   */
+  settle?: (o: TraceOutcome) => TraceOutcome;
 }
 
 export interface CommandResultOptions {
@@ -225,6 +236,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     engineId: string | null;
     remote: RemoteWatch | null;
     remoteBaseline: Set<string>;
+    settle: ((o: TraceOutcome) => TraceOutcome) | null;
   };
   const [pending, setPending] = createSignal<Pending | null>(null);
   const [state, setState] = createSignal<CommandResultState>({ kind: 'idle' });
@@ -253,11 +265,19 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     }
     const c = p.remote.check();
     if (c === 'ok') return { kind: 'ok' };
-    if (c) return { kind: 'error', message: c.error };
+    if (c && 'warning' in c) return { kind: 'warning', message: c.warning, ...(c.code ? { code: c.code } : {}) };
+    if (c) return { kind: 'error', message: c.error, ...(c.code ? { code: c.code } : {}) };
     return null;
   });
 
-  const finish = (o: TraceOutcome) => {
+  const finish = (raw: TraceOutcome) => {
+    const o = pending()?.settle?.(raw) ?? raw;
+    if (o.kind === 'warning') {
+      clearTimer();
+      setPending(null);
+      setState(o.code ? { kind: 'warning', message: o.message, code: o.code } : { kind: 'warning', message: o.message });
+      return;
+    }
     if (o.kind === 'error') {
       clearTimer();
       setPending(null);
@@ -304,6 +324,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
       engineId: target?.engineId ?? null,
       remote,
       remoteBaseline: remote?.log ? traceIdSnapshot(remote.log()) : new Set(),
+      settle: target?.settle ?? null,
     });
     if (remote) {
       // Neutral until confirmed; red only on a real error or the long timeout.

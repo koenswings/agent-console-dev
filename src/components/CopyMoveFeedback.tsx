@@ -6,7 +6,9 @@
  *
  * "Sent to <engine>, waiting for confirmation…" shows only until the Engine's
  * moveApp op is in the store; from then on the step line replaces it. A failed
- * op still shows the CommandFeedback error line.
+ * op still shows the CommandFeedback error line. A Done move that did not move the
+ * app (SOURCE_CHANGED, engine#388) is a warning: the outcome line says it once the
+ * op is visible, else the CommandFeedback warning line does.
  */
 import { Show, createMemo, type Accessor, type Component } from 'solid-js';
 import type { Store } from '../types/store';
@@ -28,7 +30,7 @@ const CopyMoveFeedback: Component<Props> = (props) => {
   });
   const resultShown = createMemo(() => {
     const k = props.ctl.result.state().kind;
-    return (k === 'sent' && !opSeen()) || k === 'error' || k === 'timeout';
+    return ((k === 'sent' || k === 'warning') && !opSeen()) || k === 'error' || k === 'timeout';
   });
   const visible = createMemo(() => resultShown() || !!view.step() || !!view.outcome());
   return (
@@ -40,6 +42,7 @@ const CopyMoveFeedback: Component<Props> = (props) => {
           testId="copy-move-feedback"
           formatLine={props.ctl.formatLine}
           hideSent={opSeen}
+          hideWarning={opSeen}
         />
         <CrossMoveLines view={view} />
       </div>

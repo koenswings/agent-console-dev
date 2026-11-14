@@ -18,7 +18,7 @@ import { createCommandResult, type CommandResult } from './commandResult';
 import { confirmNewOperation, instanceStoredOn, newInstanceOnDisk, remoteWatchFor } from './remoteConfirm';
 import { copyApp, moveApp } from './commands';
 import { ENGINE_CLOCK_SLACK_MS } from './remoteConfirm';
-import { crossMoveSupported, latestMoveOp, moveConfirmText, moveErrorLine, moveInfo } from './moveApp';
+import { crossMoveSupported, moveConfirmText, moveErrorLineFor, settleMoveOutcome } from './moveApp';
 
 export interface PendingMove {
   data: DragAppData;
@@ -107,9 +107,12 @@ export const createDragCopyMove = (
         })),
       });
     } else {
+      const since = Date.now() - ENGINE_CLOCK_SLACK_MS;
       result.start(instanceName, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'moveApp',
         engineId,
+        // engine#388: a Done op / ok trace is green only when the app moved (not SOURCE_CHANGED).
+        settle: settleMoveOutcome(store, instanceId, since, () => ({ app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname })),
         remote: remoteWatchFor(store, engineId, 'moveApp', confirmNewOperation(store, 'moveApp', instanceId, {
           engineId,
           args: { targetDiskId },
@@ -123,8 +126,8 @@ export const createDragCopyMove = (
 
   const formatLine = (message: string, code: string | null): string | null => {
     const m = crossMove();
-    const opCode = m ? moveInfo(latestMoveOp(store(), m.instanceId, m.since))?.code ?? null : null;
-    return moveErrorLine(message, code ?? opCode, { app: subject(), sourceEngine: sourceEngine(), targetEngine: m?.targetEngine ?? 'the other Engine' });
+    const ctx = { app: subject(), sourceEngine: sourceEngine(), targetEngine: m?.targetEngine ?? 'the other Engine' };
+    return m ? moveErrorLineFor(store(), m.instanceId, m.since, message, code, ctx) : moveErrorLineFor(null, '', 0, message, code, ctx);
   };
 
   return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine, formatLine };

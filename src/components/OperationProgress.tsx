@@ -2,6 +2,8 @@
  * OperationProgress — shows active operations from operationDB with lifecycle:
  * - Pending / Running: shown with progress bar
  * - Done: shown briefly with ✓, auto-dismissed after 3s
+ * - Done moveApp that did not move the app (SOURCE_CHANGED, engine#388): amber
+ *   "Not moved" with its sentence, kept like a Failed card until dismissed
  * - Failed: shown with error, dismissed manually
  * Dismissing a card only hides it in this browser (store/dismissedOps.ts); only
  * the Cancel button on a Pending / Running op sends cancelOperation (idea#498).
@@ -21,6 +23,7 @@ import { demoErrorText, demoHeartbeat } from '../store/demoApps';
 import { live, liveNow } from '../store/live';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 import { dismissOp, isCancellable, isOpDismissed } from '../store/dismissedOps';
+import { isMoveDoneNotMoved, moveOpOutcome } from '../store/moveApp';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,7 +93,10 @@ interface OpCardProps {
 }
 
 const OpCard: Component<OpCardProps> = (props) => {
-  const isDone   = () => props.op.status === 'Done';
+  // engine#388: a moveApp's own outcome (never op Done alone): SOURCE_CHANGED is Done but not moved.
+  const moveView = createMemo(() => (props.op.kind === 'moveApp' ? moveOpOutcome(props.store, props.op) : null));
+  const notMoved = () => props.op.status === 'Done' && moveView()?.moved === false;
+  const isDone   = () => props.op.status === 'Done' && !notMoved();
   const isFailed = () => props.op.status === 'Failed';
   const pct      = () => props.op.progressPercent ?? 0;
 
@@ -124,7 +130,7 @@ const OpCard: Component<OpCardProps> = (props) => {
 
   return (
     <div
-      class={`operation-card ${isFailed() ? 'operation-card--failed' : ''} ${isDone() ? 'operation-card--done' : ''}`}
+      class={`operation-card ${isFailed() ? 'operation-card--failed' : ''} ${isDone() ? 'operation-card--done' : ''} ${notMoved() ? 'operation-card--warning' : ''}`}
       data-testid={`operation-card-${props.op.id}`}
       data-op-kind={props.op.kind}
       data-op-status={props.op.status}
@@ -134,7 +140,7 @@ const OpCard: Component<OpCardProps> = (props) => {
         <span class="operation-card__kind">{KIND_LABEL[props.op.kind] ?? props.op.kind}</span>
         <div class="operation-card__top-right">
           <span class="operation-card__status">
-            {isDone() ? '✓ Done' : props.op.status}
+            {isDone() ? '✓ Done' : notMoved() ? '⚠ Not moved' : props.op.status}
           </span>
           <button
             class="operation-card__log-toggle"
@@ -146,7 +152,7 @@ const OpCard: Component<OpCardProps> = (props) => {
           <Show when={isActive()}>
             <button class="operation-card__cancel" data-testid={`operation-cancel-${props.op.id}`} onClick={props.onCancel} title="Cancel operation" aria-label="Cancel">✕</button>
           </Show>
-          <Show when={isFailed()}>
+          <Show when={isFailed() || notMoved()}>
             <button class="operation-card__dismiss" data-testid={`operation-dismiss-${props.op.id}`} onClick={props.onDismiss} title="Dismiss" aria-label="Dismiss">✕</button>
           </Show>
         </div>
@@ -160,7 +166,7 @@ const OpCard: Component<OpCardProps> = (props) => {
         {(label) => <div class="operation-card__step-label" data-testid={`operation-step-label-${props.op.id}`}>{label()}</div>}
       </Show>
 
-      <Show when={!isFailed()}>
+      <Show when={!isFailed() && !notMoved()}>
         <StepProgressBar
           currentStep={props.op.currentStep}
           totalSteps={props.op.totalSteps}
@@ -169,8 +175,14 @@ const OpCard: Component<OpCardProps> = (props) => {
         />
       </Show>
 
+      <Show when={notMoved() && moveView()}>
+        {(o) => <div class="operation-card__warning" role="alert" data-testid={`operation-warning-${props.op.id}`}>{o().text}</div>}
+      </Show>
+
       <Show when={isFailed() && props.op.error}>
-        <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo' ? demoErrorText(props.op.error, demoHeartbeat(live(), props.op.engineId).internet) : plainEngineText(props.op.error)}</div>
+        <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo'
+          ? demoErrorText(props.op.error, demoHeartbeat(live(), props.op.engineId).internet)
+          : (moveView()?.text ?? plainEngineText(props.op.error))}</div>
       </Show>
 
       <Show when={logExpanded()}>
@@ -251,7 +263,9 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
           op.status === 'Running' ||
           // Done: only show if completed within the last 5s — prevents stale ops from flashing on load
           (op.status === 'Done' && op.completedAt != null && now - op.completedAt < 5000) ||
-          op.status === 'Failed')
+          op.status === 'Failed' ||
+          // engine#388: a Done move that did not move the app stays like a Failed card
+          (op.kind === 'moveApp' && isMoveDoneNotMoved(props.store(), op)))
     );
   });
 
@@ -273,7 +287,7 @@ const OperationProgress: Component<OperationProgressProps> = (props) => {
                   op={op()}
                   store={props.store()}
                   commandLogStore={props.commandLogStore}
-                  onDismiss={() => dismissOp(id, opOf(id)?.status !== 'Done')}
+                  onDismiss={() => { const o = opOf(id); dismissOp(id, o?.status !== 'Done' || isMoveDoneNotMoved(props.store(), o ?? null)); }}
                   onCancel={() => { const o = opOf(id); if (o) cancel(o); }}
                 />
               )}
