@@ -127,6 +127,28 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     expect(screen.getByTestId('confirm-make-backup-disk')).not.toBeDisabled();
   });
 
+  it('capability on: confirm also shows how much App data this Pi holds (engine#441)', () => {
+    const store = withFlag({
+      ...MOCK_STORE,
+      instanceDB: {
+        ...MOCK_STORE.instanceDB,
+        [MOCK_IDS.INST_KOLIBRI_ID]: {
+          ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
+          dataBytes: 2_000_000_000,
+        },
+        [MOCK_IDS.INST_CHANNEL_BUILDER_ID]: {
+          ...MOCK_STORE.instanceDB[MOCK_IDS.INST_CHANNEL_BUILDER_ID],
+          dataBytes: null,
+        },
+      },
+    }, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
+    renderPanel(store);
+    fireEvent.click(screen.getByTestId('make-backup-disk'));
+    expect(screen.getByTestId('backup-sizing')).toHaveTextContent(
+      "This Pi's Apps use about 2.0 GB (1 App not measured yet)",
+    );
+  });
+
   it('capability on: confirm sends makeBackupDisk <diskId> with no summary or typed label (Erase skipped)', () => {
     const store = withFlag(MOCK_STORE, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
     renderPanel(store);

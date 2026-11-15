@@ -898,7 +898,8 @@ When the flag is fresh:
 
 - **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” opens a
   confirm that names the disk and says nothing is erased and that backups run
-  every day at 02:30 for every App on this Pi.
+  every day at 02:30 for every App on this Pi. The backup-sizing line
+  (engine#441) is shown on this confirm, as on the older createBackupDisk form.
   Confirm sends `makeBackupDisk <diskId>`. Progress shows Check and Create.
 - **Blank stick / unformatted candidate** (`UnformattedDiskView`): “Make a Backup
   Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase

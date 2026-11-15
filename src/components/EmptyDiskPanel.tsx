@@ -436,6 +436,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         <Show when={!actionDone() && panel() === 'backup' && canMakeBackupDisk()}>
           <div class="edp-form" data-testid="make-backup-disk-confirm">
             <h3 class="disk-section__title">Make {props.disk()?.name ?? 'this disk'} a Backup Disk?</h3>
+            <BackupSizingLine store={props.store} engineId={() => props.disk()?.dockedTo ?? props.engineId()} />
             <p class="edp-form__hint">{MAKE_BACKUP_DISK_EMPTY_CONFIRM}</p>
             <Show when={backupErrorText()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
