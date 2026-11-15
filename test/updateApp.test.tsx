@@ -5,7 +5,7 @@ import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
   confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
-  OP_KIND, latestUpdateOp, parseVersion, compareVersions, isNewerVersion,
+  OP_KIND, latestUpdateOp, parseVersion, compareVersions, isNewerVersion, backupDiskFromDetail, parseRefusal,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
 
@@ -202,6 +202,24 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(friendlyUpdateError("AMBIGUOUS: instance name 'k' is shared by several instances on this Engine; use the instance id", ctx))
       .toBe("IDEA couldn't tell which copy of this app to update. Nothing changed. Ask for help.");
     expect(friendlyUpdateError('HELPER_OUTDATED: idea-app-data v4, need v5', ctx)).toBe('This Engine needs a system update before Apps can be updated. Nothing changed.');
+  });
+  it('maps the idea#448 pre-update backup codes HOOK_FAILED and BACKUP_FAILED (console#213)', () => {
+    const hook = "Kolibri couldn't prepare its backup, so it wasn't updated. Nothing was stopped or changed: Kolibri works as before. Try again later. If it happens again, ask for help.";
+    expect(friendlyUpdateError("HOOK_FAILED: preHook 'dump' exited 1 (the current version's backup hook); nothing was stopped or changed, and the update does not fall back to a stop-mode backup", ctx)).toBe(hook);
+    expect(friendlyUpdateError('HOOK_FAILED', ctx)).toBe(hook);
+    expect(friendlyUpdateError('BACKUP_FAILED: the pre-update backup to Backup Disk A failed: borg create exited 2', ctx))
+      .toBe("The backup to Backup Disk A didn't finish, so Kolibri wasn't updated. Nothing changed: Kolibri keeps its current version and all its data. Check that Backup Disk A is plugged in and has free space, then try again.");
+    expect(friendlyUpdateError('BACKUP_FAILED: borg lock timeout', ctx))
+      .toBe("The backup to the Backup Disk didn't finish, so Kolibri wasn't updated. Nothing changed: Kolibri keeps its current version and all its data. Check that the Backup Disk is plugged in and has free space, then try again.");
+    expect(backupDiskFromDetail('the pre-update backup to Disk: B failed: x')).toBe('Disk: B');
+    expect(backupDiskFromDetail('something else')).toBeNull();
+    // A failed updateApp operation carries the same text in its error.
+    expect(updateOutcome(op('Failed', { error: 'BACKUP_FAILED: the pre-update backup to Backup Disk A failed: x' }), inst(), 'Kolibri', '0.15.5', ctx))
+      .toEqual({ kind: 'failed', text: REFUSAL_TEXT.BACKUP_FAILED(ctx, 'the pre-update backup to Backup Disk A failed: x') });
+    expect(updateOutcome(op('Failed', { error: 'HOOK_FAILED: x' }), inst(), 'Kolibri', '0.15.5', ctx)).toEqual({ kind: 'failed', text: hook });
+    // Unknown codes still fall back to the generic text.
+    expect(friendlyUpdateError('BRAND_NEW_BACKUP_CODE: x', ctx)).not.toBe(hook);
+    expect(parseRefusal('BRAND_NEW_BACKUP_CODE: x').code).toBeNull();
   });
   it('NO_SPACE: plain GB amounts when the helper text parses, else the old message', () => {
     const g = 1024 ** 3;

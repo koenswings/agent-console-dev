@@ -222,6 +222,10 @@ export const parseNoSpace = (detail: string): { needBytes: number; freeBytes: nu
 };
 const gbText = (bytes: number): string => (bytes / 1024 ** 3).toFixed(1);
 
+/** Backup Disk name from the Engine's `BACKUP_FAILED: the pre-update backup to <name> failed: …` (idea#448). */
+export const backupDiskFromDetail = (detail: string): string | null =>
+  /^the pre-update backup to (.+?) failed\b/s.exec(detail.trim())?.[1]?.trim() || null;
+
 export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null; toVersion?: string | null }
 
 const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` : '');
@@ -248,6 +252,13 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   NO_SUMS: () => NO_SUMS_TEXT,
   TRANSFER_FAILED: (c) => `The copy from ${c.engine} didn't finish, so nothing changed. ${c.app} is still on ${c.fromVersion}. Try again while ${c.engine} is switched on.`,
   SOURCE_UNSUPPORTED: (c) => `${c.engine} needs a newer IDEA version before it can share this update. Nothing changed.`,
+  // idea#448 pre-update backup (console#213). HOOK_FAILED runs before anything is stopped.
+  HOOK_FAILED: (c) => `${c.app} couldn't prepare its backup, so it wasn't updated. Nothing was stopped or changed: ${c.app} works as before. Try again later. If it happens again, ask for help.`,
+  // BACKUP_FAILED may come inside the snapshot stop: the old version is started again, version and data unchanged.
+  BACKUP_FAILED: (c, detail) => {
+    const disk = backupDiskFromDetail(detail) ?? 'the Backup Disk';
+    return `The backup to ${disk} didn't finish, so ${c.app} wasn't updated. Nothing changed: ${c.app} keeps its current version and all its data. Check that ${disk} is plugged in and has free space, then try again.`;
+  },
 };
 
 /** `CODE: text` → [code, text]; code is null when the message has no known code. */
