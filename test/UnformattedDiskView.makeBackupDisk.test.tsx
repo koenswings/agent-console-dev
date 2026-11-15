@@ -1,13 +1,19 @@
 /**
  * idea#404 — UnformattedDiskView "Make a Backup Disk" + EraseDialog confirm,
  * progress and failure wording, gated on the makeBackupDisk capability.
+ * Coded to Engine bc5bd78 (agent-engine-dev#355): the blank-stick path sends
+ * makeBackupDisk <candidateId> <summaryTraceId> <typed label>.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import UnformattedDiskView from '../src/components/UnformattedDiskView';
 import { setSendCommandFn } from '../src/store/commands';
-import { MAKE_BACKUP_DISK_BLANK_CONFIRM, MAKE_BACKUP_DISK_ERROR_TEXT } from '../src/store/makeBackupDisk';
+import {
+  MAKE_BACKUP_DISK_BLANK_CONFIRM,
+  MAKE_BACKUP_DISK_ERROR_TEXT,
+  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+} from '../src/store/makeBackupDisk';
 import { MOCK_FILES_STORE, FILES_IDS as I } from '../src/mock/filesFixtures';
 import { UNREADABLE_SUMMARY } from '../src/mock/eraseFixtures';
 import type { CommandLogState } from '../src/store/commandLog';
@@ -38,7 +44,7 @@ const summariseOk = (over: Partial<CommandTrace> = {}): CommandTrace => ({
 const mbTrace = (over: Partial<CommandTrace> = {}): CommandTrace => ({
   traceId: 'mb-1',
   command: 'makeBackupDisk',
-  args: { candidateId: CAND },
+  args: { targetId: CAND, rest: ['sum-mb', ...LABEL.split(' ')] },
   startedAt: 3,
   completedAt: 4,
   status: 'ok',
@@ -105,7 +111,7 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     expect(btn.textContent).toBe('Make a Backup Disk');
   });
 
-  it('capability on: typed confirm names the stick, warns it erases, then sends makeBackupDisk not eraseDisk', () => {
+  it('capability on: typed confirm names the stick, warns it erases, then sends makeBackupDisk with the summary and label (not eraseDisk)', () => {
     const t = renderView(withFlag(MOCK_FILES_STORE));
     fireEvent.click(screen.getByTestId('make-backup-disk-unformatted'));
     expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `summariseDisk ${CAND}`);
@@ -119,7 +125,7 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     fireEvent.input(input, { target: { value: LABEL } });
     expect(ok.disabled).toBe(false);
     fireEvent.click(ok);
-    expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `makeBackupDisk ${CAND}`);
+    expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `makeBackupDisk ${CAND} sum-mb ${LABEL}`);
     expect(sent.mock.calls.some(([, cmd]) => String(cmd).startsWith('eraseDisk '))).toBe(false);
   });
 
@@ -129,13 +135,13 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     const running: Operation = {
       id: 'op-mb',
       kind: 'makeBackupDisk',
-      args: { candidateId: CAND },
+      args: { targetId: CAND, summaryTraceId: 'sum-mb', confirmName: LABEL },
       cause: 'console-command',
       subject: { type: 'disk', id: CAND },
       engineId: I.ENGINE_A,
       status: 'Running',
-      progressPercent: 40,
-      currentStep: 2,
+      progressPercent: 25,
+      currentStep: 1,
       totalSteps: 4,
       stepLabel: 'Erase',
       startedAt: Date.now(),
@@ -144,11 +150,12 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     };
     t.setStore({ ...t.store()!, operationDB: { [running.id]: running } });
     const progress = screen.getByTestId('make-backup-disk-progress');
-    expect(progress.textContent).toContain('Checking the stick');
+    expect(progress.textContent).toContain('Checking the disk');
     expect(progress.textContent).toContain('Erasing the disk');
     expect(progress.textContent).toContain('Waiting for the disk to come back');
     expect(progress.textContent).toContain('Setting up the Backup Disk');
     expect(progress.querySelector('[data-step="Erase"]')?.className).toMatch(/current/);
+    expect(progress.querySelector('[data-step="Check"]')?.className).toMatch(/done/);
   });
 
   it('capability on: success when the trace is ok and the disk has the backup role', () => {
@@ -166,26 +173,31 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
           lastDocked: 1,
           dockedTo: I.ENGINE_A,
           diskTypes: ['backup'],
-          backupConfig: { mode: 'scheduled', links: [] },
+          backupConfig: { mode: 'scheduled', links: [], schedule: { daily: '02:30' } },
         },
       },
     });
     t.setCls(log(summariseOk(), mbTrace({ status: 'ok', completedAt: Date.now() })));
-    expect(screen.getByTestId('make-backup-disk-success').textContent).toMatch(/this disk is now a backup disk/i);
+    const ok = screen.getByTestId('make-backup-disk-success').textContent ?? '';
+    expect(ok).toMatch(/this disk is now a backup disk/i);
+    expect(ok).toContain(MAKE_BACKUP_DISK_FIRST_RUN_HINT);
   });
 
   it.each([
-    ['TOO_SMALL: 4 GB min', MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL],
-    ['NOT_DOCKED: gone', MAKE_BACKUP_DISK_ERROR_TEXT.NOT_DOCKED],
-    ['SYSTEM_DISK: root', MAKE_BACKUP_DISK_ERROR_TEXT.SYSTEM_DISK],
-    ['NOT_EMPTY: files', MAKE_BACKUP_DISK_ERROR_TEXT.NOT_EMPTY],
-    ['UNKNOWN: boom', MAKE_BACKUP_DISK_ERROR_TEXT.UNKNOWN],
-  ] as const)('capability on: maps %s to plain wording', (errorMessage, wording) => {
+    ['TOO_SMALL', 'TOO_SMALL: this disk is 4000000000 bytes; a Backup Disk must be at least 8589934592 bytes (8 GiB).'],
+    ['UNPLUGGED', 'UNPLUGGED: the disk was unplugged during setup; plug it back in and try again'],
+    ['REDOCK_TIMEOUT', 'REDOCK_TIMEOUT: Erase finished but the disk did not come back as empty (id X).'],
+    ['SUMMARY_STALE', 'SUMMARY_STALE: The summary is missing, for another disk, or older than 10 minutes. Check the disk again.'],
+    ['CONFIRM_MISMATCH', "CONFIRM_MISMATCH: Typed name does not match the disk label 'X'."],
+    ['SYSTEM_DISK', "SYSTEM_DISK: X is this Pi's system disk and cannot become a Backup Disk."],
+    ['BUSY', 'BUSY: An erase is already in progress; try again later.'],
+    ['WRITE_FAILED', 'WRITE_FAILED: EIO'],
+  ] as const)('capability on: maps %s to plain wording', (code, errorMessage) => {
     const t = renderView(withFlag(MOCK_FILES_STORE));
     confirmBlank(t);
-    t.setCls(log(summariseOk(), mbTrace({ status: 'error', errorMessage, completedAt: Date.now() })));
+    t.setCls(log(summariseOk(), mbTrace({ status: 'error', errorMessage, errorCode: code, completedAt: Date.now() })));
     const err = screen.getByRole('alert');
-    expect(err.textContent).toBe(wording);
-    expect(err.textContent).not.toMatch(/TOO_SMALL|NOT_DOCKED|SYSTEM_DISK|NOT_EMPTY|UNKNOWN|borg|YAML|helper/i);
+    expect(err.textContent).toBe(MAKE_BACKUP_DISK_ERROR_TEXT[code]);
+    expect(err.textContent).not.toMatch(/[A-Z]{3,}_[A-Z]+|borg|YAML|helper/i);
   });
 });

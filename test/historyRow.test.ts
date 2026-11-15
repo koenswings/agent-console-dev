@@ -96,7 +96,7 @@ describe('historyRowView — clearBackupLock (idea#454)', () => {
 describe('historyRowView — makeBackupDisk (idea#404)', () => {
   const mb = (over: Partial<CommandTrace> = {}): CommandTrace => trace({
     command: 'makeBackupDisk',
-    args: { diskId: 'DISK_1' },
+    args: { targetId: 'DISK_1', rest: [] },
     status: 'ok',
     errorMessage: null,
     ...over,
@@ -113,10 +113,20 @@ describe('historyRowView — makeBackupDisk (idea#404)', () => {
   it('TOO_SMALL → plain wording, no code', () => {
     const view = historyRowView(mb({
       status: 'error',
-      errorMessage: 'TOO_SMALL: 2 GB',
+      errorMessage: 'TOO_SMALL: this disk is 2000000000 bytes; a Backup Disk must be at least 8589934592 bytes (8 GiB).',
+      errorCode: 'TOO_SMALL',
     }));
     expect(view.tone).toBe('error');
-    expect(view.message).toBe('This stick is too small to be a Backup Disk');
+    expect(view.message).toBe('This stick is too small to be a Backup Disk. It needs at least 8 GB.');
     expect(view.message).not.toMatch(/TOO_SMALL|borg|YAML/i);
+  });
+
+  it('UNPLUGGED → plain wording', () => {
+    const view = historyRowView(mb({
+      status: 'error',
+      errorMessage: 'UNPLUGGED: the disk was unplugged during setup; plug it back in and try again',
+      errorCode: 'UNPLUGGED',
+    }));
+    expect(view.message).toBe('The disk was unplugged during setup. Plug it back in and try again.');
   });
 });

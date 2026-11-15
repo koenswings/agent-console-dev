@@ -51,7 +51,7 @@ export type EngineCapability =
   | 'removeInstance'
   // idea#79 (cross-Engine Move, see store/moveApp.ts)
   | 'moveAppCrossEngine'
-  // idea#404: agreed capability (own flag, not scheduledBackups).
+  // idea#404 / engine#355 (bc5bd78): makeBackupDisk, always on.
   | 'makeBackupDisk'
   /**
    * idea#400 / Engine f114a28: this Engine publishes the store summary, runs the
@@ -314,16 +314,27 @@ export const createBackupDisk = (
 };
 
 /**
- * Build "makeBackupDisk <diskOrCandidateId>" (idea#404, agreed on #400 and
- * Steve's decisions). Always the ID — gated by the 'makeBackupDisk' capability
- * (capabilitiesBootedAt === lastBooted), same rule as disk-id args and eraseDisk.
+ * Build "makeBackupDisk <targetId> [<summaryTraceId> <confirmName…>]"
+ * (idea#404, Engine bc5bd78 / agent-engine-dev#355). Always the ID (a docked
+ * disk id or an unformatted candidateId). The summary trace and the typed label
+ * are sent only when the Engine will erase (a blank stick); an adopted IDEA
+ * disk is sent with the id alone. Gated by the 'makeBackupDisk' capability.
  */
-export const buildMakeBackupDiskCommand = (diskOrCandidateId: string): string =>
-  `makeBackupDisk ${diskOrCandidateId}`;
+export const buildMakeBackupDiskCommand = (
+  targetId: string,
+  confirm?: { summaryTraceId: string; confirmName: string } | null
+): string =>
+  confirm
+    ? `makeBackupDisk ${targetId} ${confirm.summaryTraceId} ${confirm.confirmName}`
+    : `makeBackupDisk ${targetId}`;
 
-/** Prepare a blank stick or empty IDEA disk as a scheduled Backup Disk (02:30). */
-export const makeBackupDisk = (engineId: string, diskOrCandidateId: string): void => {
-  _sendCommand(engineId, buildMakeBackupDiskCommand(diskOrCandidateId));
+/** Turn a blank stick (typed confirm) or an adopted IDEA disk into a scheduled Backup Disk (02:30). */
+export const makeBackupDisk = (
+  engineId: string,
+  targetId: string,
+  confirm?: { summaryTraceId: string; confirmName: string } | null
+): void => {
+  _sendCommand(engineId, buildMakeBackupDiskCommand(targetId, confirm));
 };
 
 /** Add the Files role to a disk (empty, App or Backup Disk) on the given engine. */

@@ -65,7 +65,8 @@ export const historyRowView = (trace: CommandTrace): HistoryRowView => {
       return { tone: 'ok', icon: '✓', message: MAKE_BACKUP_DISK_SUCCESS_MESSAGE };
     }
     const raw = trace.errorMessage ? stripAnsi(trace.errorMessage).trim() : '';
-    return { tone: 'error', icon: '✗', message: raw ? makeBackupDiskErrorText(raw) : null };
+    const code = trace.errorCode ?? null;
+    return { tone: 'error', icon: '✗', message: raw || code ? makeBackupDiskErrorText(raw, code) : null };
   }
   if (trace.status === 'ok') {
     return { tone: 'ok', icon: '✓', message: null };

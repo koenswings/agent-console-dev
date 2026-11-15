@@ -7,7 +7,11 @@ import { render, screen, fireEvent, cleanup } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import EmptyDiskPanel from '../src/components/EmptyDiskPanel';
 import { setSendCommandFn } from '../src/store/commands';
-import { MAKE_BACKUP_DISK_EMPTY_CONFIRM, MAKE_BACKUP_DISK_ERROR_TEXT } from '../src/store/makeBackupDisk';
+import {
+  MAKE_BACKUP_DISK_EMPTY_CONFIRM,
+  MAKE_BACKUP_DISK_ERROR_TEXT,
+  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+} from '../src/store/makeBackupDisk';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
@@ -33,7 +37,7 @@ const log = (...t: CommandTrace[]): CommandLogStore => ({
 const mbTrace = (over: Partial<CommandTrace> = {}): CommandTrace => ({
   traceId: 'mb-1',
   command: 'makeBackupDisk',
-  args: { diskId: emptyDisk.id },
+  args: { targetId: emptyDisk.id, rest: [] },
   startedAt: 1,
   completedAt: 2,
   status: 'ok',
@@ -107,21 +111,23 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     expect(screen.queryByTestId('confirm-make-backup-disk')).not.toBeInTheDocument();
   });
 
-  it('capability on: simple confirm (02:30, apps linked afterwards), no mode or instance picker, no size greying', () => {
+  it('capability on: simple confirm naming the disk (nothing erased, 02:30), no mode or instance picker, no size greying', () => {
     const store = withFlag(MOCK_STORE, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
     renderPanel(store);
     const card = screen.getByTestId('make-backup-disk') as HTMLButtonElement;
     expect(card.disabled).toBe(false);
-    expect(card.textContent).toContain('Back up every App daily at 02:30');
+    expect(card.textContent).toContain('Back up every App every day at 02:30');
     fireEvent.click(card);
-    expect(screen.getByTestId('make-backup-disk-confirm').textContent).toContain(MAKE_BACKUP_DISK_EMPTY_CONFIRM);
+    const confirm = screen.getByTestId('make-backup-disk-confirm').textContent ?? '';
+    expect(confirm).toContain(MAKE_BACKUP_DISK_EMPTY_CONFIRM);
+    expect(confirm).toContain(`Make ${emptyDisk.name} a Backup Disk?`);
     expect(screen.queryByText('Backup mode')).not.toBeInTheDocument();
     expect(screen.queryByText('Link to instances')).not.toBeInTheDocument();
     // 2 GB stick is still enabled — Engine owns TOO_SMALL
     expect(screen.getByTestId('confirm-make-backup-disk')).not.toBeDisabled();
   });
 
-  it('capability on: confirm sends makeBackupDisk <diskId>', () => {
+  it('capability on: confirm sends makeBackupDisk <diskId> with no summary or typed label (Erase skipped)', () => {
     const store = withFlag(MOCK_STORE, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
     renderPanel(store);
     fireEvent.click(screen.getByTestId('make-backup-disk'));
@@ -129,7 +135,7 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     expect(sent).toHaveBeenCalledWith(MOCK_IDS.ENGINE_1_ID, `makeBackupDisk ${emptyDisk.id}`);
   });
 
-  it('capability on: shows Check / Create progress (Erase skipped) from the Operation', () => {
+  it('capability on: shows Check / Create progress (Erase and Re-dock skipped) from the Operation', () => {
     const store = withFlag(MOCK_STORE, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
     const t = renderPanel(store);
     fireEvent.click(screen.getByTestId('make-backup-disk'));
@@ -137,25 +143,27 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     const running: Operation = {
       id: 'op-mb',
       kind: 'makeBackupDisk',
-      args: { diskId: emptyDisk.id },
+      args: { targetId: emptyDisk.id },
       cause: 'console-command',
       subject: { type: 'disk', id: emptyDisk.id },
       engineId: MOCK_IDS.ENGINE_1_ID,
       status: 'Running',
-      progressPercent: 20,
+      progressPercent: 25,
       currentStep: 1,
-      totalSteps: 3,
-      stepLabel: 'Check',
+      totalSteps: 4,
+      stepLabel: 'Erase (skipped)',
       startedAt: Date.now(),
       completedAt: null,
       error: null,
     };
     t.setStore({ ...t.store()!, operationDB: { [running.id]: running } });
     const progress = screen.getByTestId('make-backup-disk-progress');
-    expect(progress.textContent).toContain('Checking the stick');
+    expect(progress.textContent).toContain('Checking the disk');
     expect(progress.textContent).toContain('Setting up the Backup Disk');
     expect(progress.querySelector('[data-step="Erase"]')).toBeNull();
-    expect(progress.querySelector('[data-step="Check"]')).not.toBeNull();
+    expect(progress.querySelector('[data-step="Re-dock"]')).toBeNull();
+    expect(progress.querySelector('[data-step="Check"]')?.className).toMatch(/done/);
+    expect(progress.querySelector('[data-step="Create"]')?.className).toMatch(/current/);
   });
 
   it('capability on: success when the trace is ok and diskTypes includes backup', () => {
@@ -172,14 +180,15 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     });
     t.setCls(log(mbTrace({ status: 'ok', completedAt: Date.now() })));
     expect(screen.getByTestId('backup-configured-success').textContent).toMatch(/this disk is now a backup disk/i);
+    expect(screen.getByTestId('make-backup-disk-first-run').textContent).toBe(MAKE_BACKUP_DISK_FIRST_RUN_HINT);
   });
 
   it.each([
-    ['TOO_SMALL: 4 GB min', MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL],
-    ['NOT_DOCKED: gone', MAKE_BACKUP_DISK_ERROR_TEXT.NOT_DOCKED],
-    ['SYSTEM_DISK: root', MAKE_BACKUP_DISK_ERROR_TEXT.SYSTEM_DISK],
-    ['NOT_EMPTY: files', MAKE_BACKUP_DISK_ERROR_TEXT.NOT_EMPTY],
-    ['UNKNOWN: boom', MAKE_BACKUP_DISK_ERROR_TEXT.UNKNOWN],
+    ['TOO_SMALL: this disk is 2000000000 bytes; a Backup Disk must be at least 8589934592 bytes (8 GiB).', MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL],
+    ["NOT_DOCKED: Disk 'X' (X) is not docked to this Engine.", MAKE_BACKUP_DISK_ERROR_TEXT.NOT_DOCKED],
+    ["SYSTEM_DISK: X is this Pi's system disk and cannot become a Backup Disk.", MAKE_BACKUP_DISK_ERROR_TEXT.SYSTEM_DISK],
+    ['ALREADY_BACKUP: X is already a Backup Disk; use setBackupMode to change mode or time.', MAKE_BACKUP_DISK_ERROR_TEXT.ALREADY_BACKUP],
+    ['WRITE_FAILED: EACCES', MAKE_BACKUP_DISK_ERROR_TEXT.WRITE_FAILED],
   ] as const)('capability on: maps %s to plain wording', (errorMessage, wording) => {
     const store = withFlag(MOCK_STORE, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
     const t = renderPanel(store);
@@ -188,6 +197,6 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     t.setCls(log(mbTrace({ status: 'error', errorMessage, completedAt: Date.now() })));
     const err = screen.getByTestId('backup-error');
     expect(err.textContent).toBe(wording);
-    expect(err.textContent).not.toMatch(/TOO_SMALL|NOT_DOCKED|SYSTEM_DISK|NOT_EMPTY|UNKNOWN|borg|YAML|helper/i);
+    expect(err.textContent).not.toMatch(/[A-Z]{3,}_[A-Z]+|borg|YAML|helper|setBackupMode/i);
   });
 });

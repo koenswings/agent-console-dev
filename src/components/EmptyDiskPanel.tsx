@@ -4,7 +4,8 @@
  * Lets the operator choose what to do with the disk:
  *   1. Make this a Files Disk   — share name → createFilesDisk <diskId> <shareName> (idea#132)
  *   2. Make this a Backup Disk  — when the Engine has 'makeBackupDisk', a simple
- *      confirm sends makeBackupDisk (scheduled 02:30, no linking). Otherwise
+ *      confirm sends makeBackupDisk <diskId> (nothing erased; scheduled daily
+ *      02:30, backs up every App, first backup within a minute). Otherwise
  *      the existing createBackupDisk form (instances + mode) is unchanged.
  *   3. Install App              — pick from appDB → installApp command
  *
@@ -27,6 +28,7 @@ import {
 import {
   MAKE_BACKUP_DISK_CAPABILITY,
   MAKE_BACKUP_DISK_EMPTY_CONFIRM,
+  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
   MAKE_BACKUP_TIMEOUT_MESSAGE,
   findMakeBackupDiskOp,
   makeBackupDiskBlockedReason,
@@ -224,9 +226,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const engineId = props.engineId();
     const disk = props.disk();
     if (!engineId || !disk) return;
+    // Adopted IDEA disk: the Engine skips Erase, so no summary or typed label (engine#355).
     backupResult.start(disk.id, () => makeBackupDisk(engineId, disk.id), {
       command: 'makeBackupDisk',
-      matchMode: 'includes',
+      argKey: 'targetId',
+      matchMode: 'key',
       longRunning: true,
       engineId,
       remote: remoteWatchFor(props.store, engineId, 'makeBackupDisk',
@@ -249,7 +253,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     const s = backupResult.state();
     if (s.kind !== 'error') return null;
     return backupResult.command() === 'makeBackupDisk'
-      ? makeBackupDiskErrorText(s.message)
+      ? makeBackupDiskErrorText(s.message, s.code)
       : plainEngineText(s.message);
   };
 
@@ -347,6 +351,9 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                 ? 'Done. This disk is now a Backup Disk.'
                 : 'Done. The app is installed on this disk.'}
             </p>
+            <Show when={backupResult.state().kind === 'success' && backupResult.command() === 'makeBackupDisk'}>
+              <p class="edp-form__hint" data-testid="make-backup-disk-first-run">{MAKE_BACKUP_DISK_FIRST_RUN_HINT}</p>
+            </Show>
             <button class="btn" onClick={reset}>← Back</button>
           </div>
         </Show>
@@ -391,7 +398,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                 <span class="edp-card__title">Make this a Backup Disk</span>
                 <span class="edp-card__desc">
                   {canMakeBackupDisk()
-                    ? 'Back up every App daily at 02:30'
+                    ? 'Back up every App every day at 02:30'
                     : 'Link instances and choose a backup schedule'}
                 </span>
               </div>
@@ -424,7 +431,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         {/* ── Backup Disk form ─────────────────────────────────────────────── */}
         <Show when={!actionDone() && panel() === 'backup' && canMakeBackupDisk()}>
           <div class="edp-form" data-testid="make-backup-disk-confirm">
-            <h3 class="disk-section__title">Make this a Backup Disk</h3>
+            <h3 class="disk-section__title">Make {props.disk()?.name ?? 'this disk'} a Backup Disk?</h3>
             <p class="edp-form__hint">{MAKE_BACKUP_DISK_EMPTY_CONFIRM}</p>
             <Show when={backupErrorText()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
@@ -436,7 +443,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               {(engine) => <p class="edp-form__hint" role="status" data-testid="backup-sent">Sent to {engine()}, waiting for confirmation…</p>}
             </Show>
             <Show when={backupPending()}>
-              <MakeBackupDiskProgress op={makeBackupOp} waiting={true} skipErase={true} />
+              <MakeBackupDiskProgress op={makeBackupOp} waiting={true} adopted={true} />
             </Show>
             <div class="edp-form__actions">
               <button

@@ -148,7 +148,7 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
             >
               Make a Backup Disk
             </button>
-            <p class="edp-form__hint">Erases this stick, then sets it up to back up every App daily at 02:30.</p>
+            <p class="edp-form__hint">Erases this stick, then sets it up to back up every App every day at 02:30.</p>
           </section>
         </Show>
 

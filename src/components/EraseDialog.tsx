@@ -15,6 +15,7 @@ import {
 } from '../store/commands';
 import {
   MAKE_BACKUP_DISK_BLANK_CONFIRM,
+  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
   MAKE_BACKUP_DISK_SUCCESS_MESSAGE,
   MAKE_BACKUP_TIMEOUT_MESSAGE,
   findMakeBackupDiskOp,
@@ -258,8 +259,8 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   const backupResult = createCommandResult({
     commandLog: cls,
     command: 'makeBackupDisk',
-    argKey: 'diskId',
-    matchMode: 'includes',
+    argKey: 'targetId',
+    matchMode: 'key',
     longRunning: true,
     isSuccess: () => (props.store()?.diskDB[props.targetId]?.diskTypes ?? []).includes('backup'),
   });
@@ -281,9 +282,15 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     setSlow(false);
     const startedAt = Date.now();
     setPhase({ kind: 'making-backup', summary: p.summary, startedAt });
-    backupResult.start(props.targetId, () => makeBackupDisk(props.engineId, props.targetId), {
+    // Blank stick: Erase runs, so the Engine needs the fresh summary trace and
+    // the typed label, same rule as eraseDisk (engine#355). After the erase the
+    // disk keeps the candidateId as its disk id, so success is diskDB[targetId]
+    // with 'backup' in diskTypes.
+    const confirm = { summaryTraceId: p.traceId, confirmName: p.summary.label };
+    backupResult.start(props.targetId, () => makeBackupDisk(props.engineId, props.targetId, confirm), {
       command: 'makeBackupDisk',
-      matchMode: 'includes',
+      argKey: 'targetId',
+      matchMode: 'key',
       longRunning: true,
     });
     backupNoResponseTimer = setTimeout(() => {
@@ -312,15 +319,14 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       setPhase({ kind: 'backup-success', summary: p.summary });
     } else if (s.kind === 'error') {
       clearBackupTimer();
-      setPhase({ kind: 'error', message: makeBackupDiskErrorText(s.message) });
+      setPhase({ kind: 'error', message: makeBackupDiskErrorText(s.message, s.code) });
     } else if (s.kind === 'timeout') {
       clearBackupTimer();
       setPhase({ kind: 'error', message: MAKE_BACKUP_TIMEOUT_MESSAGE });
     }
   });
 
-
-    const progressStep = createMemo((): string | null => {
+  const progressStep = createMemo((): string | null => {
     if (makingFiles()) {
       const s = filesResult.state();
       if (s.kind === 'pending') return MAKING_FILES_STEP;
@@ -458,6 +464,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       <Show when={phase().kind === 'backup-success'}>
         <div class="erase-dialog__result" role="status" data-testid="make-backup-disk-success">
           <p>Done. {MAKE_BACKUP_DISK_SUCCESS_MESSAGE}</p>
+          <p class="edp-form__hint" data-testid="make-backup-disk-first-run">{MAKE_BACKUP_DISK_FIRST_RUN_HINT}</p>
         </div>
         <div class="edp-form__actions">
           <button

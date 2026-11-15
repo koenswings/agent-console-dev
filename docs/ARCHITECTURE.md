@@ -251,8 +251,9 @@ with `result.message`, not a green check and not red (`historyRow.ts`, idea#454)
 
 A finished `makeBackupDisk` trace (idea#404) uses the same History row helper:
 success shows “This disk is now a Backup Disk.”; a failure shows the plain
-wording for its leading result code (for example TOO_SMALL → “This stick is too
-small to be a Backup Disk”), never the code token.
+wording for its result code (`errorCode`, else the leading `CODE:`; for example
+TOO_SMALL → “This stick is too small to be a Backup Disk. It needs at least
+8 GB.”), never the code token.
 
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
 
@@ -833,43 +834,55 @@ same dialog then `createFilesDisk` once the empty disk appears.
 
 ### Make a Backup Disk (idea#404)
 
-Aligned to Engine main f114a28 (idea#400 PR D / Engine PR #353). That sha has
-`createBackupDisk`, `summariseDisk` and `eraseDisk`, but it does **not** yet
-register `makeBackupDisk`, advertise a `makeBackupDisk` capability, or define a
-`makeBackupDisk` Operation kind. The Console therefore keeps this flow behind
-the `'makeBackupDisk'` capability (`capabilitiesBootedAt === lastBooted`) — its
-own flag, not `scheduledBackups` — and does not invent Engine fields. Today's
-Engines, including f114a28, are unchanged: empty disks still use the
-`createBackupDisk` form (mode and linked apps); there is no Make a Backup Disk
-action on an unformatted candidate.
+Coded to Engine main bc5bd78 (agent-engine-dev#355, `src/data/MakeBackupDisk.ts`,
+COMMANDS.md `makeBackupDisk`). Gated on the `'makeBackupDisk'` capability
+(always on in that Engine) with the usual `capabilitiesBootedAt === lastBooted`
+freshness rule. Without a fresh flag (older or rolled-back Engines) nothing
+changes: empty disks keep the `createBackupDisk` form (mode and linked apps)
+and an unformatted candidate has no Make a Backup Disk action.
 
-The command, once the Engine advertises the flag, is `makeBackupDisk
-<diskOrCandidateId>` (always an id). Step tokens and refusal codes below are
-the agreed contract (idea#400 / idea#404) and stay gated until they exist on
-Engine main.
+Engine contract the Console follows:
 
-When the flag is present:
+- **Command:** `makeBackupDisk <targetId> [<summaryTraceId> <confirmName…>]`.
+  `targetId` is a docked disk id or an unformatted `candidateId`. The summary
+  trace id and the typed label are required when the Engine will erase (a
+  candidate) and left out when it will not (an adopted IDEA disk).
+- **Operation:** kind `makeBackupDisk`, subject `{ type: 'disk', id: targetId }`,
+  args `{ targetId, summaryTraceId?, confirmName? }`. `stepLabel` is **Check,
+  Erase, Re-dock, Create** with a 0-based `currentStep` (0..3, `totalSteps` 4).
+  On an adopted disk the Engine reports `Erase (skipped)` and `Re-dock (skipped)`.
+- **Result:** the trace closes ok with `result { targetId, diskId, erased, mode:
+  'scheduled', schedule: '02:30' }`. After an erase the disk keeps the
+  candidate id as its disk id. Create writes `BACKUP.yaml` (scheduled, daily
+  02:30, no links: scheduled mode backs up every App on the Pi) and re-processes
+  the disk, so `diskTypes` gains `'backup'`. A new scheduled disk has no
+  `lastRun`, so its first backup starts at the next scheduler tick (within a minute).
+- **Failures:** `CODE: text` in the trace (`errorCode` too) and the Operation
+  `error`: BAD_ARGS, NOT_FOUND, SYSTEM_DISK, NOT_DOCKED, ALREADY_BACKUP, BUSY,
+  IN_USE, SUMMARY_STALE, CONFIRM_MISMATCH, SERIAL_MISMATCH, TOO_SMALL (8 GiB,
+  Engine-owned), UNPLUGGED, REDOCK_TIMEOUT, HIDDEN_PARTITIONS, OS_ROOTFS,
+  INVALID_INSTANCE_ID, WRITE_FAILED. Each maps to one plain sentence
+  (`MAKE_BACKUP_DISK_ERROR_TEXT`); codes, borg, YAML and helper never show.
 
-- **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” is a simple
-  confirm — the stick will back up every App daily at 02:30, and apps are linked
-  afterwards. Nothing is erased. Confirm sends `makeBackupDisk <diskId>`.
-- **Unformatted / blank candidate** (`UnformattedDiskView`): a new “Make a Backup
-  Disk” action reuses `EraseDialog` (names the stick, warns that it erases,
-  type the label), then sends `makeBackupDisk <candidateId>` — not `eraseDisk`.
-  The Engine performs Check, Erase, Re-dock and Create as one operation.
-- The Console has no size rule; a stick that is too small is refused by the
-  Engine at the Check step (`TOO_SMALL`).
-- Progress comes from the `makeBackupDisk` Operation (`currentStep` /
-  `stepLabel` / `progressPercent`). Agreed step tokens are **Check, Erase,
-  Re-dock, Create**, shown as “Checking the stick”, “Erasing the disk”,
-  “Waiting for the disk to come back”, “Setting up the Backup Disk”. Erase is
-  skipped on an adopted empty IDEA stick.
-- The result uses `createCommandResult`: a new trace of `makeBackupDisk` whose
-  args include the id, then `diskTypes` includes `'backup'`. Failures (`TOO_SMALL`,
-  `NOT_DOCKED`, `SYSTEM_DISK`, `NOT_EMPTY` / erase guards, `UNKNOWN`) are mapped
-  to plain wording (no borg, YAML, helper, or code tokens).
-- `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (it does
-  not go through `makeBackupDisk`).
+When the flag is fresh:
+
+- **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” opens a
+  confirm that names the disk and says nothing is erased, that it backs up
+  every App every day at 02:30, and that the first backup starts right after.
+  Confirm sends `makeBackupDisk <diskId>`. Progress shows Check and Create.
+- **Blank stick / unformatted candidate** (`UnformattedDiskView`): “Make a Backup
+  Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase
+  warning naming the stick, the typed label, then
+  `makeBackupDisk <candidateId> <summaryTraceId> <label>` (not `eraseDisk`).
+  Progress shows all four steps.
+- The result uses `createCommandResult` (trace `makeBackupDisk`, `args.targetId`,
+  long-running), then `diskDB[targetId].diskTypes` includes `'backup'`. Success
+  says “This disk is now a Backup Disk.” plus when the first backup runs.
+- The Console has no size rule; the Engine refuses a stick under 8 GiB at Check.
+- Only empty IDEA disks and blank sticks are offered. The Engine also adopts an
+  App or Files disk without erasing; the Console does not offer that yet.
+- `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (the Engine
+  now gives it the same Create defaults).
 
 ---
 

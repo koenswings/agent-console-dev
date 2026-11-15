@@ -338,9 +338,12 @@ describe('rebootEngine', () => {
 });
 
 
-describe('buildMakeBackupDiskCommand', () => {
-  it('is makeBackupDisk <diskOrCandidateId>', () => {
-    expect(buildMakeBackupDiskCommand('CAND_INTENSO')).toBe('makeBackupDisk CAND_INTENSO');
+describe('buildMakeBackupDiskCommand (engine#355)', () => {
+  it('adopted disk: makeBackupDisk <diskId>', () => {
     expect(buildMakeBackupDiskCommand('DISK_EMPTY')).toBe('makeBackupDisk DISK_EMPTY');
+  });
+  it('blank stick: makeBackupDisk <candidateId> <summaryTraceId> <confirmName…>', () => {
+    expect(buildMakeBackupDiskCommand('CAND_INTENSO', { summaryTraceId: 'tr-1', confirmName: 'INTENSO' }))
+      .toBe('makeBackupDisk CAND_INTENSO tr-1 INTENSO');
   });
 });
