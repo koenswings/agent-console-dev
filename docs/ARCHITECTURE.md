@@ -491,7 +491,12 @@ Engine liveness (`src/store/live.ts` `engineStatus`): `connecting` until a heart
 When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400,
 Engine main f114a28), `RestorePanel` and the instance row show store-summary status
 lines: schedule and next run (computed from `schedule.daily`, or 02:30 when the
-schedule is absent or invalid, and only while `clockTrusted` is true),
+schedule is absent or invalid, and only while `clockTrusted` is true; if
+`Disk.lastAttempt` is older than the most recent slot the Next run clause
+is "A missed backup will start shortly.", and if there is no `lastAttempt`
+yet it is "First backup will start shortly." — console#210; once
+`lastAttempt` passes the slot the normal "Next run today/tomorrow at HH:MM"
+returns),
 `backupConfig.scheduleError` (plain wording; the disk still runs at 02:30 until
 it is fixed), `backupConfig.orphanLinks` (Engine #356: a calm info line when
 non-empty, nothing when missing or empty; no delete action), last attempt
