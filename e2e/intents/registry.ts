@@ -104,6 +104,7 @@ import {
   leave_nextcloud_as_teacher,
   leave_nextcloud_as_learner,
 } from './operatorDeepActions';
+import { update_restart_failed } from './updateRestartFailed';
 import { copy_app, move_app } from './copyMoveApp';
 import {
   create_class,
@@ -173,6 +174,7 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   restore_from_backup,
   open_app,
   backup_instance,
+  update_restart_failed,
   back_to_disk,
   back_to_overview,
   log_out,

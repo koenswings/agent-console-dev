@@ -103,6 +103,7 @@ export const CONSOLE_INTENT_NAMES = [
   'restore_from_backup',
   'open_app',
   'backup_instance',
+  'update_restart_failed',
   'back_to_disk',
   'back_to_overview',
   'log_out',

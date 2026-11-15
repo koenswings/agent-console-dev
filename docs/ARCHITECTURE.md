@@ -950,6 +950,9 @@ Console surfaces used by the duration-tests walker expose id-keyed `data-testid`
 `console-overview`, `op-entry`, `op-overview`, `eject-confirm`, `erase-dialog`).
 Playwright Intent adapters live under `e2e/intents/`, registry keyed by Axle
 ACTIONS.md / school-day.yaml (`open_console_as_teacher`, `open_kolibri_as_teacher`,
-`open_nextcloud_as_learner`, `open_disk_inventory`, …). Defaults bind to Kid
+`open_nextcloud_as_learner`, `open_disk_inventory`, `update_restart_failed`, …). Defaults bind to Kid
 fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
 `duration-kolibri-grade5a-001`). Engine-owned `infra_*` Intents are not registered here.
+`update_restart_failed` (console#217, engine#442) is hook-gated: it is registered, but
+it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, because the Engine
+has no fault-injection hook yet to fail the post-backup restart. See `e2e/intents/README.md`.

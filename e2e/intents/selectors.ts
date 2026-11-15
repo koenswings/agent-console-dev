@@ -106,4 +106,16 @@ export const sel = {
   connectEngineManual: '[data-testid="connect-engine-manual"]',
   connectEngine: (hostname: string) =>
     `[data-testid="connect-engine-${hostname.replace(/\.local$/i, '')}"]`,
+  /** updateApp badge / confirm / result (console#217, engine#442). */
+  updateApp: (id: string) => `[data-testid="update-app-${id}"]`,
+  updateBadge: (id: string) => `[data-testid="update-badge-${id}"]`,
+  updateConfirm: (id: string) => `[data-testid="update-confirm-${id}"]`,
+  updateConfirmBtn: (id: string) => `[data-testid="update-confirm-btn-${id}"]`,
+  updateOutcome: (id: string) => `[data-testid="update-outcome-${id}"]`,
+  updateError: (id: string) => `[data-testid="update-error-${id}"]`,
+  /** The #217 alert may be on the finished op or the command-trace error. */
+  updateRestartFailedAlert: (id: string) =>
+    `[data-testid="update-outcome-${id}"], [data-testid="update-error-${id}"]`,
+  /** InstanceRow error hint (kept, Steve): visible when status is Error and the row is collapsed. */
+  instanceErrorHint: (id: string) => `[data-testid="instance-error-hint-${id}"]`,
 } as const;
