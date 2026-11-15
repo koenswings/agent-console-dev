@@ -15,8 +15,17 @@ export interface CommandTrace {
   /** Machine code of the error when the Engine has one (e.g. moveApp, engine#289). */
   errorCode?: string | null;
   logs: LogEntry[];
-  /** Optional JSON result (e.g. summariseDisk contentSummary). */
+  /**
+   * Optional JSON result (e.g. summariseDisk contentSummary).
+   * For an updateApp error, the Engine writes `{"restartFailed":true}` when the
+   * old version could not be restarted (engine#442 / agent-engine-dev#445).
+   */
   result?: string | null;
+}
+
+/** Parsed command-log trace result for an updateApp error (engine#442 / #445). */
+export interface UpdateAppTraceResult {
+  restartFailed?: boolean;
 }
 
 export interface CommandLogStore {

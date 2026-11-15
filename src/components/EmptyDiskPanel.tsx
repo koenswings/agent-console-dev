@@ -32,6 +32,7 @@ import {
   createCommandResult,
 } from '../store/commandResult';
 import { confirmInstalled, remoteWatchFor } from '../store/remoteConfirm';
+import BackupSizingLine from './BackupSizingLine';
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import type { CommandLogState } from '../store/commandLog';
@@ -364,6 +365,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         {/* ── Backup Disk form ─────────────────────────────────────────────── */}
         <Show when={!actionDone() && panel() === 'backup'}>
           <div class="edp-form">
+
+            <BackupSizingLine store={props.store} engineId={() => props.disk()?.dockedTo ?? props.engineId()} />
 
             <p class="edp-form__label">Backup mode</p>
             <div class="edp-radios">

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@solidjs/testing-library';
 import EmptyDiskPanel from '../src/components/EmptyDiskPanel';
 import { setSendCommandFn } from '../src/store/commands';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
-import type { Disk } from '../src/types/store';
+import type { Disk, Store } from '../src/types/store';
 
 const emptyDisk: Disk = {
   id: MOCK_IDS.DISK_5_ID,
@@ -146,5 +146,33 @@ describe('EmptyDiskPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /← Back/i }));
     // Back at menu
     expect(screen.getByText('What would you like to do with this disk?')).toBeInTheDocument();
+  });
+
+  it('shows how much App data this Pi holds on the Backup Disk form (engine#441)', () => {
+    const store: Store = {
+      ...MOCK_STORE,
+      instanceDB: {
+        ...MOCK_STORE.instanceDB,
+        [MOCK_IDS.INST_KOLIBRI_ID]: {
+          ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
+          dataBytes: 2_000_000_000,
+        },
+        [MOCK_IDS.INST_CHANNEL_BUILDER_ID]: {
+          ...MOCK_STORE.instanceDB[MOCK_IDS.INST_CHANNEL_BUILDER_ID],
+          dataBytes: null,
+        },
+      },
+    };
+    render(() => (
+      <EmptyDiskPanel
+        disk={() => emptyDisk}
+        store={() => store}
+        engineId={() => MOCK_IDS.ENGINE_1_ID}
+      />
+    ));
+    fireEvent.click(screen.getByText('Make this a Backup Disk'));
+    expect(screen.getByTestId('backup-sizing')).toHaveTextContent(
+      "This Pi's Apps use about 2.0 GB (1 App not measured yet)",
+    );
   });
 });
