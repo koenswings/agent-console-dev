@@ -880,13 +880,20 @@ When the flag is fresh:
   Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase
   warning naming the stick, the typed label, then
   `makeBackupDisk <candidateId> <summaryTraceId> <label>` (not `eraseDisk`).
-  Progress shows all four steps.
+  Progress shows all four steps. The confirm label on screen is uppercased by
+  CSS; the Console matches what you type case-insensitively after trimming
+  (and collapsing internal whitespace) via `confirmLabelMatches`, and the same
+  helper is used for Erase. The Engine still compares with
+  `summary.label !== confirmName` (`MakeBackupDisk.ts` / `EraseDisk.ts`), so
+  the command always sends the canonical summary label, not the typed casing.
 - The result uses `createCommandResult` (trace `makeBackupDisk`, `args.targetId`,
   long-running), then `diskDB[targetId].diskTypes` includes `'backup'`. Success
   says “This disk is now a Backup Disk.”, that backups run every day at 02:30
   for every App on this Pi, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
   use the Engine's default method `stop`, which stops and restarts a running
-  App around the copy.)
+  App around the copy.) When the candidate has left `unformattedDisks`, the
+  pane header shows the new disk's name and role (Backup Disk, or empty after
+  Erase) instead of “UNFORMATTED”.
 - **Size gate:** a stick or disk whose known size is under the Engine's
   `MAKE_BACKUP_DISK_MIN_BYTES` (8 GiB = 8·1024³ bytes; the Engine refuses
   `bytes < min`) is greyed out before anything is typed, with “Too small: needs

@@ -129,6 +129,20 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     expect(sent.mock.calls.some(([, cmd]) => String(cmd).startsWith('eraseDisk '))).toBe(false);
   });
 
+  it('capability on: case-insensitive trimmed confirm enables the button and sends the canonical label', () => {
+    const t = renderView(withFlag(MOCK_FILES_STORE));
+    fireEvent.click(screen.getByTestId('make-backup-disk-unformatted'));
+    t.setCls(log(summariseOk()));
+    const input = screen.getByTestId('erase-confirm-name') as HTMLInputElement;
+    const ok = screen.getByRole('button', { name: /erase and make a backup disk/i }) as HTMLButtonElement;
+    expect(ok.disabled).toBe(true);
+    fireEvent.input(input, { target: { value: '  intenso  32   gb  ' } });
+    expect(ok.disabled).toBe(false);
+    fireEvent.click(ok);
+    expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `makeBackupDisk ${CAND} sum-mb ${LABEL}`);
+    expect(sent.mock.calls.some(([, cmd]) => /makeBackupDisk .*intenso  32/i.test(String(cmd)) && !String(cmd).includes(LABEL))).toBe(false);
+  });
+
   it('capability on: progress shows Check, Erase, Re-dock, Create from the Operation', () => {
     const t = renderView(withFlag(MOCK_FILES_STORE));
     confirmBlank(t);
@@ -249,3 +263,108 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
   });
 });
 
+const dropCandidateAddDisk = (store: Store, disk: Store['diskDB'][string]): Store => {
+  const eng = store.engineDB[I.ENGINE_A] as Engine;
+  return {
+    ...store,
+    engineDB: {
+      ...store.engineDB,
+      [I.ENGINE_A]: {
+        ...eng,
+        unformattedDisks: (eng.unformattedDisks ?? []).filter((u) => u.candidateId !== CAND),
+      },
+    },
+    diskDB: { ...store.diskDB, [CAND]: disk },
+  };
+};
+
+const backupDisk = (): Store['diskDB'][string] => ({
+  id: CAND,
+  name: LABEL,
+  device: 'sdi',
+  created: 1,
+  lastDocked: 1,
+  dockedTo: I.ENGINE_A,
+  diskTypes: ['backup'],
+  backupConfig: { mode: 'scheduled', links: [], schedule: { daily: '02:30' } },
+});
+
+const emptyDisk = (): Store['diskDB'][string] => ({
+  id: CAND,
+  name: LABEL,
+  device: 'sdi',
+  created: 1,
+  lastDocked: 1,
+  dockedTo: I.ENGINE_A,
+  diskTypes: ['empty'],
+  backupConfig: null,
+});
+
+describe('UnformattedDiskView — header after the candidate is adopted (console#187)', () => {
+  let sent: ReturnType<typeof vi.fn>;
+  beforeEach(() => { sent = vi.fn(); setSendCommandFn(sent); });
+  afterEach(() => cleanup());
+
+  const renderView = (store: Store) => {
+    const [s, setStore] = createSignal<Store | null>(store);
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    const onSelect = vi.fn();
+    const utils = render(() => (
+      <UnformattedDiskView
+        engineId={I.ENGINE_A}
+        candidateId={CAND}
+        store={s}
+        commandLogStore={cls}
+        onSelect={onSelect}
+      />
+    ));
+    return { ...utils, setStore, setCls, onSelect, store: s };
+  };
+
+  it('makeBackupDisk success: header shows the new disk name and Backup Disk, not UNFORMATTED', () => {
+    const t = renderView(withFlag(MOCK_FILES_STORE));
+    fireEvent.click(screen.getByTestId('make-backup-disk-unformatted'));
+    t.setCls(log(summariseOk()));
+    fireEvent.input(screen.getByTestId('erase-confirm-name'), { target: { value: LABEL } });
+    fireEvent.click(screen.getByRole('button', { name: /erase and make a backup disk/i }));
+    t.setStore(dropCandidateAddDisk(t.store()!, backupDisk()));
+    t.setCls(log(summariseOk(), mbTrace({ status: 'ok', completedAt: Date.now() })));
+    expect(screen.getByTestId('make-backup-disk-success')).toBeInTheDocument();
+    const header = t.container.querySelector('.disk-view__header')!;
+    expect(header.textContent).toMatch(LABEL);
+    expect(header.textContent).toMatch(/backup/i);
+    expect(header.textContent).not.toMatch(/unformatted/i);
+    expect(header.querySelector('.disk-view__badge-unformatted')).toBeNull();
+    expect(header.querySelector('[data-role="backup"]')).not.toBeNull();
+  });
+
+  it('Erase success: header shows the new disk name and empty, not UNFORMATTED', () => {
+    const t = renderView(withFlag(MOCK_FILES_STORE));
+    fireEvent.click(screen.getByText('Erase this disk…'));
+    t.setCls(log(summariseOk({
+      result: JSON.stringify(UNREADABLE_SUMMARY({ label: LABEL, targetId: CAND })),
+    })));
+    fireEvent.input(screen.getByTestId('erase-confirm-name'), { target: { value: LABEL } });
+    fireEvent.click(screen.getByRole('button', { name: /^erase this disk$/i }));
+    const eraseOk: CommandTrace = {
+      traceId: 'erase-1',
+      command: 'eraseDisk',
+      args: { targetId: CAND },
+      startedAt: 3,
+      completedAt: 4,
+      status: 'ok',
+      errorMessage: null,
+      logs: [],
+    };
+    t.setCls(log(summariseOk({
+      result: JSON.stringify(UNREADABLE_SUMMARY({ label: LABEL, targetId: CAND })),
+    }), eraseOk));
+    t.setStore(dropCandidateAddDisk(t.store()!, emptyDisk()));
+    const header = t.container.querySelector('.disk-view__header')!;
+    expect(header.textContent).toMatch(LABEL);
+    expect(header.textContent).toMatch(/empty/i);
+    expect(header.textContent).not.toMatch(/unformatted/i);
+    expect(header.querySelector('.disk-view__badge-unformatted')).toBeNull();
+    expect(header.querySelector('[data-role="empty"]')).not.toBeNull();
+  });
+});
