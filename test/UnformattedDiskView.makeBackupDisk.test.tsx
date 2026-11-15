@@ -222,8 +222,8 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
       renderView(sized(4 * GIB));
       const btn = screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
-      expect(btn.title).toBe('Too small: needs 8 GB or more');
-      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent?.trim()).toBe('Too small: needs 8 GB or more');
+      expect(btn.title).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent?.trim()).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
       fireEvent.click(btn);
       expect(screen.queryByTestId('make-backup-disk-dialog')).not.toBeInTheDocument();
       expect(sent).not.toHaveBeenCalled();
@@ -237,7 +237,9 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     it('over 8 GiB: allowed, normal hint', () => {
       renderView(sized(8 * GIB + 1));
       expect((screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement).disabled).toBe(false);
-      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent).toMatch(/Erases this stick/);
+      const hint = screen.getByTestId('make-backup-disk-unformatted-hint').textContent ?? '';
+      expect(hint).toMatch(/Erases this stick/);
+      expect(hint).toContain('Needs a stick larger than 8 GB (16 GB or more recommended).');
     });
 
     it('unknown size (0): allowed, the Engine decides', () => {

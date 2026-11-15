@@ -8,6 +8,7 @@ import EraseDialog, { type EraseMode } from './EraseDialog';
 import { DEFAULT_SHARE_NAME, UPDATE_ENGINE_TOOLTIP, engineHasCapability, validateShareName } from '../store/commands';
 import {
   MAKE_BACKUP_DISK_CAPABILITY,
+  MAKE_BACKUP_DISK_SIZE_NEED,
   MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   makeBackupDiskBlockedReason,
 } from '../store/makeBackupDisk';
@@ -155,7 +156,7 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
             <p class="edp-form__hint" data-testid="make-backup-disk-unformatted-hint">
               {makeBackupBlocked() === MAKE_BACKUP_DISK_TOO_SMALL_REASON
                 ? MAKE_BACKUP_DISK_TOO_SMALL_REASON
-                : 'Erases this stick, then makes it a Backup Disk with daily backups at 02:30.'}
+                : `Erases this stick, then makes it a Backup Disk with daily backups at 02:30. ${MAKE_BACKUP_DISK_SIZE_NEED}`}
             </p>
           </section>
         </Show>

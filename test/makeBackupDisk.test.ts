@@ -16,6 +16,7 @@ import {
   MAKE_BACKUP_DISK_BLANK_CONFIRM,
   MAKE_BACKUP_DISK_MIN_BYTES,
   MAKE_BACKUP_DISK_TOO_SMALL_REASON,
+  MAKE_BACKUP_DISK_SIZE_NEED,
   findMakeBackupDiskOp,
   isTooSmallForBackupDisk,
   makeBackupDiskBlockedReason,
@@ -100,12 +101,12 @@ describe('makeBackupDiskErrorText', () => {
 
   it('prefers the trace errorCode over the message', () => {
     expect(makeBackupDiskErrorText('something odd', 'UNPLUGGED')).toBe(MAKE_BACKUP_DISK_ERROR_TEXT.UNPLUGGED);
-    expect(makeBackupDiskErrorText(null, 'TOO_SMALL')).toMatch(/at least 8 GB/);
+    expect(makeBackupDiskErrorText(null, 'TOO_SMALL')).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
   });
 
-  it('TOO_SMALL names the 8 GB minimum', () => {
+  it('TOO_SMALL uses the same text as the grey-out', () => {
     expect(makeBackupDiskErrorText('TOO_SMALL: this disk is 4000000000 bytes; …')).toBe(
-      'This stick is too small to be a Backup Disk. It needs at least 8 GB.',
+      'Too small: needs more than 8 GB (16 GB or more recommended)',
     );
   });
 
@@ -190,13 +191,17 @@ describe('size gate (Engine MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78)', () => {
 
   it('is exactly 8 GiB', () => {
     expect(MAKE_BACKUP_DISK_MIN_BYTES).toBe(8 * 1024 ** 3);
-    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs 8 GB or more');
+    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+    expect(MAKE_BACKUP_DISK_SIZE_NEED).toBe('Needs a stick larger than 8 GB (16 GB or more recommended).');
+    expect(MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
   });
 
   it('under / at / over / unknown', () => {
     expect(isTooSmallForBackupDisk(8 * GIB - 1)).toBe(true);
     expect(isTooSmallForBackupDisk(8 * GIB)).toBe(false);
     expect(isTooSmallForBackupDisk(64 * GIB)).toBe(false);
+    // a stick sold as "8 GB" (8·10⁹ bytes) is under 8 GiB, so it is greyed out
+    expect(isTooSmallForBackupDisk(8_000_000_000)).toBe(true);
     expect(isTooSmallForBackupDisk(null)).toBe(false);
   });
 
