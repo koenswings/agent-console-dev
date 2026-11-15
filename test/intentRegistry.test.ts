@@ -74,6 +74,9 @@ const LOCKED = [
   'restore_from_backup',
   'open_app',
   'backup_instance',
+  'backup_schedule',
+  'update_restart_failed',
+  'rename_instance',
   'back_to_disk',
   'back_to_overview',
   'log_out',
@@ -141,6 +144,9 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('install_app')).toBe(true);
     expect(hasDurationIntent('make_backup_disk')).toBe(true);
     expect(hasDurationIntent('open_app')).toBe(true);
+    expect(hasDurationIntent('update_restart_failed')).toBe(true);
+    expect(hasDurationIntent('backup_schedule')).toBe(true);
+    expect(hasDurationIntent('rename_instance')).toBe(true);
     expect(hasDurationIntent('log_out')).toBe(true);
     expect(hasDurationIntent('copy_app')).toBe(true);
     expect(hasDurationIntent('reboot_engine')).toBe(true);
@@ -228,6 +234,11 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(sel.startInstance('kolibri-grade5a-001')).toBe('[data-testid="start-instance-kolibri-grade5a-001"]');
     expect(sel.stopInstance('kolibri-grade5a-001')).toBe('[data-testid="stop-instance-kolibri-grade5a-001"]');
     expect(sel.backupInstance('kolibri-grade5a-001')).toBe('[data-testid="backup-instance-kolibri-grade5a-001"]');
+    expect(sel.updateOutcome('kolibri-grade5a-001')).toBe('[data-testid="update-outcome-kolibri-grade5a-001"]');
+    expect(sel.updateRestartFailedAlert('i1')).toBe(
+      '[data-testid="update-outcome-i1"], [data-testid="update-error-i1"]',
+    );
+    expect(sel.instanceErrorHint('i1')).toBe('[data-testid="instance-error-hint-i1"]');
     expect(sel.settingsBtn).toBe('[data-testid="settings-btn"]');
     expect(sel.makeFilesDisk).toBe('[data-testid="make-files-disk"]');
     expect(sel.makeBackupDisk).toBe('[data-testid="make-backup-disk"]');

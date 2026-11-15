@@ -522,12 +522,49 @@ A total under 1 GB is "This Pi's Apps use less than 1 GB" (never "0 GB" or
 uses one decimal place; 10 GB and above are whole numbers. The line is not gated on
 `scheduledBackups`. `dataBytesAt` is on the type but not shown.
 
+### Backup Disk size gate (console#219)
+
+Before the Console sends `createBackupDisk` (EmptyDiskPanel) or
+`initialiseDisk … backup` (Client cards → Initialise), it checks the chosen
+disk against the Engine's 8 GiB minimum and against 1.5× the measured App
+data that disk will copy. The helper is `src/store/backupDiskSizeGate.ts`
+(`assessBackupDiskSize`). The 8 GiB floor is `8 × 1024³` bytes, the same
+constant as Engine `MAKE_BACKUP_DISK_MIN_BYTES`, and is compared with total
+`Disk.sizeBytes` or the candidate's `sizeBytes`. The 1.5× rule uses the same
+capacity on an empty or new disk; a later caller (console#211) can pass
+`freeBytes` for a disk that already holds App or Files data.
+
+- EmptyDiskPanel: the ticked Apps, excluding `backupMethod: 'none'`.
+- Initialise as a Backup Disk: every instance on a disk docked to this Engine,
+  excluding demos, instances stored on the target disk, and `backupMethod: 'none'`.
+
+If the data is known and the disk is too small, the action is disabled and
+the command is not sent. If `dataBytes` is unknown, or the disk's size is
+unknown, the Console warns and does not block (unless the disk is already
+under 8 GiB). When both rules fail, the App-data wording is used if 1.5× the
+measured data is above 8 GiB; otherwise the 8 GiB wording.
+
+Wording uses the same size phrases as the backup-sizing line
+(`formatAppDataSize`: decimal GB, "less than 1 GB" without "about"). The
+8 GiB floor reads "Too small: needs more than 8 GB. Choose a disk larger
+than all the App data on this Pi." (a stick sold as "8 GB" is under 8 GiB).
+The Client cards Backup Disk option also shows the backup-sizing line.
+
+The Engine's `createBackupDisk` and `initialiseDisk … backup` do not themselves
+enforce 8 GiB or a dataBytes check; this gate is Console-only until an Engine
+follow-up exists.
+
 ### Backup Disk status lines (idea#404)
 
 When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400,
 Engine main f114a28), `RestorePanel` and the instance row show store-summary status
 lines: schedule and next run (computed from `schedule.daily`, or 02:30 when the
-schedule is absent or invalid, and only while `clockTrusted` is true),
+schedule is absent or invalid, and only while `clockTrusted` is true; if
+`Disk.lastAttempt` is older than the most recent slot the Next run clause
+is "A missed backup will start shortly.", and if there is no `lastAttempt`
+yet it is "First backup will start shortly." — console#210; once
+`lastAttempt` passes the slot the normal "Next run today/tomorrow at HH:MM"
+returns),
 `backupConfig.scheduleError` (plain wording; the disk still runs at 02:30 until
 it is fixed), `backupConfig.orphanLinks` (Engine #356: a calm info line when
 non-empty, nothing when missing or empty; no delete action), last attempt
@@ -983,12 +1020,14 @@ Key Vite config:
 - `build.outDir: 'dist'` — Chrome Extension loads from here; also served by Engine HTTP server
 - `build.emptyOutDir: false` — a direct `vite build` must not wipe a live `dist/` the Engine is serving
 
-`pnpm build` runs `scripts/build.mjs`: Vite writes to a fresh `dist.new-<timestamp>/` (with
-`emptyOutDir: true` only for that folder) and, only on success, swaps it into `dist/`
-(`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one previous tree is kept
-for rollback. A failed build leaves the live `dist/` in place, so the Engine never serves
-an empty or half-written Console. The Chrome Extension entry (`src/background/background.ts`
-→ `background.js`) is unchanged.
+`pnpm build` runs `scripts/build.mjs`, which always calls Vite `build()` with `mode: 'production'`
+and sets `NODE_ENV=production` so a stray env (for example `test`) cannot change the bundle.
+`pnpm dev` still starts the Vite dev server and is unchanged. Vite writes to a fresh
+`dist.new-<timestamp>/` (with `emptyOutDir: true` only for that folder) and, only on success,
+swaps it into `dist/` (`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one
+previous tree is kept for rollback. A failed build leaves the live `dist/` in place, so the
+Engine never serves an empty or half-written Console. The Chrome Extension entry
+(`src/background/background.ts` → `background.js`) is unchanged.
 
 `pnpm package`: builds, zips `dist/` to `/tmp/idea-console-pkg/extension.zip`, serves on
 port 8080 for download from the Pi.
@@ -1047,6 +1086,9 @@ Console surfaces used by the duration-tests walker expose id-keyed `data-testid`
 `console-overview`, `op-entry`, `op-overview`, `eject-confirm`, `erase-dialog`).
 Playwright Intent adapters live under `e2e/intents/`, registry keyed by Axle
 ACTIONS.md / school-day.yaml (`open_console_as_teacher`, `open_kolibri_as_teacher`,
-`open_nextcloud_as_learner`, `open_disk_inventory`, …). Defaults bind to Kid
+`open_nextcloud_as_learner`, `open_disk_inventory`, `backup_schedule`, `rename_instance`, `update_restart_failed`, …). Defaults bind to Kid
 fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
 `duration-kolibri-grade5a-001`). Engine-owned `infra_*` Intents are not registered here.
+`update_restart_failed` (console#217, engine#442) is hook-gated: it is registered, but
+it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, because the Engine
+has no fault-injection hook yet to fail the post-backup restart. See `e2e/intents/README.md`.

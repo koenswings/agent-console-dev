@@ -106,4 +106,36 @@ export const sel = {
   connectEngineManual: '[data-testid="connect-engine-manual"]',
   connectEngine: (hostname: string) =>
     `[data-testid="connect-engine-${hostname.replace(/\.local$/i, '')}"]`,
+  /** updateApp badge / confirm / result (console#217, engine#442). */
+  updateApp: (id: string) => `[data-testid="update-app-${id}"]`,
+  updateBadge: (id: string) => `[data-testid="update-badge-${id}"]`,
+  updateConfirm: (id: string) => `[data-testid="update-confirm-${id}"]`,
+  updateConfirmBtn: (id: string) => `[data-testid="update-confirm-btn-${id}"]`,
+  updateOutcome: (id: string) => `[data-testid="update-outcome-${id}"]`,
+  updateError: (id: string) => `[data-testid="update-error-${id}"]`,
+  /** The #217 alert may be on the finished op or the command-trace error. */
+  updateRestartFailedAlert: (id: string) =>
+    `[data-testid="update-outcome-${id}"], [data-testid="update-error-${id}"]`,
+  /** InstanceRow error hint (kept, Steve): visible when status is Error and the row is collapsed. */
+  instanceErrorHint: (id: string) => `[data-testid="instance-error-hint-${id}"]`,
+  /** Backup Disk size gate (console#220). Block fails Configure; warn does not. */
+  backupDiskSizeBlock: '[data-testid="backup-disk-size-block"]',
+  backupDiskSizeWarn: '[data-testid="backup-disk-size-warn"]',
+  /** BackupModeControls / setBackupMode (idea#400, console#212 status line). */
+  backupModeControls: '[data-testid="backup-mode-controls"]',
+  backupModeTime: '[data-testid="backup-mode-time"]',
+  backupModeTimeError: '[data-testid="backup-mode-time-error"]',
+  backupModeSave: '[data-testid="backup-mode-save"]',
+  backupModeSuccess: '[data-testid="backup-mode-success"]',
+  backupModeError: '[data-testid="backup-mode-error"]',
+  backupModeTimeout: '[data-testid="backup-mode-timeout"]',
+  backupModePending: '[data-testid="backup-mode-pending"]',
+  restoreDiskStatus: '[data-testid="restore-disk-status"]',
+  restoreDiskStatusSchedule: '[data-testid="restore-disk-status-schedule"]',
+  /** Inline rename (console#171, engine#220). */
+  renameInstanceBtn: (id: string) => `[data-testid="rename-instance-btn-${id}"]`,
+  renameInstanceInput: (id: string) => `[data-testid="rename-instance-input-${id}"]`,
+  renameInstanceSave: (id: string) => `[data-testid="rename-instance-save-${id}"]`,
+  renameInstanceCancel: (id: string) => `[data-testid="rename-instance-cancel-${id}"]`,
+  renameInstanceProblem: (id: string) => `[data-testid="rename-instance-problem-${id}"]`,
 } as const;

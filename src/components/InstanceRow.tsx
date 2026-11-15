@@ -576,7 +576,10 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           </div>
         </Show>
         <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded() && !updating()}>
-          <div class="instance-row__error-hint">
+          <div
+            class="instance-row__error-hint"
+            data-testid={`instance-error-hint-${props.instanceId ?? props.instance()?.id ?? ''}`}
+          >
             {plainEngineText(props.instance()!.statusCondition)}
           </div>
         </Show>

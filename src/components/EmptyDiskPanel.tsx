@@ -47,6 +47,10 @@ import {
   createCommandResult,
 } from '../store/commandResult';
 import { confirmInstalled, remoteWatchFor } from '../store/remoteConfirm';
+import {
+  assessBackupDiskSize,
+  instancesForLinkedBackup,
+} from '../store/backupDiskSizeGate';
 import BackupSizingLine from './BackupSizingLine';
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
@@ -198,11 +202,20 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     );
   };
 
+  const backupSizeGate = createMemo(() =>
+    assessBackupDiskSize({
+      instances: instancesForLinkedBackup(props.store(), selectedInstanceIds()),
+      totalSizeBytes: props.disk()?.sizeBytes,
+      wording: 'selected',
+    }),
+  );
+
   const handleConfigureBackup = () => {
     setError('');
     const engineId = props.engineId();
     const disk = props.disk();
     if (!engineId || !disk) return;
+    if (backupSizeGate().blocked) return;
 
     const ids = selectedInstanceIds();
     if (ids.length === 0) {
@@ -525,6 +538,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
             </Show>
 
+            <Show when={backupSizeGate().blockReason}>
+              {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-disk-size-block">{msg()}</p>}
+            </Show>
+            <Show when={backupSizeGate().warning}>
+              {(msg) => <p class="edp-form__hint" data-testid="backup-disk-size-warn">{msg()}</p>}
+            </Show>
             <Show when={error()}><p class="edp-form__error" data-testid="backup-form-error" role="alert">{error()}</p></Show>
             <Show when={backupResult.state().kind === 'pending'}>
               <p class="edp-form__hint" data-testid="backup-pending">Waiting for the Engine…</p>
@@ -542,7 +561,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               <button
                 class="btn btn--primary"
                 data-testid="configure-backup-disk"
-                disabled={backupPending()}
+                disabled={backupPending() || backupSizeGate().blocked}
+                title={backupSizeGate().blockReason}
                 onClick={handleConfigureBackup}
               >
                 Configure Backup Disk

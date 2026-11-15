@@ -107,7 +107,7 @@ See `fixtures.ts` — content IDs + `live` facility/class/lesson (mutable on re-
 
 Registered (fail loud when gated / UI missing):
 `install_app`, `start_after_install`, `stay_on_disk`, `make_backup_disk`,
-`restore_from_backup`, `open_app`, `backup_instance`, `back_to_disk`,
+`restore_from_backup`, `open_app`, `backup_instance`, `backup_schedule`, `update_restart_failed`, `rename_instance`, `back_to_disk`,
 `back_to_overview`, `log_out`, `notice_usb_dock`, `retry_login_first_time_setup`,
 `change_password`, `add_operator`, `remove_operator`, `copy_app`, `move_app`.
 
@@ -454,6 +454,54 @@ saw "Intent ok" with no op (cover-all-989400c-r42).
 | Wait for Operation | `waitForBackupAppOperation` until OperationProgress shows a `backupApp` card for the instance (`data-op-kind` / `data-op-instance`) — Pending / Running / Done = ok; Failed / CommandFeedback error / timeout = loud-fail |
 | Appear budget | `DURATION_BACKUP_OP_START_MS` default **30s** (not Done — harness still verifies archive) |
 | Prefer A | backup-before-stop in walk; Intent also starts if Stopped — **no** soft-pass / no click-only ok |
+
+## make_backup_disk size gate (console#220)
+
+Before clicking Configure, `make_backup_disk` fails immediately if
+`[data-testid="backup-disk-size-block"]` is visible, including the gate text.
+A visible `[data-testid="backup-disk-size-warn"]` does not fail the Intent
+(IntentFn has no notes channel; no `console.log`).
+
+## backup_schedule (console#212)
+
+On a Backup Disk, set scheduled mode and a daily time in BackupModeControls
+(`setBackupMode`), then assert the RestorePanel schedule status line
+(`restore-disk-status-schedule`). Accepts catch-up, first-run, or a next-run
+clause; does not wait for the slot. Fails clearly if the Engine lacks
+`scheduledBackups` (controls hidden). Override the time with
+`DURATION_BACKUP_SCHEDULE_TIME`.
+
+## rename_instance (console#171)
+
+Rename an instance via `rename-instance-*`, assert the new name, then rename
+it back so duration fixtures stay unchanged. Fails clearly if the Engine lacks
+the `renameInstance` capability. Override with `DURATION_RENAME_INSTANCE_ID`
+and `DURATION_RENAME_TEMP_NAME`.
+
+## update_restart_failed (console#217, engine#442)
+
+When `updateApp` fails before a swap and the old version cannot be restarted, the
+Console shows the agreed #217 alert (not "Nothing changed") as a red error, with
+no Retry/Resume, and still shows the InstanceRow error hint (Steve).
+
+This path cannot be triggered on a stock Engine: it needs a pre-swap update
+failure **and** a failed restart. engine#445 sets `Operation.restartFailed` and
+the command-log `{ restartFailed: true }` result when `start()` throws or the
+instance is not Running/Starting, but there is **no** Engine `IDEA_TEST_*` env,
+command flag, or duration fixture to force that. Do **not** sample this edge in
+a duration walk until that hook exists.
+
+| Step | Contract |
+|---|---|
+| Gate | Loud-fail unless `DURATION_UPDATE_RESTART_FAILED_HOOK=1` **and** an instance id (`DURATION_UPDATE_RESTART_FAILED_INSTANCE_ID` or `ctx.instanceId`). No soft-pass. |
+| App name | `DURATION_UPDATE_RESTART_FAILED_APP`, else the row's `.instance-row__app` title |
+| Click | Update badge → confirm Update (instance must have an offer; Update must be enabled) |
+| Alert | Wait (default 15 min, `DURATION_UPDATE_RESTART_FAILED_MS`) for `update-outcome-<id>` or `update-error-<id>` to equal: `The update didn't start, and <App> couldn't be started again, so it is stopped. Its version and data are unchanged. Start <App> again, or ask for help if it doesn't start.` |
+| Kind | `data-kind="failed"` when the outcome node is shown |
+| No CTA | No button named Retry or Resume on the update control or the row |
+| Hint | Collapse the row if expanded, then `instance-error-hint-<id>` must be visible |
+
+Selectors live in `selectors.ts` (`updateBadge`, `updateOutcome`, `updateRestartFailedAlert`, `instanceErrorHint`, …). Box-runnable coverage is `test/updateRestartFailedIntent.test.ts` (text, selectors, hook gate) — this Intent is not run against a Pi from `pnpm test`.
 
 ## runStartInstance wait while Starting (r32 FAIL@86)
 
