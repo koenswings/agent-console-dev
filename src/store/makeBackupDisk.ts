@@ -45,9 +45,13 @@ export const MAKE_BACKUP_DISK_TIME = '02:30';
  * Size wording (Steve, idea#404, 15 Nov 16:05). The Engine limit is 8 GiB
  * (MAKE_BACKUP_DISK_MIN_BYTES), so a stick sold as "8 GB" (8·10⁹ bytes) is
  * refused. A Backup Disk holds every App on the Pi (engine#424), so the
- * guidance is tied to the Pi's App data, not a fixed size. The store has no
- * per-instance data size yet, so the Console uses the general sentence.
- * Grey-out reason, tooltip and the TOO_SMALL error all use
+ * guidance is tied to the Pi's App data, not a fixed size.
+ * Instance.dataBytes (engine#441) is in the store, and the backup-sizing
+ * line on the makeBackupDisk confirm in EmptyDiskPanel shows "This Pi's
+ * Apps use about X GB" so the operator can judge the disk. The size gate
+ * itself does not use dataBytes: it only compares the target's known size
+ * with the Engine's 8 GiB minimum. These constants stay the general
+ * sentence. Grey-out reason, tooltip and the TOO_SMALL error all use
  * MAKE_BACKUP_DISK_TOO_SMALL_REASON; a requirement stated on its own uses
  * MAKE_BACKUP_DISK_SIZE_NEED.
  */
