@@ -3739,6 +3739,15 @@ body {
   padding-top: 0.75rem;
   border-top: 1px dashed #e5e7eb;
 }
+/* Make this also a Backup Disk (agent-console-dev#209) */
+.adopt-backup__warning {
+  margin: 0.5rem 0;
+  color: var(--colour-warning, #b26a00);
+  font-size: var(--font-size-sm, 0.875rem);
+}
+.adopt-backup__success {
+  color: var(--colour-success, #22c55e);
+}
 .tree-item--unformatted .tree-item__meta {
   color: #6b7280;
   font-size: 0.85em;

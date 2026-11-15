@@ -2,7 +2,8 @@
  * DiskView — right pane for a selected disk that isn't in the Empty disk
  * state (files-disk.md §8, idea#132 / idea#136). A header with one badge per
  * role in fixed order, then one section per role: Apps, Backups and Files.
- * "Add Files" / "Erase the disk first" on App/Backup disks; "Erase this
+ * "Add Files" / "Erase the disk first" on App/Backup disks; "Make this also
+ * a Backup Disk" on App/Files disks (agent-console-dev#209); "Erase this
  * disk…" at the bottom of every non-system disk.
  */
 import { Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
@@ -10,6 +11,7 @@ import InstanceList from './InstanceList';
 import RestorePanel from './RestorePanel';
 import FilesSection from './FilesSection';
 import FilesRoleForm from './FilesRoleForm';
+import AdoptBackupDiskSection from './AdoptBackupDiskSection';
 import EraseDialog, { type EraseMode } from './EraseDialog';
 import RoleBadges from './RoleBadges';
 import CommandFeedback from './CommandFeedback';
@@ -247,6 +249,13 @@ const DiskView: Component<DiskViewProps> = (props) => {
             </Show>
           </section>
         </Show>
+
+        <AdoptBackupDiskSection
+          disk={disk}
+          store={props.store}
+          engineId={engineId}
+          commandLogStore={props.commandLogStore}
+        />
 
         <Show when={offerErase()}>
           <div class="disk-view__erase">
