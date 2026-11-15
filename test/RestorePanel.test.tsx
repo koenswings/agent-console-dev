@@ -145,4 +145,32 @@ describe('RestorePanel', () => {
     expect(values).not.toContain(MOCK_IDS.DISK_2_ID);
     expect(values).not.toContain(MOCK_IDS.DISK_3_ID);
   });
+
+  it('shows how much App data this Pi holds (engine#441)', () => {
+    const store: Store = {
+      ...MOCK_STORE,
+      instanceDB: {
+        ...MOCK_STORE.instanceDB,
+        [MOCK_IDS.INST_KOLIBRI_ID]: {
+          ...MOCK_STORE.instanceDB[MOCK_IDS.INST_KOLIBRI_ID],
+          dataBytes: 2_000_000_000,
+        },
+        [MOCK_IDS.INST_CHANNEL_BUILDER_ID]: {
+          ...MOCK_STORE.instanceDB[MOCK_IDS.INST_CHANNEL_BUILDER_ID],
+          dataBytes: 3_500_000_000,
+        },
+      },
+    };
+    renderPanel({ store });
+    expect(screen.getByTestId('backup-sizing')).toHaveTextContent(
+      "This Pi's Apps use about 5.5 GB",
+    );
+  });
+
+  it('shows not measured yet when this Pi\'s Apps have no dataBytes', () => {
+    renderPanel();
+    expect(screen.getByTestId('backup-sizing')).toHaveTextContent(
+      "This Pi's Apps are not measured yet",
+    );
+  });
 });

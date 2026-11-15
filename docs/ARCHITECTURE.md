@@ -473,6 +473,9 @@ Instance {
   lastResult?, backupHistory?       // idea#400 summary, optional; lastResult.time is the result time
                                     // (no Instance.lastAttempt)
   backupMethod?                     // 'stop' | 'hook' | 'none' (idea#403, Engine PR #404); unset on older Engines
+  dataBytes?, dataBytesAt?          // engine#430 / engine#441: App data size in bytes (whole MB of
+                                    // 1,000,000 bytes) and Unix ms of that measurement; null/absent
+                                    // when never measured; optional on older Engines
 }
 
 User {
@@ -485,6 +488,27 @@ User {
 ```
 
 Engine liveness (`src/store/live.ts` `engineStatus`): `connecting` until a heartbeat has been observed or the connecting grace (`LIVE_CONNECTING_MS`, 15 s after the Console starts listening) has passed with a stale `lastRun`; `online` when a live heartbeat arrived within 30 s (Console clock), or — for old Engines that never send heartbeats — when stored `lastRun` is within 90 s; `offline` only once that status is known (heartbeat expired, or grace over and `lastRun` stale).
+
+
+### Backup sizing line (engine#441)
+
+`RestorePanel` (the Backup Disk section) and the "Make this a Backup Disk" form
+on `EmptyDiskPanel` show a short line for how much App data this Pi holds, so
+an operator can judge Backup Disk size. The copy comes from
+`src/store/backupSizing.ts` (`deriveBackupSizing`): it sums
+`Instance.dataBytes` over instances stored on disks whose `dockedTo` is this
+Engine. Only non-null values are added; undocked disks and disks docked to
+another Engine are excluded.
+
+- No Apps on this Pi: "No Apps on this Pi yet"
+- None measured: "This Pi's Apps are not measured yet"
+- Some measured: "This Pi's Apps use about X GB (N Apps not measured yet)"
+- All measured: "This Pi's Apps use about X GB"
+
+Sizes use decimal GB (1 GB = 1,000,000,000 bytes, matching Engine DiskSize).
+A total under 1 GB is "less than 1 GB" (never "0 GB"); under 10 GB uses one
+decimal place; 10 GB and above are whole numbers. The line is not gated on
+`scheduledBackups`. `dataBytesAt` is on the type but not shown.
 
 ### Backup Disk status lines (idea#404)
 

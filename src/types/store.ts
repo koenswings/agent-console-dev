@@ -486,6 +486,14 @@ export interface Instance {
    * (addendum decision 5). Absent or null = nothing to warn about.
    */
   demoPackWarning?: DemoPackWarning | null;
+  /**
+   * engine#430 / engine#441: bytes used by the instance folder (instances/<id>:
+   * data, database and volumes; not the shared App master), rounded to whole
+   * MB (1 MB = 1,000,000 bytes). Null or absent when never measured. Optional:
+   * older Engines omit it. dataBytesAt is the Unix ms of that measurement.
+   */
+  dataBytes?: number | null;
+  dataBytesAt?: Timestamp | null;
 }
 
 /** engine#369 comment 6875670232: exact shape of Instance.demoPackWarning. */
