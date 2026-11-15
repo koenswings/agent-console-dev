@@ -25,6 +25,7 @@ import {
   MAKE_BACKUP_DISK_CAPABILITY,
   MAKE_BACKUP_DISK_COMMAND,
   MAKE_BACKUP_DISK_TIME,
+  MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   findMakeBackupDiskOp,
   isTooSmallForBackupDisk,
   makeBackupDiskBlockedReason,
@@ -55,11 +56,10 @@ export const ADOPT_BACKUP_DISK_SUCCESS_HINT =
   'Apps pause for a moment while a backup runs.';
 
 /**
- * Size grey-out and TOO_SMALL wording for this flow. The Engine allows
+ * Size grey-out and TOO_SMALL wording: the #187 text. The Engine allows
  * exactly 8 GiB, but a stick sold as "8 GB" is smaller than that.
  */
-export const ADOPT_BACKUP_DISK_TOO_SMALL_REASON =
-  'Too small: needs more than 8 GB (16 GB or more recommended)';
+export const ADOPT_BACKUP_DISK_TOO_SMALL_REASON = MAKE_BACKUP_DISK_TOO_SMALL_REASON;
 
 export const ADOPT_BACKUP_DISK_SIZE_UNKNOWN =
   "The Pi couldn't read the size of this disk, so nothing was changed. Unplug it, plug it back in and try again.";
