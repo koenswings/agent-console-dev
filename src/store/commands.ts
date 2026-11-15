@@ -52,8 +52,30 @@ export type EngineCapability =
   // idea#79 (cross-Engine Move, see store/moveApp.ts)
   | 'moveAppCrossEngine'
   // idea#404: agreed capability (own flag, not scheduledBackups).
-  // Not advertised on Engine main f114a28 yet; the UI stays gated on this flag.
-  | 'makeBackupDisk';
+  | 'makeBackupDisk'
+  /**
+   * idea#400 / Engine f114a28: this Engine publishes the store summary, runs the
+   * schedule, and accepts setBackupMode.
+   */
+  | 'scheduledBackups'
+  /**
+   * idea#400 / Engine PR #354: fullness-driven Backup Disk cleanup. Helper-gated
+   * like flashCard: advertised only when the app-data root helper is at
+   * BACKUP_CLEANUP_HELPER_MIN (v10) or newer, checked once at startup.
+   * Freshness is capabilitiesBootedAt === lastBooted. A skipped cleanup is still
+   * recorded as lastResult HELPER_OUTDATED (runtime fallback).
+   */
+  | 'backupCleanup'
+  /**
+   * engine#369 §1 (idea#235): setupDemo / removeDemo. Advertised when
+   * removeInstance is and python3 is on PATH, checked once at startup.
+   */
+  | 'demoApps'
+  /**
+   * engine#399 / agent-engine-dev#403: instance command traces carry the
+   * resolved `instanceId` plus the display `instanceName` (see traceInstance.ts).
+   */
+  | 'traceInstanceId';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -180,8 +202,9 @@ export const rebootEngine = (engineId: string): void => {
 // ---------------------------------------------------------------------------
 
 /**
- * Cancel a Pending or Running operation (also releases the resource lock on
- * Failed ops). Sent to the engine that owns the operation.
+ * Cancel a Pending or Running operation. Sent to the engine that owns the
+ * operation. Only the user's Cancel sends it; dismissing a finished card never
+ * does (idea#498, store/dismissedOps.ts).
  * Format: "cancelOperation <operationId>"
  */
 export const cancelOperation = (engineId: string, operationId: string): void => {
@@ -252,6 +275,32 @@ export const validateShareName = (name: string): string | null => {
   if (name.length > 16) return 'At most 16 characters.';
   if (name !== name.trim()) return 'No space at the start or end.';
   return null;
+};
+
+/**
+ * Build "setBackupMode <backupDiskId> <immediate|on-demand|scheduled> [HH:MM]"
+ * (idea#400, Engine f114a28). Always the disk id, never the name. A time is
+ * valid only with scheduled and is omitted for the other modes.
+ */
+export const buildSetBackupModeCommand = (
+  backupDiskId: string,
+  mode: string,
+  time?: string,
+): string => {
+  const t = time?.trim();
+  return t && mode === 'scheduled'
+    ? `setBackupMode ${backupDiskId} ${mode} ${t}`
+    : `setBackupMode ${backupDiskId} ${mode}`;
+};
+
+/** Switch a docked Backup Disk's mode and, for scheduled, its daily time. */
+export const setBackupMode = (
+  engineId: string,
+  backupDiskId: string,
+  mode: string,
+  time?: string,
+): void => {
+  _sendCommand(engineId, buildSetBackupModeCommand(backupDiskId, mode, time));
 };
 
 /** Configure an empty disk as a Backup Disk on the given engine. */
@@ -445,4 +494,30 @@ export const buildRemoveInstanceCommand = (instanceId: string): string =>
 
 export const removeInstance = (engineId: string, instanceId: string): void => {
   _sendCommand(engineId, buildRemoveInstanceCommand(instanceId));
+};
+
+/**
+ * Build the "setupDemo" command string (engine#369 §2, idea#235).
+ * Format: "setupDemo <targetDiskId> [--apps kolibri,nextcloud]". Sent to the
+ * Engine the disk is docked to, always by disk id. `--apps` is omitted when
+ * no subset is given (the Engine default is both apps).
+ */
+export const buildSetupDemoCommand = (targetDiskId: string, apps?: readonly string[]): string =>
+  apps && apps.length > 0 ? `setupDemo ${targetDiskId} --apps ${apps.join(',')}` : `setupDemo ${targetDiskId}`;
+
+export const setupDemo = (engineId: string, targetDiskId: string, apps?: readonly string[]): void => {
+  _sendCommand(engineId, buildSetupDemoCommand(targetDiskId, apps));
+};
+
+/**
+ * Build the "removeDemo" command string (engine#369 §2, idea#235).
+ * Format: "removeDemo <instanceId>...". The Console always names the exact
+ * instance ids it showed in the confirm, never the bare form (which removes
+ * every demo instance docked to that Engine).
+ */
+export const buildRemoveDemoCommand = (instanceIds: readonly string[]): string =>
+  ['removeDemo', ...instanceIds].join(' ');
+
+export const removeDemo = (engineId: string, instanceIds: readonly string[]): void => {
+  _sendCommand(engineId, buildRemoveDemoCommand(instanceIds));
 };

@@ -23,12 +23,13 @@ async function snap(page: Page, name: string) {
   console.log(`✓ ${name}.png`);
 }
 
-/** Open a new page with demo mode pre-set in localStorage */
-async function demoPage(ctx: BrowserContext): Promise<Page> {
+/** Open a new page with preview mode pre-set in localStorage */
+async function previewPage(ctx: BrowserContext): Promise<Page> {
   const p = await ctx.newPage();
   await p.addInitScript(() => {
     localStorage.clear();
-    localStorage.setItem('demoMode', 'true');
+    localStorage.setItem('previewMode', 'true');
+    localStorage.removeItem('demoMode');
   });
   return p;
 }
@@ -68,9 +69,9 @@ async function main() {
     await p.close();
   }
 
-  // ── S4: App Browser (logged out, demo mode) ──────────────────────────────
+  // ── S4: App Browser (logged out, preview mode) ──────────────────────────────
   {
-    const p = await demoPage(ctx);
+    const p = await previewPage(ctx);
     await p.goto(BASE_URL);
     await p.locator('.app-browser').waitFor({ timeout: 15_000 });
     await snap(p, 'S4-app-browser-logged-out');
@@ -84,7 +85,7 @@ async function main() {
 
   // ── S5 + S5b + S5c + S6 + S2 (all need logged-in state) ─────────────────
   {
-    const p = await demoPage(ctx);
+    const p = await previewPage(ctx);
     await p.goto(BASE_URL);
     await p.locator('.app-browser').waitFor({ timeout: 15_000 });
     await loginDemo(p);

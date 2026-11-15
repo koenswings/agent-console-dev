@@ -10,6 +10,7 @@ import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult } from '../store/commandResult';
+import { traceInstanceMatch } from '../store/traceInstance';
 import CommandFeedback from './CommandFeedback';
 import RenameInstanceName from './RenameInstanceName';
 import UpdateAppControl from './UpdateAppControl';
@@ -31,7 +32,14 @@ import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
 import { plainEngineText } from '../store/plainError';
+import { latestRowFailure, rowFailureVisible } from '../store/rowFailure';
+import { isDemoInstance } from '../store/demoApps';
 import TechnicalDetails from './TechnicalDetails';
+import BackupStatusLines from './BackupStatusLines';
+import {
+  engineShowsBackupStatus,
+  instanceBackupStatusLines,
+} from '../store/backupStatus';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -139,6 +147,8 @@ const OP_LABEL: Record<OperationKind, string> = {
   flashCard:     'Flashing card',
   initialiseDisk: 'Initialising disk',
   makeBackupDisk: 'Making a Backup Disk',
+  setupDemo:     'Setting up demo apps',
+  removeDemo:    'Removing demo apps',
 };
 
 // ---------------------------------------------------------------------------
@@ -281,20 +291,18 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   // Copy/move failures are shown in the OperationProgress panel instead.
   const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp', 'updateApp']);
 
-  const failedOp = (): Operation | null => {
+  // idea#498: the newest finished op of this instance decides (no clock here), then
+  // the 24 h expiry and the local dismiss (store/rowFailure.ts) on the existing liveNow tick.
+  const latestFailure = createMemo((): Operation | null => {
     if (!props.instanceId || !props.store) return null;
-    const store = props.store();
-    if (!store) return null;
+    return latestRowFailure(props.store(), String(props.instanceId), (op) =>
+      RUNTIME_OP_KINDS.has(op.kind) && !(op.kind === UPDATE_OP_KIND && updateOwned()));
+  });
+  const failedOp = createMemo((): Operation | null => {
     if (activeOps().length > 0) return null; // active ops take precedence
-    const failed = Object.values(store.operationDB ?? {}).filter(
-      (op) => op.status === 'Failed'
-        && String(op.args['instanceId']) === String(props.instanceId)
-        && RUNTIME_OP_KINDS.has(op.kind)
-        && !(op.kind === UPDATE_OP_KIND && updateOwned())
-    );
-    if (failed.length === 0) return null;
-    return failed.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
-  };
+    const op = latestFailure();
+    return op && rowFailureVisible(op, props.store?.() ?? null, live(), liveNow()) ? op : null;
+  });
 
   // All CommandTraces for this instance - matched by instanceId or instanceName in args, newest first
   const instanceTraces = createMemo((): CommandTrace[] => {
@@ -380,8 +388,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     if (!engine || !inst || !diskId) return;
     // Disk ID (storedOn), never the display name: names may contain spaces.
     // Instance by NAME: no Engine (8d98718 nor Axle's fix) resolves an id here.
-    cmdResult.start(inst.name, () => startInstance(engine.id, inst.name, String(diskId)), {
+    // engine#399: match by id on a traceInstanceId Engine; the sent name (with the disk) also matches.
+    const match = traceInstanceMatch(storeAcc(), engine.id, inst.id, inst.name, String(diskId));
+    cmdResult.start(match.argValue, () => startInstance(engine.id, inst.name, String(diskId)), {
       command: 'startInstance',
+      argKey: match.argKey,
+      altMatch: match.altMatch,
       engineId: engine.id,
       remote: remoteWatchFor(storeAcc, engine.id, 'startInstance', confirmInstanceStatus(storeAcc, inst.id, ['Running'], 'startApp')),
     });
@@ -393,8 +405,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     const inst = props.instance();
     const diskId = inst?.storedOn;
     if (!engine || !inst || !diskId) return;
-    cmdResult.start(inst.name, () => stopInstance(engine.id, inst.name, String(diskId)), {
+    const match = traceInstanceMatch(storeAcc(), engine.id, inst.id, inst.name, String(diskId));
+    cmdResult.start(match.argValue, () => stopInstance(engine.id, inst.name, String(diskId)), {
       command: 'stopInstance',
+      argKey: match.argKey,
+      altMatch: match.altMatch,
       engineId: engine.id,
       remote: remoteWatchFor(storeAcc, engine.id, 'stopInstance', confirmInstanceStatus(storeAcc, inst.id, ['Stopped', 'Docked'], 'stopApp')),
     });
@@ -403,8 +418,11 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const sendBackup = (engineId: string, instanceId: string, backupDiskId: string) => {
     // Instance and backup disk by ID (see buildBackupAppCommand).
-    cmdResult.start(instanceId, () => backupApp(engineId, instanceId, backupDiskId), {
+    // engine#399: the trace's instanceName is the display name on a new Engine.
+    const match = traceInstanceMatch(storeAcc(), engineId, instanceId, instanceId);
+    cmdResult.start(match.argValue, () => backupApp(engineId, instanceId, backupDiskId), {
       command: 'backupApp',
+      argKey: match.argKey,
       longRunning: true,
       engineId,
       remote: remoteWatchFor(storeAcc, engineId, 'backupApp',
@@ -456,6 +474,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const hasBackupDisks = () => (props.backupDisks?.() ?? []).length > 0;
 
+  const backupStatusLines = createMemo(() => {
+    const inst = props.instance();
+    if (!inst || !engineShowsBackupStatus(props.engine())) return [];
+    return instanceBackupStatusLines({
+      instance: inst,
+      engine: props.engine(),
+      disks: props.backupDisks?.() ?? [],
+    });
+  });
+
   const dragData = (): DragAppData | null => {
     const inst = props.instance();
     const disk = inst?.storedOn ? props.store?.()?.diskDB[String(inst.storedOn)] : undefined;
@@ -497,12 +525,21 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
       </button>
 
       <div class="instance-row__info">
-        <RenameInstanceName
-          instance={props.instance}
-          engine={props.engine}
-          store={() => props.store?.() ?? null}
-          commandLog={() => props.commandLogStore?.() ?? null}
-        />
+        <div class="instance-row__title">
+          <RenameInstanceName
+            instance={props.instance}
+            engine={props.engine}
+            store={() => props.store?.() ?? null}
+            commandLog={() => props.commandLogStore?.() ?? null}
+          />
+          <Show when={isDemoInstance(props.instance())}>
+            <span
+              class="demo-badge"
+              data-testid={`demo-badge-${props.instance()?.id ?? ''}`}
+              title="Demo app: for training, not a real school app"
+            >DEMO</span>
+          </Show>
+        </div>
         <div class="instance-row__app">
           {props.app() ? props.app()!.title : props.instance()?.instanceOf}
         </div>
@@ -709,6 +746,14 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
               <dt>Last backup</dt>
               <dd>{formatTs(props.instance()?.lastBackup)}</dd>
             </div>
+            <Show when={backupStatusLines().length > 0}>
+              <div class="instance-details__item instance-details__item--full" data-testid="instance-backup-status-item">
+                <dt>Backup status</dt>
+                <dd>
+                  <BackupStatusLines lines={backupStatusLines} testId="instance-backup-status" />
+                </dd>
+              </div>
+            </Show>
             <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition}>
               <div class="instance-details__item instance-details__item--full instance-details__item--error">
                 <dt>

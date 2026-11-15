@@ -1,13 +1,24 @@
 import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import { restoreApp } from '../store/commands';
 import { createCommandResult, type CommandResult } from '../store/commandResult';
+import { traceInstanceMatch } from '../store/traceInstance';
 import type { CommandLogState } from '../store/commandLog';
 import { isInstanceLocked } from '../store/operations';
 import CommandFeedback from './CommandFeedback';
+import BackupModeControls from './BackupModeControls';
 import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
 import {
   backupDateText, currentDiskName, isSameDiskRestore, otherDiskButton, otherDiskSummary, type RestoreWords,
 } from '../store/restoreConfirm';
+import BackupStatusLines from './BackupStatusLines';
+import {
+  diskBackupStatusLines,
+  engineForDisk,
+  engineShowsBackupStatus,
+  instanceBackupStatusLines,
+  isBackupMethodNone,
+  METHOD_NONE_COPY,
+} from '../store/backupStatus';
 import type { Disk, Instance, Store } from '../types/store';
 
 interface RestorePanelProps {
@@ -35,13 +46,32 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
 
   const backupConfig = () => props.disk()?.backupConfig ?? null;
 
-  const linkedInstances = createMemo((): Instance[] => {
+  // ID-keyed: iterate link IDs that still exist in the store (idea#404).
+  const linkedInstanceIds = createMemo((): string[] => {
     const s = props.store();
     const cfg = backupConfig();
     if (!s || !cfg) return [];
-    return cfg.links
-      .map((id) => s.instanceDB[id])
-      .filter((inst): inst is Instance => inst !== undefined);
+    return cfg.links.filter((id) => s.instanceDB[id] !== undefined);
+  });
+
+  const instanceOf = (id: string): Instance | undefined => props.store()?.instanceDB[id];
+
+  const linkedInstances = createMemo((): Instance[] =>
+    linkedInstanceIds().map((id) => instanceOf(id)).filter((inst): inst is Instance => inst !== undefined)
+  );
+
+  const engine = createMemo(() => engineForDisk(props.store(), props.disk(), props.engineId()));
+
+  const showBackupStatus = createMemo(() => engineShowsBackupStatus(engine()));
+
+  const diskStatusLines = createMemo(() => {
+    const disk = props.disk();
+    if (!disk || !showBackupStatus()) return [];
+    return diskBackupStatusLines({
+      disk,
+      engine: engine(),
+      instances: linkedInstances(),
+    });
   });
 
   const targetDisks = createMemo((): Disk[] => {
@@ -60,6 +90,8 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
         (d.diskTypes.includes('app') || d.diskTypes.includes('empty'))
     );
   });
+
+  const targetDiskIds = createMemo((): string[] => targetDisks().map((d) => d.id));
 
   const formatLastBackup = (ts: number | null): string => {
     if (!ts) return 'Never backed up';
@@ -86,8 +118,10 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
     // share a name). The Engine's answer (e.g. "Too many arguments", "Target
     // disk … not found") is shown on this row by CommandFeedback — never
     // silent. On another Engine: "Sent to …" until the restore op is Done.
-    result.start(inst.id, () => restoreApp(engineId, inst.id, targetDisk.id), {
+    const match = traceInstanceMatch(s, engineId, inst.id, inst.id); // engine#399
+    result.start(match.argValue, () => restoreApp(engineId, inst.id, targetDisk.id), {
       engineId,
+      argKey: match.argKey,
       remote: remoteWatchFor(props.store, engineId, 'restoreApp', confirmNewOperation(props.store, 'restoreApp', inst.id, { engineId, args: { targetDiskId: targetDisk.id } })),
     });
     onSent?.();
@@ -121,6 +155,17 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
         </div>
       </header>
 
+      <BackupModeControls
+        disk={props.disk}
+        store={props.store}
+        engineId={props.engineId}
+        commandLogStore={props.commandLogStore}
+      />
+
+      <Show when={diskStatusLines().length > 0}>
+        <BackupStatusLines lines={diskStatusLines} testId="restore-disk-status" />
+      </Show>
+
       {/* No backup configuration */}
       <Show when={!backupConfig()}>
         <p class="restore-panel__empty">This disk has no backup configuration.</p>
@@ -135,25 +180,41 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
           }
         >
           <div class="restore-panel__instance-list">
-            <For each={linkedInstances()}>
-              {(inst) => {
-                const locked = () => isInstanceLocked(props.store(), inst.id);
-                const selectedDiskId = () => targetSelections()[inst.id] ?? '';
-                const isConfirming = () => confirmingId() === inst.id;
+            <For each={linkedInstanceIds()}>
+              {(instanceId) => {
+                const inst = () => instanceOf(instanceId)!;
+                const locked = () => isInstanceLocked(props.store(), instanceId);
+                const selectedDiskId = () => targetSelections()[instanceId] ?? '';
+                const isConfirming = () => confirmingId() === instanceId;
+                // idea#403: a backup-method-none instance has nothing on this disk to restore.
+                const nothingToRestore = () => isBackupMethodNone(inst()) && inst()?.lastBackup == null;
                 const result = createCommandResult({
                   commandLog: () => props.commandLogStore?.() ?? null,
                   command: 'restoreApp',
                   argKey: 'instanceName',
                   longRunning: true,
                 });
+                const instanceStatusLines = createMemo(() => {
+                  if (!showBackupStatus()) return [];
+                  const current = inst();
+                  if (!current) return [];
+                  const disk = props.disk();
+                  const lines = instanceBackupStatusLines({
+                    instance: current,
+                    engine: engine(),
+                    disks: disk ? [disk] : [],
+                  });
+                  // The method-none sentence is already the row's backup line.
+                  return nothingToRestore() ? lines.filter((l) => l.text !== METHOD_NONE_COPY) : lines;
+                });
 
                 const words = (): RestoreWords => ({
-                  app: inst.name,
-                  date: backupDateText(inst.lastBackup),
+                  app: inst().name,
+                  date: backupDateText(inst().lastBackup),
                   target: selectedDiskName(),
-                  current: currentDiskName(props.store(), inst),
+                  current: currentDiskName(props.store(), inst()!),
                 });
-                const sameDisk = () => isSameDiskRestore(inst, selectedDiskId());
+                const sameDisk = () => isSameDiskRestore(inst()!, selectedDiskId());
                 // Summary words, captured when sent (the selection is cleared then).
                 const [sentWords, setSentWords] = createSignal<RestoreWords | null>(null);
                 const summary = () => {
@@ -168,91 +229,97 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                 };
 
                 return (
-                  <div class="restore-panel__instance-row" data-testid={`restore-instance-${inst.id}`}>
+                  <div class="restore-panel__instance-row" data-testid={`restore-instance-${instanceId}`}>
                     <div class="restore-panel__instance-info">
-                      <span class="restore-panel__instance-name">{inst.name}</span>
-                      <span class="restore-panel__instance-backup">
-                        {formatLastBackup(inst.lastBackup)}
+                      <span class="restore-panel__instance-name">{inst().name}</span>
+                      <span class="restore-panel__instance-backup" data-testid={`restore-instance-backup-${instanceId}`}>
+                        {nothingToRestore() ? METHOD_NONE_COPY : formatLastBackup(inst().lastBackup)}
                       </span>
+                      <Show when={instanceStatusLines().length > 0}>
+                        <BackupStatusLines lines={instanceStatusLines} testId={`restore-instance-status-${instanceId}`} />
+                      </Show>
                     </div>
 
-                    {/* Target disk selector */}
-                    <Show when={targetDisks().length > 0} fallback={
-                      <p class="restore-panel__empty">No available target disks.</p>
-                    }>
-                      <select
-                        class="restore-panel__target-select"
-                        data-testid={`restore-target-${inst.id}`}
-                        value={selectedDiskId()}
-                        disabled={locked() || isConfirming()}
-                        onChange={(e) => setTarget(inst.id, e.currentTarget.value)}
-                      >
-                        <option value="">Select target disk…</option>
-                        <For each={targetDisks()}>
-                          {(d) => (
-                            <option value={d.id}>{d.name}</option>
-                          )}
-                        </For>
-                      </select>
-                    </Show>
-
-                    {/* Restore button — disabled until target selected */}
-                    <Show when={!isConfirming()}>
-                      <button
-                        class="btn"
-                        data-testid={`restore-btn-${inst.id}`}
-                        disabled={locked() || !selectedDiskId()}
-                        onClick={() => handleRestoreClick(inst.id)}
-                      >
-                        {locked() ? 'Operation in progress' : 'Restore'}
-                      </button>
-                    </Show>
-
-                    {/* Inline confirmation (agent-engine-dev#191 wording) */}
-                    <Show when={isConfirming()}>
-                      <div class="restore-panel__confirm" data-testid={`restore-confirm-box-${inst.id}`}>
-                        <Show
-                          when={!sameDisk()}
-                          fallback={
-                            <p class="restore-panel__confirm-text" data-testid={`restore-confirm-text-${inst.id}`}>
-                              Restore <strong>{words().app}</strong> from the backup of {words().date}? The app will be stopped and its data replaced with the backup. Changes made since {words().date} will be lost.
-                            </p>
-                          }
+                    <Show when={!nothingToRestore()}>
+                      {/* Target disk selector */}
+                      <Show when={targetDisks().length > 0} fallback={
+                        <p class="restore-panel__empty">No available target disks.</p>
+                      }>
+                        <select
+                          class="restore-panel__target-select"
+                          data-testid={`restore-target-${instanceId}`}
+                          value={selectedDiskId()}
+                          disabled={locked() || isConfirming()}
+                          onChange={(e) => setTarget(instanceId, e.currentTarget.value)}
                         >
-                          <p class="restore-panel__confirm-text" data-testid={`restore-confirm-text-${inst.id}`}>
-                            Restore <strong>{words().app}</strong> from the backup of {words().date} onto <strong>{words().target}</strong>?
-                          </p>
-                          <ul class="restore-panel__confirm-points" data-testid={`restore-confirm-points-${inst.id}`}>
-                            <li>The running copy of {words().app} on <strong>{words().current}</strong> will be stopped.</li>
-                            <li>From now on, {words().app} will run from <strong>{words().target}</strong>.</li>
-                            <li>The old copy on {words().current} is not deleted. It stays there until you remove it.</li>
-                          </ul>
-                        </Show>
-                        <div class="restore-panel__confirm-actions">
-                          <button class="btn" data-testid={`restore-cancel-${inst.id}`} onClick={handleCancel}>Cancel</button>
-                          <button
-                            class="btn btn--danger"
-                            data-testid={`restore-confirm-${inst.id}`}
-                            onClick={() => {
-                              const w = words();
-                              const other = !sameDisk();
-                              handleConfirm(inst, result, () => setSentWords(other ? w : null));
-                            }}
+                          <option value="">Select target disk…</option>
+                          <For each={targetDiskIds()}>
+                            {(diskId) => (
+                              <option value={diskId}>{props.store()?.diskDB[diskId]?.name ?? diskId}</option>
+                            )}
+                          </For>
+                        </select>
+                      </Show>
+
+                      {/* Restore button — disabled until target selected */}
+                      <Show when={!isConfirming()}>
+                        <button
+                          class="btn"
+                          data-testid={`restore-btn-${instanceId}`}
+                          disabled={locked() || !selectedDiskId()}
+                          onClick={() => handleRestoreClick(instanceId)}
+                        >
+                          {locked() ? 'Operation in progress' : 'Restore'}
+                        </button>
+                      </Show>
+
+                      {/* Inline confirmation (agent-engine-dev#191 wording) */}
+                      <Show when={isConfirming()}>
+                        <div class="restore-panel__confirm" data-testid={`restore-confirm-box-${instanceId}`}>
+                          <Show
+                            when={!sameDisk()}
+                            fallback={
+                              <p class="restore-panel__confirm-text" data-testid={`restore-confirm-text-${instanceId}`}>
+                                Restore <strong>{words().app}</strong> from the backup of {words().date}? The app will be stopped and its data replaced with the backup. Changes made since {words().date} will be lost.
+                              </p>
+                            }
                           >
-                            {sameDisk() ? 'Restore' : otherDiskButton(words().target)}
-                          </button>
+                            <p class="restore-panel__confirm-text" data-testid={`restore-confirm-text-${instanceId}`}>
+                              Restore <strong>{words().app}</strong> from the backup of {words().date} onto <strong>{words().target}</strong>?
+                            </p>
+                            <ul class="restore-panel__confirm-points" data-testid={`restore-confirm-points-${instanceId}`}>
+                              <li>The running copy of {words().app} on <strong>{words().current}</strong> will be stopped.</li>
+                              <li>From now on, {words().app} will run from <strong>{words().target}</strong>.</li>
+                              <li>The old copy on {words().current} is not deleted. It stays there until you remove it.</li>
+                            </ul>
+                          </Show>
+                          <div class="restore-panel__confirm-actions">
+                            <button class="btn" data-testid={`restore-cancel-${instanceId}`} onClick={handleCancel}>Cancel</button>
+                            <button
+                              class="btn btn--danger"
+                              data-testid={`restore-confirm-${instanceId}`}
+                              onClick={() => {
+                                const w = words();
+                                const other = !sameDisk();
+                                handleConfirm(inst()!, result, () => setSentWords(other ? w : null));
+                              }}
+                            >
+                              {sameDisk() ? 'Restore' : otherDiskButton(words().target)}
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      </Show>
+
                     </Show>
 
                     <Show when={summary()}>
-                      <p class="restore-panel__summary" role="status" data-testid={`restore-summary-${inst.id}`}>{summary()}</p>
+                      <p class="restore-panel__summary" role="status" data-testid={`restore-summary-${instanceId}`}>{summary()}</p>
                     </Show>
 
                     <CommandFeedback
                       result={result}
-                      subject={() => inst.name}
-                      testId={`restore-feedback-${inst.id}`}
+                      subject={() => inst().name}
+                      testId={`restore-feedback-${instanceId}`}
                     />
                   </div>
                 );

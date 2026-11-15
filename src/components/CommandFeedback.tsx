@@ -5,6 +5,7 @@
  * Disk results: an `edp-form__error` alert with the Engine's error trace
  * message, or an `edp-form__hint` status when the Engine never answered.
  * Pending and success render nothing; the panel's own progress UI covers them.
+ * A `warning` state (finished, but not as asked) is an amber `edp-form__hint`.
  *
  * Cross-engine commands (remoteConfirm.ts) show a neutral `edp-form__hint`
  * "Sent to <engine>, waiting for confirmation" until the store or the target's
@@ -42,6 +43,11 @@ export const COMMAND_VERBS: Record<string, string> = {
   createBackupDisk: 'set up',
   // idea#404 — agreed makeBackupDisk
   makeBackupDisk: 'set up',
+  // idea#400 / Engine f114a28
+  setBackupMode: 'change the backup settings of',
+  // idea#235 / engine#369
+  setupDemo: 'set up demo apps on',
+  removeDemo: 'remove demo apps from',
 };
 
 export const commandVerb = (command: string | null): string =>
@@ -57,6 +63,12 @@ interface CommandFeedbackProps {
   formatError?: (message: string) => string;
   /** Optional: a complete sentence for this error (replaces "Couldn't <verb> <subject>: …"); null = default line. */
   formatLine?: (message: string, code: string | null) => string | null;
+  /** Optional: hide the "Sent to …, waiting for confirmation" line (the caller shows progress instead). */
+  hideSent?: Accessor<boolean>;
+  /** Optional: the warning sentence, re-read while rendering (moveApp: follows the newest op, engine#395); null = the message. */
+  formatWarning?: (message: string, code: string | null) => string | null;
+  /** Optional: hide the warning line (the caller shows the same outcome itself). */
+  hideWarning?: Accessor<boolean>;
 }
 
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
@@ -64,9 +76,15 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
     const s = props.result.state();
     return s.kind === 'error' ? plainEngineText(props.formatError ? props.formatError(s.message) : s.message) : null;
   };
+  // A finished command that did not do what was asked (moveApp SOURCE_CHANGED, engine#388): a plain sentence, amber.
+  const warning = () => {
+    const s = props.result.state();
+    if (s.kind !== 'warning' || props.hideWarning?.()) return null;
+    return props.formatWarning?.(s.message, s.code ?? null) ?? plainEngineText(s.message);
+  };
   const sentTo = () => {
     const s = props.result.state();
-    return s.kind === 'sent' ? s.engine : null;
+    return s.kind === 'sent' && !props.hideSent?.() ? s.engine : null;
   };
   return (
     <>
@@ -95,6 +113,18 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
               const line = raw.kind === 'error' && props.formatLine ? props.formatLine(raw.message, raw.code ?? null) : null;
               return line ?? `Couldn't ${commandVerb(props.result.command())} ${props.subject()}: ${msg()}`;
             })()}
+          </p>
+        )}
+      </Show>
+      <Show when={warning()}>
+        {(msg) => (
+          <p
+            class="edp-form__hint command-feedback--warning"
+            role="alert"
+            data-testid={`${props.testId}-warning`}
+            data-command={props.result.command() ?? ''}
+          >
+            {msg()}
           </p>
         )}
       </Show>

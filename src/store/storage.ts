@@ -17,7 +17,9 @@ export const STORAGE_KEY_STORE_URL = 'storeUrl';
 /** Optional HTTP port for a manually entered `host:port` engine (idea#100). Absent = default port. */
 export const STORAGE_KEY_PORT = 'enginePort';
 export const STORAGE_KEY_MODE = 'displayMode';
-export const STORAGE_KEY_DEMO = 'demoMode';
+export const STORAGE_KEY_PREVIEW = 'previewMode';
+/** Legacy mock-mode key; read once as a fallback and then removed. */
+export const STORAGE_KEY_DEMO_LEGACY = 'demoMode';
 export const STORAGE_KEY_HISTORY = 'engineHistory';
 
 export type DisplayMode = 'sidePanel' | 'popup' | 'window';
@@ -118,15 +120,28 @@ export async function saveHostnameAndStoreUrl(
   }
 }
 
-export async function readStoredDemoMode(): Promise<boolean> {
-  const r = await csGet([STORAGE_KEY_DEMO]);
+export async function readStoredPreviewMode(): Promise<boolean> {
+  const r = await csGet([STORAGE_KEY_PREVIEW, STORAGE_KEY_DEMO_LEGACY]);
   // Only return true if explicitly stored as 'true'.
-  // Never default to demo mode — users should see engine discovery, not a mock.
-  return r[STORAGE_KEY_DEMO] === 'true';
+  // Never default to preview mode — users should see engine discovery, not a mock.
+  if (STORAGE_KEY_PREVIEW in r) {
+    if (STORAGE_KEY_DEMO_LEGACY in r) {
+      await csRemove([STORAGE_KEY_DEMO_LEGACY]);
+    }
+    return r[STORAGE_KEY_PREVIEW] === 'true';
+  }
+  if (STORAGE_KEY_DEMO_LEGACY in r) {
+    const val = r[STORAGE_KEY_DEMO_LEGACY] === 'true';
+    await csSet({ [STORAGE_KEY_PREVIEW]: String(val) });
+    await csRemove([STORAGE_KEY_DEMO_LEGACY]);
+    return val;
+  }
+  return false;
 }
 
-export async function saveDemoMode(val: boolean): Promise<void> {
-  await csSet({ [STORAGE_KEY_DEMO]: String(val) });
+export async function savePreviewMode(val: boolean): Promise<void> {
+  await csSet({ [STORAGE_KEY_PREVIEW]: String(val) });
+  await csRemove([STORAGE_KEY_DEMO_LEGACY]);
 }
 
 export async function readEngineHistory(): Promise<string[]> {

@@ -164,6 +164,38 @@ describe('newInstanceOnDisk (copyApp fallback)', () => {
 });
 
 describe('instanceStoredOn (moveApp fallback)', () => {
+  it.each(['Pending', 'Running'] as const)('a kept-id move with a %s op waits for Done after storedOn flips', (status) => {
+    const [s, setS] = createSignal(base());
+    const check = confirmNewOperation(s, 'moveApp', NEXTCLOUD, {
+      engineId: E2, args: { targetDiskId: TARGET },
+      fallbackOk: instanceStoredOn(s, NEXTCLOUD, TARGET),
+    });
+    const moving = op('move', { kind: 'moveApp', status, stepLabel: 'Removing the old copy', startedAt: engineClock(s()) });
+    setS(withOp(withInstance(s(), NEXTCLOUD, { storedOn: TARGET }), moving));
+    expect(check()).toBeNull();
+    setS(withOp(s(), { ...moving, status: 'Done' }));
+    expect(check()).toBe('ok');
+  });
+  it('a kept-id move can confirm from storedOn when no matching op is visible', () => {
+    const [s, setS] = createSignal(base());
+    const check = confirmNewOperation(s, 'moveApp', NEXTCLOUD, {
+      engineId: E2, args: { targetDiskId: TARGET },
+      fallbackOk: instanceStoredOn(s, NEXTCLOUD, TARGET),
+    });
+    setS(withInstance(s(), NEXTCLOUD, { storedOn: TARGET }));
+    expect(check()).toBe('ok');
+  });
+  it('a Failed move wins over storedOn proof', () => {
+    const [s, setS] = createSignal(base());
+    const check = confirmNewOperation(s, 'moveApp', NEXTCLOUD, {
+      engineId: E2, args: { targetDiskId: TARGET },
+      fallbackOk: instanceStoredOn(s, NEXTCLOUD, TARGET),
+    });
+    setS(withOp(withInstance(s(), NEXTCLOUD, { storedOn: TARGET }), op('move', {
+      kind: 'moveApp', status: 'Failed', error: 'Move failed', startedAt: engineClock(s()),
+    })));
+    expect(check()).toEqual({ error: 'Move failed' });
+  });
   it('already on the target at send → never confirms', () => {
     const [s, setS] = createSignal(withInstance(base(), NEXTCLOUD, { storedOn: TARGET }));
     const moved = instanceStoredOn(s, NEXTCLOUD, TARGET);

@@ -29,6 +29,57 @@ export type BackupMode = 'immediate' | 'on-demand' | 'scheduled';
 export interface BackupConfig {
   mode: BackupMode;
   links: InstanceID[]; // instance IDs this backup disk is configured for
+  /**
+   * Daily local time on the docked Pi, e.g. `{ daily: "02:30" }`.
+   * Mirrors Engine Disk.backupConfig (f114a28). Null/absent when not set.
+   */
+  schedule?: BackupSchedule | null;
+  /**
+   * Set when BACKUP.yaml has a schedule that does not parse (BAD_TIME / BAD_SCHEDULE
+   * text); null when valid or absent (Engine f114a28). A scheduled disk with an
+   * error still runs at 02:30 until the file is fixed. Shown in plain wording.
+   */
+  scheduleError?: string | null;
+  /**
+   * Instance ids listed in BACKUP.yaml (and in `links`) that are not in the
+   * store (Engine #356 / idea#400 follow-up). Optional: missing on older
+   * Engines. The yaml is never rewritten or pruned for this; scheduled and
+   * immediate runs still skip those links. This list is how the Console shows why.
+   */
+  orphanLinks?: InstanceID[];
+}
+
+/** Daily "HH:MM" local to the docked Pi. Mirrors Engine BackupConfig.schedule. */
+export interface BackupSchedule {
+  daily: string;
+}
+
+/**
+ * A leftover .backup-in-progress lock found when a Backup Disk docks or
+ * the Engine boots (idea#446). Shape matches Engine 71fc2c6 src/data/Disk.ts.
+ */
+export interface BackupStaleLock {
+  instanceId: InstanceID;
+  startedAt: Timestamp | null;
+  detectedAt: Timestamp;
+}
+
+/**
+ * One backup attempt in the idea#400 store summary (time, method, result).
+ * Mirrors Engine BackupResult (f114a28): time, method (stop|hook|live|none),
+ * and result. result is a plain string so unknown Engine codes still type-check.
+ * Known codes, precedence for combined outcomes: FAILED, SKIPPED_LOCKED,
+ * HOOK_FALLBACK, HOOK_POST_WARNING, HELPER_OUTDATED, OK. BACKUP_DISK_FULL,
+ * APP_DISK_NOT_DOCKED and INTERRUPTED occur alone. Do not show the raw code
+ * in the UI. lastResult.time is the result time (there is no Instance.lastAttempt).
+ */
+/** x-app.backup.method published on the Instance (idea#403). */
+export type BackupMethod = 'stop' | 'hook' | 'none';
+
+export interface BackupRunResult {
+  time: Timestamp;
+  method: string | null;
+  result: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +164,24 @@ export interface Disk {
   /** Filesystem size and free space in bytes (docked disks, idea#131); null or absent otherwise. */
   sizeBytes?: number | null;
   freeBytes?: number | null;
+  /**
+   * Stale .backup-in-progress locks found at dock/boot (idea#446).
+   * Not auto-retried. null/absent when none or undocked.
+   * Matches Engine 71fc2c6 Disk.ts — not provisional.
+   */
+  backupStaleLocks?: BackupStaleLock[] | null;
+  /**
+   * idea#400 store summary (agreed on idea#400 and Steve's decisions).
+   * All optional: today's Engines omit them and the Console looks as before.
+   * lastAttempt is a Disk field (BACKUP.yaml mirror); it is not on Instance.
+   */
+  freePct?: number | null;
+  clockTrusted?: boolean | null;
+  clockReason?: string | null;
+  missedRuns?: number | null;
+  cleaning?: boolean | null;
+  cleaningStartedAt?: Timestamp | null;
+  lastAttempt?: Timestamp | null;
 }
 
 /** Files Disk settings — mirrors Disk.filesConfig (files-disk.md §7.5). */
@@ -374,6 +443,19 @@ export interface Instance {
   serviceImages: ServiceImage[];
   created: Timestamp;
   lastBackup: Timestamp | null; // unix ms of last successful backup; null if never backed up
+  /**
+   * idea#400 per-instance backup summary (agreed on idea#400 and Steve's decisions).
+   * All optional: today's Engines omit them and the Console looks as before.
+   * There is no Instance.lastAttempt; use lastResult.time. lastBackup (last
+   * successful backup) is unchanged.
+   */
+  lastResult?: BackupRunResult | null;
+  /**
+   * The App's x-app.backup.method as the Engine resolved it (idea#403, agent-engine-dev#404).
+   * Defaults to 'stop'; unset on an invalid backup spec or an older Engine/record.
+   */
+  backupMethod?: BackupMethod;
+  backupHistory?: BackupRunResult[] | null;
   lastStarted: Timestamp;
   storedOn: DiskID | null;
   /**
@@ -390,6 +472,29 @@ export interface Instance {
   metrics: DockerMetrics | null;
   /** Files Disks mounted into this instance, written after a successful compose up (idea#133). */
   filesMounts?: DiskID[];
+  /**
+   * engine#369 §3 (idea#235 Demo apps): present only when true, never false.
+   * Mirrored by the Engine from `x-app.demo: true` in the instance's
+   * compose.yaml, which only setupDemo writes. The DEMO badge comes from this
+   * flag, never from the name. Absent on older Engines.
+   */
+  demo?: true;
+  /**
+   * engine#369 Pixel Q1 answer (comment 6875670232): set by updateApp when the
+   * on-disk pack.json packVersion is below the new bundle's demo.pack.minVersion;
+   * cleared when a setupDemo verify succeeds. A warning only, no auto-download
+   * (addendum decision 5). Absent or null = nothing to warn about.
+   */
+  demoPackWarning?: DemoPackWarning | null;
+}
+
+/** engine#369 comment 6875670232: exact shape of Instance.demoPackWarning. */
+export interface DemoPackWarning {
+  code: 'PACK_OUTDATED';
+  /** On-disk pack.json packVersion. */
+  packVersion: number;
+  /** The new bundle's app.yaml demo.pack.minVersion. */
+  minVersion: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +533,61 @@ export type OperationKind =
   | 'flashCard'
   | 'initialiseDisk'
   // idea#404: agreed Operation kind makeBackupDisk
-  | 'makeBackupDisk';
+  | 'makeBackupDisk'
+  // engine#369 §3 (idea#235 Demo apps)
+  | 'setupDemo'
+  | 'removeDemo';
+
+// ---------------------------------------------------------------------------
+// Demo apps progress — engine#369 §3 (`Operation.demo`, like `Operation.move`).
+// All optional on Operation, so older Engines type-check unchanged.
+// ---------------------------------------------------------------------------
+/** Stable step ids. Setup: install … classwork; removal: stop, remove. */
+export type DemoStepId =
+  | 'install' | 'download' | 'verify' | 'seed' | 'start' | 'ready' | 'classwork' | 'stop' | 'remove';
+export type DemoStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'failed';
+export type DemoAppId = 'kolibri' | 'nextcloud';
+/** engine#369 §9 codes. Kept as string so a new Engine code still type-checks. */
+export type DemoCode = string;
+
+export interface DemoStep {
+  id: DemoStepId;
+  status: DemoStepStatus;
+  /** Set once with the download step; bytesDone is never stored (engine#369 §3). */
+  bytesTotal?: number | null;
+}
+
+export interface DemoAppProgress {
+  app: DemoAppId;
+  /** Set once install registered the instance. */
+  instanceId: InstanceID | null;
+  steps: DemoStep[];
+  source: 'local' | 'github' | null;
+  packVersion: string | null;
+  code: DemoCode | null;
+  /** Hook exit code / stderr tail in plain words (operator diagnostics). */
+  detail: string | null;
+}
+
+/** An app the Engine skipped because it had no source (engine#369 follow-up). */
+export interface DemoSkippedApp {
+  app: DemoAppId;
+  code: DemoCode;
+  detail: string;
+}
+
+export interface DemoProgress {
+  targetDiskId: DiskID | null;
+  apps: DemoAppProgress[];
+  /**
+   * Apps not attempted because they had no source. Always present on Engines
+   * that support skipping; [] = nothing skipped. Absent on older Engines.
+   * Skipped apps are not listed in `apps`.
+   */
+  skipped?: DemoSkippedApp[] | null;
+  code: DemoCode | null;
+  resultText: string | null;
+}
 
 export type OperationCause =
   | 'console-command'
@@ -454,6 +613,7 @@ export type OperationID = string;
 export interface Operation {
   id: OperationID;
   kind: OperationKind;
+  /** Every value is a string; setupDemo's `apps` is a comma string (engine#369 answer 3). */
   args: Record<string, string>;
   /** What triggered this operation. */
   cause: OperationCause;
@@ -474,6 +634,8 @@ export interface Operation {
    * off, safe to pull; false = eject first (POWER_OFF_FAILED). Absent on other kinds.
    */
   safeToRemove?: boolean;
+  /** engine#369 §3: setupDemo / removeDemo progress. Absent on other kinds and older Engines. */
+  demo?: DemoProgress | null;
 }
 
 // ---------------------------------------------------------------------------

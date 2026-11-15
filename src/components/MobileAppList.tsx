@@ -3,7 +3,8 @@ import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import CommandFeedback from './CommandFeedback';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
-import { createCommandResult, type CommandResult } from '../store/commandResult';
+import { createCommandResult, type CommandResult, type CommandResultTarget, type TraceAltMatch, type TraceArgKey } from '../store/commandResult';
+import { traceInstanceMatch } from '../store/traceInstance';
 import {
   confirmInstanceStatus,
   confirmNewOperation,
@@ -11,12 +12,15 @@ import {
   lastBackupAdvanced,
   newInstanceOnDisk,
   remoteWatchFor,
+  ENGINE_CLOCK_SLACK_MS,
   type RemoteCheck,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance } from '../store/operations';
+import { moveErrorLineFor, moveWarningLineFor, settleMoveOutcome, type MoveCtx } from '../store/moveApp';
 import { live, liveNow, metricsFor } from '../store/live';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
+import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
 import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
@@ -66,6 +70,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
   // through the card's result so a refusal shows on the card after the sheet
   // closes.
   const cardResults = new Map<string, CommandResult>();
+  // Last Move sent from the sheet per instance: when (Engine-clock slack applied) and the names (engine#388 wording).
+  const lastMoves = new Map<string, { since: number; ctx: MoveCtx }>();
 
   // Auto-clear pending start/stop when instance reaches expected status
   createEffect(() => {
@@ -179,15 +185,18 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     inst: Instance,
     command: string,
     send: () => void,
-    o: { engineId: string; argValue: string; longRunning?: boolean; confirm: () => RemoteCheck },
+    o: { engineId: string; argValue: string; argKey?: TraceArgKey; altMatch?: TraceAltMatch; longRunning?: boolean; confirm: () => RemoteCheck; settle?: CommandResultTarget['settle'] },
   ) => {
     const r = cardResults.get(inst.id);
     if (!r) { send(); return; }
     r.start(o.argValue, send, {
       command,
+      ...(o.argKey ? { argKey: o.argKey } : {}),
+      altMatch: o.altMatch ?? null,
       longRunning: o.longRunning ?? false,
       engineId: o.engineId,
       remote: remoteWatchFor(props.store, o.engineId, command, o.confirm),
+      settle: o.settle,
     });
   };
 
@@ -196,8 +205,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const diskId = inst.storedOn;
     if (!engine || !diskId) return;
     // Disk ID (storedOn), never the display name: names may contain spaces.
+    // engine#399: by id on a traceInstanceId Engine; the sent name (with the disk) also matches.
     sendTracked(inst, 'startInstance', () => startInstance(engine.id, inst.name, String(diskId)), {
-      engineId: engine.id, argValue: inst.name,
+      engineId: engine.id, ...traceInstanceMatch(props.store(), engine.id, inst.id, inst.name, String(diskId)),
       confirm: confirmInstanceStatus(props.store, inst.id, ['Running'], 'startApp'),
     });
     setPending(inst.id, 'starting');
@@ -208,7 +218,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const diskId = inst.storedOn;
     if (!engine || !diskId) return;
     sendTracked(inst, 'stopInstance', () => stopInstance(engine.id, inst.name, String(diskId)), {
-      engineId: engine.id, argValue: inst.name,
+      engineId: engine.id, ...traceInstanceMatch(props.store(), engine.id, inst.id, inst.name, String(diskId)),
       confirm: confirmInstanceStatus(props.store, inst.id, ['Stopped', 'Docked'], 'stopApp'),
     });
     setPending(inst.id, 'stopping');
@@ -219,8 +229,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
     const disks = resolveBackupDisks(inst);
     if (!engine || disks.length === 0) return;
     // Instance and backup disk by ID (see buildBackupAppCommand).
+    // engine#399: match by id on an Engine with traceInstanceId.
     sendTracked(inst, 'backupApp', () => backupApp(engine.id, inst.id, disks[0].id), {
-      engineId: engine.id, argValue: inst.id, longRunning: true,
+      engineId: engine.id, ...traceInstanceMatch(props.store(), engine.id, inst.id, inst.id), longRunning: true,
       confirm: confirmNewOperation(props.store, 'backupApp', inst.id, {
         engineId: engine.id, args: { backupDiskId: disks[0].id }, fallbackOk: lastBackupAdvanced(props.store, inst.id),
       }),
@@ -300,6 +311,9 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 <StatusDot status={i().status} size={9} />
                 <span class="mobile-app-card__name">
                   {cardTitle().title}
+                  <Show when={isDemoInstance(i())}>
+                    <span class="demo-badge" data-testid={`mobile-demo-badge-${id}`} title="Demo app: for training, not a real school app">DEMO</span>
+                  </Show>
                   <Show when={cardTitle().subtitle}>
                     <span class="mobile-app-card__app" data-testid={`mobile-app-title-${id}`}>
                       {cardTitle().subtitle}
@@ -321,11 +335,22 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               </div>
 
               <div class="mobile-app-card__status">{statusText(i())}</div>
+              <Show when={demoPackWarningText(i())}>
+                <p class="demo-warning" role="status" data-testid={`mobile-demo-pack-warning-${id}`}>{demoPackWarningText(i())}</p>
+              </Show>
 
               <CommandFeedback
                 result={cmdResult}
                 subject={() => i().name}
                 testId={`mobile-instance-cmd-${id}`}
+                formatLine={(message, code) => {
+                  const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
+                  return m ? moveErrorLineFor(props.store(), id, m.since, message, code, m.ctx) : null;
+                }}
+                formatWarning={() => {
+                  const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
+                  return m ? moveWarningLineFor(props.store(), id, m.since, m.ctx) : null;
+                }}
               />
 
               {/* Backup progress bar */}
@@ -445,11 +470,25 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
             const fallback = command === 'copyApp'
               ? newInstanceOnDisk(props.store, target.targetDiskId, { instanceOf: String(i.instanceOf), name: String(i.name), engineId: target.engineId })
               : instanceStoredOn(props.store, i.id, target.targetDiskId);
+            const s = props.store();
+            const targetEngineId = s?.diskDB?.[target.targetDiskId]?.dockedTo;
+            const move = command === 'moveApp' ? {
+              since: Date.now() - ENGINE_CLOCK_SLACK_MS,
+              ctx: {
+                app: String(i.name),
+                sourceEngine: String(s?.engineDB?.[target.engineId]?.hostname ?? target.engineId),
+                targetEngine: String((targetEngineId && s?.engineDB?.[String(targetEngineId)]?.hostname) ?? 'the other Engine'),
+              },
+            } : null;
+            if (move) lastMoves.set(i.id, move);
+            // engine#399: sent by name; an Engine with traceInstanceId traces the resolved id.
             sendTracked(i, command, send, {
-              engineId: target.engineId, argValue: i.name, longRunning: true,
+              engineId: target.engineId, ...traceInstanceMatch(s, target.engineId, i.id, String(i.name), i.storedOn == null ? null : String(i.storedOn)), longRunning: true,
               confirm: confirmNewOperation(props.store, command, i.id, {
                 engineId: target.engineId, args: { targetDiskId: target.targetDiskId }, fallbackOk: fallback,
               }),
+              // engine#388: a Done move / ok trace is green only when the app moved (not SOURCE_CHANGED).
+              settle: move ? settleMoveOutcome(props.store, i.id, move.since, () => move.ctx) : undefined,
             });
           }}
         />

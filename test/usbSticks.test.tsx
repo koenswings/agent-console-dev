@@ -1,13 +1,13 @@
 /**
  * idea#193 — read-only USB sticks in the Console: row, builder link, erase,
- * the two step-5 hints, and the demo-mode fixtures.
+ * the two step-5 hints, and the preview-mode fixtures.
  */
 import { describe, it, expect } from 'vitest';
 import { render, fireEvent } from '@solidjs/testing-library';
 import NetworkTree from '../src/components/NetworkTree';
 import UnformattedDiskView from '../src/components/UnformattedDiskView';
 import { MOCK_STORE, MOCK_IDS, APP_CHANNEL_BUILDER_ID } from '../src/mock/mockStore';
-import { resolveDemoMode } from '../src/store/demoMode';
+import { resolvePreviewMode } from '../src/store/previewMode';
 import {
   BUILDER_LINK_TEXT,
   HINT_BUILDER_STOPPED,
@@ -164,7 +164,7 @@ describe('Step 5 hints (idea#193 §8.2a)', () => {
   });
 });
 
-describe('Demo mode (idea#193 §8.4, step 5b)', () => {
+describe('Preview mode (idea#193 §8.4, step 5b)', () => {
   it('the demo store has the channel builder app, its disk on Engine 1 and a Running instance on 8090', () => {
     const app = MOCK_STORE.appDB[APP_CHANNEL_BUILDER_ID];
     expect(APP_CHANNEL_BUILDER_ID).toBe('kolibri-channel-builder-1.0');
@@ -183,13 +183,13 @@ describe('Demo mode (idea#193 §8.4, step 5b)', () => {
     expect(MOCK_STORE.engineDB[E1].unformattedDisks?.some((u) => u.device === st[0].device)).toBe(true);
   });
 
-  it('production web never uses the demo/mock store, even with stored demoMode or ?demo=1', () => {
-    for (const storedDemo of [true, false]) {
-      for (const searchParams of ['', '?demo=1', '?demo=true']) {
-        expect(resolveDemoMode({ productionWeb: true, storedDemo, searchParams }).isDemo).toBe(false);
+  it('production web never uses the mock store, even with stored previewMode or ?preview=1', () => {
+    for (const storedPreview of [true, false]) {
+      for (const searchParams of ['', '?preview=1', '?preview=true', '?demo=1', '?demo=true']) {
+        expect(resolvePreviewMode({ productionWeb: true, storedPreview, searchParams }).isPreview).toBe(false);
       }
     }
-    expect(resolveDemoMode({ productionWeb: true, storedDemo: true }).persistFalse).toBe(true);
-    expect(resolveDemoMode({ productionWeb: false, storedDemo: true }).isDemo).toBe(true);
+    expect(resolvePreviewMode({ productionWeb: true, storedPreview: true }).persistFalse).toBe(true);
+    expect(resolvePreviewMode({ productionWeb: false, storedPreview: true }).isPreview).toBe(true);
   });
 });

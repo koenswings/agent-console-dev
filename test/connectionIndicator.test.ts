@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { connectionIndicator, RECONNECTING_LABEL } from '../src/store/connectionIndicator';
 
-const base = { connected: true, socketState: 'live' as const, demo: false, discovering: false, hostname: 'idea04', engineName: () => 'idea04' };
+const base = { connected: true, socketState: 'live' as const, preview: false, discovering: false, hostname: 'idea04', engineName: () => 'idea04' };
 
 describe('status-bar indicator (agent-engine-dev#168)', () => {
   it('live socket: green dot and the Engine name', () => {

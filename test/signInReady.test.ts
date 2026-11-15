@@ -5,7 +5,7 @@ import { isLiveDurationConsole } from '../e2e/intents/openConsole';
 describe('isLiveDurationConsole (Prefer A)', () => {
   const fakePage = (url: string) => ({ url: () => url }) as never;
 
-  it('DURATION_LIVE forces live (no bootDemo)', () => {
+  it('DURATION_LIVE forces live (no bootPreview)', () => {
     expect(isLiveDurationConsole(fakePage('http://localhost:5173/'), { DURATION_LIVE: '1' })).toBe(true);
   });
 
@@ -21,7 +21,7 @@ describe('isLiveDurationConsole (Prefer A)', () => {
     expect(isLiveDurationConsole(fakePage('http://idea01:8080/'), {})).toBe(true);
   });
 
-  it('vite localhost stays demo boot path', () => {
+  it('vite localhost stays preview boot path', () => {
     expect(isLiveDurationConsole(fakePage('http://localhost:5173/'), {})).toBe(false);
   });
 });

@@ -9,16 +9,16 @@
  * ## What we test
  *
  * 1. Sets hostname=wizardly-hugle.local in localStorage → app connects (dot turns green)
- * 2. Main page structure is correct (status bar, no DEMO badge)
+ * 2. Main page structure is correct (status bar, no PREVIEW badge)
  * 3. Login as real-engine operator (skips if store hasn't synced or no users yet)
- * 4. Switch from real engine → demo mode (requires operator login first)
- * 5. Switch from demo mode → back to real engine
+ * 4. Switch from real engine → preview mode (requires operator login first)
+ * 5. Switch from preview mode → back to real engine
  *
  * ## Strategy for operator-only actions
  *
  * `.settings-panel__change-engine-btn` is only rendered when `isOperator()`.
- * For tests that need it, we log into demo mode first (guaranteed to work),
- * then navigate to real engine from within the demo session.
+ * For tests that need it, we log into preview mode first (guaranteed to work),
+ * then navigate to real engine from within the preview session.
  * This tests the real switching flow without depending on real-engine user sync timing.
  */
 
@@ -38,7 +38,8 @@ async function bootRealEngine(page: Page): Promise<void> {
   await page.addInitScript(({ h }: { h: string }) => {
     localStorage.clear();
     localStorage.setItem('engineHostname', h);
-    localStorage.setItem('demoMode', 'false');
+    localStorage.setItem('previewMode', 'false');
+    localStorage.removeItem('demoMode');
   }, { h: ENGINE_HOSTNAME });
   await page.goto('/');
 }
@@ -92,8 +93,8 @@ test.describe('Real engine', () => {
     // Status bar shows hostname with .local stripped
     await expect(page.locator('.status-bar__indicator')).toContainText(ENGINE_DISPLAY_NAME);
 
-    // No DEMO badge
-    await expect(page.locator('.status-bar__demo-badge')).not.toBeVisible();
+    // No PREVIEW badge
+    await expect(page.locator('.status-bar__preview-badge')).not.toBeVisible();
 
     expect(pageErrors).toHaveLength(0);
   });
@@ -109,7 +110,7 @@ test.describe('Real engine', () => {
     await expect(page.locator('.status-bar__title')).toContainText('IDEA Console');
     await expect(page.locator('.status-bar__settings-btn')).toBeVisible();
     await expect(page.locator('.app-browser')).toBeVisible();
-    await expect(page.locator('.status-bar__demo-badge')).not.toBeVisible();
+    await expect(page.locator('.status-bar__preview-badge')).not.toBeVisible();
 
     expect(pageErrors).toHaveLength(0);
   });
@@ -191,16 +192,16 @@ test.describe('Real engine', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 4. Switch from real engine → demo mode
-  //    Strategy: log in via demo first (guaranteed), then navigate to settings
-  //    and use the demo switch button. This tests the switch UI without needing
+  // 4. Switch from real engine → preview mode
+  //    Strategy: log in via preview first (guaranteed), then navigate to settings
+  //    and use the preview switch button. This tests the switch UI without needing
   //    the real engine store to have synced users.
   // -------------------------------------------------------------------------
-  test('switches from real engine to demo mode via change-engine dialog', async ({ page }) => {
+  test('switches from real engine to preview mode via change-engine dialog', async ({ page }) => {
     // Log in as demo operator so the change-engine button is available
     await loginAsDemo(page);
 
-    // We're in demo mode now — settings gear shows the change-engine dialog
+    // We're in preview mode now — settings gear shows the change-engine dialog
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
     await page.locator('.settings-panel__change-engine-btn').click();
@@ -215,8 +216,8 @@ test.describe('Real engine', () => {
     await hostnameInput.fill(ENGINE_HOSTNAME);
     await page.locator('.change-engine-dialog__input-row button').click();
 
-    // DEMO badge disappears once switched to real engine mode
-    await expect(page.locator('.status-bar__demo-badge')).not.toBeVisible({ timeout: 15_000 });
+    // PREVIEW badge disappears once switched to real engine mode
+    await expect(page.locator('.status-bar__preview-badge')).not.toBeVisible({ timeout: 15_000 });
 
     // The WS connects quickly; full Automerge sync may take longer.
     // Verify the app is in real-engine mode: dot is searching/connected (not disconnected)
@@ -231,12 +232,12 @@ test.describe('Real engine', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 5. Switch from demo mode → real engine
+  // 5. Switch from preview mode → real engine
   // -------------------------------------------------------------------------
-  test('switches from demo mode back to real engine via change-engine dialog', async ({ page }) => {
+  test('switches from preview mode back to real engine via change-engine dialog', async ({ page }) => {
     // Start logged in as demo operator
     await loginAsDemo(page);
-    await expect(page.locator('.status-bar__demo-badge')).toBeVisible();
+    await expect(page.locator('.status-bar__preview-badge')).toBeVisible();
 
     // Open settings → change engine dialog (operator-only — works because we're logged in)
     await page.locator('.status-bar__settings-btn').click();
@@ -253,8 +254,8 @@ test.describe('Real engine', () => {
     await hostnameInput.fill(ENGINE_HOSTNAME);
     await page.locator('.change-engine-dialog__input-row button').click();
 
-    // DEMO badge disappears once switched to real engine mode
-    await expect(page.locator('.status-bar__demo-badge')).not.toBeVisible({ timeout: 15_000 });
+    // PREVIEW badge disappears once switched to real engine mode
+    await expect(page.locator('.status-bar__preview-badge')).not.toBeVisible({ timeout: 15_000 });
 
     // Dot is searching or connected (real engine mode, WS is up or connecting)
     await expect(

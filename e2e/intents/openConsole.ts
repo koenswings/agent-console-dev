@@ -4,7 +4,7 @@
  * Teacher and learner share user-mode AppBrowser (`console-overview`).
  * Operator lands on Account / login (`op-entry`) ready for Sign in.
  *
- * Prefer A live (:8080): never force demoMode / bootDemo reload — that tears
+ * Prefer A live (:8080): never force previewMode / bootPreview reload — that tears
  * down the Engine WS right after dock/undock and leaves sign-in on Connecting…
  */
 import type { Page } from '@playwright/test';
@@ -13,16 +13,17 @@ import { sel } from './selectors';
 import { waitForSignInReady } from './signInReady';
 import { waitForUserOverviewCatalog } from './stayOnOverview';
 
-const bootDemo = async (page: Page): Promise<void> => {
+const bootPreview = async (page: Page): Promise<void> => {
   await page.addInitScript(() => {
-    localStorage.setItem('demoMode', 'true');
+    localStorage.setItem('previewMode', 'true');
+    localStorage.removeItem('demoMode');
     localStorage.removeItem('engineHostname');
   });
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
 };
 
-/** True when walking live Engine Console (Prefer A) — no demo boot. */
+/** True when walking live Engine Console (Prefer A) — no preview boot. */
 export function isLiveDurationConsole(
   page: Page,
   env: NodeJS.ProcessEnv = process.env,
@@ -42,12 +43,13 @@ export function isLiveDurationConsole(
 /**
  * Ensure Console page without forcing demo reconnect on live.
  */
-export async function ensureConsoleSurface(page: Page): Promise<'live' | 'demo'> {
+export async function ensureConsoleSurface(page: Page): Promise<'live' | 'preview'> {
   if (isLiveDurationConsole(page)) {
     const envUrl = process.env.DURATION_CONSOLE_URL?.trim();
     await page.addInitScript(() => {
-      // Prefer A: never boot demo on Engine :8080
-      localStorage.setItem('demoMode', 'false');
+      // Prefer A: never boot preview on Engine :8080
+      localStorage.setItem('previewMode', 'false');
+      localStorage.removeItem('demoMode');
     });
     let u = '';
     try {
@@ -66,8 +68,8 @@ export async function ensureConsoleSurface(page: Page): Promise<'live' | 'demo'>
     // Already on live Console — do NOT reload (avoids WS reconnect storm after dock)
     return 'live';
   }
-  await bootDemo(page);
-  return 'demo';
+  await bootPreview(page);
+  return 'preview';
 }
 
 /**

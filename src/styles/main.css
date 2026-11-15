@@ -214,7 +214,7 @@ body {
   50%       { opacity: 0.35; transform: scale(0.75); }
 }
 
-.status-bar__demo-badge {
+.status-bar__preview-badge {
   font-size: var(--font-size-xs);
   font-weight: 700;
   padding: 1px 7px;
@@ -647,6 +647,20 @@ body {
 .instance-row__info {
   flex: 1;
   min-width: 0;
+}
+
+.instance-row__title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.instance-row__title .instance-row__name {
+  min-width: 0;
+}
+
+.instance-row__title .demo-badge {
+  flex-shrink: 0;
 }
 
 .instance-row__name {
@@ -2339,7 +2353,7 @@ body {
   align-self: flex-start;
 }
 
-.change-engine-dialog__demo-section {
+.change-engine-dialog__preview-section {
   border-top: 1px solid var(--colour-border);
   padding-top: 12px;
   display: flex;
@@ -2786,8 +2800,14 @@ body {
 }
 
 /* idea#79: moved, but the old copy is still on the source */
-.cross-move--warning {
+.cross-move--warning,
+.command-feedback--warning {
   color: var(--colour-warning, #b26a00);
+}
+
+/* idea#498: the moved (success) line, same green as the Done op card */
+.cross-move--success {
+  color: var(--colour-success, #22c55e);
 }
 
 .copy-move-modal__desc strong {
@@ -2798,6 +2818,19 @@ body {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+/* idea#498: copy/move feedback (Sent to…, Move steps, live Checking line, result)
+   in one panel above the Operations panel, desktop and mobile. */
+.copy-move-feedback {
+  background: var(--colour-surface-alt);
+  border: 1px solid var(--colour-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* ── Operation progress panel ───────────────────────────────────────────── */
@@ -2873,6 +2906,20 @@ body {
 .operation-card__error {
   font-size: 0.78rem;
   color: var(--colour-danger, #e05);
+}
+
+/* engine#388: a Done move that did not move the app (amber, stays until dismissed) */
+.operation-card--warning {
+  border-color: var(--colour-warning, #b26a00);
+}
+
+.operation-card--warning .operation-card__status,
+.operation-card__warning {
+  color: var(--colour-warning, #b26a00);
+}
+
+.operation-card__warning {
+  font-size: 0.78rem;
 }
 
 .operation-card__step-label {
@@ -3868,6 +3915,31 @@ body {
   font-size: 0.85em;
 }
 
+/* idea#400: Backup Disk mode and schedule controls */
+.backup-mode-controls {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--colour-border, #ddd);
+}
+.backup-mode-controls__intro {
+  margin: 0 0 0.5rem;
+  color: var(--colour-text-muted, #555);
+}
+.backup-mode-controls__fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.backup-mode-controls__legend {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+.backup-mode-controls__time {
+  max-width: 8rem;
+}
+
 /* Follow-up to PR #162: App links to an offline Engine are greyed out */
 .app-card--offline .app-card__open-btn,
 .btn--open:disabled {
@@ -3921,4 +3993,122 @@ body {
   font-size: 0.8em;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* idea#404: space the existing RestorePanel header/row so status lines can sit cleanly */
+.restore-panel__subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.restore-panel__instance-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* idea#404: Backup Disk status lines (gated on scheduledBackups) */
+.backup-status {
+  list-style: none;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.restore-panel__instance-info .backup-status,
+.instance-details .backup-status {
+  margin: 0.35rem 0 0;
+}
+.backup-status__line {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.backup-status__line--ok { color: var(--colour-running); }
+.backup-status__line--warn { color: var(--colour-pauzed); }
+.backup-status__line--error { color: var(--colour-error); }
+.backup-status__line--unknown { color: var(--colour-text-dim); }
+.backup-status__line--neutral { color: var(--colour-text-muted); }
+/* idea#400 / Engine #356: orphan-links line uses --neutral (info, not a warning). */
+.backup-status__line--info { color: var(--colour-text-muted); }
+
+/* ── Demo apps (idea#235, engine#369) ─────────────────────────────────────── */
+.demo-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--colour-pauzed);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.demo-apps__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 1rem;
+}
+
+.demo-apps__note {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--colour-text-muted);
+}
+
+.demo-apps__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.demo-apps__progress {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.demo-apps__app-name {
+  font-weight: 600;
+}
+
+.demo-apps__steps {
+  margin: 4px 0 0;
+  padding-left: 1.2rem;
+}
+
+.demo-apps__step {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.demo-apps__step-status {
+  color: var(--colour-text-dim);
+}
+
+.demo-apps__step--running .demo-apps__step-status {
+  color: var(--colour-starting);
+}
+
+.demo-apps__step--done .demo-apps__step-status,
+.demo-apps__step--skipped .demo-apps__step-status {
+  color: var(--colour-running);
+}
+
+.demo-apps__step--failed .demo-apps__step-status {
+  color: var(--colour-error);
+}
+
+.demo-warning {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--colour-pauzed);
 }

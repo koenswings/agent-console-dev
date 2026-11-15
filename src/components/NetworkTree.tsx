@@ -299,7 +299,7 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     if (remote) return remote;
                     const c = s.watch.check();
                     if (c === 'ok') return { kind: 'ok' as const };
-                    return c ? { kind: 'error' as const, message: c.error } : null;
+                    return c ? { kind: 'error' as const, message: 'error' in c ? c.error : c.warning } : null;
                   });
                   createEffect(() => {
                     const outcome = ejectOutcome();

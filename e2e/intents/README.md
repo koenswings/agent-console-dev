@@ -121,7 +121,7 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 
 | Intent | Contract |
 |---|---|
-| `open_settings` | Panel + Engine tab + `settings-engine-status` (connected/demo). Account: `settings-change-password-*`. |
+| `open_settings` | Panel + Engine tab + `settings-engine-status` (connected/preview). Account: `settings-change-password-*`. |
 | `close_settings` | Panel must **hide** after settings-btn (loud if still open). |
 | `switch_engine` | Prefer A r44: open ConnectionManagement; if status-bar hostname **already matches** `DURATION_SWITCH_ENGINE_HOST` → **PASS** (already connected; "No engine found" is N/A — do **not** manual-Connect retry). Connect/retry only when status hostname ≠ HOST. Scan `DURATION_SWITCH_ENGINE_SCAN_MS`; connect `DURATION_SWITCH_ENGINE_CONNECT_MS`. |
 | `notice_usb_dock` | NetworkTree visible **and** ≥1 `disk-*` within 20s. No soft 500ms dwell. |
@@ -210,31 +210,31 @@ clicked. No force / JS clicks; up to 3 click attempts per hop. Success only when
 Learn `#/home`; otherwise loud-fail with the hop trail and final URL. Selectors are Kolibri 0.15.5 upstream markup, not Kid testids. Engine must drop
 `finish_exercise` from deferred / add it to `PIXEL_REGISTERED_INTENTS` (Axle).
 
-## Live duration — no bootDemo (`--live --ui`)
+## Live duration — no bootPreview (`--live --ui`)
 
 Duration walks against Kid fixture disks (`disk-duration-kolibri-grade5a-001`, …)
-must use the **Engine-hosted Console** (production web), never bootDemo mock disks
+must use the **Engine-hosted Console** (production web), never bootPreview mock disks
 (`DISK001` / `kolibri-disk`).
 
 | Requirement | Detail |
 |---|---|
 | URL | Engine host **`:8080`** (e.g. `http://idea01:8080/`) — not Vite/dev, not extension popup |
-| Demo | `isProductionWebMode()` forces demo **off** and clears localStorage `demoMode` even if stale `'true'` |
-| URL knobs | `?demo=0` / `?demo=false` clear demo (dev/extension). `?demo=1` **ignored** on production web |
+| Preview | `isProductionWebMode()` forces preview **off** and clears localStorage `previewMode` (and a leftover `demoMode`) even if stale `'true'` |
+| URL knobs | `?preview=0` / `?preview=false` clear preview (dev/extension). Legacy `?demo=` is still honoured when `preview` is absent. `?preview=1` / `?demo=1` **ignored** on production web |
 | Intents | Do **not** remap to demo disk IDs — fail loud if fixture disks missing |
 
 Playwright (before `page.goto` Console):
 
 ```ts
 await page.addInitScript(() => {
-  localStorage.setItem('demoMode', 'false');
-  localStorage.removeItem('demoMode'); // or set false — initConnection also clears in prod web
+  localStorage.setItem('previewMode', 'false');
+  localStorage.removeItem('demoMode'); // leftover key — initConnection also clears in prod web
 });
 await page.goto('http://idea01:8080/');
-// Assert no DEMO badge in status bar
+// Assert no PREVIEW badge in status bar
 ```
 
-Ops verify: status bar must **not** show `DEMO`; NetworkTree disks are Kid fixtures, not DISK001.
+Ops verify: status bar must **not** show `PREVIEW`; NetworkTree disks are Kid fixtures, not DISK001.
 
 ## Multi-disk `copy_app` / `move_app` preload (Axle / Engine)
 
@@ -242,7 +242,7 @@ Hardpass needs **real** NetworkTree drag (not demo DISK001). Prefer A:
 
 | Requirement | Detail |
 |---|---|
-| Console | Engine `:8080`, `demoMode=false` (production web clears stale demo) |
+| Console | Engine `:8080`, `previewMode=false` (production web clears stale preview) |
 | Disks | **Both** `duration-kolibri-grade5a-001` **and** `duration-nextcloud-grade5a-001` docked & visible in NetworkTree |
 | Source instance | Card `instance-kolibri-grade5a-001` (default) with `data-copyable="true"` (storedOn set after Path A restore) |
 | Target | Other duration disk row accepts drop |
@@ -288,8 +288,8 @@ Env: `DURATION_ADD_OPERATOR_USERNAME`, `DURATION_REMOVE_OPERATOR_USERNAME`, `DUR
 
 | Intent | Behavior |
 |---|---|
-| `open_console_as_operator` | Live `:8080` skips bootDemo reload; waits until Log in enabled / already logged in / first-time setup |
-| `sign_in` / `retry_login_first_time_setup` | Shared `waitForSignInReady` (default **60s**, `DURATION_SIGNIN_READY_MS`); loud-fail with status-bar + sign-in text + demoMode/hostname |
+| `open_console_as_operator` | Live `:8080` skips bootPreview reload; waits until Log in enabled / already logged in / first-time setup |
+| `sign_in` / `retry_login_first_time_setup` | Shared `waitForSignInReady` (default **60s**, `DURATION_SIGNIN_READY_MS`); loud-fail with status-bar + sign-in text + previewMode/hostname |
 
 Axle: after `infra_dock_fixture`, prefer a short settle before `open_console_as_operator`, or rely on the 60s wait. Do **not** soft-pass while Connecting….
 

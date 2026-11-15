@@ -42,14 +42,14 @@ test.describe('Settings panel', () => {
     expect(pageErrors).toHaveLength(0);
   });
 
-  test('engine connection tab shows demo mode status', async ({ page }) => {
+  test('engine connection tab shows preview mode status', async ({ page }) => {
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    // In demo mode the status label says "Demo mode"
-    await expect(page.locator('.settings-panel__current-label')).toContainText('Demo mode');
+    // In preview mode the status label says "Preview mode"
+    await expect(page.locator('.settings-panel__current-label')).toContainText('Preview mode');
 
-    // Demo toggle checkbox is present
+    // Preview toggle checkbox is present
     await expect(page.locator('.settings-panel input[type="checkbox"]')).toBeVisible();
 
     expect(consoleErrors).toHaveLength(0);

@@ -1,23 +1,26 @@
-import { createSignal, Show, For, type Component } from 'solid-js';
+import { createMemo, createSignal, Show, For, type Component } from 'solid-js';
 import pkg from '../../package.json';
 import { currentUser, isOperator, changePassword } from '../store/auth';
 import type { Store } from '../types/store';
+import { engineHasCapability } from '../store/commands';
+import { DEMO_APPS_CAPABILITY } from '../store/demoApps';
+import DemoAppsSection from './DemoAppsSection';
 import type { StoreConnection } from '../mock/mockStore';
 
-type Tab = 'engine' | 'account' | 'about';
+type Tab = 'engine' | 'account' | 'demo' | 'about';
 
 export interface SettingsPanelProps {
   store: Store | null;
   connection: StoreConnection | null;
   hostname: string;
-  demo: boolean;
+  preview: boolean;
   onClose: () => void;
   onComplete: () => void;
   onConnect: (hostname: string, storeUrl: string) => void;
   /** Open ConnectionManagement to pick another Engine (Prefer A switch_engine). */
   onChangeEngine?: () => void;
-  onDemoMode: () => void;
-  onDemoToggle?: (val: boolean) => Promise<void>;
+  onPreviewMode: () => void;
+  onPreviewToggle?: (val: boolean) => Promise<void>;
 }
 
 const SettingsPanel: Component<SettingsPanelProps> = (props) => {
@@ -68,9 +71,16 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
     }
   };
 
+  /** idea#235: any Engine with a fresh demoApps capability (engine#369 §1). */
+  const anyDemoEngine = createMemo(() =>
+    Object.values(props.store?.engineDB ?? {}).some((e) => engineHasCapability(e, DEMO_APPS_CAPABILITY)));
+  /** Operators only (Koen, idea#235, 14 Nov 2026 10:15); hidden for everyone else. */
+  const showDemoApps = () => isOperator() && anyDemoEngine();
+
   const tabs = (): { id: Tab; label: string }[] => {
     const t: { id: Tab; label: string }[] = [{ id: 'engine', label: 'Engine Connection' }];
     if (isOperator()) t.push({ id: 'account', label: 'Account' });
+    if (showDemoApps()) t.push({ id: 'demo', label: 'Demo apps' });
     t.push({ id: 'about', label: 'About' });
     return t;
   };
@@ -102,30 +112,30 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
 
             {/* Status row */}
             <div class="settings-panel__current-engine" data-testid="settings-engine-status">
-              <Show when={props.demo}>
+              <Show when={props.preview}>
                 <span class="settings-panel__status-dot" style="background:var(--colour-text-dim)" />
-                <span class="settings-panel__current-label">Demo mode — simulated data, no engine connected</span>
+                <span class="settings-panel__current-label">Preview mode — simulated data, no engine connected</span>
               </Show>
-              <Show when={!props.demo && props.hostname}>
+              <Show when={!props.preview && props.hostname}>
                 <span class="settings-panel__status-dot settings-panel__status-dot--connected" />
                 <span class="settings-panel__current-label">Connected to <strong>{props.hostname.replace(/\.local$/i, '')}</strong></span>
               </Show>
-              <Show when={!props.demo && !props.hostname}>
+              <Show when={!props.preview && !props.hostname}>
                 <span class="settings-panel__status-dot" style="background:var(--colour-error)" />
                 <span class="settings-panel__current-label">Not connected</span>
               </Show>
             </div>
 
-            {/* Demo mode toggle — always visible */}
+            {/* Preview mode toggle — always visible */}
             <div class="settings-panel__toggle-row">
               <label class="toggle-row">
                 <input
                   type="checkbox"
-                  data-testid="settings-demo-toggle"
-                  checked={props.demo}
-                  onChange={(e) => void props.onDemoToggle?.(e.currentTarget.checked)}
+                  data-testid="settings-preview-toggle"
+                  checked={props.preview}
+                  onChange={(e) => void props.onPreviewToggle?.(e.currentTarget.checked)}
                 />
-                <span class="toggle-row__label">Demo mode</span>
+                <span class="toggle-row__label">Preview mode</span>
               </label>
               <span class="form-field__hint">Simulated data, no engine required</span>
             </div>
@@ -197,6 +207,14 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
               </button>
             </form>
           </div>
+        </Show>
+
+        {/* Demo apps (idea#235): operators only, Engine capability demoApps */}
+        <Show when={activeTab() === 'demo' && showDemoApps()}>
+          <DemoAppsSection
+            store={() => props.store}
+            commandLog={() => props.connection?.commandLogStore() ?? null}
+          />
         </Show>
 
         {/* About */}

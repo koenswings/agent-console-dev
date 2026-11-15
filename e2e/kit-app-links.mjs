@@ -29,7 +29,7 @@
  *
  * Env: CONSOLE_URL (required), CONSOLE_USER / CONSOLE_PASSWORD (mobile pass),
  * SKIP_MOBILE=1, SKIP_DESKTOP=1, CHROMIUM_PATH, SYNC_TIMEOUT_MS (default 60000),
- * HEADED=1, DEMO=1 (mock store; self-test of the script only).
+ * HEADED=1, PREVIEW=1 or DEMO=1 (mock store; self-test of the script only).
  */
 import { chromium, devices } from 'playwright';
 
@@ -37,7 +37,7 @@ const env = process.env;
 const CONSOLE_URL = (env.CONSOLE_URL || '').replace(/\/+$/, '');
 const SYNC_TIMEOUT = Number(env.SYNC_TIMEOUT_MS || 60_000);
 const FETCH_TIMEOUT = 10_000;
-const DEMO = env.DEMO === '1';
+const DEMO = env.PREVIEW === '1' || env.DEMO === '1';
 const USER = env.CONSOLE_USER || (DEMO ? 'admin' : '');
 const PASSWORD = env.CONSOLE_PASSWORD || (DEMO ? 'admin911!' : '');
 
@@ -153,7 +153,7 @@ async function runPass(browser, view, servingId, rows, problems) {
     ? { ...devices['Pixel 7'] }
     : { viewport: { width: 1280, height: 800 } };
   const context = await browser.newContext(ctxOpts);
-  if (DEMO) await context.addInitScript(() => localStorage.setItem('demoMode', 'true'));
+  if (DEMO) await context.addInitScript(() => { localStorage.setItem('previewMode', 'true'); localStorage.removeItem('demoMode'); });
   const page = await context.newPage();
   try {
     await page.goto(`${CONSOLE_URL}/`, { waitUntil: 'domcontentloaded' });

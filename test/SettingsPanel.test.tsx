@@ -20,7 +20,7 @@ vi.mock('../src/store/storage', () => ({
   csGet: vi.fn(() => Promise.resolve({})),
   csSet: vi.fn(() => Promise.resolve()),
   STORAGE_KEY_MODE: 'displayMode',
-  STORAGE_KEY_DEMO: 'demoMode',
+  STORAGE_KEY_PREVIEW: 'previewMode',
 }));
 
 // Prevent real network probes in tests
@@ -62,11 +62,11 @@ const defaultProps = () => ({
   store: makeStore(),
   connection: makeConnection(),
   hostname: 'appdocker01.local',
-  demo: false,
+  preview: false,
   onClose: vi.fn(),
   onComplete: vi.fn(),
   onConnect: vi.fn(),
-  onDemoMode: vi.fn(),
+  onPreviewMode: vi.fn(),
 });
 
 beforeEach(() => {
@@ -113,27 +113,27 @@ describe('SettingsPanel', () => {
   });
 
   it('shows connected hostname label with .local stripped', () => {
-    render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" demo={false} />);
+    render(() => <SettingsPanel {...defaultProps()} hostname="appdocker01.local" preview={false} />);
     expect(screen.getByText(/Connected to/)).toBeInTheDocument();
     expect(screen.getByText('appdocker01')).toBeInTheDocument();
     expect(screen.queryByText('appdocker01.local')).not.toBeInTheDocument();
   });
 
-  it('shows demo mode label when demo is true', () => {
-    render(() => <SettingsPanel {...defaultProps()} demo={true} hostname="" />);
-    // "Demo mode" appears in both the status label and the toggle row
-    expect(screen.getAllByText(/Demo mode/).length).toBeGreaterThan(0);
+  it('shows preview mode label when preview is true', () => {
+    render(() => <SettingsPanel {...defaultProps()} preview={true} hostname="" />);
+    // "Preview mode" appears in both the status label and the toggle row
+    expect(screen.getAllByText(/Preview mode/).length).toBeGreaterThan(0);
   });
 
-  it('shows not connected label when no hostname and not demo', () => {
-    render(() => <SettingsPanel {...defaultProps()} demo={false} hostname="" />);
+  it('shows not connected label when no hostname and not preview', () => {
+    render(() => <SettingsPanel {...defaultProps()} preview={false} hostname="" />);
     expect(screen.getByText('Not connected')).toBeInTheDocument();
   });
 
-  it('Engine tab shows Demo mode toggle and no Change engine control', () => {
+  it('Engine tab shows Preview mode toggle and no Change engine control', () => {
     vi.mocked(isOperator).mockReturnValue(true);
     render(() => <SettingsPanel {...defaultProps()} />);
-    expect(screen.getByText('Demo mode', { selector: '.toggle-row__label' })).toBeInTheDocument();
+    expect(screen.getByText('Preview mode', { selector: '.toggle-row__label' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /change engine/i })).not.toBeInTheDocument();
   });
 

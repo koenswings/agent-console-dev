@@ -7,7 +7,7 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Boot the app into onboarding mode (no demo, no hostname).
+ * Boot the app into onboarding mode (no preview, no hostname).
  * Intercept /api/store-url so we control which hostnames "respond".
  */
 async function bootOnboarding(page: import('@playwright/test').Page, respondingHosts: string[]) {
@@ -28,6 +28,7 @@ async function bootOnboarding(page: import('@playwright/test').Page, respondingH
   });
 
   await page.addInitScript(() => {
+    localStorage.removeItem('previewMode');
     localStorage.removeItem('demoMode');
     localStorage.removeItem('engineHostname');
     localStorage.removeItem('storeUrl');

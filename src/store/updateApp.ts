@@ -197,9 +197,17 @@ export const NEEDS_BACKUP_TEXT = 'Dock a Backup Disk and make a backup first';
 export const MAKE_BACKUP_FIRST_TEXT = 'Make a backup first';
 /** Engine UpdateAppPolicy.BACKUP_MAX_AGE_MS: a major needs a backup under 1 h old. */
 export const BACKUP_MAX_AGE_MS = 60 * 60 * 1000;
-/** Upfront gate from `instance.lastBackup` (the field the Engine checks); the Engine still decides. */
-export const majorNeedsBackup = (o: Pick<UpdateOffer, 'major'> | null, lastBackup: number | null | undefined, now: number): boolean =>
-  !!o?.major && (lastBackup == null || now - Number(lastBackup) > BACKUP_MAX_AGE_MS);
+/**
+ * Upfront gate from `instance.lastBackup` (the field the Engine checks); the Engine still decides.
+ * A backup-method-none instance (idea#403, `isBackupMethodNone`) never has a backup and needs none.
+ */
+export const majorNeedsBackup = (
+  o: Pick<UpdateOffer, 'major'> | null,
+  lastBackup: number | null | undefined,
+  now: number,
+  methodNone = false,
+): boolean =>
+  !!o?.major && !methodNone && (lastBackup == null || now - Number(lastBackup) > BACKUP_MAX_AGE_MS);
 
 /** Version as shown to people: an unversioned (SHA/date) build reads "development build (5ab9f64)". */
 export const versionLabel = (v: string | null | undefined): string =>

@@ -17,8 +17,9 @@ import type { CommandLogState } from './commandLog';
 import { createCommandResult, type CommandResult } from './commandResult';
 import { confirmNewOperation, instanceStoredOn, newInstanceOnDisk, remoteWatchFor } from './remoteConfirm';
 import { copyApp, moveApp } from './commands';
+import { traceInstanceMatch } from './traceInstance';
 import { ENGINE_CLOCK_SLACK_MS } from './remoteConfirm';
-import { crossMoveSupported, latestMoveOp, moveConfirmText, moveErrorLine, moveInfo } from './moveApp';
+import { crossMoveSupported, moveConfirmText, moveErrorLineFor, moveWarningLineFor, settleMoveOutcome } from './moveApp';
 
 export interface PendingMove {
   data: DragAppData;
@@ -46,6 +47,8 @@ export interface DragCopyMove {
   sourceEngine: Accessor<string>;
   /** CommandFeedback formatLine for the copy/move result: the plain Move sentence, or null. */
   formatLine: (message: string, code: string | null) => string | null;
+  /** CommandFeedback formatWarning: the Move warning from the newest op (engine#395), or null. */
+  formatWarning: () => string | null;
 }
 
 export const createDragCopyMove = (
@@ -92,12 +95,18 @@ export const createDragCopyMove = (
       ? { instanceId, app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname, since: Date.now() - ENGINE_CLOCK_SLACK_MS }
       : null);
     // Instance by NAME: copyApp/moveApp resolve the instance by name on every
-    // Engine (8d98718 and Axle's fix); the disks go by ID.
+    // Engine (8d98718 and Axle's fix); the disks go by ID. engine#399: an Engine
+    // with traceInstanceId traces the resolved id, so match the trace by id.
+    // The sent name also matches (unresolved, or a refusal before execution) with the
+    // source disk sent: the instance's own disk is what tells namesakes apart.
+    const match = traceInstanceMatch(s, engineId, instanceId, instanceName, sourceDiskId);
     if (op === 'copy') {
       const instanceOf = s?.instanceDB[instanceId]?.instanceOf;
       const instanceOfStr = instanceOf === undefined ? undefined : String(instanceOf);
-      result.start(instanceName, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), {
+      result.start(match.argValue, () => copyApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'copyApp',
+        argKey: match.argKey,
+        altMatch: match.altMatch,
         engineId,
         remote: remoteWatchFor(store, engineId, 'copyApp', confirmNewOperation(store, 'copyApp', instanceId, {
           engineId,
@@ -107,9 +116,14 @@ export const createDragCopyMove = (
         })),
       });
     } else {
-      result.start(instanceName, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
+      const since = Date.now() - ENGINE_CLOCK_SLACK_MS;
+      result.start(match.argValue, () => moveApp(engineId, instanceName, sourceDiskId, targetDiskId), {
         command: 'moveApp',
+        argKey: match.argKey,
+        altMatch: match.altMatch,
         engineId,
+        // engine#388: a Done op / ok trace is green only when the app moved (not SOURCE_CHANGED).
+        settle: settleMoveOutcome(store, instanceId, since, () => ({ app: instanceName, sourceEngine: sourceName, targetEngine: pending.targetEngineHostname })),
         remote: remoteWatchFor(store, engineId, 'moveApp', confirmNewOperation(store, 'moveApp', instanceId, {
           engineId,
           args: { targetDiskId },
@@ -123,9 +137,16 @@ export const createDragCopyMove = (
 
   const formatLine = (message: string, code: string | null): string | null => {
     const m = crossMove();
-    const opCode = m ? moveInfo(latestMoveOp(store(), m.instanceId, m.since))?.code ?? null : null;
-    return moveErrorLine(message, code ?? opCode, { app: subject(), sourceEngine: sourceEngine(), targetEngine: m?.targetEngine ?? 'the other Engine' });
+    const ctx = { app: subject(), sourceEngine: sourceEngine(), targetEngine: m?.targetEngine ?? 'the other Engine' };
+    return m ? moveErrorLineFor(store(), m.instanceId, m.since, message, code, ctx) : moveErrorLineFor(null, '', 0, message, code, ctx);
   };
 
-  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine, formatLine };
+  // engine#395: the warning follows the newest op (targetCleanup lands after the op settles).
+  const formatWarning = (): string | null => {
+    const m = crossMove();
+    if (!m || result.command() !== 'moveApp') return null;
+    return moveWarningLineFor(store(), m.instanceId, m.since, { app: subject(), sourceEngine: sourceEngine(), targetEngine: m.targetEngine });
+  };
+
+  return { dragData, setDragData, pendingMove, cancel: () => setPendingMove(null), handleDrop, choose, result, subject, crossMove, sourceEngine, formatLine, formatWarning };
 };
