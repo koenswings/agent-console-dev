@@ -923,12 +923,14 @@ Key Vite config:
 - `build.outDir: 'dist'` — Chrome Extension loads from here; also served by Engine HTTP server
 - `build.emptyOutDir: false` — a direct `vite build` must not wipe a live `dist/` the Engine is serving
 
-`pnpm build` runs `scripts/build.mjs`: Vite writes to a fresh `dist.new-<timestamp>/` (with
-`emptyOutDir: true` only for that folder) and, only on success, swaps it into `dist/`
-(`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one previous tree is kept
-for rollback. A failed build leaves the live `dist/` in place, so the Engine never serves
-an empty or half-written Console. The Chrome Extension entry (`src/background/background.ts`
-→ `background.js`) is unchanged.
+`pnpm build` runs `scripts/build.mjs`, which always calls Vite `build()` with `mode: 'production'`
+and sets `NODE_ENV=production` so a stray env (for example `test`) cannot change the bundle.
+`pnpm dev` still starts the Vite dev server and is unchanged. Vite writes to a fresh
+`dist.new-<timestamp>/` (with `emptyOutDir: true` only for that folder) and, only on success,
+swaps it into `dist/` (`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one
+previous tree is kept for rollback. A failed build leaves the live `dist/` in place, so the
+Engine never serves an empty or half-written Console. The Chrome Extension entry
+(`src/background/background.ts` → `background.js`) is unchanged.
 
 `pnpm package`: builds, zips `dist/` to `/tmp/idea-console-pkg/extension.zip`, serves on
 port 8080 for download from the Pi.

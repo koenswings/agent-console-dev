@@ -3,6 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { copyRuntimeState, swapDist } from './swap-dist.mjs';
+import { forceProductionNodeEnv, viteProductionBuildOptions } from './build-options.mjs';
+
+export { VITE_BUILD_MODE, forceProductionNodeEnv, viteProductionBuildOptions } from './build-options.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const newDirName = `dist.new-${Date.now()}`;
@@ -13,13 +16,8 @@ function removeNewDir() {
 }
 
 try {
-  await build({
-    root,
-    build: {
-      outDir: newDirName,
-      emptyOutDir: true,
-    },
-  });
+  forceProductionNodeEnv();
+  await build(viteProductionBuildOptions(newDirName, root));
   copyRuntimeState({ root, newDir });
   swapDist({ root, newDir });
   process.stdout.write(`Build swapped into dist/ (previous kept as dist.prev if one existed)\n`);
