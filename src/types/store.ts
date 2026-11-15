@@ -486,6 +486,14 @@ export interface Instance {
    * (addendum decision 5). Absent or null = nothing to warn about.
    */
   demoPackWarning?: DemoPackWarning | null;
+  /**
+   * engine#430 / engine#441: bytes used by the instance folder (instances/<id>:
+   * data, database and volumes; not the shared App master), rounded to whole
+   * MB (1 MB = 1,000,000 bytes). Null or absent when never measured. Optional:
+   * older Engines omit it. dataBytesAt is the Unix ms of that measurement.
+   */
+  dataBytes?: number | null;
+  dataBytesAt?: Timestamp | null;
 }
 
 /** engine#369 comment 6875670232: exact shape of Instance.demoPackWarning. */
@@ -634,6 +642,12 @@ export interface Operation {
    * off, safe to pull; false = eject first (POWER_OFF_FAILED). Absent on other kinds.
    */
   safeToRemove?: boolean;
+  /**
+   * updateApp only (engine#442 / agent-engine-dev#445): the update failed before a
+   * swap and the old version could not be restarted. The Console must not say
+   * "Nothing changed". Absent otherwise. Engine types this as `restartFailed?: true`.
+   */
+  restartFailed?: boolean;
   /** engine#369 §3: setupDemo / removeDemo progress. Absent on other kinds and older Engines. */
   demo?: DemoProgress | null;
 }

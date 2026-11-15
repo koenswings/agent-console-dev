@@ -10,6 +10,7 @@ import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
 import {
   backupDateText, currentDiskName, isSameDiskRestore, otherDiskButton, otherDiskSummary, type RestoreWords,
 } from '../store/restoreConfirm';
+import BackupSizingLine from './BackupSizingLine';
 import BackupStatusLines from './BackupStatusLines';
 import {
   diskBackupStatusLines,
@@ -161,6 +162,8 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
         engineId={props.engineId}
         commandLogStore={props.commandLogStore}
       />
+
+      <BackupSizingLine store={props.store} engineId={() => props.engineId() ?? props.disk()?.dockedTo ?? undefined} />
 
       <Show when={diskStatusLines().length > 0}>
         <BackupStatusLines lines={diskStatusLines} testId="restore-disk-status" />
