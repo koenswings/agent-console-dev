@@ -30,6 +30,13 @@
 import { engineHasCapability } from './commands';
 import { isDiskLocked } from './operations';
 import { GENERIC_ERROR_TEXT, plainEngineText } from './plainError';
+import {
+  BACKUP_DISK_MIN_BYTES,
+  BACKUP_DISK_TOO_SMALL_MIN,
+  assessBackupDiskSize,
+  instancesForAllAppsOnPi,
+  type BackupDiskSizeGate,
+} from './backupDiskSizeGate';
 import type { Engine, Operation, Store } from '../types/store';
 
 /** Own capability that gates the flow (engine#355, always on). */
@@ -46,17 +53,16 @@ export const MAKE_BACKUP_DISK_TIME = '02:30';
  * (MAKE_BACKUP_DISK_MIN_BYTES), so a stick sold as "8 GB" (8·10⁹ bytes) is
  * refused. A Backup Disk holds every App on the Pi (engine#424), so the
  * guidance is tied to the Pi's App data, not a fixed size.
- * Instance.dataBytes (engine#441) is in the store, and the backup-sizing
- * line on the makeBackupDisk confirm in EmptyDiskPanel shows "This Pi's
- * Apps use about X GB" so the operator can judge the disk. The size gate
- * itself does not use dataBytes: it only compares the target's known size
- * with the Engine's 8 GiB minimum. These constants stay the general
- * sentence. Grey-out reason, tooltip and the TOO_SMALL error all use
- * MAKE_BACKUP_DISK_TOO_SMALL_REASON; a requirement stated on its own uses
+ * The grey-out uses the shared Backup Disk size gate (console#219,
+ * backupDiskSizeGate.ts): the 8 GiB floor on total size plus 1.5× the
+ * measured App data of every App on this Pi (instancesForAllAppsOnPi, the
+ * same set as the Engine's scheduledTargets, engine#424). When the 8 GiB
+ * floor is the one that fails, the reason is MAKE_BACKUP_DISK_TOO_SMALL_REASON
+ * (also the TOO_SMALL error text); a requirement stated on its own uses
  * MAKE_BACKUP_DISK_SIZE_NEED.
  */
 export const MAKE_BACKUP_DISK_SIZE_GUIDANCE = 'Choose a disk larger than all the App data on this Pi.';
-export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = `Too small: needs more than 8 GB. ${MAKE_BACKUP_DISK_SIZE_GUIDANCE}`;
+export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = BACKUP_DISK_TOO_SMALL_MIN;
 export const MAKE_BACKUP_DISK_SIZE_NEED = `Needs a disk larger than 8 GB. ${MAKE_BACKUP_DISK_SIZE_GUIDANCE}`;
 
 /** Adopted empty IDEA disk: nothing is erased. */
@@ -217,7 +223,7 @@ export const findMakeBackupDiskOp = (
  * Engine minimum (MakeBackupDisk.ts MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78): 8 GiB.
  * The Engine refuses `bytes < MIN` with TOO_SMALL at Check.
  */
-export const MAKE_BACKUP_DISK_MIN_BYTES = 8 * 1024 * 1024 * 1024;
+export const MAKE_BACKUP_DISK_MIN_BYTES = BACKUP_DISK_MIN_BYTES;
 
 
 const usableSize = (n: unknown): number | null =>
@@ -252,20 +258,46 @@ export const isTooSmallForBackupDisk = (bytes: number | null): boolean =>
   bytes != null && bytes < MAKE_BACKUP_DISK_MIN_BYTES;
 
 /**
+ * The shared Backup Disk size gate (console#219) for a makeBackupDisk target:
+ * the 8 GiB floor on the size the Engine compares, plus 1.5× the measured
+ * App data of every App this disk will back up (engine#424: every instance
+ * on a disk docked to the same Engine, except demos, instances on the target
+ * itself and backupMethod 'none'). `capacityBytes` is the space left for
+ * backups when the disk already holds data (#211 passes Disk.freeBytes);
+ * leave it out for a blank or empty disk, where total size is the capacity.
+ * Null when the Engine is unknown.
+ */
+export const makeBackupDiskSizeGate = (
+  engine: Engine | null | undefined,
+  store: Store | null | undefined,
+  targetId: string,
+  capacityBytes?: number | null,
+): BackupDiskSizeGate | null => {
+  if (!engine) return null;
+  const args = {
+    instances: instancesForAllAppsOnPi(store, String(engine.id), targetId),
+    totalSizeBytes: makeBackupDiskSizeBytes(engine, store, targetId),
+    wording: 'thisPi' as const,
+  };
+  return assessBackupDiskSize(capacityBytes === undefined ? args : { ...args, capacityBytes });
+};
+
+/**
  * Why the Make a Backup Disk action is disabled, or undefined when it may be
  * offered. Hidden entirely when the capability is absent (caller checks that).
- * A known size under 8 GiB is greyed out before anything is typed; an unknown
- * size is left to the Engine (TOO_SMALL stays mapped as a fallback).
+ * A disk the size gate blocks (under 8 GiB, or under 1.5× the Pi's measured
+ * App data) is greyed out before anything is typed; an unknown size is left
+ * to the Engine (TOO_SMALL stays mapped as a fallback).
  */
 export const makeBackupDiskBlockedReason = (
   engine: Engine | null | undefined,
   store: Store | null,
   targetId: string,
+  capacityBytes?: number | null,
 ): string | undefined => {
   if (!engineHasCapability(engine, MAKE_BACKUP_DISK_CAPABILITY)) return undefined;
-  if (isTooSmallForBackupDisk(makeBackupDiskSizeBytes(engine, store, targetId))) {
-    return MAKE_BACKUP_DISK_TOO_SMALL_REASON;
-  }
+  const gate = makeBackupDiskSizeGate(engine, store, targetId, capacityBytes);
+  if (gate?.blocked) return gate.blockReason;
   if (engine?.eraseInProgress) {
     return `An erase of ${engine.eraseInProgress.label} is already in progress.`;
   }
@@ -274,3 +306,7 @@ export const makeBackupDiskBlockedReason = (
   }
   return undefined;
 };
+
+/** The size-gate block reason alone (for hints), or undefined. */
+export const makeBackupDiskSizeBlock = (gate: BackupDiskSizeGate | null): string | undefined =>
+  gate?.blocked ? gate.blockReason : undefined;

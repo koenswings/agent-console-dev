@@ -524,12 +524,53 @@ A total under 1 GB is "This Pi's Apps use less than 1 GB" (never "0 GB" or
 uses one decimal place; 10 GB and above are whole numbers. The line is not gated on
 `scheduledBackups`. `dataBytesAt` is on the type but not shown.
 
+### Backup Disk size gate (console#219)
+
+Before the Console sends `createBackupDisk` (EmptyDiskPanel) or
+`initialiseDisk … backup` (Client cards → Initialise), it checks the chosen
+disk against the Engine's 8 GiB minimum and against 1.5× the measured App
+data that disk will copy. The helper is `src/store/backupDiskSizeGate.ts`
+(`assessBackupDiskSize`). The 8 GiB floor is `8 × 1024³` bytes, the same
+constant as Engine `MAKE_BACKUP_DISK_MIN_BYTES`, and is compared with total
+`Disk.sizeBytes` or the candidate's `sizeBytes`. The 1.5× rule uses the same
+capacity on an empty or new disk; a later caller (console#211) can pass
+`freeBytes` for a disk that already holds App or Files data.
+
+- EmptyDiskPanel (`createBackupDisk` form): the ticked Apps, excluding `backupMethod: 'none'`.
+- Initialise as a Backup Disk, and Make a Backup Disk (`makeBackupDisk`, on an
+  empty IDEA disk or a blank stick, `makeBackupDiskSizeGate`): every instance
+  on a disk docked to this Engine, excluding demos, instances stored on the
+  target disk, and `backupMethod: 'none'`. This is the set the Engine's
+  scheduler backs up for a disk with no links (engine#424, Engine
+  `src/monitors/backupScheduler.ts` `scheduledTargets`).
+
+If the data is known and the disk is too small, the action is disabled and
+the command is not sent. If `dataBytes` is unknown, or the disk's size is
+unknown, the Console warns and does not block (unless the disk is already
+under 8 GiB). When both rules fail, the App-data wording is used if 1.5× the
+measured data is above 8 GiB; otherwise the 8 GiB wording.
+
+Wording uses the same size phrases as the backup-sizing line
+(`formatAppDataSize`: decimal GB, "less than 1 GB" without "about"). The
+8 GiB floor reads "Too small: needs more than 8 GB. Choose a disk larger
+than all the App data on this Pi." (a stick sold as "8 GB" is under 8 GiB).
+The Client cards Backup Disk option also shows the backup-sizing line.
+
+The Engine's `createBackupDisk` and `initialiseDisk … backup` do not themselves
+enforce 8 GiB or a dataBytes check; this gate is Console-only until an Engine
+follow-up exists.
+
 ### Backup Disk status lines (idea#404)
 
 When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400,
 Engine main f114a28), `RestorePanel` and the instance row show store-summary status
 lines: schedule and next run (computed from `schedule.daily`, or 02:30 when the
-schedule is absent or invalid, and only while `clockTrusted` is true),
+schedule is absent or invalid, and only while `clockTrusted` is true; if
+`Disk.lastAttempt` is older than the most recent slot the Next run clause
+is "A missed backup will start shortly.", and if there is no `lastAttempt`
+yet it is "First backup will start shortly." — console#210; once
+`lastAttempt` passes the slot the normal "Next run today/tomorrow at HH:MM"
+returns),
 `backupConfig.scheduleError` (plain wording; the disk still runs at 02:30 until
 it is fixed), `backupConfig.orphanLinks` (Engine #356: a calm info line when
 non-empty, nothing when missing or empty; no delete action), last attempt
@@ -884,11 +925,13 @@ Engine contract the Console follows:
   candidate id as its disk id. Create writes `BACKUP.yaml` (scheduled, daily
   02:30, no links) and re-processes the disk, so `diskTypes` gains `'backup'`.
   Koen's decision (idea#404): a new Backup Disk backs up **every App on its
-  Pi**, new ones included, with no link step. Engine bc5bd78's scheduler
-  (`backupScheduler.ts` `runDisk`) still runs only `yaml.links`; engine#424
-  (Axle) makes it back up every App, so real backups from a disk made here
-  depend on engine#424. The Console copy states the decided behaviour and does
-  not promise a first backup at a set time.
+  Pi**, new ones included, with no link step. engine#424 (Engine PR #431,
+  merged as 865df67) implements it: a scheduled disk with no links backs up,
+  at each run, every instance stored on a disk docked to the same Engine,
+  except demo instances and instances stored on the Backup Disk itself
+  (`backupScheduler.ts` `scheduledTargets`); explicit links still win. The
+  Console copy states this behaviour and does not promise a first backup at a
+  set time.
 - **Failures:** `CODE: text` in the trace (`errorCode` too) and the Operation
   `error`: BAD_ARGS, NOT_FOUND, SYSTEM_DISK, NOT_DOCKED, ALREADY_BACKUP, BUSY,
   IN_USE, SUMMARY_STALE, CONFIRM_MISMATCH, SERIAL_MISMATCH, TOO_SMALL (8 GiB,
@@ -921,27 +964,30 @@ When the flag is fresh:
   App around the copy.) When the candidate has left `unformattedDisks`, the
   pane header shows the new disk's name and role (Backup Disk, or empty after
   Erase) instead of “UNFORMATTED”.
-- **Size gate:** a stick or disk whose known size is under the Engine's
-  `MAKE_BACKUP_DISK_MIN_BYTES` (8 GiB = 8·1024³ bytes; the Engine refuses
-  `bytes < min`) is greyed out before anything is typed, with “Too small: needs
-  more than 8 GB. Choose a disk larger than all the App data on this Pi.”
-  (`MAKE_BACKUP_DISK_TOO_SMALL_REASON`, also the TOO_SMALL error text). A stick
-  sold as “8 GB” (8·10⁹ bytes) is under 8 GiB, hence “more than 8 GB”. Where the
-  need is stated on its own (the blank-stick hint) the text is “Needs a disk
-  larger than 8 GB. Choose a disk larger than all the App data on this Pi.”
-  (`MAKE_BACKUP_DISK_SIZE_NEED`). A Backup Disk holds every App on the Pi
-  (engine#424), so there is no fixed recommended size. `Instance.dataBytes`
-  (engine#441) is in the store, and the backup-sizing line on the
-  makeBackupDisk confirm in `EmptyDiskPanel` shows “This Pi's Apps use
-  about X GB” so the operator can judge the disk. The size gate itself
-  does not use `dataBytes`: it only compares the target's known size with
-  the Engine's 8 GiB minimum. That size comes from the same store fields
-  the Engine reads:
+- **Size gate:** the shared Backup Disk size gate (console#219, above) via
+  `makeBackupDiskSizeGate`: the Engine's 8 GiB floor
+  (`MAKE_BACKUP_DISK_MIN_BYTES` = 8·1024³ bytes; the Engine refuses
+  `bytes < min`) plus 1.5× the measured App data of every App on this Pi
+  (the engine#424 set). A disk that fails is greyed out before anything is
+  typed. When only the floor fails the reason is “Too small: needs more than
+  8 GB. Choose a disk larger than all the App data on this Pi.”
+  (`MAKE_BACKUP_DISK_TOO_SMALL_REASON`, also the TOO_SMALL error text); a stick
+  sold as “8 GB” (8·10⁹ bytes) is under 8 GiB, hence “more than 8 GB”. When
+  the App data does not fit it reads, for example, “This disk is too small for
+  this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB.
+  Choose a larger disk.” Where the need is stated on its own (the blank-stick
+  hint) the text is “Needs a disk larger than 8 GB. Choose a disk larger than
+  all the App data on this Pi.” (`MAKE_BACKUP_DISK_SIZE_NEED`). Unmeasured Apps
+  or an unknown size give a calm warning (on the empty-disk confirm and under
+  the blank-stick hint) and do not block. The backup-sizing line (“This Pi's
+  Apps use about X GB”) stays on the empty-disk confirm. The size comes from
+  the same store fields the Engine reads:
   `Disk.sizeBytes` for a disk docked to that Engine, else
   `Engine.unformattedDisks[].sizeBytes`, else an erasable `usbDisk` in
   `Engine.diskCandidates[].sizeBytes` (`makeBackupDiskSizeBytes`). An unknown
   size (null, 0, missing) is not greyed out; the Engine decides and `TOO_SMALL`
-  stays mapped as a fallback.
+  stays mapped as a fallback. The Engine itself only checks the 8 GiB floor;
+  the App-data rule is Console-only.
 - **App or Files disk** (`DiskView` → `AdoptBackupDiskSection`, agent-console-dev#209):
   see “Make this also a Backup Disk” below.
 - `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (the Engine
@@ -961,14 +1007,27 @@ example `['app', 'backup']` or `['app', 'backup', 'files']`.
   `backupConfig`, docked with a device, not the system disk, and only when the
   Engine it is docked to has a fresh `makeBackupDisk` flag. Otherwise the action
   is hidden (`canOfferAdoptBackupDisk`, `src/store/adoptBackupDisk.ts`).
-- **Grey-out:** a known `Disk.sizeBytes` under 8 GiB shows “Too small: needs more
-  than 8 GB. Choose a disk larger than all the App data on this Pi.” (exactly 8 GiB is allowed; an unknown size
-  is left to the Engine). Then the #187 reasons: an erase running, the disk locked.
+- **Grey-out:** the shared Backup Disk size gate (console#219) through
+  `makeBackupDiskBlockedReason(…, Disk.freeBytes)`: the 8 GiB floor on **total**
+  `Disk.sizeBytes` (what the Engine checks; exactly 8 GiB is allowed, an unknown
+  size is left to the Engine), and 1.5× the measured App data of every App this
+  disk will back up compared with **`Disk.freeBytes`**, because the disk already
+  holds App or Files data and backups must fit in what is left. The App set is
+  every instance on a disk docked to the same Engine, except demos,
+  `backupMethod: 'none'` and the instances stored on this disk itself (engine#424
+  leaves those out). When `freeBytes` is unknown the App-data part warns and does
+  not block. When only the floor fails the reason is “Too small: needs more than
+  8 GB. Choose a disk larger than all the App data on this Pi.”; when the App data
+  does not fit, for example “This disk is too small for this Pi's Apps. They use
+  about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.”
+  Then the #187 reasons: an erase running, the disk locked.
 - **Confirm** (no typed name): “Make *name* also a Backup Disk?”, “Nothing on this
   disk is erased. Its Apps and files stay.”, “Backups run every day at 02:30 for
   every App on this Pi. You can change the time later.” When instances are stored
-  on the disk: “Backups of Apps on this same disk don't protect them if the disk
-  fails.” (a warning, not a block).
+  on the disk: “Apps stored on this disk are not backed up onto it. Move them to
+  another disk to protect them.” (a note, not a block; it states what the Engine
+  does, engine#424). A size warning from the gate (unmeasured Apps, unknown free
+  space) is shown as a calm hint.
 - **Send:** exactly `makeBackupDisk <diskId>` to `Disk.dockedTo`. A remote Engine
   is confirmed from its log, or from the store: a `makeBackupDisk` Operation that
   was not there at send time is Done and the disk has `backup` (or it Failed).
@@ -980,9 +1039,12 @@ example `['app', 'backup']` or `['app', 'backup', 'files']`.
   Refusals use `adoptBackupDiskErrorText`: TOO_SMALL gets the wording above (or a
   could-not-read-the-size sentence), everything else the #187 table.
 - **Every App (Koen, 15 Nov):** a scheduled Backup Disk backs up every App on its
-  Pi, new ones included, with no link-Apps step. At Engine 4b57456 the scheduler
-  still runs only `BACKUP.yaml` links and Create writes `links: []`, so real
-  backups from this disk depend on engine#424.
+  Pi, new ones included, with no link-Apps step. engine#424 (Engine PR #431,
+  865df67) implements it in `backupScheduler.ts` `scheduledTargets`: with no
+  links, each run backs up every instance stored on a disk docked to the same
+  Engine, except demo instances and **instances stored on the Backup Disk itself**,
+  which are left out and named in the Engine log (“a backup onto the same disk
+  protects nothing”). An explicit link still backs up such an instance.
 
 ---
 
@@ -1022,12 +1084,14 @@ Key Vite config:
 - `build.outDir: 'dist'` — Chrome Extension loads from here; also served by Engine HTTP server
 - `build.emptyOutDir: false` — a direct `vite build` must not wipe a live `dist/` the Engine is serving
 
-`pnpm build` runs `scripts/build.mjs`: Vite writes to a fresh `dist.new-<timestamp>/` (with
-`emptyOutDir: true` only for that folder) and, only on success, swaps it into `dist/`
-(`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one previous tree is kept
-for rollback. A failed build leaves the live `dist/` in place, so the Engine never serves
-an empty or half-written Console. The Chrome Extension entry (`src/background/background.ts`
-→ `background.js`) is unchanged.
+`pnpm build` runs `scripts/build.mjs`, which always calls Vite `build()` with `mode: 'production'`
+and sets `NODE_ENV=production` so a stray env (for example `test`) cannot change the bundle.
+`pnpm dev` still starts the Vite dev server and is unchanged. Vite writes to a fresh
+`dist.new-<timestamp>/` (with `emptyOutDir: true` only for that folder) and, only on success,
+swaps it into `dist/` (`dist/` → `dist.prev`, then the new folder → `dist/`). Exactly one
+previous tree is kept for rollback. A failed build leaves the live `dist/` in place, so the
+Engine never serves an empty or half-written Console. The Chrome Extension entry
+(`src/background/background.ts` → `background.js`) is unchanged.
 
 `pnpm package`: builds, zips `dist/` to `/tmp/idea-console-pkg/extension.zip`, serves on
 port 8080 for download from the Pi.
@@ -1086,6 +1150,9 @@ Console surfaces used by the duration-tests walker expose id-keyed `data-testid`
 `console-overview`, `op-entry`, `op-overview`, `eject-confirm`, `erase-dialog`).
 Playwright Intent adapters live under `e2e/intents/`, registry keyed by Axle
 ACTIONS.md / school-day.yaml (`open_console_as_teacher`, `open_kolibri_as_teacher`,
-`open_nextcloud_as_learner`, `open_disk_inventory`, …). Defaults bind to Kid
+`open_nextcloud_as_learner`, `open_disk_inventory`, `backup_schedule`, `rename_instance`, `update_restart_failed`, …). Defaults bind to Kid
 fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
 `duration-kolibri-grade5a-001`). Engine-owned `infra_*` Intents are not registered here.
+`update_restart_failed` (console#217, engine#442) is hook-gated: it is registered, but
+it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, because the Engine
+has no fault-injection hook yet to fail the post-backup restart. See `e2e/intents/README.md`.

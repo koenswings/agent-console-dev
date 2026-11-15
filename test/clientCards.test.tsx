@@ -25,7 +25,8 @@ import {
 } from '../src/store/clientCards';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
-import type { Engine, Operation, Store } from '../src/types/store';
+import { BACKUP_DISK_TOO_SMALL_MIN } from '../src/store/backupDiskSizeGate';
+import type { Engine, Instance, Operation, Store } from '../src/types/store';
 
 const E = MOCK_IDS.ENGINE_1_ID;
 const CARD = MOCK_IDS.DEMO_CARD_ID;
@@ -692,5 +693,60 @@ describe('Stale BUSY after a flash (idea04 13:18 / 16:11)', () => {
     const h = harness(s);
     const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
     expect(q(container, `client-card-hint-${CARD}`)!.textContent).toBe(ERROR_TEXT.BUSY);
+  });
+});
+
+
+const GB = 1_000_000_000;
+const GIB = 1024 * 1024 * 1024;
+
+const storeForBackupInit = (sizeBytes: number, kolibriBytes: number | null): Store => {
+  const s = base();
+  const disks = s.engineDB[E].newDisks ?? [];
+  const target = disks.find((d) => d.candidateId === DISK);
+  if (target) target.sizeBytes = sizeBytes;
+  const zeroOthers = (id: string, inst: Instance): Instance => {
+    if (id === MOCK_IDS.INST_KOLIBRI_ID) return { ...inst, dataBytes: kolibriBytes };
+    if (id === MOCK_IDS.INST_CHANNEL_BUILDER_ID) return { ...inst, dataBytes: 0 };
+    return inst;
+  };
+  s.instanceDB = Object.fromEntries(
+    Object.entries(s.instanceDB).map(([id, inst]) => [id, zeroOthers(id, inst)]),
+  );
+  return s;
+};
+
+describe('Client cards — Initialise Backup Disk size gate (console#219)', () => {
+  it('disables Initialise when the candidate is under 1.5× this Pi\'s Apps, and shows the this-Pi wording', () => {
+    const h = harness(storeForBackupInit(16 * GB, 12 * GB));
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    fireEvent.change(q(container, `new-disk-type-${DISK}`)!, { target: { value: 'backup' } });
+    const btn = q(container, `new-disk-initialise-${DISK}`) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(q(container, `new-disk-backup-size-block-${DISK}`)!.textContent).toBe(
+      "This disk is too small for this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.",
+    );
+    expect(q(container, 'backup-sizing')!.textContent).toContain("This Pi's Apps use about 12 GB");
+    fireEvent.click(btn);
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('allows Initialise when the candidate is large enough, and still shows the sizing line', () => {
+    const h = harness(storeForBackupInit(20 * GB, 12 * GB));
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    fireEvent.change(q(container, `new-disk-type-${DISK}`)!, { target: { value: 'backup' } });
+    expect((q(container, `new-disk-initialise-${DISK}`) as HTMLButtonElement).disabled).toBe(false);
+    expect(q(container, `new-disk-backup-size-block-${DISK}`)).toBeNull();
+    expect(q(container, 'backup-sizing')!.textContent).toContain("This Pi's Apps use about 12 GB");
+    fireEvent.click(q(container, `new-disk-initialise-${DISK}`)!);
+    expect(sent).toHaveBeenCalledWith(E, `initialiseDisk ${DISK} backup`);
+  });
+
+  it('blocks a candidate under 8 GiB even when no App has been measured', () => {
+    const h = harness(storeForBackupInit(8 * GIB - 1, null));
+    const { container } = render(() => <ClientCardsSection engineId={E} store={h.s} commandLogStore={h.cls} />);
+    fireEvent.change(q(container, `new-disk-type-${DISK}`)!, { target: { value: 'backup' } });
+    expect((q(container, `new-disk-initialise-${DISK}`) as HTMLButtonElement).disabled).toBe(true);
+    expect(q(container, `new-disk-backup-size-block-${DISK}`)!.textContent).toBe(BACKUP_DISK_TOO_SMALL_MIN);
   });
 });

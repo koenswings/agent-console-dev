@@ -19,8 +19,11 @@ import {
   engineShowsBackupStatus,
   instanceBackupStatusLines,
   nextScheduledRun,
+  mostRecentSlot,
   parseDailyTime,
   plainBackupResult,
+  MISSED_BACKUP_SHORTLY_COPY,
+  FIRST_BACKUP_SHORTLY_COPY,
 } from '../src/store/backupStatus';
 import type { Disk, Engine, Instance, BackupRunResult } from '../src/types/store';
 
@@ -92,6 +95,9 @@ const result = (over: Partial<BackupRunResult> & { result: string }): BackupRunR
 // 13 Nov 2026 10:00 local — after the 02:30 slot, so next run is tomorrow.
 const NOW = new Date(2026, 10, 13, 10, 0, 0).getTime();
 const BEFORE_SLOT = new Date(2026, 10, 13, 1, 0, 0).getTime();
+const TODAY_SLOT = new Date(2026, 10, 13, 2, 30, 0).getTime();
+const YESTERDAY_SLOT = new Date(2026, 10, 12, 2, 30, 0).getTime();
+const FIVE_NIGHTS_AGO = new Date(2026, 10, 8, 2, 30, 0).getTime();
 
 describe('parseDailyTime / nextScheduledRun', () => {
   it('parses HH:MM', () => {
@@ -107,6 +113,14 @@ describe('parseDailyTime / nextScheduledRun', () => {
     expect(today.getDate()).toBe(13);
     const tomorrow = nextScheduledRun('02:30', NOW)!;
     expect(tomorrow.getDate()).toBe(14);
+  });
+
+  it('mostRecentSlot is today when the slot has been reached, yesterday before it', () => {
+    expect(mostRecentSlot('02:30', NOW)).toBe(TODAY_SLOT);
+    expect(mostRecentSlot('02:30', TODAY_SLOT)).toBe(TODAY_SLOT);
+    expect(mostRecentSlot('02:30', TODAY_SLOT - 1)).toBe(YESTERDAY_SLOT);
+    expect(mostRecentSlot('02:30', BEFORE_SLOT)).toBe(YESTERDAY_SLOT);
+    expect(mostRecentSlot('not-a-time', NOW)).toBeNull();
   });
 });
 
@@ -170,21 +184,25 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
   const engine = flaggedEngine();
 
   it('shows schedule and next run when the clock is trusted', () => {
-    const lines = diskBackupStatusLines({ disk: disk({ clockTrusted: true }), engine, now: NOW });
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true, lastAttempt: TODAY_SLOT }),
+      engine,
+      now: NOW,
+    });
     const line = lines.find((l) => l.id === 'schedule');
-    expect(line?.text).toMatch(/Scheduled daily at 02:30/);
-    expect(line?.text).toMatch(/Next run tomorrow at 02:30/);
+    expect(line?.text).toBe('Scheduled daily at 02:30. Next run tomorrow at 02:30.');
+    expect(line?.tone).toBe('neutral');
   });
 
   it('omits a wall-clock next run when the clock is not trusted', () => {
     const lines = diskBackupStatusLines({
-      disk: disk({ clockTrusted: false }),
+      disk: disk({ clockTrusted: false, lastAttempt: FIVE_NIGHTS_AGO }),
       engine,
       now: NOW,
     });
     const schedule = lines.find((l) => l.id === 'schedule');
     expect(schedule?.text).toBe('Scheduled daily at 02:30.');
-    expect(schedule?.text).not.toMatch(/Next run/);
+    expect(schedule?.text).not.toMatch(/Next run|will start shortly/);
     const clock = lines.find((l) => l.id === 'clock');
     expect(clock?.text).toBe(CLOCK_UNKNOWN_COPY);
     expect(clock?.tone).toBe('unknown');
@@ -265,6 +283,7 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     const lines = diskBackupStatusLines({
       disk: disk({
         clockTrusted: true,
+        lastAttempt: TODAY_SLOT,
         backupConfig: {
           mode: 'scheduled',
           links: ['inst-1'],
@@ -280,8 +299,7 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     expect(err?.tone).toBe('warn');
     expect(JSON.stringify(lines)).not.toMatch(/BAD_TIME|25:00|YAML/);
     const schedule = lines.find((l) => l.id === 'schedule');
-    expect(schedule?.text).toMatch(/Scheduled daily at 02:30/);
-    expect(schedule?.text).toMatch(/Next run tomorrow at 02:30/);
+    expect(schedule?.text).toBe('Scheduled daily at 02:30. Next run tomorrow at 02:30.');
   });
 
   it('shows a shorter scheduleError line in on-demand mode and no next run', () => {
@@ -311,7 +329,7 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
     });
     const schedule = lines.find((l) => l.id === 'schedule');
     expect(schedule?.text).toBe('Scheduled daily at 02:30.');
-    expect(schedule?.text).not.toMatch(/Next run/);
+    expect(schedule?.text).not.toMatch(/Next run|will start shortly/);
     expect(lines.find((l) => l.id === 'clock')).toBeUndefined();
   });
 
@@ -389,6 +407,79 @@ describe('diskBackupStatusLines — each §5 line from mock data', () => {
       now: NOW,
     });
     expect(lines.find((l) => l.id === 'schedule')).toBeUndefined();
+  });
+});
+
+
+describe('diskBackupStatusLines — catch-up and first run (console#210)', () => {
+  const engine = flaggedEngine();
+
+  const scheduleOf = (over: Partial<Disk>, now: number) =>
+    diskBackupStatusLines({ disk: disk({ clockTrusted: true, ...over }), engine, now })
+      .find((l) => l.id === 'schedule');
+
+  it('after the slot with an old attempt: Next run becomes a missed-backup line, neutral tone', () => {
+    const line = scheduleOf({ lastAttempt: YESTERDAY_SLOT - 1 }, NOW);
+    expect(line?.text).toBe(`Scheduled daily at 02:30. ${MISSED_BACKUP_SHORTLY_COPY}`);
+    expect(line?.tone).toBe('neutral');
+    expect(line?.text).not.toMatch(/Next run|catching up|now/i);
+  });
+
+  it('after the slot with an updated attempt: back to Next run tomorrow', () => {
+    const atSlot = scheduleOf({ lastAttempt: TODAY_SLOT }, NOW);
+    expect(atSlot?.text).toBe('Scheduled daily at 02:30. Next run tomorrow at 02:30.');
+    const afterSlot = scheduleOf({ lastAttempt: NOW }, NOW);
+    expect(afterSlot?.text).toBe('Scheduled daily at 02:30. Next run tomorrow at 02:30.');
+    expect(afterSlot?.tone).toBe('neutral');
+  });
+
+  it('before the slot, after yesterday’s run: Next run today, not a catch-up', () => {
+    const line = scheduleOf({ lastAttempt: YESTERDAY_SLOT }, BEFORE_SLOT);
+    expect(line?.text).toBe('Scheduled daily at 02:30. Next run today at 02:30.');
+    expect(line?.text).not.toMatch(/will start shortly/);
+  });
+
+  it('before the slot, if yesterday’s slot is still unpaid: missed-backup line', () => {
+    const line = scheduleOf({ lastAttempt: YESTERDAY_SLOT - 1 }, BEFORE_SLOT);
+    expect(line?.text).toBe(`Scheduled daily at 02:30. ${MISSED_BACKUP_SHORTLY_COPY}`);
+  });
+
+  it('no Disk.lastAttempt (first run): First backup will start shortly, even before the slot', () => {
+    const after = scheduleOf({}, NOW);
+    expect(after?.text).toBe(`Scheduled daily at 02:30. ${FIRST_BACKUP_SHORTLY_COPY}`);
+    expect(after?.tone).toBe('neutral');
+    const before = scheduleOf({}, BEFORE_SLOT);
+    expect(before?.text).toBe(`Scheduled daily at 02:30. ${FIRST_BACKUP_SHORTLY_COPY}`);
+  });
+
+  it('untrusted clock: no Next run, no catch-up, no first-run clause', () => {
+    const oldAttempt = diskBackupStatusLines({
+      disk: disk({ clockTrusted: false, lastAttempt: FIVE_NIGHTS_AGO }),
+      engine,
+      now: NOW,
+    }).find((l) => l.id === 'schedule');
+    expect(oldAttempt?.text).toBe('Scheduled daily at 02:30.');
+    const noAttempt = diskBackupStatusLines({
+      disk: disk({ clockTrusted: false }),
+      engine,
+      now: NOW,
+    }).find((l) => l.id === 'schedule');
+    expect(noAttempt?.text).toBe('Scheduled daily at 02:30.');
+    expect(noAttempt?.text).not.toMatch(/Next run|will start shortly/);
+  });
+
+  it('several missed nights still give one catch-up line; missed-runs line is unchanged', () => {
+    const lines = diskBackupStatusLines({
+      disk: disk({ clockTrusted: true, lastAttempt: FIVE_NIGHTS_AGO, missedRuns: 4 }),
+      engine,
+      now: NOW,
+    });
+    const schedule = lines.filter((l) => l.id === 'schedule');
+    expect(schedule).toHaveLength(1);
+    expect(schedule[0].text).toBe(`Scheduled daily at 02:30. ${MISSED_BACKUP_SHORTLY_COPY}`);
+    expect(schedule[0].tone).toBe('neutral');
+    expect(lines.find((l) => l.id === 'missed-runs')?.text).toBe('4 scheduled backups were missed.');
+    expect(lines.find((l) => l.id === 'missed-runs')?.tone).toBe('warn');
   });
 });
 

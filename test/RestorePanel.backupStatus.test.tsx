@@ -12,6 +12,8 @@ import {
   SCHEDULED_BACKUPS_CAPABILITY,
   BACKUP_CLEANUP_CAPABILITY,
   orphanLinksCopy,
+  MISSED_BACKUP_SHORTLY_COPY,
+  FIRST_BACKUP_SHORTLY_COPY,
 } from '../src/store/backupStatus';
 import type { Disk, Engine, Instance, Store } from '../src/types/store';
 
@@ -211,6 +213,42 @@ describe('RestorePanel — Backup Disk status lines (idea#404)', () => {
     expect(screen.getByTestId(`restore-instance-${other.id}`)).toBeInTheDocument();
     expect(screen.getByText('kolibri')).toBeInTheDocument();
     expect(screen.getByText('nextcloud')).toBeInTheDocument();
+  });
+
+  it('flag on: after a missed slot, the schedule line says a missed backup will start shortly', () => {
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
+    const disk: Disk = {
+      ...baseDisk,
+      backupConfig: {
+        mode: 'scheduled',
+        links: [MOCK_IDS.INST_KOLIBRI_ID],
+        schedule: { daily: '02:30' },
+      },
+      clockTrusted: true,
+      lastAttempt: Date.now() - 2 * 24 * 60 * 60 * 1000,
+    };
+    renderPanel(storeWith({ engine, disk }), disk);
+    const status = screen.getByTestId('restore-disk-status');
+    expect(status.textContent).toContain('Scheduled daily at 02:30.');
+    expect(status.textContent).toContain(MISSED_BACKUP_SHORTLY_COPY);
+    expect(status.textContent).not.toMatch(/Next run/);
+  });
+
+  it('flag on: with no lastAttempt, the schedule line says the first backup will start shortly', () => {
+    const engine = withFlag(baseEngine, [SCHEDULED_BACKUPS_CAPABILITY]);
+    const disk: Disk = {
+      ...baseDisk,
+      backupConfig: {
+        mode: 'scheduled',
+        links: [MOCK_IDS.INST_KOLIBRI_ID],
+        schedule: { daily: '02:30' },
+      },
+      clockTrusted: true,
+    };
+    renderPanel(storeWith({ engine, disk }), disk);
+    const status = screen.getByTestId('restore-disk-status');
+    expect(status.textContent).toContain(`Scheduled daily at 02:30. ${FIRST_BACKUP_SHORTLY_COPY}`);
+    expect(status.textContent).not.toMatch(/Next run/);
   });
 });
 

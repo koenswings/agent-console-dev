@@ -7,7 +7,10 @@
  * missing or stale, this module returns no lines and the existing UI is unchanged.
  * Instance.lastAttempt is not a field; lastResult.time is the result time.
  * Disk.lastAttempt is kept. There is no nextRun field: the next run is
- * computed from schedule.daily only while clockTrusted is true.
+ * computed from schedule.daily while clockTrusted is true, except when a
+ * catch-up or first run is due (console#210): then the Next run clause
+ * is replaced, using Disk.lastAttempt against the most recent slot
+ * (same semantics as Engine mostRecentSlot / decideBackupDue).
  *
  * Operator copy has no jargon (no borg, YAML, helper, or result-code tokens).
  */
@@ -131,6 +134,30 @@ export const nextScheduledRun = (daily: string, now: number): Date | null => {
   return next;
 };
 
+/**
+ * The most recent daily slot at or before `now`, in local time. Mirrors
+ * Engine `mostRecentSlot` (backupSchedule.ts, 4b57456): today's slot when
+ * it has already been reached, otherwise yesterday's. A slot in a DST
+ * spring-forward gap resolves the way Date does; in a fall-back overlap
+ * it is the first occurrence.
+ */
+export const mostRecentSlot = (daily: string, now: number): number | null => {
+  const parsed = parseDailyTime(daily);
+  if (!parsed) return null;
+  const nowDate = new Date(now);
+  const slotOnDay = (dayRef: Date): number =>
+    new Date(dayRef.getFullYear(), dayRef.getMonth(), dayRef.getDate(), parsed.hours, parsed.minutes, 0, 0).getTime();
+  const today = slotOnDay(nowDate);
+  if (today <= now) return today;
+  const yesterday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() - 1, 12, 0, 0, 0);
+  return slotOnDay(yesterday);
+};
+
+/** Next-run clause when a missed slot is still unpaid (console#210). Neutral tone. */
+export const MISSED_BACKUP_SHORTLY_COPY = 'A missed backup will start shortly.';
+/** Next-run clause when the disk has never run (no Disk.lastAttempt). */
+export const FIRST_BACKUP_SHORTLY_COPY = 'First backup will start shortly.';
+
 const isSameLocalDay = (a: Date, b: Date): boolean =>
   a.getFullYear() === b.getFullYear()
   && a.getMonth() === b.getMonth()
@@ -152,18 +179,29 @@ const scheduleLine = (disk: Disk, now: number, clockTrusted: boolean): BackupSta
   if (!clockTrusted) {
     return { id: 'schedule', tone: 'neutral', text: `Scheduled daily at ${when}.` };
   }
-  const next = nextScheduledRun(when, now);
-  if (!next) {
-    return { id: 'schedule', tone: 'neutral', text: `Scheduled daily at ${when}.` };
+  // Catch-up / first run: Disk.lastAttempt only (not lastResult.time). Mirrors
+  // Engine decideBackupDue clock path: due when lastRun.time < mostRecentSlot.
+  const slot = mostRecentSlot(when, now);
+  const lastAttempt = typeof disk.lastAttempt === 'number' ? disk.lastAttempt : null;
+  let clause: string | null = null;
+  if (lastAttempt == null) {
+    clause = FIRST_BACKUP_SHORTLY_COPY;
+  } else if (slot != null && lastAttempt < slot) {
+    clause = MISSED_BACKUP_SHORTLY_COPY;
+  } else {
+    const next = nextScheduledRun(when, now);
+    if (next) {
+      const today = new Date(now);
+      const dayWord = isSameLocalDay(next, today) ? 'today' : 'tomorrow';
+      const hh = String(next.getHours()).padStart(2, '0');
+      const mm = String(next.getMinutes()).padStart(2, '0');
+      clause = `Next run ${dayWord} at ${hh}:${mm}.`;
+    }
   }
-  const today = new Date(now);
-  const dayWord = isSameLocalDay(next, today) ? 'today' : 'tomorrow';
-  const hh = String(next.getHours()).padStart(2, '0');
-  const mm = String(next.getMinutes()).padStart(2, '0');
   return {
     id: 'schedule',
     tone: 'neutral',
-    text: `Scheduled daily at ${when}. Next run ${dayWord} at ${hh}:${mm}.`,
+    text: clause ? `Scheduled daily at ${when}. ${clause}` : `Scheduled daily at ${when}.`,
   };
 };
 

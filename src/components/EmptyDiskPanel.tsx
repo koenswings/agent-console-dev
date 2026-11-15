@@ -29,11 +29,12 @@ import {
   MAKE_BACKUP_DISK_CAPABILITY,
   MAKE_BACKUP_DISK_EMPTY_CONFIRM,
   MAKE_BACKUP_DISK_SUCCESS_HINT,
-  MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   MAKE_BACKUP_TIMEOUT_MESSAGE,
   findMakeBackupDiskOp,
   makeBackupDiskBlockedReason,
   makeBackupDiskErrorText,
+  makeBackupDiskSizeBlock,
+  makeBackupDiskSizeGate,
 } from '../store/makeBackupDisk';
 import MakeBackupDiskProgress from './MakeBackupDiskProgress';
 import { canEraseDisk, eraseBlockedReason } from '../store/erase';
@@ -47,6 +48,10 @@ import {
   createCommandResult,
 } from '../store/commandResult';
 import { confirmInstalled, remoteWatchFor } from '../store/remoteConfirm';
+import {
+  assessBackupDiskSize,
+  instancesForLinkedBackup,
+} from '../store/backupDiskSizeGate';
 import BackupSizingLine from './BackupSizingLine';
 import FilesRoleForm from './FilesRoleForm';
 import EraseDialog, { type EraseMode } from './EraseDialog';
@@ -146,6 +151,11 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     if (!d) return undefined;
     return makeBackupDiskBlockedReason(targetEngine(), props.store(), d.id);
   });
+  // Shared size gate (console#219): 8 GiB floor + 1.5× this Pi's App data.
+  const makeBackupSizeGate = createMemo(() => {
+    const d = props.disk();
+    return d ? makeBackupDiskSizeGate(targetEngine(), props.store(), d.id) : null;
+  });
   const backupCardBlocked = (): string | undefined =>
     canMakeBackupDisk() ? makeBackupBlocked() : diskBlocked();
 
@@ -198,11 +208,20 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
     );
   };
 
+  const backupSizeGate = createMemo(() =>
+    assessBackupDiskSize({
+      instances: instancesForLinkedBackup(props.store(), selectedInstanceIds()),
+      totalSizeBytes: props.disk()?.sizeBytes,
+      wording: 'selected',
+    }),
+  );
+
   const handleConfigureBackup = () => {
     setError('');
     const engineId = props.engineId();
     const disk = props.disk();
     if (!engineId || !disk) return;
+    if (backupSizeGate().blocked) return;
 
     const ids = selectedInstanceIds();
     if (ids.length === 0) {
@@ -401,9 +420,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                 <span class="edp-card__desc" data-testid="make-backup-disk-desc">
                   {!canMakeBackupDisk()
                     ? 'Link instances and choose a backup schedule'
-                    : makeBackupBlocked() === MAKE_BACKUP_DISK_TOO_SMALL_REASON
-                      ? MAKE_BACKUP_DISK_TOO_SMALL_REASON
-                      : 'Daily backups at 02:30, nothing erased'}
+                    : makeBackupDiskSizeBlock(makeBackupSizeGate()) ?? 'Daily backups at 02:30, nothing erased'}
                 </span>
               </div>
               <span class="edp-card__chevron">›</span>
@@ -438,6 +455,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
             <h3 class="disk-section__title">Make {props.disk()?.name ?? 'this disk'} a Backup Disk?</h3>
             <BackupSizingLine store={props.store} engineId={() => props.disk()?.dockedTo ?? props.engineId()} />
             <p class="edp-form__hint">{MAKE_BACKUP_DISK_EMPTY_CONFIRM}</p>
+            <Show when={makeBackupDiskSizeBlock(makeBackupSizeGate())}>
+              {(msg) => <p class="edp-form__error" role="alert" data-testid="make-backup-disk-size-block">{msg()}</p>}
+            </Show>
+            <Show when={makeBackupSizeGate()?.warning}>
+              {(msg) => <p class="edp-form__hint" data-testid="make-backup-disk-size-warn">{msg()}</p>}
+            </Show>
             <Show when={backupErrorText()}>
               {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-error">{msg()}</p>}
             </Show>
@@ -525,6 +548,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
             </Show>
 
+            <Show when={backupSizeGate().blockReason}>
+              {(msg) => <p class="edp-form__error" role="alert" data-testid="backup-disk-size-block">{msg()}</p>}
+            </Show>
+            <Show when={backupSizeGate().warning}>
+              {(msg) => <p class="edp-form__hint" data-testid="backup-disk-size-warn">{msg()}</p>}
+            </Show>
             <Show when={error()}><p class="edp-form__error" data-testid="backup-form-error" role="alert">{error()}</p></Show>
             <Show when={backupResult.state().kind === 'pending'}>
               <p class="edp-form__hint" data-testid="backup-pending">Waiting for the Engine…</p>
@@ -542,7 +571,8 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               <button
                 class="btn btn--primary"
                 data-testid="configure-backup-disk"
-                disabled={backupPending()}
+                disabled={backupPending() || backupSizeGate().blocked}
+                title={backupSizeGate().blockReason}
                 onClick={handleConfigureBackup}
               >
                 Configure Backup Disk

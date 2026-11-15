@@ -256,6 +256,43 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
       expect(screen.getByTestId('make-backup-disk')).not.toBeDisabled();
     });
 
+    describe('App data on this Pi (console#219 gate, engine#424 set)', () => {
+      const GB = 1_000_000_000;
+      const withApps = (sizeBytes: number, dataBytes: number | null): Store => {
+        const base = sized(sizeBytes);
+        const appDisk = { ...emptyDisk, id: 'APPX', name: 'app-x', device: 'sdx', diskTypes: ['app'], sizeBytes: 500 * GIB };
+        return {
+          ...base,
+          diskDB: { ...base.diskDB, APPX: appDisk } as Store['diskDB'],
+          instanceDB: { kx: { ...Object.values(base.instanceDB)[0], id: 'kx', storedOn: 'APPX', dataBytes, demo: false, backupMethod: 'stop' } } as unknown as Store['instanceDB'],
+        };
+      };
+
+      it('a 16 GiB disk is greyed out when this Pi\'s Apps use 12 GB (needs 18 GB)', () => {
+        renderPanel(withApps(16 * GIB, 12 * GB));
+        const card = screen.getByTestId('make-backup-disk') as HTMLButtonElement;
+        const reason = "This disk is too small for this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.";
+        expect(card.disabled).toBe(true);
+        expect(card.title).toBe(reason);
+        expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe(reason);
+      });
+
+      it('a large enough disk is allowed and the confirm has no size warning', () => {
+        renderPanel(withApps(32 * GIB, 12 * GB));
+        fireEvent.click(screen.getByTestId('make-backup-disk'));
+        expect(screen.getByTestId('make-backup-disk-confirm')).toBeInTheDocument();
+        expect(screen.queryByTestId('make-backup-disk-size-block')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('make-backup-disk-size-warn')).not.toBeInTheDocument();
+      });
+
+      it('unmeasured Apps: allowed, with a calm warning on the confirm', () => {
+        renderPanel(withApps(32 * GIB, null));
+        fireEvent.click(screen.getByTestId('make-backup-disk'));
+        expect(screen.getByTestId('make-backup-disk-size-warn').textContent).toMatch(/haven't been measured yet/);
+        expect(screen.getByTestId('confirm-make-backup-disk')).not.toBeDisabled();
+      });
+    });
+
     it('capability off: a small disk keeps the old createBackupDisk card enabled', () => {
       renderPanel({ ...MOCK_STORE, diskDB: { ...MOCK_STORE.diskDB, [emptyDisk.id]: { ...emptyDisk, sizeBytes: 2 * GIB } } });
       expect(screen.getByTestId('make-backup-disk')).not.toBeDisabled();
