@@ -3,8 +3,9 @@
  * (files-disk.md §8, idea#136): Make this a Files Disk (erase-first only),
  * Make a Backup Disk (when the Engine has 'makeBackupDisk'), and Erase this disk….
  */
-import { Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import EraseDialog, { type EraseMode } from './EraseDialog';
+import RoleBadges from './RoleBadges';
 import { DEFAULT_SHARE_NAME, UPDATE_ENGINE_TOOLTIP, engineHasCapability, validateShareName } from '../store/commands';
 import {
   MAKE_BACKUP_DISK_CAPABILITY,
@@ -44,6 +45,16 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   const makeBackupBlocked = createMemo(() =>
     makeBackupDiskBlockedReason(engine(), props.store(), props.candidateId)
   );
+  // After erase / makeBackupDisk the candidate leaves unformattedDisks and the
+  // new Disk is republished under the same id. Show that disk's name and role
+  // in the header (not "UNFORMATTED"). Remember the last label for the brief
+  // gap while the stick is being re-docked.
+  const adopted = createMemo(() => props.store()?.diskDB[props.candidateId]);
+  const [rememberedLabel, setRememberedLabel] = createSignal(props.candidateId);
+  createEffect(() => {
+    const name = adopted()?.name ?? candidate()?.label;
+    if (name) setRememberedLabel(name);
+  });
 
   const [dialog, setDialog] = createSignal<{ mode: EraseMode; shareName?: string } | null>(null);
   const [shareName, setShareName] = createSignal(DEFAULT_SHARE_NAME);
@@ -66,18 +77,34 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
       <header class="disk-view__header">
         <span class="disk-view__icon" aria-hidden="true">💾</span>
         <Show
-          when={stick()}
+          when={adopted()}
           fallback={
-            <>
-              <span class="disk-view__title">{candidate()?.label ?? props.candidateId}</span>
-              <span class="disk-view__badge-unformatted">unformatted</span>
-            </>
+            <Show
+              when={stick()}
+              fallback={
+                <>
+                  <span class="disk-view__title">{candidate()?.label ?? rememberedLabel()}</span>
+                  <Show when={candidate()}>
+                    <span class="disk-view__badge-unformatted">unformatted</span>
+                  </Show>
+                </>
+              }
+            >
+              {(st) => (
+                <>
+                  <span class="disk-view__title">{stickRowLabel(st())}</span>
+                  <span class="disk-view__badge-readonly">read-only</span>
+                </>
+              )}
+            </Show>
           }
         >
-          {(st) => (
+          {(disk) => (
             <>
-              <span class="disk-view__title">{stickRowLabel(st())}</span>
-              <span class="disk-view__badge-readonly">read-only</span>
+              <span class="disk-view__title">{disk().name}</span>
+              <span class="disk-view__badges">
+                <RoleBadges disk={() => disk()} store={props.store} />
+              </span>
             </>
           )}
         </Show>

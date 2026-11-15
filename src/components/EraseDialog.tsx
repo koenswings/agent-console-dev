@@ -35,6 +35,7 @@ import {
   ERASE_WARNING,
   MAKING_FILES_STEP,
   SUMMARY_STALE_MESSAGE,
+  confirmLabelMatches,
   countText,
   findTargetTrace,
   isErasedEmptyDisk,
@@ -158,7 +159,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   const labelMatches = createMemo(() => {
     const p = phase();
     if (p.kind !== 'summary') return false;
-    return confirmName() === p.summary.label;
+    return confirmLabelMatches(confirmName(), p.summary.label);
   });
 
   // ── eraseDisk ────────────────────────────────────────────────────────────
@@ -283,9 +284,10 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     const startedAt = Date.now();
     setPhase({ kind: 'making-backup', summary: p.summary, startedAt });
     // Blank stick: Erase runs, so the Engine needs the fresh summary trace and
-    // the typed label, same rule as eraseDisk (engine#355). After the erase the
-    // disk keeps the candidateId as its disk id, so success is diskDB[targetId]
-    // with 'backup' in diskTypes.
+    // the canonical summary label (engine#355). The Engine compares with
+    // `summary.label !== confirmName`, so we send p.summary.label, not the
+    // user's typed casing. After the erase the disk keeps the candidateId as
+    // its disk id, so success is diskDB[targetId] with 'backup' in diskTypes.
     const confirm = { summaryTraceId: p.traceId, confirmName: p.summary.label };
     backupResult.start(props.targetId, () => makeBackupDisk(props.engineId, props.targetId, confirm), {
       command: 'makeBackupDisk',

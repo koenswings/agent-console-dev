@@ -12,6 +12,7 @@ import {
   SUMMARY_MAX_AGE_MS,
   SUMMARY_STALE_MESSAGE,
   canEraseDisk,
+  confirmLabelMatches,
   eraseBlockedReason,
   isErasedEmptyDisk,
   isSummaryStale,
@@ -132,5 +133,16 @@ describe('isErasedEmptyDisk', () => {
     expect(isErasedEmptyDisk({ ...d(I.FA_APP), diskTypes: ['empty'] })).toBe(true);
     expect(isErasedEmptyDisk(d(I.FA_APP))).toBe(false);
     expect(isErasedEmptyDisk(undefined)).toBe(false);
+  });
+});
+
+describe('confirmLabelMatches', () => {
+  it('matches case-insensitively after trim and collapsed whitespace', () => {
+    expect(confirmLabelMatches('Intenso 32 GB', 'Intenso 32 GB')).toBe(true);
+    expect(confirmLabelMatches('  intenso  32   gb  ', 'Intenso 32 GB')).toBe(true);
+    expect(confirmLabelMatches('INTENSO 32 GB', 'Intenso 32 GB')).toBe(true);
+    expect(confirmLabelMatches('Intenso 32GB', 'Intenso 32 GB')).toBe(false);
+    expect(confirmLabelMatches('Intenso', 'Intenso 32 GB')).toBe(false);
+    expect(confirmLabelMatches('', 'Intenso 32 GB')).toBe(false);
   });
 });
