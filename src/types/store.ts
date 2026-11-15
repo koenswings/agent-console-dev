@@ -640,6 +640,12 @@ export interface Operation {
    * off, safe to pull; false = eject first (POWER_OFF_FAILED). Absent on other kinds.
    */
   safeToRemove?: boolean;
+  /**
+   * updateApp only (engine#442 / agent-engine-dev#445): the update failed before a
+   * swap and the old version could not be restarted. The Console must not say
+   * "Nothing changed". Absent otherwise. Engine types this as `restartFailed?: true`.
+   */
+  restartFailed?: boolean;
   /** engine#369 §3: setupDemo / removeDemo progress. Absent on other kinds and older Engines. */
   demo?: DemoProgress | null;
 }

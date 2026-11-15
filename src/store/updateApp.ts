@@ -17,7 +17,10 @@
  *             are read too when present)
  *  - op       kind `updateApp` (engine#268), steps Fetch/Check/Snapshot/Swap/Start/Health,
  *             states running/done/failed/rolledBack, failure text `ROLLED BACK: <why>` (confirmed);
- *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed)
+ *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed);
+ *             `restartFailed?: true` (engine#442 / agent-engine-dev#445) when the update failed
+ *             before a swap and the old version could not be restarted
+ *  - command-log trace result `{ restartFailed: true }` on that error (JSON on the trace)
  *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
  *  - refusals `CODE: text` in the trace error
  */
@@ -268,7 +271,37 @@ export const parseRefusal = (message: string): { code: string | null; detail: st
   return { code: null, detail: message };
 };
 
-export const friendlyUpdateError = (message: string, ctx: RefusalCtx): string => {
+/**
+ * engine#442 / agent-engine-dev#445: the update never swapped, and the old
+ * version could not be restarted. The App is stopped; do not say "Nothing changed".
+ * Steve and Marco agreed this wording (App display name filled in).
+ */
+export const restartFailedText = (app: string): string =>
+  `The update didn't start, and ${app} couldn't be started again, so it is stopped. Its version and data are unchanged. Start ${app} again, or ask for help if it doesn't start.`;
+
+/** True only for the Engine's `restartFailed: true` (absent or false is ignored). */
+export const isRestartFailed = (value: unknown): boolean => value === true;
+
+/** Operation.restartFailed from the store (engine#442 / #445). */
+export const restartFailedFromOp = (op: Operation | null | undefined): boolean =>
+  isRestartFailed(op?.restartFailed);
+
+/**
+ * Command-log trace result (engine#442 / #445): the Engine writes
+ * `error.traceResult = { restartFailed: true }` as JSON on the error trace.
+ */
+export const restartFailedFromTraceResult = (result: unknown): boolean => {
+  try {
+    const raw = typeof result === 'string' && result ? JSON.parse(result) : result;
+    return isRestartFailed((raw as { restartFailed?: unknown } | null | undefined)?.restartFailed);
+  } catch {
+    return false;
+  }
+};
+
+export const friendlyUpdateError = (message: string, ctx: RefusalCtx, opts?: { restartFailed?: boolean }): string => {
+  // Check the flag first, before the REFUSAL_TEXT lookup: it overrides every code.
+  if (opts?.restartFailed) return restartFailedText(ctx.app);
   const { code, detail } = parseRefusal(message);
   return code ? REFUSAL_TEXT[code](ctx, detail) : plainEngineText(message);
 };
@@ -362,6 +395,8 @@ export const updateOutcome = (
   const s = stateOf(op);
   const err = op.error ?? '';
   if (s === 'done') return { kind: 'updated', text: `Updated from ${fromVersion}` };
+  // engine#442: whatever the error code (including ROLLED_BACK), say the App is stopped.
+  if (restartFailedFromOp(op)) return { kind: 'failed', text: restartFailedText(app) };
   if (isRollbackFailed(inst) || err.trim().replace(/^INTERRUPTED:\s*/, '').startsWith(ROLLBACK_FAILED_PREFIX)) {
     return { kind: 'stopped', text: `${app} is stopped. Nothing was deleted. Ask for help.` };
   }

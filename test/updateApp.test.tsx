@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { createSignal } from 'solid-js';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import InstanceRow from '../src/components/InstanceRow';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
-  confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
+  confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, restartFailedFromOp, restartFailedFromTraceResult, restartFailedText, stepLabel, updateOfferFor, updateOutcome,
   OP_KIND, latestUpdateOp, parseVersion, compareVersions, isNewerVersion, backupDiskFromDetail, parseRefusal,
 } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
@@ -262,6 +263,57 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(updateOutcome(op('Failed', { error: 'BUSY: lock' }), inst({ status: 'Stopped', statusCondition: 'exited' }), 'Kolibri', '0.15.5', ctx)!.kind)
       .toBe('failed');
   });
+  it('engine#442 restartFailed: the agreed text, whatever the error code', () => {
+    const text = "The update didn't start, and Kolibri couldn't be started again, so it is stopped. Its version and data are unchanged. Start Kolibri again, or ask for help if it doesn't start.";
+    expect(restartFailedText('Kolibri')).toBe(text);
+    expect(restartFailedText('Nextcloud')).toBe(
+      "The update didn't start, and Nextcloud couldn't be started again, so it is stopped. Its version and data are unchanged. Start Nextcloud again, or ask for help if it doesn't start.",
+    );
+    expect(text).not.toMatch(/Nothing changed/i);
+    expect(text).not.toMatch(/Nothing was stopped/i);
+
+    const hookMsg = "HOOK_FAILED: preHook 'dump' exited 1; nothing was stopped or changed";
+    const backupMsg = 'BACKUP_FAILED: the pre-update backup to Backup Disk A failed: borg create exited 2';
+    const otherMsg = 'NO_SPACE: snapshot needs 100 bytes, free 10 bytes';
+    const rolledMsg = 'ROLLED BACK: Snapshot failed: helper crashed; the update failed and the old version could not be restarted: compose up failed';
+
+    for (const message of [hookMsg, backupMsg, otherMsg, rolledMsg]) {
+      expect(friendlyUpdateError(message, ctx, { restartFailed: true })).toBe(text);
+      expect(friendlyUpdateError(message, ctx, { restartFailed: true })).not.toMatch(/Nothing changed/i);
+    }
+
+    // Absent, false, or a non-true value keeps the existing refusal text.
+    const hook = REFUSAL_TEXT.HOOK_FAILED(ctx, '');
+    expect(friendlyUpdateError(hookMsg, ctx)).toBe(hook);
+    expect(friendlyUpdateError(hookMsg, ctx, {})).toBe(hook);
+    expect(friendlyUpdateError(hookMsg, ctx, { restartFailed: false })).toBe(hook);
+    expect(friendlyUpdateError(backupMsg, ctx)).toBe(REFUSAL_TEXT.BACKUP_FAILED(ctx, 'the pre-update backup to Backup Disk A failed: borg create exited 2'));
+    expect(friendlyUpdateError(otherMsg, ctx)).toBe(REFUSAL_TEXT.NO_SPACE(ctx, 'snapshot needs 100 bytes, free 10 bytes'));
+    expect(updateOutcome(op('Failed', { error: backupMsg }), inst(), 'Kolibri', '0.15.5', ctx))
+      .toEqual({ kind: 'failed', text: REFUSAL_TEXT.BACKUP_FAILED(ctx, 'the pre-update backup to Backup Disk A failed: borg create exited 2') });
+    expect(updateOutcome(op('Failed', { error: backupMsg, restartFailed: false }), inst(), 'Kolibri', '0.15.5', ctx)!.text)
+      .not.toBe(text);
+
+    for (const [message, extra] of [
+      [hookMsg, { error: hookMsg, restartFailed: true }],
+      [backupMsg, { error: backupMsg, restartFailed: true }],
+      [otherMsg, { error: otherMsg, restartFailed: true }],
+      [rolledMsg, { error: rolledMsg, restartFailed: true }],
+    ] as const) {
+      const out = updateOutcome(op('Failed', extra), inst({ status: 'Error', statusCondition: 'the update failed and the old version could not be restarted: docker start refused' }), 'Kolibri', '0.15.5', ctx);
+      expect(out, message).toEqual({ kind: 'failed', text });
+    }
+
+    expect(restartFailedFromOp(op('Failed', { restartFailed: true }))).toBe(true);
+    expect(restartFailedFromOp(op('Failed'))).toBe(false);
+    expect(restartFailedFromOp(op('Failed', { restartFailed: false }))).toBe(false);
+    expect(restartFailedFromTraceResult(JSON.stringify({ restartFailed: true }))).toBe(true);
+    expect(restartFailedFromTraceResult({ restartFailed: true })).toBe(true);
+    expect(restartFailedFromTraceResult(JSON.stringify({ restartFailed: false }))).toBe(false);
+    expect(restartFailedFromTraceResult('{}')).toBe(false);
+    expect(restartFailedFromTraceResult(null)).toBe(false);
+    expect(restartFailedFromTraceResult(undefined)).toBe(false);
+  });
 });
 
 describe('UpdateAppControl in InstanceRow', () => {
@@ -320,5 +372,28 @@ describe('UpdateAppControl in InstanceRow', () => {
       [op('Running', { stepLabel: 'Fetch' })]);
     const r = row(s);
     expect(r.getByTestId('update-step-i1').textContent).toBe('Paused while library-pi cools down. The copy continues by itself.');
+  });
+  it('restartFailed: red error outcome with the agreed text, no Retry/Resume (engine#442)', () => {
+    const text = restartFailedText('Kolibri');
+    const [s, setS] = createSignal(mkStore(inst(), [op('Running', { stepLabel: 'Snapshot' })]));
+    const r = render(() => (
+      <InstanceRow instance={() => s().instanceDB.i1} app={() => s().appDB['kolibri-0.15.5']} engine={() => s().engineDB.ENG1} store={s} instanceId="i1" />
+    ));
+    expect(r.getByTestId('update-step-i1').textContent).toBe('Saving a safety copy');
+    setS(mkStore(
+      inst({ status: 'Error', statusCondition: 'the update failed and the old version could not be restarted: docker start refused' }),
+      [op('Failed', {
+        error: 'BACKUP_FAILED: the pre-update backup to Disk B failed: x; the update failed and the old version could not be restarted: docker start refused',
+        restartFailed: true,
+      })],
+    ));
+    const out = r.getByTestId('update-outcome-i1');
+    expect(out.textContent).toBe(text);
+    expect(out.getAttribute('data-kind')).toBe('failed');
+    expect(out.getAttribute('role')).toBe('alert');
+    expect(out.classList.contains('edp-form__error')).toBe(true);
+    expect(out.textContent).not.toMatch(/Nothing changed/i);
+    expect(r.queryByRole('button', { name: /retry|resume/i })).toBeNull();
+    expect(r.container.textContent).not.toMatch(/\bRetry\b|\bResume\b/);
   });
 });
