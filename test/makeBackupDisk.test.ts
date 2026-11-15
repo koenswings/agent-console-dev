@@ -11,10 +11,15 @@ import {
   MAKE_BACKUP_DISK_SKIPPED_ON_ADOPTED,
   MAKE_BACKUP_DISK_STEPS,
   MAKE_BACKUP_DISK_SUCCESS_MESSAGE,
-  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+  MAKE_BACKUP_DISK_SUCCESS_HINT,
   MAKE_BACKUP_DISK_EMPTY_CONFIRM,
   MAKE_BACKUP_DISK_BLANK_CONFIRM,
+  MAKE_BACKUP_DISK_MIN_BYTES,
+  MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   findMakeBackupDiskOp,
+  isTooSmallForBackupDisk,
+  makeBackupDiskBlockedReason,
+  makeBackupDiskSizeBytes,
   makeBackupDiskErrorText,
   makeBackupDiskProgress,
   makeBackupDiskStepsFor,
@@ -22,7 +27,7 @@ import {
 } from '../src/store/makeBackupDisk';
 import { GENERIC_ERROR_TEXT } from '../src/store/plainError';
 import { buildMakeBackupDiskCommand } from '../src/store/commands';
-import type { Operation, Store } from '../src/types/store';
+import type { Engine, Operation, Store } from '../src/types/store';
 
 const op = (over: Partial<Operation> = {}): Operation => ({
   id: 'op-1',
@@ -72,12 +77,15 @@ describe('makeBackupDisk contract (engine#355 / bc5bd78)', () => {
     expect(makeBackupDiskStepsFor(false).map((s) => s.id)).toEqual(['Check', 'Erase', 'Re-dock', 'Create']);
   });
 
-  it('copy names the 02:30 default and the first backup, and no link step', () => {
+  it('copy names 02:30 and linked Apps; never promises "every App" or a first backup', () => {
     expect(MAKE_BACKUP_DISK_EMPTY_CONFIRM).toMatch(/02:30/);
     expect(MAKE_BACKUP_DISK_EMPTY_CONFIRM).toMatch(/Nothing on this disk is erased/);
     expect(MAKE_BACKUP_DISK_BLANK_CONFIRM).toMatch(/02:30/);
-    expect(MAKE_BACKUP_DISK_FIRST_RUN_HINT).toMatch(/within a minute/);
-    expect(`${MAKE_BACKUP_DISK_EMPTY_CONFIRM} ${MAKE_BACKUP_DISK_BLANK_CONFIRM}`).not.toMatch(/link/i);
+    const all = `${MAKE_BACKUP_DISK_EMPTY_CONFIRM} ${MAKE_BACKUP_DISK_BLANK_CONFIRM} ${MAKE_BACKUP_DISK_SUCCESS_HINT}`;
+    expect(all).not.toMatch(/every App|first backup|within a minute/i);
+    for (const t of [MAKE_BACKUP_DISK_EMPTY_CONFIRM, MAKE_BACKUP_DISK_BLANK_CONFIRM, MAKE_BACKUP_DISK_SUCCESS_HINT]) {
+      expect(t).toMatch(/Apps linked to this disk/);
+    }
     expect(MAKE_BACKUP_DISK_SUCCESS_MESSAGE).toBe('This disk is now a Backup Disk.');
   });
 });
@@ -162,5 +170,74 @@ describe('findMakeBackupDiskOp', () => {
     const wrongTarget = op({ id: 'd', subject: { type: 'disk', id: 'X' }, args: { targetId: 'X' } });
     const erase = op({ id: 'e', kind: 'eraseDisk' as Operation['kind'] });
     expect(findMakeBackupDiskOp(store([other, wrongTarget, erase]), 'ENGINE_1', 'CAND_1')).toBeNull();
+  });
+});
+
+describe('size gate (Engine MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78)', () => {
+  const GIB = 1024 * 1024 * 1024;
+  const engine = (over: Partial<Engine> = {}): Engine => ({
+    id: 'ENGINE_1',
+    lastBooted: 100,
+    capabilities: ['makeBackupDisk'],
+    capabilitiesBootedAt: 100,
+    unformattedDisks: [],
+    diskCandidates: [],
+    ...over,
+  } as unknown as Engine);
+  const storeWith = (disks: Record<string, unknown> = {}): Store =>
+    ({ diskDB: disks, operationDB: {} } as unknown as Store);
+  const cand = (sizeBytes: number) => ({ candidateId: 'C1', device: 'sdi', sizeBytes, model: null, fsType: null, label: 'Stick' });
+
+  it('is exactly 8 GiB', () => {
+    expect(MAKE_BACKUP_DISK_MIN_BYTES).toBe(8 * 1024 ** 3);
+    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs 8 GB or more');
+  });
+
+  it('under / at / over / unknown', () => {
+    expect(isTooSmallForBackupDisk(8 * GIB - 1)).toBe(true);
+    expect(isTooSmallForBackupDisk(8 * GIB)).toBe(false);
+    expect(isTooSmallForBackupDisk(64 * GIB)).toBe(false);
+    expect(isTooSmallForBackupDisk(null)).toBe(false);
+  });
+
+  it('reads Disk.sizeBytes for a disk docked to this Engine', () => {
+    const disk = { id: 'D1', device: 'sde', dockedTo: 'ENGINE_1', sizeBytes: 4 * GIB };
+    expect(makeBackupDiskSizeBytes(engine(), storeWith({ D1: disk }), 'D1')).toBe(4 * GIB);
+    expect(makeBackupDiskBlockedReason(engine(), storeWith({ D1: disk }), 'D1')).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
+  });
+
+  it('a disk on another Engine or without a device is not this Engine\'s size', () => {
+    const elsewhere = { id: 'D1', device: 'sde', dockedTo: 'ENGINE_2', sizeBytes: 4 * GIB };
+    const noDevice = { id: 'D1', device: null, dockedTo: 'ENGINE_1', sizeBytes: 4 * GIB };
+    expect(makeBackupDiskSizeBytes(engine(), storeWith({ D1: elsewhere }), 'D1')).toBeNull();
+    expect(makeBackupDiskSizeBytes(engine(), storeWith({ D1: noDevice }), 'D1')).toBeNull();
+  });
+
+  it('reads unformattedDisks[].sizeBytes, then an erasable usbDisk in diskCandidates', () => {
+    expect(makeBackupDiskSizeBytes(engine({ unformattedDisks: [cand(2 * GIB)] }), storeWith(), 'C1')).toBe(2 * GIB);
+    const dc = { candidateId: 'C1', kind: 'usbDisk', device: 'sdi', sizeBytes: 16 * GIB, actions: ['erase'] };
+    expect(makeBackupDiskSizeBytes(engine({ diskCandidates: [dc] } as Partial<Engine>), storeWith(), 'C1')).toBe(16 * GIB);
+    const noErase = { ...dc, actions: ['initialise'] };
+    expect(makeBackupDiskSizeBytes(engine({ diskCandidates: [noErase] } as Partial<Engine>), storeWith(), 'C1')).toBeNull();
+  });
+
+  it('unknown size (null, 0, missing) is never greyed out', () => {
+    expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(0)] }), storeWith(), 'C1')).toBeUndefined();
+    const disk = { id: 'D1', device: 'sde', dockedTo: 'ENGINE_1', sizeBytes: null };
+    expect(makeBackupDiskBlockedReason(engine(), storeWith({ D1: disk }), 'D1')).toBeUndefined();
+    expect(makeBackupDiskBlockedReason(engine(), storeWith(), 'NOPE')).toBeUndefined();
+  });
+
+  it('at the limit is allowed; without the capability nothing is greyed', () => {
+    expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(8 * GIB)] }), storeWith(), 'C1')).toBeUndefined();
+    expect(makeBackupDiskBlockedReason(engine({ capabilities: [], unformattedDisks: [cand(1)] }), storeWith(), 'C1')).toBeUndefined();
+  });
+
+  it('TOO_SMALL stays mapped as a fallback', () => {
+    expect(makeBackupDiskErrorText('TOO_SMALL: could not read the size')).toBe(MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL);
+  });
+
+  it('the success copy says apps pause while a backup runs (default method stop)', () => {
+    expect(MAKE_BACKUP_DISK_SUCCESS_HINT).toMatch(/Apps pause for a moment while a backup runs\.$/);
   });
 });

@@ -20,9 +20,11 @@
  *              after an erase. Failures are `CODE: text` (trace errorCode and
  *              Operation error).
  *   Create:    BACKUP.yaml mode scheduled, daily 02:30, no links, backups/ root;
- *              the disk is re-processed so diskTypes gains 'backup'. A new
- *              scheduled disk has no lastRun, so the first backup starts at the
- *              next scheduler tick (within a minute).
+ *              the disk is re-processed so diskTypes gains 'backup'.
+ *   Scheduled runs back up only the instances linked in BACKUP.yaml
+ *   (backupScheduler.ts runDisk: `yaml.links`), so a new disk copies nothing
+ *   until Apps are linked. The copy below says so and does not promise a
+ *   first backup or "every App".
  */
 import { engineHasCapability } from './commands';
 import { isDiskLocked } from './operations';
@@ -40,18 +42,23 @@ export const MAKE_BACKUP_DISK_TIME = '02:30';
 
 /** Adopted empty IDEA disk: nothing is erased. */
 export const MAKE_BACKUP_DISK_EMPTY_CONFIRM =
-  `Nothing on this disk is erased. It will back up every App on this Pi every day at ${MAKE_BACKUP_DISK_TIME}. ` +
-  'The first backup starts right after. You can change the time later.';
+  `Nothing on this disk is erased. Backups run every day at ${MAKE_BACKUP_DISK_TIME} ` +
+  'for the Apps linked to this disk. You can change the time later.';
 
 /** Blank stick: shown under the erase warning in the typed-confirm dialog. */
 export const MAKE_BACKUP_DISK_BLANK_CONFIRM =
-  `After erasing, it will back up every App on this Pi every day at ${MAKE_BACKUP_DISK_TIME}. ` +
-  'The first backup starts right after. You can change the time later.';
+  `After erasing, backups run every day at ${MAKE_BACKUP_DISK_TIME} ` +
+  'for the Apps linked to this disk. You can change the time later.';
 
 export const MAKE_BACKUP_DISK_SUCCESS_MESSAGE = 'This disk is now a Backup Disk.';
 
-export const MAKE_BACKUP_DISK_FIRST_RUN_HINT =
-  `The first backup starts within a minute. After that, it runs every day at ${MAKE_BACKUP_DISK_TIME}.`;
+/**
+ * Apps without x-app.backup use method 'stop' (Engine backupMethod.ts
+ * defaultBackupSpec), so a backup stops and restarts a running App.
+ */
+export const MAKE_BACKUP_DISK_SUCCESS_HINT =
+  `Backups run every day at ${MAKE_BACKUP_DISK_TIME} for the Apps linked to this disk. ` +
+  'Apps pause for a moment while a backup runs.';
 
 export const MAKE_BACKUP_TIMEOUT_MESSAGE =
   "The Engine didn't respond. Check History for this command.";
@@ -187,9 +194,49 @@ export const findMakeBackupDiskOp = (
 };
 
 /**
+ * Engine minimum (MakeBackupDisk.ts MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78): 8 GiB.
+ * The Engine refuses `bytes < MIN` with TOO_SMALL at Check.
+ */
+export const MAKE_BACKUP_DISK_MIN_BYTES = 8 * 1024 * 1024 * 1024;
+
+export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = 'Too small: needs 8 GB or more';
+
+const usableSize = (n: unknown): number | null =>
+  typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+
+/**
+ * The size the Engine compares, read from the same store fields
+ * (MakeBackupDisk.ts sizeOf + SummariseDisk.ts resolveSummaryTarget):
+ * a disk docked to this Engine with a device → Disk.sizeBytes; else
+ * Engine.unformattedDisks[].sizeBytes; else an erasable usbDisk in
+ * Engine.diskCandidates[].sizeBytes. Null when unknown (the Console then
+ * leaves the decision to the Engine).
+ */
+export const makeBackupDiskSizeBytes = (
+  engine: Engine | null | undefined,
+  store: Store | null | undefined,
+  targetId: string,
+): number | null => {
+  if (!engine) return null;
+  const disk = store?.diskDB?.[targetId];
+  if (disk && disk.device && String(disk.dockedTo) === String(engine.id)) return usableSize(disk.sizeBytes);
+  const cand = engine.unformattedDisks?.find((c) => c.candidateId === targetId);
+  if (cand) return usableSize(cand.sizeBytes);
+  const dc = (engine.diskCandidates ?? []).find(
+    (c) => c?.candidateId === targetId && c.kind === 'usbDisk' && (c.actions ?? []).includes('erase'),
+  );
+  return dc ? usableSize(dc.sizeBytes) : null;
+};
+
+/** True only when the size is known and below the Engine's 8 GiB minimum. */
+export const isTooSmallForBackupDisk = (bytes: number | null): boolean =>
+  bytes != null && bytes < MAKE_BACKUP_DISK_MIN_BYTES;
+
+/**
  * Why the Make a Backup Disk action is disabled, or undefined when it may be
  * offered. Hidden entirely when the capability is absent (caller checks that).
- * There is no size rule here: the Engine owns the 8 GiB TOO_SMALL check.
+ * A known size under 8 GiB is greyed out before anything is typed; an unknown
+ * size is left to the Engine (TOO_SMALL stays mapped as a fallback).
  */
 export const makeBackupDiskBlockedReason = (
   engine: Engine | null | undefined,
@@ -197,6 +244,9 @@ export const makeBackupDiskBlockedReason = (
   targetId: string,
 ): string | undefined => {
   if (!engineHasCapability(engine, MAKE_BACKUP_DISK_CAPABILITY)) return undefined;
+  if (isTooSmallForBackupDisk(makeBackupDiskSizeBytes(engine, store, targetId))) {
+    return MAKE_BACKUP_DISK_TOO_SMALL_REASON;
+  }
   if (engine?.eraseInProgress) {
     return `An erase of ${engine.eraseInProgress.label} is already in progress.`;
   }

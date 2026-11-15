@@ -12,7 +12,7 @@ import { setSendCommandFn } from '../src/store/commands';
 import {
   MAKE_BACKUP_DISK_BLANK_CONFIRM,
   MAKE_BACKUP_DISK_ERROR_TEXT,
-  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+  MAKE_BACKUP_DISK_SUCCESS_HINT,
 } from '../src/store/makeBackupDisk';
 import { MOCK_FILES_STORE, FILES_IDS as I } from '../src/mock/filesFixtures';
 import { UNREADABLE_SUMMARY } from '../src/mock/eraseFixtures';
@@ -180,7 +180,7 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     t.setCls(log(summariseOk(), mbTrace({ status: 'ok', completedAt: Date.now() })));
     const ok = screen.getByTestId('make-backup-disk-success').textContent ?? '';
     expect(ok).toMatch(/this disk is now a backup disk/i);
-    expect(ok).toContain(MAKE_BACKUP_DISK_FIRST_RUN_HINT);
+    expect(ok).toContain(MAKE_BACKUP_DISK_SUCCESS_HINT);
   });
 
   it.each([
@@ -200,4 +200,50 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
     expect(err.textContent).toBe(MAKE_BACKUP_DISK_ERROR_TEXT[code]);
     expect(err.textContent).not.toMatch(/[A-Z]{3,}_[A-Z]+|borg|YAML|helper/i);
   });
+
+  describe('size gate (Engine 8 GiB minimum, unformattedDisks[].sizeBytes)', () => {
+    const GIB = 1024 * 1024 * 1024;
+    const sized = (sizeBytes: number): Store => {
+      const store = withFlag(MOCK_FILES_STORE);
+      const eng = store.engineDB[I.ENGINE_A] as Engine;
+      return {
+        ...store,
+        engineDB: {
+          ...store.engineDB,
+          [I.ENGINE_A]: {
+            ...eng,
+            unformattedDisks: (eng.unformattedDisks ?? []).map((u) => (u.candidateId === CAND ? { ...u, sizeBytes } : u)),
+          },
+        },
+      };
+    };
+
+    it('under 8 GiB: greyed out with the plain reason; no summariseDisk is sent', () => {
+      renderView(sized(4 * GIB));
+      const btn = screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      expect(btn.title).toBe('Too small: needs 8 GB or more');
+      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent?.trim()).toBe('Too small: needs 8 GB or more');
+      fireEvent.click(btn);
+      expect(screen.queryByTestId('make-backup-disk-dialog')).not.toBeInTheDocument();
+      expect(sent).not.toHaveBeenCalled();
+    });
+
+    it('exactly 8 GiB: allowed', () => {
+      renderView(sized(8 * GIB));
+      expect((screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('over 8 GiB: allowed, normal hint', () => {
+      renderView(sized(8 * GIB + 1));
+      expect((screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent).toMatch(/Erases this stick/);
+    });
+
+    it('unknown size (0): allowed, the Engine decides', () => {
+      renderView(sized(0));
+      expect((screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
 });
+

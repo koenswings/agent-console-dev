@@ -854,9 +854,12 @@ Engine contract the Console follows:
 - **Result:** the trace closes ok with `result { targetId, diskId, erased, mode:
   'scheduled', schedule: '02:30' }`. After an erase the disk keeps the
   candidate id as its disk id. Create writes `BACKUP.yaml` (scheduled, daily
-  02:30, no links: scheduled mode backs up every App on the Pi) and re-processes
-  the disk, so `diskTypes` gains `'backup'`. A new scheduled disk has no
-  `lastRun`, so its first backup starts at the next scheduler tick (within a minute).
+  02:30, no links) and re-processes the disk, so `diskTypes` gains `'backup'`.
+  Engine COMMANDS.md says scheduled mode backs up every App, but the scheduler
+  (`backupScheduler.ts` `runDisk`) backs up only `yaml.links`, so a new disk
+  copies nothing until Apps are linked (`addBackupLink`). The Console copy
+  follows the code: it says backups run for the Apps linked to the disk and
+  does not promise a first backup.
 - **Failures:** `CODE: text` in the trace (`errorCode` too) and the Operation
   `error`: BAD_ARGS, NOT_FOUND, SYSTEM_DISK, NOT_DOCKED, ALREADY_BACKUP, BUSY,
   IN_USE, SUMMARY_STALE, CONFIRM_MISMATCH, SERIAL_MISMATCH, TOO_SMALL (8 GiB,
@@ -867,8 +870,8 @@ Engine contract the Console follows:
 When the flag is fresh:
 
 - **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” opens a
-  confirm that names the disk and says nothing is erased, that it backs up
-  every App every day at 02:30, and that the first backup starts right after.
+  confirm that names the disk and says nothing is erased and that backups run
+  every day at 02:30 for the Apps linked to it.
   Confirm sends `makeBackupDisk <diskId>`. Progress shows Check and Create.
 - **Blank stick / unformatted candidate** (`UnformattedDiskView`): “Make a Backup
   Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase
@@ -877,8 +880,19 @@ When the flag is fresh:
   Progress shows all four steps.
 - The result uses `createCommandResult` (trace `makeBackupDisk`, `args.targetId`,
   long-running), then `diskDB[targetId].diskTypes` includes `'backup'`. Success
-  says “This disk is now a Backup Disk.” plus when the first backup runs.
-- The Console has no size rule; the Engine refuses a stick under 8 GiB at Check.
+  says “This disk is now a Backup Disk.”, that backups run every day at 02:30
+  for the linked Apps, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
+  use the Engine's default method `stop`, which stops and restarts a running
+  App around the copy.)
+- **Size gate:** a stick or disk whose known size is under the Engine's
+  `MAKE_BACKUP_DISK_MIN_BYTES` (8 GiB = 8·1024³ bytes; the Engine refuses
+  `bytes < min`) is greyed out before anything is typed, with “Too small: needs
+  8 GB or more”. The size comes from the same store fields the Engine reads:
+  `Disk.sizeBytes` for a disk docked to that Engine, else
+  `Engine.unformattedDisks[].sizeBytes`, else an erasable `usbDisk` in
+  `Engine.diskCandidates[].sizeBytes` (`makeBackupDiskSizeBytes`). An unknown
+  size (null, 0, missing) is not greyed out; the Engine decides and `TOO_SMALL`
+  stays mapped as a fallback.
 - Only empty IDEA disks and blank sticks are offered. The Engine also adopts an
   App or Files disk without erasing; the Console does not offer that yet.
 - `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (the Engine

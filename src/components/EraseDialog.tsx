@@ -15,7 +15,7 @@ import {
 } from '../store/commands';
 import {
   MAKE_BACKUP_DISK_BLANK_CONFIRM,
-  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+  MAKE_BACKUP_DISK_SUCCESS_HINT,
   MAKE_BACKUP_DISK_SUCCESS_MESSAGE,
   MAKE_BACKUP_TIMEOUT_MESSAGE,
   findMakeBackupDiskOp,
@@ -464,7 +464,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       <Show when={phase().kind === 'backup-success'}>
         <div class="erase-dialog__result" role="status" data-testid="make-backup-disk-success">
           <p>Done. {MAKE_BACKUP_DISK_SUCCESS_MESSAGE}</p>
-          <p class="edp-form__hint" data-testid="make-backup-disk-first-run">{MAKE_BACKUP_DISK_FIRST_RUN_HINT}</p>
+          <p class="edp-form__hint" data-testid="make-backup-disk-success-hint">{MAKE_BACKUP_DISK_SUCCESS_HINT}</p>
         </div>
         <div class="edp-form__actions">
           <button

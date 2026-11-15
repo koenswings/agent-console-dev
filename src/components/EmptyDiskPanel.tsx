@@ -5,7 +5,7 @@
  *   1. Make this a Files Disk   — share name → createFilesDisk <diskId> <shareName> (idea#132)
  *   2. Make this a Backup Disk  — when the Engine has 'makeBackupDisk', a simple
  *      confirm sends makeBackupDisk <diskId> (nothing erased; scheduled daily
- *      02:30, backs up every App, first backup within a minute). Otherwise
+ *      02:30 for the Apps linked to the disk). Otherwise
  *      the existing createBackupDisk form (instances + mode) is unchanged.
  *   3. Install App              — pick from appDB → installApp command
  *
@@ -28,7 +28,8 @@ import {
 import {
   MAKE_BACKUP_DISK_CAPABILITY,
   MAKE_BACKUP_DISK_EMPTY_CONFIRM,
-  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+  MAKE_BACKUP_DISK_SUCCESS_HINT,
+  MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   MAKE_BACKUP_TIMEOUT_MESSAGE,
   findMakeBackupDiskOp,
   makeBackupDiskBlockedReason,
@@ -352,7 +353,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
                 : 'Done. The app is installed on this disk.'}
             </p>
             <Show when={backupResult.state().kind === 'success' && backupResult.command() === 'makeBackupDisk'}>
-              <p class="edp-form__hint" data-testid="make-backup-disk-first-run">{MAKE_BACKUP_DISK_FIRST_RUN_HINT}</p>
+              <p class="edp-form__hint" data-testid="make-backup-disk-success-hint">{MAKE_BACKUP_DISK_SUCCESS_HINT}</p>
             </Show>
             <button class="btn" onClick={reset}>← Back</button>
           </div>
@@ -396,10 +397,12 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
               </div>
               <div class="edp-card__text">
                 <span class="edp-card__title">Make this a Backup Disk</span>
-                <span class="edp-card__desc">
-                  {canMakeBackupDisk()
-                    ? 'Back up every App every day at 02:30'
-                    : 'Link instances and choose a backup schedule'}
+                <span class="edp-card__desc" data-testid="make-backup-disk-desc">
+                  {!canMakeBackupDisk()
+                    ? 'Link instances and choose a backup schedule'
+                    : makeBackupBlocked() === MAKE_BACKUP_DISK_TOO_SMALL_REASON
+                      ? MAKE_BACKUP_DISK_TOO_SMALL_REASON
+                      : 'Daily backups at 02:30, nothing erased'}
                 </span>
               </div>
               <span class="edp-card__chevron">›</span>

@@ -10,7 +10,7 @@ import { setSendCommandFn } from '../src/store/commands';
 import {
   MAKE_BACKUP_DISK_EMPTY_CONFIRM,
   MAKE_BACKUP_DISK_ERROR_TEXT,
-  MAKE_BACKUP_DISK_FIRST_RUN_HINT,
+  MAKE_BACKUP_DISK_SUCCESS_HINT,
 } from '../src/store/makeBackupDisk';
 import { MOCK_STORE, MOCK_IDS } from '../src/mock/mockStore';
 import type { CommandLogState } from '../src/store/commandLog';
@@ -116,14 +116,14 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     renderPanel(store);
     const card = screen.getByTestId('make-backup-disk') as HTMLButtonElement;
     expect(card.disabled).toBe(false);
-    expect(card.textContent).toContain('Back up every App every day at 02:30');
+    expect(card.textContent).toContain('Daily backups at 02:30, nothing erased');
     fireEvent.click(card);
     const confirm = screen.getByTestId('make-backup-disk-confirm').textContent ?? '';
     expect(confirm).toContain(MAKE_BACKUP_DISK_EMPTY_CONFIRM);
     expect(confirm).toContain(`Make ${emptyDisk.name} a Backup Disk?`);
     expect(screen.queryByText('Backup mode')).not.toBeInTheDocument();
     expect(screen.queryByText('Link to instances')).not.toBeInTheDocument();
-    // 2 GB stick is still enabled — Engine owns TOO_SMALL
+    // MOCK_STORE's empty disk has no sizeBytes: unknown size is left to the Engine
     expect(screen.getByTestId('confirm-make-backup-disk')).not.toBeDisabled();
   });
 
@@ -180,7 +180,7 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     });
     t.setCls(log(mbTrace({ status: 'ok', completedAt: Date.now() })));
     expect(screen.getByTestId('backup-configured-success').textContent).toMatch(/this disk is now a backup disk/i);
-    expect(screen.getByTestId('make-backup-disk-first-run').textContent).toBe(MAKE_BACKUP_DISK_FIRST_RUN_HINT);
+    expect(screen.getByTestId('make-backup-disk-success-hint').textContent).toBe(MAKE_BACKUP_DISK_SUCCESS_HINT);
   });
 
   it.each([
@@ -198,5 +198,45 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
     const err = screen.getByTestId('backup-error');
     expect(err.textContent).toBe(wording);
     expect(err.textContent).not.toMatch(/[A-Z]{3,}_[A-Z]+|borg|YAML|helper|setBackupMode/i);
+  });
+
+  describe('size gate (Engine 8 GiB minimum, Disk.sizeBytes)', () => {
+    const GIB = 1024 * 1024 * 1024;
+    const sized = (sizeBytes: number | null | undefined): Store => {
+      const base = withFlag(MOCK_STORE, [...(MOCK_STORE.engineDB[MOCK_IDS.ENGINE_1_ID].capabilities ?? []), 'makeBackupDisk']);
+      return { ...base, diskDB: { ...base.diskDB, [emptyDisk.id]: { ...emptyDisk, sizeBytes } } };
+    };
+
+    it('under 8 GiB: card greyed out with the plain reason, before anything is typed', () => {
+      renderPanel(sized(8 * GIB - 1));
+      const card = screen.getByTestId('make-backup-disk') as HTMLButtonElement;
+      expect(card.disabled).toBe(true);
+      expect(card.title).toBe('Too small: needs 8 GB or more');
+      expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe('Too small: needs 8 GB or more');
+      fireEvent.click(card);
+      expect(screen.queryByTestId('make-backup-disk-confirm')).not.toBeInTheDocument();
+      expect(sent).not.toHaveBeenCalled();
+    });
+
+    it('exactly 8 GiB: allowed (the Engine refuses only below the limit)', () => {
+      renderPanel(sized(8 * GIB));
+      expect(screen.getByTestId('make-backup-disk')).not.toBeDisabled();
+    });
+
+    it('over 8 GiB: allowed', () => {
+      renderPanel(sized(32 * GIB));
+      expect(screen.getByTestId('make-backup-disk')).not.toBeDisabled();
+      expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe('Daily backups at 02:30, nothing erased');
+    });
+
+    it('unknown size (null): allowed, the Engine decides', () => {
+      renderPanel(sized(null));
+      expect(screen.getByTestId('make-backup-disk')).not.toBeDisabled();
+    });
+
+    it('capability off: a small disk keeps the old createBackupDisk card enabled', () => {
+      renderPanel({ ...MOCK_STORE, diskDB: { ...MOCK_STORE.diskDB, [emptyDisk.id]: { ...emptyDisk, sizeBytes: 2 * GIB } } });
+      expect(screen.getByTestId('make-backup-disk')).not.toBeDisabled();
+    });
   });
 });
