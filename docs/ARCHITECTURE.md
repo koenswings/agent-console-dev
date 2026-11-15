@@ -855,11 +855,12 @@ Engine contract the Console follows:
   'scheduled', schedule: '02:30' }`. After an erase the disk keeps the
   candidate id as its disk id. Create writes `BACKUP.yaml` (scheduled, daily
   02:30, no links) and re-processes the disk, so `diskTypes` gains `'backup'`.
-  Engine COMMANDS.md says scheduled mode backs up every App, but the scheduler
-  (`backupScheduler.ts` `runDisk`) backs up only `yaml.links`, so a new disk
-  copies nothing until Apps are linked (`addBackupLink`). The Console copy
-  follows the code: it says backups run for the Apps linked to the disk and
-  does not promise a first backup.
+  Koen's decision (idea#404): a new Backup Disk backs up **every App on its
+  Pi**, new ones included, with no link step. Engine bc5bd78's scheduler
+  (`backupScheduler.ts` `runDisk`) still runs only `yaml.links`; engine#424
+  (Axle) makes it back up every App, so real backups from a disk made here
+  depend on engine#424. The Console copy states the decided behaviour and does
+  not promise a first backup at a set time.
 - **Failures:** `CODE: text` in the trace (`errorCode` too) and the Operation
   `error`: BAD_ARGS, NOT_FOUND, SYSTEM_DISK, NOT_DOCKED, ALREADY_BACKUP, BUSY,
   IN_USE, SUMMARY_STALE, CONFIRM_MISMATCH, SERIAL_MISMATCH, TOO_SMALL (8 GiB,
@@ -871,7 +872,7 @@ When the flag is fresh:
 
 - **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” opens a
   confirm that names the disk and says nothing is erased and that backups run
-  every day at 02:30 for the Apps linked to it.
+  every day at 02:30 for every App on this Pi.
   Confirm sends `makeBackupDisk <diskId>`. Progress shows Check and Create.
 - **Blank stick / unformatted candidate** (`UnformattedDiskView`): “Make a Backup
   Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase
@@ -881,7 +882,7 @@ When the flag is fresh:
 - The result uses `createCommandResult` (trace `makeBackupDisk`, `args.targetId`,
   long-running), then `diskDB[targetId].diskTypes` includes `'backup'`. Success
   says “This disk is now a Backup Disk.”, that backups run every day at 02:30
-  for the linked Apps, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
+  for every App on this Pi, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
   use the Engine's default method `stop`, which stops and restarts a running
   App around the copy.)
 - **Size gate:** a stick or disk whose known size is under the Engine's

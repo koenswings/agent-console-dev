@@ -78,15 +78,18 @@ describe('makeBackupDisk contract (engine#355 / bc5bd78)', () => {
     expect(makeBackupDiskStepsFor(false).map((s) => s.id)).toEqual(['Check', 'Erase', 'Re-dock', 'Create']);
   });
 
-  it('copy names 02:30 and linked Apps; never promises "every App" or a first backup', () => {
+  it('copy names 02:30 and every App on this Pi (Koen, engine#424); no link step, no first-backup promise', () => {
     expect(MAKE_BACKUP_DISK_EMPTY_CONFIRM).toMatch(/02:30/);
     expect(MAKE_BACKUP_DISK_EMPTY_CONFIRM).toMatch(/Nothing on this disk is erased/);
     expect(MAKE_BACKUP_DISK_BLANK_CONFIRM).toMatch(/02:30/);
     const all = `${MAKE_BACKUP_DISK_EMPTY_CONFIRM} ${MAKE_BACKUP_DISK_BLANK_CONFIRM} ${MAKE_BACKUP_DISK_SUCCESS_HINT}`;
-    expect(all).not.toMatch(/every App|first backup|within a minute/i);
+    expect(all).not.toMatch(/link|first backup|within a minute/i);
     for (const t of [MAKE_BACKUP_DISK_EMPTY_CONFIRM, MAKE_BACKUP_DISK_BLANK_CONFIRM, MAKE_BACKUP_DISK_SUCCESS_HINT]) {
-      expect(t).toMatch(/Apps linked to this disk/);
+      expect(t).toMatch(/every day at 02:30 for every App on this Pi\./);
     }
+    expect(MAKE_BACKUP_DISK_SUCCESS_HINT).toBe(
+      'Backups run every day at 02:30 for every App on this Pi. Apps pause for a moment while a backup runs.',
+    );
     expect(MAKE_BACKUP_DISK_SUCCESS_MESSAGE).toBe('This disk is now a Backup Disk.');
   });
 });

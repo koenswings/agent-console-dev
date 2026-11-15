@@ -21,10 +21,11 @@
  *              Operation error).
  *   Create:    BACKUP.yaml mode scheduled, daily 02:30, no links, backups/ root;
  *              the disk is re-processed so diskTypes gains 'backup'.
- *   Scheduled runs back up only the instances linked in BACKUP.yaml
- *   (backupScheduler.ts runDisk: `yaml.links`), so a new disk copies nothing
- *   until Apps are linked. The copy below says so and does not promise a
- *   first backup or "every App".
+ *   Koen's decision (via Steve, idea#404): a new Backup Disk backs up every
+ *   App on its Pi, new ones included, with no link step. Engine bc5bd78 still
+ *   runs only `yaml.links` (backupScheduler.ts runDisk); engine#424 (Axle)
+ *   makes it back up every App. The copy states the decided behaviour and
+ *   does not promise a first backup at a set time.
  */
 import { engineHasCapability } from './commands';
 import { isDiskLocked } from './operations';
@@ -53,12 +54,12 @@ export const MAKE_BACKUP_DISK_SIZE_NEED = 'Needs a stick larger than 8 GB (16 GB
 /** Adopted empty IDEA disk: nothing is erased. */
 export const MAKE_BACKUP_DISK_EMPTY_CONFIRM =
   `Nothing on this disk is erased. Backups run every day at ${MAKE_BACKUP_DISK_TIME} ` +
-  'for the Apps linked to this disk. You can change the time later.';
+  'for every App on this Pi. You can change the time later.';
 
 /** Blank stick: shown under the erase warning in the typed-confirm dialog. */
 export const MAKE_BACKUP_DISK_BLANK_CONFIRM =
   `After erasing, backups run every day at ${MAKE_BACKUP_DISK_TIME} ` +
-  'for the Apps linked to this disk. You can change the time later.';
+  'for every App on this Pi. You can change the time later.';
 
 export const MAKE_BACKUP_DISK_SUCCESS_MESSAGE = 'This disk is now a Backup Disk.';
 
@@ -67,7 +68,7 @@ export const MAKE_BACKUP_DISK_SUCCESS_MESSAGE = 'This disk is now a Backup Disk.
  * defaultBackupSpec), so a backup stops and restarts a running App.
  */
 export const MAKE_BACKUP_DISK_SUCCESS_HINT =
-  `Backups run every day at ${MAKE_BACKUP_DISK_TIME} for the Apps linked to this disk. ` +
+  `Backups run every day at ${MAKE_BACKUP_DISK_TIME} for every App on this Pi. ` +
   'Apps pause for a moment while a backup runs.';
 
 export const MAKE_BACKUP_TIMEOUT_MESSAGE =

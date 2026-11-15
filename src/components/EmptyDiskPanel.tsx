@@ -5,7 +5,7 @@
  *   1. Make this a Files Disk   — share name → createFilesDisk <diskId> <shareName> (idea#132)
  *   2. Make this a Backup Disk  — when the Engine has 'makeBackupDisk', a simple
  *      confirm sends makeBackupDisk <diskId> (nothing erased; scheduled daily
- *      02:30 for the Apps linked to the disk). Otherwise
+ *      02:30 for every App on this Pi). Otherwise
  *      the existing createBackupDisk form (instances + mode) is unchanged.
  *   3. Install App              — pick from appDB → installApp command
  *
