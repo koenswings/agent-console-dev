@@ -99,7 +99,7 @@ describe('adoptBackupDiskBlockedReason (8 GiB, Disk.sizeBytes)', () => {
   it('under 8 GiB: greyed out with the new wording', () => {
     const s = sized(8 * GIB - 1);
     expect(adoptBackupDiskBlockedReason(engA(s), s, I.FA_APP)).toBe(
-      'Too small: needs more than 8 GB (16 GB or more recommended)',
+      'Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.',
     );
   });
   it('exactly 8 GiB and over: allowed', () => {

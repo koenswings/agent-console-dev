@@ -159,7 +159,7 @@ describe('DiskView — #209: size gate', () => {
     const btn = screen.getByTestId('adopt-backup-disk') as HTMLButtonElement;
     expect(btn.disabled).toBe(greyed);
     if (greyed) {
-      expect(btn.title).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+      expect(btn.title).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
       expect(screen.getByTestId('adopt-backup-disk-blocked').textContent).toBe(ADOPT_BACKUP_DISK_TOO_SMALL_REASON);
     } else {
       expect(screen.queryByTestId('adopt-backup-disk-blocked')).not.toBeInTheDocument();

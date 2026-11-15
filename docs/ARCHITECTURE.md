@@ -924,7 +924,7 @@ example `['app', 'backup']` or `['app', 'backup', 'files']`.
   Engine it is docked to has a fresh `makeBackupDisk` flag. Otherwise the action
   is hidden (`canOfferAdoptBackupDisk`, `src/store/adoptBackupDisk.ts`).
 - **Grey-out:** a known `Disk.sizeBytes` under 8 GiB shows “Too small: needs more
-  than 8 GB (16 GB or more recommended)” (exactly 8 GiB is allowed; an unknown size
+  than 8 GB. Choose a disk larger than all the App data on this Pi.” (exactly 8 GiB is allowed; an unknown size
   is left to the Engine). Then the #187 reasons: an erase running, the disk locked.
 - **Confirm** (no typed name): “Make *name* also a Backup Disk?”, “Nothing on this
   disk is erased. Its Apps and files stay.”, “Backups run every day at 02:30 for
