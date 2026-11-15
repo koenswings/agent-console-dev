@@ -117,7 +117,7 @@ describe('historyRowView — makeBackupDisk (idea#404)', () => {
       errorCode: 'TOO_SMALL',
     }));
     expect(view.tone).toBe('error');
-    expect(view.message).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+    expect(view.message).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
     expect(view.message).not.toMatch(/TOO_SMALL|borg|YAML/i);
   });
 

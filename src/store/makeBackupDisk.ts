@@ -42,14 +42,18 @@ export const MAKE_BACKUP_DISK_COMMAND = 'makeBackupDisk';
 export const MAKE_BACKUP_DISK_TIME = '02:30';
 
 /**
- * Size wording (Steve, idea#404 round 3). The Engine limit is 8 GiB
+ * Size wording (Steve, idea#404, 15 Nov 16:05). The Engine limit is 8 GiB
  * (MAKE_BACKUP_DISK_MIN_BYTES), so a stick sold as "8 GB" (8·10⁹ bytes) is
- * refused. Grey-out reason, tooltip and the TOO_SMALL error all use
+ * refused. A Backup Disk holds every App on the Pi (engine#424), so the
+ * guidance is tied to the Pi's App data, not a fixed size. The store has no
+ * per-instance data size yet, so the Console uses the general sentence.
+ * Grey-out reason, tooltip and the TOO_SMALL error all use
  * MAKE_BACKUP_DISK_TOO_SMALL_REASON; a requirement stated on its own uses
  * MAKE_BACKUP_DISK_SIZE_NEED.
  */
-export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = 'Too small: needs more than 8 GB (16 GB or more recommended)';
-export const MAKE_BACKUP_DISK_SIZE_NEED = 'Needs a stick larger than 8 GB (16 GB or more recommended).';
+export const MAKE_BACKUP_DISK_SIZE_GUIDANCE = 'Choose a disk larger than all the App data on this Pi.';
+export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = `Too small: needs more than 8 GB. ${MAKE_BACKUP_DISK_SIZE_GUIDANCE}`;
+export const MAKE_BACKUP_DISK_SIZE_NEED = `Needs a disk larger than 8 GB. ${MAKE_BACKUP_DISK_SIZE_GUIDANCE}`;
 
 /** Adopted empty IDEA disk: nothing is erased. */
 export const MAKE_BACKUP_DISK_EMPTY_CONFIRM =

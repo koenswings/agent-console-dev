@@ -211,8 +211,8 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
       renderPanel(sized(8 * GIB - 1));
       const card = screen.getByTestId('make-backup-disk') as HTMLButtonElement;
       expect(card.disabled).toBe(true);
-      expect(card.title).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
-      expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+      expect(card.title).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
+      expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
       fireEvent.click(card);
       expect(screen.queryByTestId('make-backup-disk-confirm')).not.toBeInTheDocument();
       expect(sent).not.toHaveBeenCalled();
