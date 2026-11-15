@@ -25,6 +25,7 @@ import {
   adoptBackupDiskBlockedReason,
   adoptBackupDiskErrorText,
   adoptBackupDiskRemoteCheck,
+  adoptBackupDiskSizeGate,
   adoptBackupDiskTitle,
   canOfferAdoptBackupDisk,
   diskHoldsInstances,
@@ -53,6 +54,10 @@ const AdoptBackupDiskSection: Component<AdoptBackupDiskSectionProps> = (props) =
   const blocked = createMemo((): string | undefined => {
     const id = diskId();
     return id ? adoptBackupDiskBlockedReason(engine(), props.store(), id) : undefined;
+  });
+  const sizeWarning = createMemo((): string | undefined => {
+    const id = diskId();
+    return id ? adoptBackupDiskSizeGate(engine(), props.store(), id)?.warning : undefined;
   });
   const holdsInstances = createMemo(() => {
     const id = diskId();
@@ -149,6 +154,9 @@ const AdoptBackupDiskSection: Component<AdoptBackupDiskSectionProps> = (props) =
                 <p class="adopt-backup__warning" data-testid="adopt-backup-disk-same-disk">
                   {ADOPT_BACKUP_DISK_SAME_DISK_WARNING}
                 </p>
+              </Show>
+              <Show when={sizeWarning()}>
+                {(msg) => <p class="edp-form__hint" data-testid="adopt-backup-disk-size-warn">{msg()}</p>}
               </Show>
               <Show when={errorText()}>
                 {(msg) => <p class="edp-form__error" role="alert" data-testid="adopt-backup-disk-error">{msg()}</p>}

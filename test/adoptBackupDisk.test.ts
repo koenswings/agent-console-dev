@@ -4,9 +4,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  ADOPT_BACKUP_DISK_SAME_DISK_WARNING,
   ADOPT_BACKUP_DISK_SIZE_UNKNOWN,
   ADOPT_BACKUP_DISK_TOO_SMALL_REASON,
   adoptBackupDiskBlockedReason,
+  adoptBackupDiskSizeGate,
   adoptBackupDiskErrorText,
   adoptBackupDiskRemoteCheck,
   adoptBackupDiskTitle,
@@ -112,6 +114,57 @@ describe('adoptBackupDiskBlockedReason (8 GiB, Disk.sizeBytes)', () => {
   it('erase in progress: greyed out', () => {
     const s = { ...on, engineDB: { ...on.engineDB, [I.ENGINE_A]: { ...engA(on), eraseInProgress: { label: 'Stick' } } } } as Store;
     expect(adoptBackupDiskBlockedReason(engA(s), s, I.FA_APP)).toMatch(/erase of Stick is already in progress/);
+  });
+});
+
+describe('App data against free space (console#219 gate, engine#424 set)', () => {
+  const DEC_GB = 1_000_000_000;
+  const on = withFlag(MOCK_FILES_STORE, I.ENGINE_A);
+  /** Only the instances given; FA_APP sized 500 GiB with the given free space. */
+  const withApps = (freeBytes: number | null, instances: Record<string, unknown>): Store => ({
+    ...withDisk(on, I.FA_APP, { sizeBytes: 500 * GIB, freeBytes }),
+    instanceDB: instances as Store['instanceDB'],
+  });
+  const inst = (id: string, storedOn: string, dataBytes: number | null, over: Record<string, unknown> = {}) =>
+    ({ ...Object.values(MOCK_FILES_STORE.instanceDB)[0], id, storedOn, dataBytes, demo: false, backupMethod: 'stop', ...over });
+
+  it('blocks when 1.5× the other Apps\' data does not fit in the free space (not the total size)', () => {
+    const s = withApps(10 * GIB, { x: inst('x', I.FA_FILES, 12 * DEC_GB) });
+    expect(adoptBackupDiskBlockedReason(engA(s), s, I.FA_APP)).toBe(
+      "This disk is too small for this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.",
+    );
+  });
+
+  it('allows it when the free space is enough', () => {
+    const s = withApps(100 * GIB, { x: inst('x', I.FA_FILES, 12 * DEC_GB) });
+    expect(adoptBackupDiskBlockedReason(engA(s), s, I.FA_APP)).toBeUndefined();
+  });
+
+  it('leaves out the Apps stored on this disk itself, demos and method none (as the Engine does)', () => {
+    const s = withApps(10 * GIB, {
+      own: inst('own', I.FA_APP, 300 * DEC_GB),
+      demo: inst('demo', I.FA_FILES, 300 * DEC_GB, { demo: true }),
+      none: inst('none', I.FA_FILES, 300 * DEC_GB, { backupMethod: 'none' }),
+      x: inst('x', I.FA_FILES, 1 * DEC_GB),
+    });
+    const gate = adoptBackupDiskSizeGate(engA(s), s, I.FA_APP);
+    expect(gate?.measuredSum).toBe(1 * DEC_GB);
+    expect(gate?.blocked).toBe(false);
+  });
+
+  it('unknown free space: warns, does not block; the 8 GiB floor still uses total size', () => {
+    const s = withApps(null, { x: inst('x', I.FA_FILES, 12 * DEC_GB) });
+    const gate = adoptBackupDiskSizeGate(engA(s), s, I.FA_APP);
+    expect(gate?.blocked).toBe(false);
+    expect(gate?.warning).toMatch(/free space isn't known yet/);
+    const small = withDisk(s, I.FA_APP, { sizeBytes: 4 * GIB });
+    expect(adoptBackupDiskBlockedReason(engA(small), small, I.FA_APP)).toMatch(/too small/i);
+  });
+
+  it('the same-disk note states what the Engine does (engine#424 skips them)', () => {
+    expect(ADOPT_BACKUP_DISK_SAME_DISK_WARNING).toBe(
+      'Apps stored on this disk are not backed up onto it. Move them to another disk to protect them.',
+    );
   });
 });
 

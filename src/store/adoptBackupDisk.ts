@@ -14,10 +14,12 @@
  *              then processDisk, so diskTypes becomes e.g. ['app', 'backup'].
  *
  * Koen's decision (via Steve, 15 Nov): a scheduled Backup Disk backs up every
- * App on its Pi, new ones included (engine#424). At 4b57456 the scheduler still
- * runs only `yaml.links` and Create writes `links: []`, so real backups from
- * this disk depend on engine#424. There is no link-Apps step.
- * Reuses the #187 helpers in ./makeBackupDisk.
+ * App on its Pi, new ones included. engine#424 (Engine PR #431, 865df67,
+ * `src/monitors/backupScheduler.ts` `scheduledTargets`) does this for a disk
+ * with no links, at each run, and leaves out demo instances and the instances
+ * stored on the Backup Disk itself. There is no link-Apps step.
+ * Reuses the #187 helpers in ./makeBackupDisk, and the shared size gate
+ * (console#219) with Disk.freeBytes as the capacity for the App data.
  */
 import { engineHasCapability } from './commands';
 import { hasAppRole } from './diskRoles';
@@ -27,12 +29,12 @@ import {
   MAKE_BACKUP_DISK_TIME,
   MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   findMakeBackupDiskOp,
-  isTooSmallForBackupDisk,
   makeBackupDiskBlockedReason,
   makeBackupDiskErrorText,
-  makeBackupDiskSizeBytes,
+  makeBackupDiskSizeGate,
   parseMakeBackupDiskCode,
 } from './makeBackupDisk';
+import type { BackupDiskSizeGate } from './backupDiskSizeGate';
 import type { RemoteCheck } from './remoteConfirm';
 import type { Disk, Engine, Store } from '../types/store';
 
@@ -44,9 +46,13 @@ export const ADOPT_BACKUP_DISK_SCHEDULE =
   `Backups run every day at ${MAKE_BACKUP_DISK_TIME} for every App on this Pi. ` +
   'You can change the time later.';
 
-/** Shown only when the disk holds App instances (open contract item: warn, not block). */
+/**
+ * Shown only when the disk holds App instances. The Engine leaves instances
+ * stored on the Backup Disk itself out of a no-links run (engine#424,
+ * backupScheduler.ts scheduledTargets), so this states that; it does not block.
+ */
 export const ADOPT_BACKUP_DISK_SAME_DISK_WARNING =
-  "Backups of Apps on this same disk don't protect them if the disk fails.";
+  'Apps stored on this disk are not backed up onto it. Move them to another disk to protect them.';
 
 export const ADOPT_BACKUP_DISK_SUCCESS_MESSAGE = 'This disk is now also a Backup Disk.';
 
@@ -90,21 +96,30 @@ export const canOfferAdoptBackupDisk = (
 };
 
 /**
- * Why the action is greyed out, or undefined. A known size under 8 GiB first
- * (this flow's wording), then the shared #187 reasons (erase running, disk
- * locked). An unknown size is left to the Engine.
+ * The shared Backup Disk size gate (console#219) for this disk: the 8 GiB
+ * floor on total Disk.sizeBytes (what the Engine checks), and 1.5× the
+ * measured App data of every App this disk will back up compared with
+ * Disk.freeBytes, because the disk already holds App or Files data. Unknown
+ * free space warns and does not block the App-data part.
+ */
+export const adoptBackupDiskSizeGate = (
+  engine: Engine | null | undefined,
+  store: Store | null,
+  diskId: string,
+): BackupDiskSizeGate | null =>
+  makeBackupDiskSizeGate(engine, store, diskId, store?.diskDB?.[diskId]?.freeBytes ?? null);
+
+/**
+ * Why the action is greyed out, or undefined: the size gate first (8 GiB
+ * floor, App data against free space), then the shared #187 reasons (erase
+ * running, disk locked). An unknown size is left to the Engine.
  */
 export const adoptBackupDiskBlockedReason = (
   engine: Engine | null | undefined,
   store: Store | null,
   diskId: string,
-): string | undefined => {
-  if (!engineHasCapability(engine, MAKE_BACKUP_DISK_CAPABILITY)) return undefined;
-  if (isTooSmallForBackupDisk(makeBackupDiskSizeBytes(engine, store, diskId))) {
-    return ADOPT_BACKUP_DISK_TOO_SMALL_REASON;
-  }
-  return makeBackupDiskBlockedReason(engine, store, diskId);
-};
+): string | undefined =>
+  makeBackupDiskBlockedReason(engine, store, diskId, store?.diskDB?.[diskId]?.freeBytes ?? null);
 
 const SIZE_UNKNOWN_RE = /could not read the size/i;
 

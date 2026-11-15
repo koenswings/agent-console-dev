@@ -230,3 +230,36 @@ describe('DiskView — #209: progress and result', () => {
     expect(err.textContent).not.toMatch(/[A-Z]{3,}_[A-Z]+|borg|YAML|helper|setBackupMode/i);
   });
 });
+
+describe('DiskView — Make this also a Backup Disk (#209): App data against free space', () => {
+  const DEC_GB = 1_000_000_000;
+  const appsOn = (freeBytes: number | null, dataBytes: number | null): Store => ({
+    ...withDisk(ON, I.FA_APP, { sizeBytes: 500 * GIB, freeBytes }),
+    instanceDB: {
+      x: { ...Object.values(ON.instanceDB)[0], id: 'x', storedOn: I.FA_FILES, dataBytes, demo: false, backupMethod: 'stop' },
+    } as unknown as Store['instanceDB'],
+  });
+
+  it('greyed out when the other Apps do not fit in the free space', () => {
+    renderView(I.FA_APP, appsOn(10 * GIB, 12 * DEC_GB));
+    const btn = screen.getByTestId('adopt-backup-disk') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(screen.getByTestId('adopt-backup-disk-blocked').textContent).toBe(
+      "This disk is too small for this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.",
+    );
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('unknown free space: allowed, with a calm warning on the confirm', () => {
+    renderView(I.FA_APP, appsOn(null, 12 * DEC_GB));
+    openConfirm();
+    expect(screen.getByTestId('adopt-backup-disk-size-warn').textContent).toMatch(/free space isn't known yet/);
+    expect(screen.getByTestId('confirm-adopt-backup-disk')).not.toBeDisabled();
+  });
+
+  it('enough free space: no size warning', () => {
+    renderView(I.FA_APP, appsOn(100 * GIB, 12 * DEC_GB));
+    openConfirm();
+    expect(screen.queryByTestId('adopt-backup-disk-size-warn')).not.toBeInTheDocument();
+  });
+});
