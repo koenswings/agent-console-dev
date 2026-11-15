@@ -512,6 +512,38 @@ A total under 1 GB is "This Pi's Apps use less than 1 GB" (never "0 GB" or
 uses one decimal place; 10 GB and above are whole numbers. The line is not gated on
 `scheduledBackups`. `dataBytesAt` is on the type but not shown.
 
+### Backup Disk size gate (console#219)
+
+Before the Console sends `createBackupDisk` (EmptyDiskPanel) or
+`initialiseDisk … backup` (Client cards → Initialise), it checks the chosen
+disk against the Engine's 8 GiB minimum and against 1.5× the measured App
+data that disk will copy. The helper is `src/store/backupDiskSizeGate.ts`
+(`assessBackupDiskSize`). The 8 GiB floor is `8 × 1024³` bytes, the same
+constant as Engine `MAKE_BACKUP_DISK_MIN_BYTES`, and is compared with total
+`Disk.sizeBytes` or the candidate's `sizeBytes`. The 1.5× rule uses the same
+capacity on an empty or new disk; a later caller (console#211) can pass
+`freeBytes` for a disk that already holds App or Files data.
+
+- EmptyDiskPanel: the ticked Apps, excluding `backupMethod: 'none'`.
+- Initialise as a Backup Disk: every instance on a disk docked to this Engine,
+  excluding demos, instances stored on the target disk, and `backupMethod: 'none'`.
+
+If the data is known and the disk is too small, the action is disabled and
+the command is not sent. If `dataBytes` is unknown, or the disk's size is
+unknown, the Console warns and does not block (unless the disk is already
+under 8 GiB). When both rules fail, the App-data wording is used if 1.5× the
+measured data is above 8 GiB; otherwise the 8 GiB wording.
+
+Wording uses the same size phrases as the backup-sizing line
+(`formatAppDataSize`: decimal GB, "less than 1 GB" without "about"). The
+8 GiB floor reads "Too small: needs more than 8 GB. Choose a disk larger
+than all the App data on this Pi." (a stick sold as "8 GB" is under 8 GiB).
+The Client cards Backup Disk option also shows the backup-sizing line.
+
+The Engine's `createBackupDisk` and `initialiseDisk … backup` do not themselves
+enforce 8 GiB or a dataBytes check; this gate is Console-only until an Engine
+follow-up exists.
+
 ### Backup Disk status lines (idea#404)
 
 When the docked Engine advertises a fresh `scheduledBackups` capability (idea#400,

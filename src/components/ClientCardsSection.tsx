@@ -8,6 +8,11 @@
  * replaces the two lists; older Engines keep the two lists unchanged.
  */
 import { For, Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
+import {
+  assessBackupDiskSize,
+  instancesForAllAppsOnPi,
+} from '../store/backupDiskSizeGate';
+import BackupSizingLine from './BackupSizingLine';
 import CommandFeedback from './CommandFeedback';
 import FlashDialog from './FlashDialog';
 import EraseDialog from './EraseDialog';
@@ -131,6 +136,15 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
     const blocked = () => (!hasCap(engine(), 'unknownDiskReadOnly') ? CAP_HINT.unknownDiskReadOnly
       : mustErase() ? errorText('NOT_EXT4: ') : null);
     const busy = () => raw.state().kind === 'pending';
+    const backupGate = createMemo(() => {
+      if (type() !== 'backup') return null;
+      return assessBackupDiskSize({
+        instances: instancesForAllAppsOnPi(props.store(), props.engineId, p.disk.candidateId),
+        totalSizeBytes: p.disk.sizeBytes,
+        wording: 'thisPi',
+      });
+    });
+    const backupBlocked = () => backupGate()?.blocked ? backupGate()!.blockReason : undefined;
     const label = () => `${p.disk.model ?? 'disk'} (${formatBytes(p.disk.sizeBytes)})`;
     return (
       <div class="new-disk" data-testid={`new-disk-${p.disk.candidateId}`}>
@@ -149,9 +163,12 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
         <button
           class="btn"
           data-testid={`new-disk-initialise-${p.disk.candidateId}`}
-          disabled={!!blocked() || busy()}
-          title={blocked() ?? undefined}
-          onClick={() => raw.start(p.disk.candidateId, () => initialiseDisk(props.engineId, p.disk.candidateId, type()))}
+          disabled={!!blocked() || busy() || !!backupBlocked()}
+          title={blocked() ?? backupBlocked() ?? undefined}
+          onClick={() => {
+            if (backupGate()?.blocked) return;
+            raw.start(p.disk.candidateId, () => initialiseDisk(props.engineId, p.disk.candidateId, type()));
+          }}
         >
           {busy() ? 'Initialising…' : 'Initialise'}
         </button>
@@ -167,6 +184,15 @@ const ClientCardsSection: Component<ClientCardsSectionProps> = (props) => {
         </Show>
         <Show when={blocked()}>
           {(h) => <p class="edp-form__hint" data-testid={`new-disk-hint-${p.disk.candidateId}`}>{h()}</p>}
+        </Show>
+        <Show when={type() === 'backup'}>
+          <BackupSizingLine store={props.store} engineId={() => props.engineId} />
+          <Show when={backupGate()?.blockReason}>
+            {(msg) => <p class="edp-form__error" role="alert" data-testid={`new-disk-backup-size-block-${p.disk.candidateId}`}>{msg()}</p>}
+          </Show>
+          <Show when={backupGate()?.warning}>
+            {(msg) => <p class="edp-form__hint" data-testid={`new-disk-backup-size-warn-${p.disk.candidateId}`}>{msg()}</p>}
+          </Show>
         </Show>
         <Show when={erasing()}>
           <EraseDialog
