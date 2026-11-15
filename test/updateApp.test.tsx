@@ -5,9 +5,10 @@ import InstanceRow from '../src/components/InstanceRow';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   NEEDS_BACKUP_TEXT, NO_SUMS_TEXT, REFUSAL_TEXT, applyUpdateProgress, badgeText, buildUpdateAppCommand,
-  confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, restartFailedFromOp, restartFailedFromTraceResult, restartFailedText, stepLabel, updateOfferFor, updateOutcome,
+  confirmText, isUnversioned, majorNeedsBackup, versionLabel, BACKUP_MAX_AGE_MS, majorConfirmText, fetchPausedOf, friendlyUpdateError, pausedText, receiveUpdateProgress, resetDismissed, stepLabel, updateOfferFor, updateOutcome,
   OP_KIND, latestUpdateOp, parseVersion, compareVersions, isNewerVersion, backupDiskFromDetail, parseRefusal,
 } from '../src/store/updateApp';
+import { restartFailedFromOp, restartFailedFromTraceResult, restartFailedText } from '../src/store/updateApp';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
 
 const T = Date.now();
