@@ -69,6 +69,34 @@ describe('findCommandOutcome', () => {
     const l = log(trace('t', { command: 'eraseDisk', args: { targetId: 'CAND_1' } }));
     expect(findCommandOutcome(l, new Set(), 'eraseDisk', 'targetId', 'CAND_1')).toEqual({ kind: 'ok' });
   });
+  it('updateApp error: restartFailed on the command-log trace result (engine#442 / #445)', () => {
+    const l = log(trace('t', {
+      command: 'updateApp',
+      args: { instanceId: 'i1' },
+      status: 'error',
+      errorMessage: 'BACKUP_FAILED: the pre-update backup to Disk B failed: x',
+      errorCode: 'BACKUP_FAILED',
+      result: JSON.stringify({ restartFailed: true }),
+    }));
+    expect(findCommandOutcome(l, new Set(), 'updateApp', 'instanceId', 'i1')).toEqual({
+      kind: 'error',
+      message: 'BACKUP_FAILED: the pre-update backup to Disk B failed: x',
+      code: 'BACKUP_FAILED',
+      restartFailed: true,
+    });
+    const plain = log(trace('t2', {
+      command: 'updateApp',
+      args: { instanceId: 'i1' },
+      status: 'error',
+      errorMessage: 'BACKUP_FAILED: the pre-update backup to Disk B failed: x',
+      errorCode: 'BACKUP_FAILED',
+    }));
+    expect(findCommandOutcome(plain, new Set(), 'updateApp', 'instanceId', 'i1')).toEqual({
+      kind: 'error',
+      message: 'BACKUP_FAILED: the pre-update backup to Disk B failed: x',
+      code: 'BACKUP_FAILED',
+    });
+  });
 });
 
 describe('createCommandResult', () => {

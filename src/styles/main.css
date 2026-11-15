@@ -4112,3 +4112,15 @@ body {
   font-size: 0.8rem;
   color: var(--colour-pauzed);
 }
+
+/* engine#441: how much App data this Pi holds, for backup sizing */
+.backup-sizing {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--colour-text-muted, #555);
+}
+.edp-form > .backup-sizing {
+  margin: 0 0 0.75rem;
+}
+

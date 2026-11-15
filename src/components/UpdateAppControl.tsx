@@ -13,7 +13,7 @@ import { engineStatus, live, liveNow, liveSince } from '../store/live';
 import {
   COMMAND, MAKE_BACKUP_FIRST_TEXT, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
-  latestUpdateOp, parseRefusal, pausedText, previousVersionOf, stepLabel, updateOfferFor, updateOutcome,
+  latestUpdateOp, parseRefusal, pausedText, previousVersionOf, restartFailedFromOp, stepLabel, updateOfferFor, updateOutcome,
   updateProgress, type RefusalCtx,
 } from '../store/updateApp';
 import type { Engine, Instance, Store } from '../types/store';
@@ -100,7 +100,8 @@ const UpdateAppControl: Component<Props> = (props) => {
   });
   const errorText = () => {
     const s = result.state();
-    return s.kind === 'error' ? friendlyUpdateError(s.message, ctx()) : null;
+    if (s.kind !== 'error') return null;
+    return friendlyUpdateError(s.message, ctx(), { restartFailed: !!s.restartFailed || restartFailedFromOp(op()) });
   };
 
   return (

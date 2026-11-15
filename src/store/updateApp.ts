@@ -17,7 +17,10 @@
  *             are read too when present)
  *  - op       kind `updateApp` (engine#268), steps Fetch/Check/Snapshot/Swap/Start/Health,
  *             states running/done/failed/rolledBack, failure text `ROLLED BACK: <why>` (confirmed);
- *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed)
+ *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed);
+ *             `restartFailed?: true` (engine#442 / agent-engine-dev#445) when the update failed
+ *             before a swap and the old version could not be restarted
+ *  - command-log trace result `{ restartFailed: true }` on that error (JSON on the trace)
  *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
  *  - refusals `CODE: text` in the trace error
  */
@@ -222,6 +225,10 @@ export const parseNoSpace = (detail: string): { needBytes: number; freeBytes: nu
 };
 const gbText = (bytes: number): string => (bytes / 1024 ** 3).toFixed(1);
 
+/** Backup Disk name from the Engine's `BACKUP_FAILED: the pre-update backup to <name> failed: …` (idea#448). */
+export const backupDiskFromDetail = (detail: string): string | null =>
+  /^the pre-update backup to (.+?) failed\b/s.exec(detail.trim())?.[1]?.trim() || null;
+
 export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null; toVersion?: string | null }
 
 const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` : '');
@@ -248,6 +255,13 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   NO_SUMS: () => NO_SUMS_TEXT,
   TRANSFER_FAILED: (c) => `The copy from ${c.engine} didn't finish, so nothing changed. ${c.app} is still on ${c.fromVersion}. Try again while ${c.engine} is switched on.`,
   SOURCE_UNSUPPORTED: (c) => `${c.engine} needs a newer IDEA version before it can share this update. Nothing changed.`,
+  // idea#448 pre-update backup (console#213). HOOK_FAILED runs before anything is stopped.
+  HOOK_FAILED: (c) => `${c.app} couldn't prepare its backup, so it wasn't updated. Nothing was stopped or changed: ${c.app} works as before. Try again later. If it happens again, ask for help.`,
+  // BACKUP_FAILED may come inside the snapshot stop: the old version is started again, version and data unchanged.
+  BACKUP_FAILED: (c, detail) => {
+    const disk = backupDiskFromDetail(detail) ?? 'the Backup Disk';
+    return `The backup to ${disk} didn't finish, so ${c.app} wasn't updated. Nothing changed: ${c.app} keeps its current version and all its data. Check that ${disk} is plugged in and has free space, then try again.`;
+  },
 };
 
 /** `CODE: text` → [code, text]; code is null when the message has no known code. */
@@ -257,7 +271,37 @@ export const parseRefusal = (message: string): { code: string | null; detail: st
   return { code: null, detail: message };
 };
 
-export const friendlyUpdateError = (message: string, ctx: RefusalCtx): string => {
+/**
+ * engine#442 / agent-engine-dev#445: the update never swapped, and the old
+ * version could not be restarted. The App is stopped; do not say "Nothing changed".
+ * Steve and Marco agreed this wording (App display name filled in).
+ */
+export const restartFailedText = (app: string): string =>
+  `The update didn't start, and ${app} couldn't be started again, so it is stopped. Its version and data are unchanged. Start ${app} again, or ask for help if it doesn't start.`;
+
+/** True only for the Engine's `restartFailed: true` (absent or false is ignored). */
+export const isRestartFailed = (value: unknown): boolean => value === true;
+
+/** Operation.restartFailed from the store (engine#442 / #445). */
+export const restartFailedFromOp = (op: Operation | null | undefined): boolean =>
+  isRestartFailed(op?.restartFailed);
+
+/**
+ * Command-log trace result (engine#442 / #445): the Engine writes
+ * `error.traceResult = { restartFailed: true }` as JSON on the error trace.
+ */
+export const restartFailedFromTraceResult = (result: unknown): boolean => {
+  try {
+    const raw = typeof result === 'string' && result ? JSON.parse(result) : result;
+    return isRestartFailed((raw as { restartFailed?: unknown } | null | undefined)?.restartFailed);
+  } catch {
+    return false;
+  }
+};
+
+export const friendlyUpdateError = (message: string, ctx: RefusalCtx, opts?: { restartFailed?: boolean }): string => {
+  // Check the flag first, before the REFUSAL_TEXT lookup: it overrides every code.
+  if (opts?.restartFailed) return restartFailedText(ctx.app);
   const { code, detail } = parseRefusal(message);
   return code ? REFUSAL_TEXT[code](ctx, detail) : plainEngineText(message);
 };
@@ -351,6 +395,8 @@ export const updateOutcome = (
   const s = stateOf(op);
   const err = op.error ?? '';
   if (s === 'done') return { kind: 'updated', text: `Updated from ${fromVersion}` };
+  // engine#442: whatever the error code (including ROLLED_BACK), say the App is stopped.
+  if (restartFailedFromOp(op)) return { kind: 'failed', text: restartFailedText(app) };
   if (isRollbackFailed(inst) || err.trim().replace(/^INTERRUPTED:\s*/, '').startsWith(ROLLBACK_FAILED_PREFIX)) {
     return { kind: 'stopped', text: `${app} is stopped. Nothing was deleted. Ask for help.` };
   }

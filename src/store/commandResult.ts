@@ -25,6 +25,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { CommandLogState } from './commandLog';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
+import { restartFailedFromTraceResult } from './updateApp';
 import { traceIdSnapshot } from './ejectResult';
 import { noteConnectedEngine } from './connectedEngine';
 import { formatWait, type RemoteWatch } from './remoteConfirm';
@@ -39,7 +40,7 @@ export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId'
 
 export type TraceOutcome =
   | { kind: 'ok'; code?: string | null }
-  | { kind: 'error'; message: string; code?: string | null }
+  | { kind: 'error'; message: string; code?: string | null; restartFailed?: boolean }
   /** Finished, but not what was asked (e.g. a Done moveApp that did not move the app, engine#388). */
   | { kind: 'warning'; message: string; code?: string | null };
 
@@ -214,7 +215,13 @@ export const traceOutcome = (trace: CommandTrace, command: string): TraceOutcome
   const lastErrorLog = errorLogs.length > 0 ? clean(errorLogs[errorLogs.length - 1].message) : '';
   if (trace.status === 'error') {
     const code = traceErrorCode(trace);
-    return { kind: 'error', message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed`, ...(code ? { code } : {}) };
+    const restartFailed = restartFailedFromTraceResult(trace.result);
+    return {
+      kind: 'error',
+      message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed`,
+      ...(code ? { code } : {}),
+      ...(restartFailed ? { restartFailed: true } : {}),
+    };
   }
   if (lastErrorLog) return { kind: 'error', message: lastErrorLog };
   // An ok trace may still carry a result code (moveApp SOURCE_CHANGED, engine#388): keep it for `settle`.
@@ -243,7 +250,7 @@ export type CommandResultState =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'success' }
-  | { kind: 'error'; message: string; code?: string | null }
+  | { kind: 'error'; message: string; code?: string | null; restartFailed?: boolean }
   /** Finished, but not as asked: a plain sentence, shown as a warning (not red, not success). */
   | { kind: 'warning'; message: string; code?: string | null }
   | { kind: 'timeout' }
@@ -354,7 +361,12 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     if (o.kind === 'error') {
       clearTimer();
       setPending(null);
-      setState(o.code ? { kind: 'error', message: o.message, code: o.code } : { kind: 'error', message: o.message });
+      setState({
+        kind: 'error',
+        message: o.message,
+        ...(o.code ? { code: o.code } : {}),
+        ...(o.restartFailed ? { restartFailed: true } : {}),
+      });
       return;
     }
     if (!opts.isSuccess || opts.isSuccess()) {
