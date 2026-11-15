@@ -21,10 +21,11 @@
  *              Operation error).
  *   Create:    BACKUP.yaml mode scheduled, daily 02:30, no links, backups/ root;
  *              the disk is re-processed so diskTypes gains 'backup'.
- *   Scheduled runs back up only the instances linked in BACKUP.yaml
- *   (backupScheduler.ts runDisk: `yaml.links`), so a new disk copies nothing
- *   until Apps are linked. The copy below says so and does not promise a
- *   first backup or "every App".
+ *   Koen's decision (via Steve, idea#404): a new Backup Disk backs up every
+ *   App on its Pi, new ones included, with no link step. Engine bc5bd78 still
+ *   runs only `yaml.links` (backupScheduler.ts runDisk); engine#424 (Axle)
+ *   makes it back up every App. The copy states the decided behaviour and
+ *   does not promise a first backup at a set time.
  */
 import { engineHasCapability } from './commands';
 import { isDiskLocked } from './operations';
@@ -40,15 +41,25 @@ export const MAKE_BACKUP_DISK_COMMAND = 'makeBackupDisk';
 /** Default daily time the Engine writes at Create (DEFAULT_BACKUP_TIME). */
 export const MAKE_BACKUP_DISK_TIME = '02:30';
 
+/**
+ * Size wording (Steve, idea#404 round 3). The Engine limit is 8 GiB
+ * (MAKE_BACKUP_DISK_MIN_BYTES), so a stick sold as "8 GB" (8·10⁹ bytes) is
+ * refused. Grey-out reason, tooltip and the TOO_SMALL error all use
+ * MAKE_BACKUP_DISK_TOO_SMALL_REASON; a requirement stated on its own uses
+ * MAKE_BACKUP_DISK_SIZE_NEED.
+ */
+export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = 'Too small: needs more than 8 GB (16 GB or more recommended)';
+export const MAKE_BACKUP_DISK_SIZE_NEED = 'Needs a stick larger than 8 GB (16 GB or more recommended).';
+
 /** Adopted empty IDEA disk: nothing is erased. */
 export const MAKE_BACKUP_DISK_EMPTY_CONFIRM =
   `Nothing on this disk is erased. Backups run every day at ${MAKE_BACKUP_DISK_TIME} ` +
-  'for the Apps linked to this disk. You can change the time later.';
+  'for every App on this Pi. You can change the time later.';
 
 /** Blank stick: shown under the erase warning in the typed-confirm dialog. */
 export const MAKE_BACKUP_DISK_BLANK_CONFIRM =
   `After erasing, backups run every day at ${MAKE_BACKUP_DISK_TIME} ` +
-  'for the Apps linked to this disk. You can change the time later.';
+  'for every App on this Pi. You can change the time later.';
 
 export const MAKE_BACKUP_DISK_SUCCESS_MESSAGE = 'This disk is now a Backup Disk.';
 
@@ -57,7 +68,7 @@ export const MAKE_BACKUP_DISK_SUCCESS_MESSAGE = 'This disk is now a Backup Disk.
  * defaultBackupSpec), so a backup stops and restarts a running App.
  */
 export const MAKE_BACKUP_DISK_SUCCESS_HINT =
-  `Backups run every day at ${MAKE_BACKUP_DISK_TIME} for the Apps linked to this disk. ` +
+  `Backups run every day at ${MAKE_BACKUP_DISK_TIME} for every App on this Pi. ` +
   'Apps pause for a moment while a backup runs.';
 
 export const MAKE_BACKUP_TIMEOUT_MESSAGE =
@@ -75,7 +86,8 @@ export const MAKE_BACKUP_DISK_ERROR_TEXT: Record<string, string> = {
   SUMMARY_STALE: 'The check of this disk is too old. Check the disk again.',
   CONFIRM_MISMATCH: "The name you typed doesn't match the disk's name.",
   SERIAL_MISMATCH: 'This is not the disk that was checked. Check the disk again.',
-  TOO_SMALL: 'This stick is too small to be a Backup Disk. It needs at least 8 GB.',
+  // Same text as the grey-out (Steve, round 3): an "8 GB" stick is under 8 GiB.
+  TOO_SMALL: MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   UNPLUGGED: 'The disk was unplugged during setup. Plug it back in and try again.',
   REDOCK_TIMEOUT: "The disk was erased but didn't come back. Unplug it, plug it back in and try again.",
   HIDDEN_PARTITIONS: 'This disk has hidden parts, so it was not erased.',
@@ -199,7 +211,6 @@ export const findMakeBackupDiskOp = (
  */
 export const MAKE_BACKUP_DISK_MIN_BYTES = 8 * 1024 * 1024 * 1024;
 
-export const MAKE_BACKUP_DISK_TOO_SMALL_REASON = 'Too small: needs 8 GB or more';
 
 const usableSize = (n: unknown): number | null =>
   typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;

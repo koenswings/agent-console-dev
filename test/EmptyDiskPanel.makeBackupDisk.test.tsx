@@ -211,8 +211,8 @@ describe('EmptyDiskPanel — makeBackupDisk (idea#404)', () => {
       renderPanel(sized(8 * GIB - 1));
       const card = screen.getByTestId('make-backup-disk') as HTMLButtonElement;
       expect(card.disabled).toBe(true);
-      expect(card.title).toBe('Too small: needs 8 GB or more');
-      expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe('Too small: needs 8 GB or more');
+      expect(card.title).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+      expect(screen.getByTestId('make-backup-disk-desc').textContent).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
       fireEvent.click(card);
       expect(screen.queryByTestId('make-backup-disk-confirm')).not.toBeInTheDocument();
       expect(sent).not.toHaveBeenCalled();

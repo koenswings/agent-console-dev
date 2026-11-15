@@ -117,7 +117,7 @@ describe('historyRowView — makeBackupDisk (idea#404)', () => {
       errorCode: 'TOO_SMALL',
     }));
     expect(view.tone).toBe('error');
-    expect(view.message).toBe('This stick is too small to be a Backup Disk. It needs at least 8 GB.');
+    expect(view.message).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
     expect(view.message).not.toMatch(/TOO_SMALL|borg|YAML/i);
   });
 

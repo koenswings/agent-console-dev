@@ -16,6 +16,7 @@ import {
   MAKE_BACKUP_DISK_BLANK_CONFIRM,
   MAKE_BACKUP_DISK_MIN_BYTES,
   MAKE_BACKUP_DISK_TOO_SMALL_REASON,
+  MAKE_BACKUP_DISK_SIZE_NEED,
   findMakeBackupDiskOp,
   isTooSmallForBackupDisk,
   makeBackupDiskBlockedReason,
@@ -77,15 +78,18 @@ describe('makeBackupDisk contract (engine#355 / bc5bd78)', () => {
     expect(makeBackupDiskStepsFor(false).map((s) => s.id)).toEqual(['Check', 'Erase', 'Re-dock', 'Create']);
   });
 
-  it('copy names 02:30 and linked Apps; never promises "every App" or a first backup', () => {
+  it('copy names 02:30 and every App on this Pi (Koen, engine#424); no link step, no first-backup promise', () => {
     expect(MAKE_BACKUP_DISK_EMPTY_CONFIRM).toMatch(/02:30/);
     expect(MAKE_BACKUP_DISK_EMPTY_CONFIRM).toMatch(/Nothing on this disk is erased/);
     expect(MAKE_BACKUP_DISK_BLANK_CONFIRM).toMatch(/02:30/);
     const all = `${MAKE_BACKUP_DISK_EMPTY_CONFIRM} ${MAKE_BACKUP_DISK_BLANK_CONFIRM} ${MAKE_BACKUP_DISK_SUCCESS_HINT}`;
-    expect(all).not.toMatch(/every App|first backup|within a minute/i);
+    expect(all).not.toMatch(/link|first backup|within a minute/i);
     for (const t of [MAKE_BACKUP_DISK_EMPTY_CONFIRM, MAKE_BACKUP_DISK_BLANK_CONFIRM, MAKE_BACKUP_DISK_SUCCESS_HINT]) {
-      expect(t).toMatch(/Apps linked to this disk/);
+      expect(t).toMatch(/every day at 02:30 for every App on this Pi\./);
     }
+    expect(MAKE_BACKUP_DISK_SUCCESS_HINT).toBe(
+      'Backups run every day at 02:30 for every App on this Pi. Apps pause for a moment while a backup runs.',
+    );
     expect(MAKE_BACKUP_DISK_SUCCESS_MESSAGE).toBe('This disk is now a Backup Disk.');
   });
 });
@@ -100,12 +104,12 @@ describe('makeBackupDiskErrorText', () => {
 
   it('prefers the trace errorCode over the message', () => {
     expect(makeBackupDiskErrorText('something odd', 'UNPLUGGED')).toBe(MAKE_BACKUP_DISK_ERROR_TEXT.UNPLUGGED);
-    expect(makeBackupDiskErrorText(null, 'TOO_SMALL')).toMatch(/at least 8 GB/);
+    expect(makeBackupDiskErrorText(null, 'TOO_SMALL')).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
   });
 
-  it('TOO_SMALL names the 8 GB minimum', () => {
+  it('TOO_SMALL uses the same text as the grey-out', () => {
     expect(makeBackupDiskErrorText('TOO_SMALL: this disk is 4000000000 bytes; …')).toBe(
-      'This stick is too small to be a Backup Disk. It needs at least 8 GB.',
+      'Too small: needs more than 8 GB (16 GB or more recommended)',
     );
   });
 
@@ -190,13 +194,17 @@ describe('size gate (Engine MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78)', () => {
 
   it('is exactly 8 GiB', () => {
     expect(MAKE_BACKUP_DISK_MIN_BYTES).toBe(8 * 1024 ** 3);
-    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs 8 GB or more');
+    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+    expect(MAKE_BACKUP_DISK_SIZE_NEED).toBe('Needs a stick larger than 8 GB (16 GB or more recommended).');
+    expect(MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
   });
 
   it('under / at / over / unknown', () => {
     expect(isTooSmallForBackupDisk(8 * GIB - 1)).toBe(true);
     expect(isTooSmallForBackupDisk(8 * GIB)).toBe(false);
     expect(isTooSmallForBackupDisk(64 * GIB)).toBe(false);
+    // a stick sold as "8 GB" (8·10⁹ bytes) is under 8 GiB, so it is greyed out
+    expect(isTooSmallForBackupDisk(8_000_000_000)).toBe(true);
     expect(isTooSmallForBackupDisk(null)).toBe(false);
   });
 

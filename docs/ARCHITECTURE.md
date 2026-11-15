@@ -254,8 +254,8 @@ with `result.message`, not a green check and not red (`historyRow.ts`, idea#454)
 A finished `makeBackupDisk` trace (idea#404) uses the same History row helper:
 success shows “This disk is now a Backup Disk.”; a failure shows the plain
 wording for its result code (`errorCode`, else the leading `CODE:`; for example
-TOO_SMALL → “This stick is too small to be a Backup Disk. It needs at least
-8 GB.”), never the code token.
+TOO_SMALL → “Too small: needs more than 8 GB (16 GB or more recommended)”),
+never the code token.
 
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
 
@@ -857,11 +857,12 @@ Engine contract the Console follows:
   'scheduled', schedule: '02:30' }`. After an erase the disk keeps the
   candidate id as its disk id. Create writes `BACKUP.yaml` (scheduled, daily
   02:30, no links) and re-processes the disk, so `diskTypes` gains `'backup'`.
-  Engine COMMANDS.md says scheduled mode backs up every App, but the scheduler
-  (`backupScheduler.ts` `runDisk`) backs up only `yaml.links`, so a new disk
-  copies nothing until Apps are linked (`addBackupLink`). The Console copy
-  follows the code: it says backups run for the Apps linked to the disk and
-  does not promise a first backup.
+  Koen's decision (idea#404): a new Backup Disk backs up **every App on its
+  Pi**, new ones included, with no link step. Engine bc5bd78's scheduler
+  (`backupScheduler.ts` `runDisk`) still runs only `yaml.links`; engine#424
+  (Axle) makes it back up every App, so real backups from a disk made here
+  depend on engine#424. The Console copy states the decided behaviour and does
+  not promise a first backup at a set time.
 - **Failures:** `CODE: text` in the trace (`errorCode` too) and the Operation
   `error`: BAD_ARGS, NOT_FOUND, SYSTEM_DISK, NOT_DOCKED, ALREADY_BACKUP, BUSY,
   IN_USE, SUMMARY_STALE, CONFIRM_MISMATCH, SERIAL_MISMATCH, TOO_SMALL (8 GiB,
@@ -873,7 +874,7 @@ When the flag is fresh:
 
 - **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” opens a
   confirm that names the disk and says nothing is erased and that backups run
-  every day at 02:30 for the Apps linked to it.
+  every day at 02:30 for every App on this Pi.
   Confirm sends `makeBackupDisk <diskId>`. Progress shows Check and Create.
 - **Blank stick / unformatted candidate** (`UnformattedDiskView`): “Make a Backup
   Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase
@@ -883,13 +884,17 @@ When the flag is fresh:
 - The result uses `createCommandResult` (trace `makeBackupDisk`, `args.targetId`,
   long-running), then `diskDB[targetId].diskTypes` includes `'backup'`. Success
   says “This disk is now a Backup Disk.”, that backups run every day at 02:30
-  for the linked Apps, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
+  for every App on this Pi, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
   use the Engine's default method `stop`, which stops and restarts a running
   App around the copy.)
 - **Size gate:** a stick or disk whose known size is under the Engine's
   `MAKE_BACKUP_DISK_MIN_BYTES` (8 GiB = 8·1024³ bytes; the Engine refuses
   `bytes < min`) is greyed out before anything is typed, with “Too small: needs
-  8 GB or more”. The size comes from the same store fields the Engine reads:
+  more than 8 GB (16 GB or more recommended)” (`MAKE_BACKUP_DISK_TOO_SMALL_REASON`,
+  also the TOO_SMALL error text). A stick sold as “8 GB” (8·10⁹ bytes) is under
+  8 GiB, hence “more than 8 GB”. Where the need is stated on its own (the
+  blank-stick hint) the text is “Needs a stick larger than 8 GB (16 GB or more
+  recommended).” (`MAKE_BACKUP_DISK_SIZE_NEED`). The size comes from the same store fields the Engine reads:
   `Disk.sizeBytes` for a disk docked to that Engine, else
   `Engine.unformattedDisks[].sizeBytes`, else an erasable `usbDisk` in
   `Engine.diskCandidates[].sizeBytes` (`makeBackupDiskSizeBytes`). An unknown
