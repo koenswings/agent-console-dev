@@ -118,4 +118,24 @@ export const sel = {
     `[data-testid="update-outcome-${id}"], [data-testid="update-error-${id}"]`,
   /** InstanceRow error hint (kept, Steve): visible when status is Error and the row is collapsed. */
   instanceErrorHint: (id: string) => `[data-testid="instance-error-hint-${id}"]`,
+  /** Backup Disk size gate (console#220). Block fails Configure; warn does not. */
+  backupDiskSizeBlock: '[data-testid="backup-disk-size-block"]',
+  backupDiskSizeWarn: '[data-testid="backup-disk-size-warn"]',
+  /** BackupModeControls / setBackupMode (idea#400, console#212 status line). */
+  backupModeControls: '[data-testid="backup-mode-controls"]',
+  backupModeTime: '[data-testid="backup-mode-time"]',
+  backupModeTimeError: '[data-testid="backup-mode-time-error"]',
+  backupModeSave: '[data-testid="backup-mode-save"]',
+  backupModeSuccess: '[data-testid="backup-mode-success"]',
+  backupModeError: '[data-testid="backup-mode-error"]',
+  backupModeTimeout: '[data-testid="backup-mode-timeout"]',
+  backupModePending: '[data-testid="backup-mode-pending"]',
+  restoreDiskStatus: '[data-testid="restore-disk-status"]',
+  restoreDiskStatusSchedule: '[data-testid="restore-disk-status-schedule"]',
+  /** Inline rename (console#171, engine#220). */
+  renameInstanceBtn: (id: string) => `[data-testid="rename-instance-btn-${id}"]`,
+  renameInstanceInput: (id: string) => `[data-testid="rename-instance-input-${id}"]`,
+  renameInstanceSave: (id: string) => `[data-testid="rename-instance-save-${id}"]`,
+  renameInstanceCancel: (id: string) => `[data-testid="rename-instance-cancel-${id}"]`,
+  renameInstanceProblem: (id: string) => `[data-testid="rename-instance-problem-${id}"]`,
 } as const;

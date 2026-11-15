@@ -74,7 +74,9 @@ const LOCKED = [
   'restore_from_backup',
   'open_app',
   'backup_instance',
+  'backup_schedule',
   'update_restart_failed',
+  'rename_instance',
   'back_to_disk',
   'back_to_overview',
   'log_out',
@@ -143,6 +145,8 @@ describe('Intent registry (idea#166 Phase 5 / #168)', () => {
     expect(hasDurationIntent('make_backup_disk')).toBe(true);
     expect(hasDurationIntent('open_app')).toBe(true);
     expect(hasDurationIntent('update_restart_failed')).toBe(true);
+    expect(hasDurationIntent('backup_schedule')).toBe(true);
+    expect(hasDurationIntent('rename_instance')).toBe(true);
     expect(hasDurationIntent('log_out')).toBe(true);
     expect(hasDurationIntent('copy_app')).toBe(true);
     expect(hasDurationIntent('reboot_engine')).toBe(true);

@@ -107,7 +107,7 @@ See `fixtures.ts` — content IDs + `live` facility/class/lesson (mutable on re-
 
 Registered (fail loud when gated / UI missing):
 `install_app`, `start_after_install`, `stay_on_disk`, `make_backup_disk`,
-`restore_from_backup`, `open_app`, `backup_instance`, `update_restart_failed`, `back_to_disk`,
+`restore_from_backup`, `open_app`, `backup_instance`, `backup_schedule`, `update_restart_failed`, `rename_instance`, `back_to_disk`,
 `back_to_overview`, `log_out`, `notice_usb_dock`, `retry_login_first_time_setup`,
 `change_password`, `add_operator`, `remove_operator`, `copy_app`, `move_app`.
 
@@ -454,6 +454,29 @@ saw "Intent ok" with no op (cover-all-989400c-r42).
 | Wait for Operation | `waitForBackupAppOperation` until OperationProgress shows a `backupApp` card for the instance (`data-op-kind` / `data-op-instance`) — Pending / Running / Done = ok; Failed / CommandFeedback error / timeout = loud-fail |
 | Appear budget | `DURATION_BACKUP_OP_START_MS` default **30s** (not Done — harness still verifies archive) |
 | Prefer A | backup-before-stop in walk; Intent also starts if Stopped — **no** soft-pass / no click-only ok |
+
+## make_backup_disk size gate (console#220)
+
+Before clicking Configure, `make_backup_disk` fails immediately if
+`[data-testid="backup-disk-size-block"]` is visible, including the gate text.
+A visible `[data-testid="backup-disk-size-warn"]` does not fail the Intent
+(IntentFn has no notes channel; no `console.log`).
+
+## backup_schedule (console#212)
+
+On a Backup Disk, set scheduled mode and a daily time in BackupModeControls
+(`setBackupMode`), then assert the RestorePanel schedule status line
+(`restore-disk-status-schedule`). Accepts catch-up, first-run, or a next-run
+clause; does not wait for the slot. Fails clearly if the Engine lacks
+`scheduledBackups` (controls hidden). Override the time with
+`DURATION_BACKUP_SCHEDULE_TIME`.
+
+## rename_instance (console#171)
+
+Rename an instance via `rename-instance-*`, assert the new name, then rename
+it back so duration fixtures stay unchanged. Fails clearly if the Engine lacks
+the `renameInstance` capability. Override with `DURATION_RENAME_INSTANCE_ID`
+and `DURATION_RENAME_TEMP_NAME`.
 
 ## update_restart_failed (console#217, engine#442)
 

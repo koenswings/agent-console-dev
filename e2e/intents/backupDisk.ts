@@ -146,6 +146,53 @@ export function resolveBackupSourceInstanceId(
   );
 }
 
+export type BackupDiskSizeGateReading = {
+  blocked: string | null;
+  warn: string | null;
+};
+
+/** Build the fail-loud error when console#220 blocks Configure. */
+export function backupDiskSizeBlockError(intent: string, gateText: string): Error {
+  const text = gateText.trim() || '(no text)';
+  return new Error(
+    `idea#168 ${intent}: Backup Disk size gate blocked Configure (console#220) — "${text}". ` +
+      `No soft-pass.`,
+  );
+}
+
+/**
+ * Decide whether Configure may proceed. A visible size-block fails immediately
+ * (replaces a ~90s timeout). A visible size-warn is allowed; IntentFn has no
+ * notes channel, so the warn is returned and not logged.
+ */
+export function sizeGateDecision(
+  reading: BackupDiskSizeGateReading,
+  intent: string,
+): { ok: true; warn?: string } | { ok: false; error: Error } {
+  if (reading.blocked) {
+    return { ok: false, error: backupDiskSizeBlockError(intent, reading.blocked) };
+  }
+  const warn = reading.warn?.trim();
+  return warn ? { ok: true, warn } : { ok: true };
+}
+
+/** Read the size-gate banners and fail loud if Configure is blocked (console#220). */
+export async function assertBackupSizeGateAllowsConfigure(
+  page: Page,
+  intent: string,
+): Promise<void> {
+  const block = page.locator(sel.backupDiskSizeBlock);
+  const warnLoc = page.locator(sel.backupDiskSizeWarn);
+  const blocked = (await block.isVisible().catch(() => false))
+    ? ((await block.textContent()) ?? '').trim() || '(no text)'
+    : null;
+  const warn = (await warnLoc.isVisible().catch(() => false))
+    ? ((await warnLoc.textContent()) ?? '').trim() || null
+    : null;
+  const decision = sizeGateDecision({ blocked, warn }, intent);
+  if (!decision.ok) throw decision.error;
+}
+
 /**
  * EmptyDiskPanel backup form: on-demand mode + ≥1 linked instance + Configure,
  * then wait until backup role / success / restore-panel. Loud-fail on
@@ -206,6 +253,10 @@ export async function completeMakeBackupDiskForm(
         `(preferred=${preferred}). No soft-pass.`,
     );
   }
+
+  // console#220: fail immediately when the size gate has blocked Configure,
+  // instead of clicking a disabled button and waiting ~90s.
+  await assertBackupSizeGateAllowsConfigure(page, intent);
 
   await form.locator(sel.configureBackupDisk).click();
 

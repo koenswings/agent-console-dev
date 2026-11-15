@@ -105,6 +105,8 @@ import {
   leave_nextcloud_as_learner,
 } from './operatorDeepActions';
 import { update_restart_failed } from './updateRestartFailed';
+import { backup_schedule } from './backupSchedule';
+import { rename_instance } from './renameInstance';
 import { copy_app, move_app } from './copyMoveApp';
 import {
   create_class,
@@ -174,7 +176,9 @@ export const intentRegistry: Record<ConsoleIntentName, IntentFn> = {
   restore_from_backup,
   open_app,
   backup_instance,
+  backup_schedule,
   update_restart_failed,
+  rename_instance,
   back_to_disk,
   back_to_overview,
   log_out,
