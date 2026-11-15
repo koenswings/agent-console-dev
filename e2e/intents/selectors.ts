@@ -81,7 +81,6 @@ export const sel = {
     `[data-testid^="operation-card-"][data-op-kind="backupApp"][data-op-instance="${instanceId}"]`,
   instanceCmdError: (id: string) =>
     `[data-testid="instance-cmd-${id}-error"], [data-testid="mobile-instance-cmd-${id}-error"]`,
-  backupToDisk: (diskId: string) => `[data-testid="backup-to-disk-${diskId}"]`,
   installAppItem: (appId: string) => `[data-testid="install-app-item-${appId}"]`,
   restoreInstance: (id: string) => `[data-testid="restore-instance-${id}"]`,
   restoreTarget: (id: string) => `[data-testid="restore-target-${id}"]`,
