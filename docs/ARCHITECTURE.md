@@ -928,9 +928,13 @@ When the flag is fresh:
   need is stated on its own (the blank-stick hint) the text is “Needs a disk
   larger than 8 GB. Choose a disk larger than all the App data on this Pi.”
   (`MAKE_BACKUP_DISK_SIZE_NEED`). A Backup Disk holds every App on the Pi
-  (engine#424), so there is no fixed recommended size. The store has no
-  per-instance data size yet; if the Engine publishes one, the guidance can
-  become “This Pi's Apps use about X GB; choose a disk larger than that.” The size comes from the same store fields the Engine reads:
+  (engine#424), so there is no fixed recommended size. `Instance.dataBytes`
+  (engine#441) is in the store, and the backup-sizing line on the
+  makeBackupDisk confirm in `EmptyDiskPanel` shows “This Pi's Apps use
+  about X GB” so the operator can judge the disk. The size gate itself
+  does not use `dataBytes`: it only compares the target's known size with
+  the Engine's 8 GiB minimum. That size comes from the same store fields
+  the Engine reads:
   `Disk.sizeBytes` for a disk docked to that Engine, else
   `Engine.unformattedDisks[].sizeBytes`, else an erasable `usbDisk` in
   `Engine.diskCandidates[].sizeBytes` (`makeBackupDiskSizeBytes`). An unknown
