@@ -256,6 +256,23 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
       expect(hint).toContain('Needs a disk larger than 8 GB. Choose a disk larger than all the App data on this Pi.');
     });
 
+    it('App data on this Pi decides too (console#219): 16 GiB is too small for 12 GB of Apps', () => {
+      const GB = 1_000_000_000;
+      const base = sized(16 * GIB);
+      const appDisk = Object.values(base.diskDB).find((d) => d && d.device && String(d.dockedTo) === String(I.ENGINE_A));
+      expect(appDisk).toBeTruthy();
+      const store = {
+        ...base,
+        instanceDB: { kx: { ...Object.values(base.instanceDB)[0], id: 'kx', storedOn: appDisk!.id, dataBytes: 12 * GB, demo: false, backupMethod: 'stop' } },
+      } as unknown as Store;
+      renderView(store);
+      const reason = "This disk is too small for this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.";
+      const btn = screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      expect(btn.title).toBe(reason);
+      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent?.trim()).toBe(reason);
+    });
+
     it('unknown size (0): allowed, the Engine decides', () => {
       renderView(sized(0));
       expect((screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement).disabled).toBe(false);

@@ -20,6 +20,8 @@ import {
   findMakeBackupDiskOp,
   isTooSmallForBackupDisk,
   makeBackupDiskBlockedReason,
+  makeBackupDiskSizeBlock,
+  makeBackupDiskSizeGate,
   makeBackupDiskSizeBytes,
   makeBackupDiskErrorText,
   makeBackupDiskProgress,
@@ -239,6 +241,72 @@ describe('size gate (Engine MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78)', () => {
   it('at the limit is allowed; without the capability nothing is greyed', () => {
     expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(8 * GIB)] }), storeWith(), 'C1')).toBeUndefined();
     expect(makeBackupDiskBlockedReason(engine({ capabilities: [], unformattedDisks: [cand(1)] }), storeWith(), 'C1')).toBeUndefined();
+  });
+
+  describe('shared App-data gate (console#219, every App on this Pi per engine#424)', () => {
+    const GB = 1_000_000_000;
+    const docked = (id: string, sizeBytes: number | null = 500 * GIB, freeBytes: number | null = 400 * GIB) =>
+      ({ id, device: `sd${id}`, dockedTo: 'ENGINE_1', sizeBytes, freeBytes });
+    const inst = (id: string, storedOn: string, dataBytes: number | null, over: Record<string, unknown> = {}) =>
+      ({ id, storedOn, dataBytes, ...over });
+    const storeFull = (disks: Record<string, unknown>, instances: Record<string, unknown>): Store =>
+      ({ diskDB: disks, instanceDB: instances, operationDB: {} } as unknown as Store);
+    const appsStore = (target: Record<string, unknown> = {}) => storeFull(
+      { APP1: docked('APP1'), ...target },
+      { a: inst('a', 'APP1', 10 * GB), b: inst('b', 'APP1', 2 * GB) },
+    );
+
+    it('blocks a 16 GiB stick when this Pi\'s Apps need more (1.5 × 12 GB = 18 GB)', () => {
+      const r = makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(16 * GIB)] }), appsStore(), 'C1');
+      expect(r).toBe("This disk is too small for this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.");
+      expect(makeBackupDiskSizeBlock(makeBackupDiskSizeGate(engine({ unformattedDisks: [cand(16 * GIB)] }), appsStore(), 'C1'))).toBe(r);
+    });
+
+    it('allows a stick large enough for the Apps', () => {
+      expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(32 * GIB)] }), appsStore(), 'C1')).toBeUndefined();
+    });
+
+    it('keeps the 8 GiB wording when only the floor fails', () => {
+      const small = storeFull({ APP1: docked('APP1') }, { a: inst('a', 'APP1', 1 * GB) });
+      expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(4 * GIB)] }), small, 'C1')).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
+      // App data needing more than 8 GiB names the App data instead
+      expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(4 * GIB)] }), appsStore(), 'C1')).toMatch(/too small for this Pi's Apps/);
+    });
+
+    it('counts the same set as the Engine: not demos, not method none, not the target, only disks docked here', () => {
+      const store = storeFull(
+        { APP1: docked('APP1'), OTHER: { id: 'OTHER', device: 'sdo', dockedTo: 'ENGINE_2', sizeBytes: 500 * GIB }, D1: docked('D1', 16 * GIB) },
+        {
+          a: inst('a', 'APP1', 4 * GB),
+          demo: inst('demo', 'APP1', 100 * GB, { demo: true }),
+          none: inst('none', 'APP1', 100 * GB, { backupMethod: 'none' }),
+          remote: inst('remote', 'OTHER', 100 * GB),
+          self: inst('self', 'D1', 100 * GB),
+        },
+      );
+      const gate = makeBackupDiskSizeGate(engine(), store, 'D1');
+      expect(gate?.blocked).toBe(false);
+      expect(gate?.measuredSum).toBe(4 * GB);
+    });
+
+    it('warns, does not block, when the Apps are not measured yet', () => {
+      const store = storeFull({ APP1: docked('APP1') }, { a: inst('a', 'APP1', null) });
+      const gate = makeBackupDiskSizeGate(engine({ unformattedDisks: [cand(16 * GIB)] }), store, 'C1');
+      expect(gate?.blocked).toBe(false);
+      expect(gate?.warning).toMatch(/haven't been measured yet/);
+      expect(makeBackupDiskBlockedReason(engine({ unformattedDisks: [cand(16 * GIB)] }), store, 'C1')).toBeUndefined();
+    });
+
+    it('a capacity (free space) can be passed for a disk that already holds data', () => {
+      const store = storeFull({ APP1: docked('APP1'), D1: docked('D1', 500 * GIB, 10 * GIB) }, { a: inst('a', 'APP1', 10 * GB) });
+      expect(makeBackupDiskBlockedReason(engine(), store, 'D1')).toBeUndefined();
+      expect(makeBackupDiskBlockedReason(engine(), store, 'D1', 10 * GIB)).toMatch(/too small for this Pi's Apps/);
+    });
+
+    it('no Engine, no gate', () => {
+      expect(makeBackupDiskSizeGate(null, appsStore(), 'C1')).toBeNull();
+      expect(makeBackupDiskSizeBlock(null)).toBeUndefined();
+    });
   });
 
   it('TOO_SMALL stays mapped as a fallback', () => {

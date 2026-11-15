@@ -10,8 +10,9 @@ import { DEFAULT_SHARE_NAME, UPDATE_ENGINE_TOOLTIP, engineHasCapability, validat
 import {
   MAKE_BACKUP_DISK_CAPABILITY,
   MAKE_BACKUP_DISK_SIZE_NEED,
-  MAKE_BACKUP_DISK_TOO_SMALL_REASON,
   makeBackupDiskBlockedReason,
+  makeBackupDiskSizeBlock,
+  makeBackupDiskSizeGate,
 } from '../store/makeBackupDisk';
 import { eraseBlockedReason, findUnformatted } from '../store/erase';
 import { formatBytes as fmt } from '../store/diskRoles';
@@ -44,6 +45,10 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   );
   const makeBackupBlocked = createMemo(() =>
     makeBackupDiskBlockedReason(engine(), props.store(), props.candidateId)
+  );
+  // Shared size gate (console#219): 8 GiB floor + 1.5× this Pi's App data.
+  const makeBackupSizeGate = createMemo(() =>
+    makeBackupDiskSizeGate(engine(), props.store(), props.candidateId)
   );
   // After erase / makeBackupDisk the candidate leaves unformattedDisks and the
   // new Disk is republished under the same id. Show that disk's name and role
@@ -181,10 +186,12 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
               Make a Backup Disk
             </button>
             <p class="edp-form__hint" data-testid="make-backup-disk-unformatted-hint">
-              {makeBackupBlocked() === MAKE_BACKUP_DISK_TOO_SMALL_REASON
-                ? MAKE_BACKUP_DISK_TOO_SMALL_REASON
-                : `Erases this stick, then makes it a Backup Disk with daily backups at 02:30. ${MAKE_BACKUP_DISK_SIZE_NEED}`}
+              {makeBackupDiskSizeBlock(makeBackupSizeGate())
+                ?? `Erases this stick, then makes it a Backup Disk with daily backups at 02:30. ${MAKE_BACKUP_DISK_SIZE_NEED}`}
             </p>
+            <Show when={makeBackupSizeGate()?.warning}>
+              {(msg) => <p class="edp-form__hint" data-testid="make-backup-disk-size-warn">{msg()}</p>}
+            </Show>
           </section>
         </Show>
 
