@@ -109,7 +109,7 @@ describe('makeBackupDiskErrorText', () => {
 
   it('TOO_SMALL uses the same text as the grey-out', () => {
     expect(makeBackupDiskErrorText('TOO_SMALL: this disk is 4000000000 bytes; …')).toBe(
-      'Too small: needs more than 8 GB (16 GB or more recommended)',
+      'Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.',
     );
   });
 
@@ -194,8 +194,8 @@ describe('size gate (Engine MAKE_BACKUP_DISK_MIN_BYTES, bc5bd78)', () => {
 
   it('is exactly 8 GiB', () => {
     expect(MAKE_BACKUP_DISK_MIN_BYTES).toBe(8 * 1024 ** 3);
-    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
-    expect(MAKE_BACKUP_DISK_SIZE_NEED).toBe('Needs a stick larger than 8 GB (16 GB or more recommended).');
+    expect(MAKE_BACKUP_DISK_TOO_SMALL_REASON).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
+    expect(MAKE_BACKUP_DISK_SIZE_NEED).toBe('Needs a disk larger than 8 GB. Choose a disk larger than all the App data on this Pi.');
     expect(MAKE_BACKUP_DISK_ERROR_TEXT.TOO_SMALL).toBe(MAKE_BACKUP_DISK_TOO_SMALL_REASON);
   });
 

@@ -222,8 +222,8 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
       renderView(sized(4 * GIB));
       const btn = screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
-      expect(btn.title).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
-      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent?.trim()).toBe('Too small: needs more than 8 GB (16 GB or more recommended)');
+      expect(btn.title).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
+      expect(screen.getByTestId('make-backup-disk-unformatted-hint').textContent?.trim()).toBe('Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.');
       fireEvent.click(btn);
       expect(screen.queryByTestId('make-backup-disk-dialog')).not.toBeInTheDocument();
       expect(sent).not.toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe('UnformattedDiskView — Make a Backup Disk (idea#404)', () => {
       expect((screen.getByTestId('make-backup-disk-unformatted') as HTMLButtonElement).disabled).toBe(false);
       const hint = screen.getByTestId('make-backup-disk-unformatted-hint').textContent ?? '';
       expect(hint).toMatch(/Erases this stick/);
-      expect(hint).toContain('Needs a stick larger than 8 GB (16 GB or more recommended).');
+      expect(hint).toContain('Needs a disk larger than 8 GB. Choose a disk larger than all the App data on this Pi.');
     });
 
     it('unknown size (0): allowed, the Engine decides', () => {

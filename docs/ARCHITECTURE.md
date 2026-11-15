@@ -254,7 +254,7 @@ with `result.message`, not a green check and not red (`historyRow.ts`, idea#454)
 A finished `makeBackupDisk` trace (idea#404) uses the same History row helper:
 success shows “This disk is now a Backup Disk.”; a failure shows the plain
 wording for its result code (`errorCode`, else the leading `CODE:`; for example
-TOO_SMALL → “Too small: needs more than 8 GB (16 GB or more recommended)”),
+TOO_SMALL → “Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.”),
 never the code token.
 
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
@@ -890,11 +890,15 @@ When the flag is fresh:
 - **Size gate:** a stick or disk whose known size is under the Engine's
   `MAKE_BACKUP_DISK_MIN_BYTES` (8 GiB = 8·1024³ bytes; the Engine refuses
   `bytes < min`) is greyed out before anything is typed, with “Too small: needs
-  more than 8 GB (16 GB or more recommended)” (`MAKE_BACKUP_DISK_TOO_SMALL_REASON`,
-  also the TOO_SMALL error text). A stick sold as “8 GB” (8·10⁹ bytes) is under
-  8 GiB, hence “more than 8 GB”. Where the need is stated on its own (the
-  blank-stick hint) the text is “Needs a stick larger than 8 GB (16 GB or more
-  recommended).” (`MAKE_BACKUP_DISK_SIZE_NEED`). The size comes from the same store fields the Engine reads:
+  more than 8 GB. Choose a disk larger than all the App data on this Pi.”
+  (`MAKE_BACKUP_DISK_TOO_SMALL_REASON`, also the TOO_SMALL error text). A stick
+  sold as “8 GB” (8·10⁹ bytes) is under 8 GiB, hence “more than 8 GB”. Where the
+  need is stated on its own (the blank-stick hint) the text is “Needs a disk
+  larger than 8 GB. Choose a disk larger than all the App data on this Pi.”
+  (`MAKE_BACKUP_DISK_SIZE_NEED`). A Backup Disk holds every App on the Pi
+  (engine#424), so there is no fixed recommended size. The store has no
+  per-instance data size yet; if the Engine publishes one, the guidance can
+  become “This Pi's Apps use about X GB; choose a disk larger than that.” The size comes from the same store fields the Engine reads:
   `Disk.sizeBytes` for a disk docked to that Engine, else
   `Engine.unformattedDisks[].sizeBytes`, else an erasable `usbDisk` in
   `Engine.diskCandidates[].sizeBytes` (`makeBackupDiskSizeBytes`). An unknown
