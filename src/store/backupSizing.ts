@@ -9,7 +9,7 @@
  *
  * Null rule (documented for the PR):
  *   - no Apps on this Pi: "No Apps on this Pi yet"
- *   - none of those Apps have a measurement: "This Pi's Apps are not measured yet"
+ *   - none of those Apps have a measurement: "This Pi's Apps haven't been measured yet"
  *   - some measured, some null or missing: "This Pi's Apps use about X GB (N Apps not measured yet)"
  *   - all measured: "This Pi's Apps use about X GB"
  *
@@ -106,7 +106,7 @@ export const deriveBackupSizing = (
 
   let text: string;
   if (measuredCount === 0) {
-    text = "This Pi's Apps are not measured yet";
+    text = "This Pi's Apps haven't been measured yet";
   } else if (unmeasuredCount > 0) {
     text = `${sizeSentence(totalBytes)} (${appsWord(unmeasuredCount)} not measured yet)`;
   } else {

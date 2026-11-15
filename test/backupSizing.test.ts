@@ -130,7 +130,7 @@ describe('deriveBackupSizing', () => {
     expect(result.measuredCount).toBe(0);
     expect(result.unmeasuredCount).toBe(2);
     expect(result.totalBytes).toBe(0);
-    expect(result.text).toBe("This Pi's Apps are not measured yet");
+    expect(result.text).toBe("This Pi's Apps haven't been measured yet");
   });
 
   it('excludes instances on disks docked to another Engine', () => {
@@ -185,6 +185,19 @@ describe('deriveBackupSizing', () => {
       [inst({ dataBytes: 250_000_000 })],
     );
     expect(deriveBackupSizing(store, 'eng-1').text).toBe("This Pi's Apps use less than 1 GB");
+  });
+
+  it('keeps less than 1 GB, with no about, when some Apps are not measured yet', () => {
+    const store = storeOf(
+      [disk()],
+      [
+        inst({ id: 'a', dataBytes: 250_000_000 }),
+        inst({ id: 'b', dataBytes: null }),
+      ],
+    );
+    expect(deriveBackupSizing(store, 'eng-1').text).toBe(
+      "This Pi's Apps use less than 1 GB (1 App not measured yet)",
+    );
   });
 
   it('uses whole numbers from 10 GB and keeps the unmeasured note', () => {

@@ -501,13 +501,15 @@ Engine. Only non-null values are added; undocked disks and disks docked to
 another Engine are excluded.
 
 - No Apps on this Pi: "No Apps on this Pi yet"
-- None measured: "This Pi's Apps are not measured yet"
+- None measured: "This Pi's Apps haven't been measured yet"
 - Some measured: "This Pi's Apps use about X GB (N Apps not measured yet)"
+  (singular: "1 App not measured yet")
 - All measured: "This Pi's Apps use about X GB"
 
 Sizes use decimal GB (1 GB = 1,000,000,000 bytes, matching Engine DiskSize).
-A total under 1 GB is "less than 1 GB" (never "0 GB"); under 10 GB uses one
-decimal place; 10 GB and above are whole numbers. The line is not gated on
+A total under 1 GB is "This Pi's Apps use less than 1 GB" (never "0 GB" or
+"about"); the same phrasing is kept when some Apps are unmeasured. Under 10 GB
+uses one decimal place; 10 GB and above are whole numbers. The line is not gated on
 `scheduledBackups`. `dataBytesAt` is on the type but not shown.
 
 ### Backup Disk status lines (idea#404)

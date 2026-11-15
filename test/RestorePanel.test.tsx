@@ -170,7 +170,7 @@ describe('RestorePanel', () => {
   it('shows not measured yet when this Pi\'s Apps have no dataBytes', () => {
     renderPanel();
     expect(screen.getByTestId('backup-sizing')).toHaveTextContent(
-      "This Pi's Apps are not measured yet",
+      "This Pi's Apps haven't been measured yet",
     );
   });
 });
