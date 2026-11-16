@@ -29,8 +29,10 @@ import {
   isErasedEmptyDisk,
   isSummaryStale,
   parseContentSummary,
+  parseEraseDiskResult,
   sizeText,
 } from '../store/erase';
+import { clearEraseCommandResult, publishEraseCommandResult } from '../store/eraseCommandResult';
 import { formatBytes } from '../store/diskRoles';
 import type { CommandLogState } from '../store/commandLog';
 import type { ContentSummary, Store } from '../types/store';
@@ -162,6 +164,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     if (p.kind !== 'summary' || stale() || !labelMatches()) return;
     clearEraseTimers();
     setSlow(false);
+    clearEraseCommandResult();
     eraseBaseline = traceIdSnapshot(cls());
     const startedAt = Date.now();
     setPhase({ kind: 'erasing', summary: p.summary, startedAt });
@@ -189,14 +192,21 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     if (!trace || trace.status === 'running') return;
     clearEraseTimers();
     if (trace.status === 'error') {
-      setPhase({
-        kind: 'error',
-        message: logText(trace.errorMessage)?.trim() ? plainEngineText(logText(trace.errorMessage)) : 'Erase failed.',
-      });
+      const message = logText(trace.errorMessage)?.trim()
+        ? plainEngineText(logText(trace.errorMessage))
+        : 'Erase failed.';
+      publishEraseCommandResult({ status: 'error', targetId: props.targetId, message });
+      setPhase({ kind: 'error', message });
       return;
     }
     // Wait for republish as ['empty'] with same ID (Disk and candidate both land as diskDB[targetId])
     // createEffect below watches for empty / then files shortcut
+    const parsed = parseEraseDiskResult(trace);
+    publishEraseCommandResult({
+      status: 'ok',
+      targetId: props.targetId,
+      diskId: parsed?.diskId ?? props.targetId,
+    });
     setPhase({ kind: 'success', summary: p.summary });
   });
 

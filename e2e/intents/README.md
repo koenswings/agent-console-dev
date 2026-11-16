@@ -351,7 +351,7 @@ soft-ok while **"checking…"**; kolibri gone → `eject_disk` default failed.
 | Intent | Contract |
 |---|---|
 | `erase_disk` | `ensureEmptyDiskPanel` first — **never** Grade5A. Loud-fail if no empty (`DURATION_EMPTY_DISK_ID` / `duration-empty-001`). Then `erase-this-disk`. |
-| `confirm_erase` | Wait for confirm field → type label → OK → wait for `erase-complete` / Done (≤180s). **No soft-pass** on checking… |
+| `confirm_erase` | Wait for confirm field → type label → OK → success only on `erase-complete`, the Engine `eraseDisk` command result (`[data-testid=erase-command-result]` status=ok), or the disk coming back Empty after the click (≤180s). A closed dialog is **not** success (r86t / engine#488 / console#233). Engine refusal (dialog or command error) fails with the reason. **No soft-pass** on checking… or dialog close. |
 | `eject_disk` | If preferred disk missing (erased), discover surviving ejectable row; loud-fail with visible disk ids. |
 
 ## start_instance already Running (r17 FAIL@77)

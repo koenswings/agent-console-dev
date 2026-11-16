@@ -38,6 +38,7 @@ export const sel = {
   eraseComplete: '[data-testid="erase-complete"]',
   eraseDone: '[data-testid="erase-done"]',
   eraseProgress: '[data-testid="erase-progress"]',
+  eraseCommandResult: '[data-testid="erase-command-result"]',
   eraseThisDisk: '[data-testid="erase-this-disk"]',
   emptyDiskPanel: '[data-testid="empty-disk-panel"]',
   makeFilesDisk: '[data-testid="make-files-disk"]',
