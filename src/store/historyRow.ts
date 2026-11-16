@@ -111,7 +111,7 @@ export const historyRowView = (trace: CommandTrace, appTitle?: string | null): H
     if (trace.status === 'ok') {
       return { tone: 'ok', icon: '✓', message: MAKE_BACKUP_DISK_SUCCESS_MESSAGE };
     }
-    const raw = trace.errorMessage ? stripAnsi(trace.errorMessage).trim() : '';
+    const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
     const code = trace.errorCode ?? null;
     return { tone: 'error', icon: '✗', message: raw || code ? makeBackupDiskErrorText(raw, code) : null };
   }

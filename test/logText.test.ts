@@ -154,6 +154,17 @@ describe('mixed command log (old plain-string traces next to ImmutableString tra
     expect(row.message).toBeTruthy();
     expect(row.message).not.toContain('[object');
     expect(parseTraceResult(trace('empty', { result: imm('') }))).toBeNull();
+    const mb = historyRowView(trace('mb', {
+      command: 'makeBackupDisk',
+      status: 'error',
+      errorMessage: imm('TOO_SMALL: this disk is 2000000000 bytes; a Backup Disk must be at least 8589934592 bytes (8 GiB).'),
+      errorCode: 'TOO_SMALL',
+    }));
+    expect(mb).toEqual({
+      tone: 'error',
+      icon: '✗',
+      message: 'Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.',
+    });
   });
 
   it('eject, erase and flash readers accept ImmutableString', () => {
