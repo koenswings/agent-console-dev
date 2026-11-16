@@ -5,7 +5,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   CONFIRM_ERASE_TIMEOUT_MS,
+  ERASE_SHARED_DISK_REFUSAL,
   commandSignalFromMarker,
+  confirmEraseRefusalMessage,
   decideConfirmErase,
   type ConfirmEraseObservation,
 } from '../e2e/intents/confirmEraseOutcome';
@@ -206,5 +208,38 @@ describe('decideConfirmErase', () => {
         }),
       ),
     ).toEqual({ kind: 'refusal', message: 'nothing was erased' });
+  });
+});
+
+describe('engine#488 step 105 refusal contract', () => {
+  const engineMsg =
+    'Duration Tests — Empty Disk 001 shares its physical disk (/dev/sdb) with sdb1 mounted at /disks/sdb1. Erasing wipes the whole disk, so nothing was erased.';
+
+  it('formats a refusal so the walker sees ok:false and the Engine sentence', () => {
+    const decision = decideConfirmErase(
+      base({ dialogError: engineMsg }),
+    );
+    expect(decision).toEqual({ kind: 'refusal', message: engineMsg });
+    const intentMessage = confirmEraseRefusalMessage(engineMsg);
+    expect(intentMessage).toContain(engineMsg);
+    // runDurationIntent catch → { ok: false, message: intentMessage }
+    // PlaywrightUiDriver wraps: runDurationIntent('confirm_erase'): ${message}
+    const walkerMessage = `runDurationIntent('confirm_erase'): ${intentMessage}`;
+    const m = ERASE_SHARED_DISK_REFUSAL.exec(walkerMessage);
+    expect(m).not.toBeNull();
+    expect(m![1]).toBe('sdb');
+    expect(m![2]).toMatch(/\bsdb1\b/);
+  });
+
+  it('does not match a timeout or an ok as the shared-disk refusal', () => {
+    const timeout = decideConfirmErase(
+      base({ dialogVisible: false, elapsedMs: CONFIRM_ERASE_TIMEOUT_MS }),
+    );
+    expect(timeout.kind).toBe('timeout');
+    if (timeout.kind === 'timeout') {
+      expect(ERASE_SHARED_DISK_REFUSAL.test(timeout.message)).toBe(false);
+    }
+    const okWrap = 'runDurationIntent ok: confirm_erase';
+    expect(ERASE_SHARED_DISK_REFUSAL.test(okWrap)).toBe(false);
   });
 });

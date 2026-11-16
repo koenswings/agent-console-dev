@@ -90,3 +90,18 @@ export function decideConfirmErase(obs: ConfirmEraseObservation): ConfirmEraseDe
   }
   return { kind: 'wait' };
 }
+
+/**
+ * Walker engine#488 `ERASE_SHARED_DISK_REFUSAL` (test/duration/stage2.ts).
+ * Stage 2 step 105 treats an Intent result as the expected refusal when
+ * `ok === false` and this regex matches `result.message` (the Engine sentence,
+ * not the Console prefix). Capture 1 is the parent device; capture 2 must name
+ * every mounted sibling kname.
+ */
+export const ERASE_SHARED_DISK_REFUSAL =
+  /shares its physical disk \(\/dev\/([a-z0-9]+)\) with (.+?)\. Erasing wipes the whole disk, so nothing was erased\./;
+
+/** Message `runDurationIntent` returns (ok:false) when confirm_erase refuses. */
+export function confirmEraseRefusalMessage(engineText: string): string {
+  return `idea#168 confirm_erase: erase refused — "${engineText}". No soft-pass.`;
+}

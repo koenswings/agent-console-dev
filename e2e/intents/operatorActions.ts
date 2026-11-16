@@ -14,6 +14,7 @@ import { ensureEmptyDiskPanel } from './emptyDisk';
 import {
   CONFIRM_ERASE_TIMEOUT_MS,
   commandSignalFromMarker,
+  confirmEraseRefusalMessage,
   decideConfirmErase,
   type ConfirmEraseObservation,
 } from './confirmEraseOutcome';
@@ -350,9 +351,7 @@ export const confirm_erase: IntentFn = async (ctx) => {
     };
     const decision = decideConfirmErase(obs);
     if (decision.kind === 'refusal') {
-      throw new Error(
-        `idea#168 confirm_erase: erase refused — "${decision.message}". No soft-pass.`,
-      );
+      throw new Error(confirmEraseRefusalMessage(decision.message));
     }
     if (decision.kind === 'timeout') {
       throw new Error(decision.message);
