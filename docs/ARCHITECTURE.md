@@ -114,12 +114,14 @@ src/
 │   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk, Files erase-first, or makeBackupDisk
 │   ├── UnformattedDiskView.tsx  Right pane for unformatted candidates (Files, Make a Backup Disk, Erase)
 │   ├── MakeBackupDiskProgress.tsx  makeBackupDisk Operation steps (Check, Erase, Re-dock, Create)
+│   ├── AdoptBackupDiskSection.tsx  Make this also a Backup Disk on an App / Files disk (#209)
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
 │   ├── makeBackupDisk.ts        makeBackupDisk command helpers, error wording, step labels (idea#404)
+│   ├── adoptBackupDisk.ts       Make this also a Backup Disk: offer rule, copy, size gate (#209)
 │   ├── setBackupMode.ts         setBackupMode validation, error wording, success copy (idea#400)
 │   ├── demoApps.ts              Demo apps gating, targets, step/error wording (idea#235, engine#369)
 │   ├── backupStatus.ts          Backup Disk status-line copy (idea#404 / Engine f114a28)
@@ -1021,10 +1023,63 @@ When the flag is fresh:
   size (null, 0, missing) is not greyed out; the Engine decides and `TOO_SMALL`
   stays mapped as a fallback. The Engine itself only checks the 8 GiB floor;
   the App-data rule is Console-only.
-- Only empty IDEA disks and blank sticks are offered. The Engine also adopts an
-  App or Files disk without erasing; the Console does not offer that yet.
+- **App or Files disk** (`DiskView` → `AdoptBackupDiskSection`, agent-console-dev#209):
+  see “Make this also a Backup Disk” below.
 - `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (the Engine
   now gives it the same Create defaults).
+
+#### Make this also a Backup Disk (agent-console-dev#209)
+
+Engine side read at main 4b57456 (`src/data/MakeBackupDisk.ts`, unchanged since
+bc5bd78): a docked IDEA disk resolves to `kind: 'disk'`, so `needsErase` is false
+and the Engine never erases; `IN_USE` is not raised (the disk keeps its App
+instances). Create writes `BACKUP.yaml` and `backups/` next to `apps/`,
+`instances/` and `files/`, then runs `processDisk`, so `diskTypes` becomes for
+example `['app', 'backup']` or `['app', 'backup', 'files']`.
+
+- **Where:** `DiskView` shows “Make this also a Backup Disk” on a disk with the App
+  role (or instances on it) or the Files role, with no `backup` in `diskTypes` and no
+  `backupConfig`, docked with a device, not the system disk, and only when the
+  Engine it is docked to has a fresh `makeBackupDisk` flag. Otherwise the action
+  is hidden (`canOfferAdoptBackupDisk`, `src/store/adoptBackupDisk.ts`).
+- **Grey-out:** the shared Backup Disk size gate (console#219) through
+  `makeBackupDiskBlockedReason(…, Disk.freeBytes)`: the 8 GiB floor on **total**
+  `Disk.sizeBytes` (what the Engine checks; exactly 8 GiB is allowed, an unknown
+  size is left to the Engine), and 1.5× the measured App data of every App this
+  disk will back up compared with **`Disk.freeBytes`**, because the disk already
+  holds App or Files data and backups must fit in what is left. The App set is
+  every instance on a disk docked to the same Engine, except demos,
+  `backupMethod: 'none'` and the instances stored on this disk itself (engine#424
+  leaves those out). When `freeBytes` is unknown the App-data part warns and does
+  not block. When only the floor fails the reason is “Too small: needs more than
+  8 GB. Choose a disk larger than all the App data on this Pi.”; when the App data
+  does not fit, for example “This disk is too small for this Pi's Apps. They use
+  about 12 GB, so the Backup Disk needs about 18 GB. Choose a larger disk.”
+  Then the #187 reasons: an erase running, the disk locked.
+- **Confirm** (no typed name): “Make *name* also a Backup Disk?”, “Nothing on this
+  disk is erased. Its Apps and files stay.”, “Backups run every day at 02:30 for
+  every App on this Pi. You can change the time later.” When instances are stored
+  on the disk: “Apps stored on this disk are not backed up onto it. Move them to
+  another disk to protect them.” (a note, not a block; it states what the Engine
+  does, engine#424). A size warning from the gate (unmeasured Apps, unknown free
+  space) is shown as a calm hint.
+- **Send:** exactly `makeBackupDisk <diskId>` to `Disk.dockedTo`. A remote Engine
+  is confirmed from its log, or from the store: a `makeBackupDisk` Operation that
+  was not there at send time is Done and the disk has `backup` (or it Failed).
+- **Progress:** `MakeBackupDiskProgress adopted` (Check → Create; `Erase (skipped)` and
+  `Re-dock (skipped)` move on to Create).
+- **Result:** success needs the trace ok **and** `backup` in `diskTypes`: “This disk
+  is now also a Backup Disk.” and “Backups run every day at 02:30 for every App on
+  this Pi. Apps pause for a moment while a backup runs.” The header shows all roles.
+  Refusals use `adoptBackupDiskErrorText`: TOO_SMALL gets the wording above (or a
+  could-not-read-the-size sentence), everything else the #187 table.
+- **Every App (Koen, 15 Nov):** a scheduled Backup Disk backs up every App on its
+  Pi, new ones included, with no link-Apps step. engine#424 (Engine PR #431,
+  865df67) implements it in `backupScheduler.ts` `scheduledTargets`: with no
+  links, each run backs up every instance stored on a disk docked to the same
+  Engine, except demo instances and **instances stored on the Backup Disk itself**,
+  which are left out and named in the Engine log (“a backup onto the same disk
+  protects nothing”). An explicit link still backs up such an instance.
 
 ---
 
