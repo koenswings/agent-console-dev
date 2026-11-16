@@ -23,6 +23,11 @@
  *  - command-log trace result `{ restartFailed: true }` on that error (JSON on the trace)
  *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
  *  - refusals `CODE: text` in the trace error
+ *  - engine#469 / agent-engine-dev#472: a due major backup with no linked Backup Disk docked is
+ *             a temporary backup on the system disk inside the Snapshot stop (op stepLabel
+ *             `Temporary pre-update backup on the system disk …`, op args `tempBackup`,
+ *             `tempBackupStamp`, `tempBackupState`); refusals `TEMP_BACKUP_NO_SPACE`,
+ *             `TEMP_BACKUP_FAILED`, and `HELPER_OUTDATED` naming the temporary backup
  */
 import { createSignal } from 'solid-js';
 import { engineHasCapability } from './commands';
@@ -176,14 +181,18 @@ const fromTo = (o: Pick<UpdateOffer, 'fromVersion' | 'toVersion'>): string =>
 export const badgeText = (o: UpdateOffer, sourceEngine: string | null): string =>
   `Update available: ${fromTo(o)}` + (sourceEngine ? ` (from the disk in ${sourceEngine})` : '');
 
-/** Shown in the confirm for a major update (Engine: --allow-major + a backup from the last hour). */
-export const majorConfirmText = (app: string, o: Pick<UpdateOffer, 'toVersion'>): string =>
-  `${app} ${o.toVersion} is a major update. It only starts if ${app} was backed up in the last hour.`;
+/**
+ * Shown in the confirm for a major update. Since idea#448 / engine#469 the Engine makes the
+ * required backup itself (to a linked Backup Disk, else temporarily on its own disk), so a
+ * missing backup no longer blocks Update; `backupFirst` says it will be made first.
+ */
+export const majorConfirmText = (app: string, o: Pick<UpdateOffer, 'toVersion'>, backupFirst = false): string =>
+  `${app} ${o.toVersion} is a major update.` + (backupFirst ? ` IDEA makes a backup of ${app} first, so it takes a little longer.` : '');
 
-export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | null): string[] => {
+export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | null, backupFirst = false): string[] => {
   const lines = [
     isUnversioned(o.fromVersion) ? `Update ${app} to ${o.toVersion}?` : `Update ${app} from ${o.fromVersion} to ${o.toVersion}?`,
-    ...(o.major ? [majorConfirmText(app, o)] : []),
+    ...(o.major ? [majorConfirmText(app, o, backupFirst)] : []),
     "Your learners' work is kept.",
     o.estimatedMinutes != null
       ? `${app} is unavailable for up to ${o.estimatedMinutes} minutes.`
@@ -196,14 +205,14 @@ export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | 
   return lines;
 };
 
+/** Hint after an Engine without engine#469 refused NEEDS_BACKUP (the badge stays disabled). */
 export const NEEDS_BACKUP_TEXT = 'Dock a Backup Disk and make a backup first';
-/** Design §7.3: Update is disabled for a major with this hint until a fresh backup exists. */
-export const MAKE_BACKUP_FIRST_TEXT = 'Make a backup first';
 /** Engine UpdateAppPolicy.BACKUP_MAX_AGE_MS: a major needs a backup under 1 h old. */
 export const BACKUP_MAX_AGE_MS = 60 * 60 * 1000;
 /**
- * Upfront gate from `instance.lastBackup` (the field the Engine checks); the Engine still decides.
- * A backup-method-none instance (idea#403, `isBackupMethodNone`) never has a backup and needs none.
+ * Whether a major update needs a backup first, from `instance.lastBackup` (the field the Engine
+ * checks). Not a gate any more (engine#469): it only adds "IDEA makes a backup first" to the
+ * confirm. A backup-method-none instance (idea#403, `isBackupMethodNone`) needs none.
  */
 export const majorNeedsBackup = (
   o: Pick<UpdateOffer, 'major'> | null,
@@ -230,7 +239,29 @@ const gbText = (bytes: number): string => (bytes / 1024 ** 3).toFixed(1);
 export const backupDiskFromDetail = (detail: string): string | null =>
   /^the pre-update backup to (.+?) failed\b/s.exec(detail.trim())?.[1]?.trim() || null;
 
-export interface RefusalCtx { app: string; fromVersion: string; engine: string; diskName: string | null; toVersion?: string | null }
+export interface RefusalCtx {
+  app: string;
+  fromVersion: string;
+  /** The source Engine for a cross-Engine update, else this Engine. */
+  engine: string;
+  diskName: string | null;
+  toVersion?: string | null;
+  /** The Engine the App runs on (engine#469: its own disk holds the temporary backup). */
+  hostEngine?: string | null;
+}
+
+/** engine#469 `TEMP_BACKUP_NO_SPACE` text: need (own + the snapshot on the same disk) and free bytes. */
+export const parseTempBackupNoSpace = (detail: string): { needBytes: number; freeBytes: number } | null => {
+  const base = parseNoSpace(detail);
+  if (!base) return null;
+  const plus = /\bplus\s+(\d+)\s+bytes for the snapshot\b/.exec(detail);
+  return { needBytes: base.needBytes + (plus ? Number(plus[1]) : 0), freeBytes: base.freeBytes };
+};
+
+/** engine#469: `HELPER_OUTDATED` refused because of the temporary backup on the system disk. */
+const isTempBackupDetail = (detail: string): boolean => /\btemporary pre-update backup\b/.test(detail);
+const ownDisk = (c: RefusalCtx): string => `${c.hostEngine || 'this Engine'}'s own disk`;
+const dockBackupDisk = (c: RefusalCtx): string => `Dock a Backup Disk for ${c.app}`;
 
 const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` : '');
 
@@ -252,7 +283,9 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   // Confirmed from engine#268
   NOT_FOUND: () => 'This app is no longer on this Engine. Nothing changed.',
   AMBIGUOUS: () => "IDEA couldn't tell which copy of this app to update. Nothing changed. Ask for help.",
-  HELPER_OUTDATED: () => 'This Engine needs a system update before Apps can be updated. Nothing changed.',
+  HELPER_OUTDATED: (c, detail) => (isTempBackupDetail(detail)
+    ? `${c.hostEngine || 'This Engine'} needs a system update before it can back up ${c.app} on its own disk, so ${c.app} wasn't updated. Nothing changed. ${dockBackupDisk(c)} and try again, or ask for help.`
+    : 'This Engine needs a system update before Apps can be updated. Nothing changed.'),
   NO_SUMS: () => NO_SUMS_TEXT,
   TRANSFER_FAILED: (c) => `The copy from ${c.engine} didn't finish, so nothing changed. ${c.app} is still on ${c.fromVersion}. Try again while ${c.engine} is switched on.`,
   SOURCE_UNSUPPORTED: (c) => `${c.engine} needs a newer IDEA version before it can share this update. Nothing changed.`,
@@ -263,6 +296,21 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
     const disk = backupDiskFromDetail(detail) ?? 'the Backup Disk';
     return `The backup to ${disk} didn't finish, so ${c.app} wasn't updated. Nothing changed: ${c.app} keeps its current version and all its data. Check that ${disk} is plugged in and has free space, then try again.`;
   },
+  // engine#469: the temporary backup on the system disk (no Backup Disk linked). Refused at Check
+  // before anything stops, or inside the Snapshot stop (the old version is started again).
+  TEMP_BACKUP_NO_SPACE: (c, detail) => {
+    const space = parseTempBackupNoSpace(detail);
+    const amounts = space ? `: it needs ${gbText(space.needBytes)} GB and only ${gbText(space.freeBytes)} GB is free` : '';
+    return `There isn't enough free space on ${ownDisk(c)} for the backup IDEA makes before this update${amounts}. Nothing changed: ${c.app} works as before. ${dockBackupDisk(c)}, or make room on ${c.hostEngine || 'this Engine'}, then try again.`;
+  },
+  TEMP_BACKUP_FAILED: (c) =>
+    `IDEA couldn't make a backup of ${c.app} on ${ownDisk(c)}, so ${c.app} wasn't updated. Nothing changed: ${c.app} keeps its current version and all its data. ${dockBackupDisk(c)} and try again, or ask for help.`,
+};
+
+/** engine#469: the refusal is about the temporary pre-update backup on the system disk. */
+export const isTempBackupRefusal = (message: string): boolean => {
+  const { code, detail } = parseRefusal(message);
+  return code === 'TEMP_BACKUP_NO_SPACE' || code === 'TEMP_BACKUP_FAILED' || (code === 'HELPER_OUTDATED' && isTempBackupDetail(detail));
 };
 
 /** `CODE: text` → [code, text]; code is null when the message has no known code. */
@@ -318,6 +366,15 @@ const STEP_LABEL: Record<Exclude<UpdateStep, 'Fetch'>, string> = {
   Health: 'Checking it works',
 };
 
+/**
+ * idea#448 / engine#469: the op's stepLabel while updateApp makes its pre-update backup
+ * (`Pre-update backup to <disk> (…)` or `Temporary pre-update backup on the system disk (…)`).
+ * Live progress only says Check or Snapshot then.
+ */
+const BACKUP_STEP_RE = /^(?:Temporary pre-update backup|Pre-update backup)\b/;
+export const BACKUP_STEP = 'Backup' as const;
+export const BACKUP_STEP_TEXT = 'Making a backup first';
+
 export interface UpdateProgress { step: string | null; bytesDone: number | null; bytesTotal: number | null; fetchPaused?: FetchPaused | null; receivedAt: number }
 
 const GB = 1024 ** 3;
@@ -329,6 +386,7 @@ export const stepLabel = (step: string | null, p: UpdateProgress | null, sourceE
     if (p?.bytesDone != null && p.bytesTotal) return `Copying from ${sourceEngine}: ${gb(p.bytesDone)} of ${gb(p.bytesTotal)} GB`;
     return `Copying from ${sourceEngine}`;
   }
+  if (step === BACKUP_STEP) return BACKUP_STEP_TEXT;
   return STEP_LABEL[step as keyof typeof STEP_LABEL] ?? step;
 };
 
@@ -349,8 +407,21 @@ export const isUpdateRunning = (op: Operation | null): boolean => {
   return s === 'running' || s === 'pending';
 };
 
-export const currentStep = (op: Operation | null, p: UpdateProgress | null): string | null =>
-  p?.step ?? str(rawOf(op as unknown as Raw).step) ?? op?.stepLabel ?? null;
+/**
+ * The step to show: the backup phase from the op's stepLabel (engine#469), else the live
+ * progress step, else the op's step index (after a reload the stepLabel can be a long
+ * Engine line such as `Snapshot <path> (<bytes> …)`), else the raw stepLabel.
+ */
+export const currentStep = (op: Operation | null, p: UpdateProgress | null): string | null => {
+  const live = p?.step ?? str(rawOf(op as unknown as Raw).step);
+  if (isUpdateRunning(op) && BACKUP_STEP_RE.test(op?.stepLabel ?? '') && (!live || live === 'Check' || live === 'Snapshot')) {
+    return BACKUP_STEP;
+  }
+  if (live) return live;
+  const i = op?.currentStep;
+  if (typeof i === 'number' && STEPS[i] && op?.totalSteps === STEPS.length) return STEPS[i];
+  return op?.stepLabel ?? null;
+};
 
 export interface FetchPaused { reason: string; bytesDone: number | null; bytesTotal: number | null; since: number | null }
 const pausedFrom = (f: Raw): FetchPaused | null => {

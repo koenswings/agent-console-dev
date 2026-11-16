@@ -12,7 +12,7 @@ import type { CommandLogState } from '../store/commandLog';
 import { isBackupMethodNone } from '../store/backupStatus';
 import { engineStatus, live, liveNow, liveSince } from '../store/live';
 import {
-  COMMAND, MAKE_BACKUP_FIRST_TEXT, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
+  COMMAND, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
   latestUpdateOp, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
   restartFailedText, stepLabel, updateOfferFor, updateOutcome,
@@ -67,6 +67,7 @@ const UpdateAppControl: Component<Props> = (props) => {
     engine: sourceName() ?? engineLabel(props.store(), props.engine()?.id ?? null),
     diskName: diskName(),
     toVersion: offer()?.toVersion ?? null,
+    hostEngine: props.engine() ? engineLabel(props.store(), props.engine()!.id) : null,
   });
 
   const result = createCommandResult({ commandLog: props.commandLog, command: COMMAND, argKey: 'instanceId', matchMode: 'includes', longRunning: true });
@@ -81,9 +82,12 @@ const UpdateAppControl: Component<Props> = (props) => {
   // idea#403: a backup-method-none instance never gets lastBackup and needs no backup.
   const methodNone = () => isBackupMethodNone(props.instance());
   const refusedForBackup = () => !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
-  const majorBackupMissing = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow(), methodNone());
-  const needsBackup = () => refusedForBackup() || majorBackupMissing();
-  const backupHint = () => (refusedForBackup() ? NEEDS_BACKUP_TEXT : MAKE_BACKUP_FIRST_TEXT);
+  // engine#469: a missing backup no longer blocks a major update: the Engine makes it first
+  // (linked Backup Disk, else temporarily on its own disk). An older Engine refuses NEEDS_BACKUP
+  // before anything stops, and then the badge stays disabled with the hint.
+  const backupFirst = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow(), methodNone());
+  const needsBackup = () => refusedForBackup();
+  const backupHint = () => NEEDS_BACKUP_TEXT;
   const showBadge = () => {
     const o = offer();
     return !!o && !running() && !isDismissed(id(), o.toAppId);
@@ -149,7 +153,7 @@ const UpdateAppControl: Component<Props> = (props) => {
         <Show when={confirming() && offer()}>
           {(o) => (
             <div class="update-app__confirm" role="alertdialog" aria-label={`Update ${props.appTitle()}`} data-testid={`update-confirm-${id()}`}>
-              <For each={confirmText(props.appTitle(), o(), sourceName())}>{(line) => <p class="update-app__line">{line}</p>}</For>
+              <For each={confirmText(props.appTitle(), o(), sourceName(), backupFirst())}>{(line) => <p class="update-app__line">{line}</p>}</For>
               <Show when={o().major && o().migrationNote}>
                 <p class="update-app__note" data-testid={`update-migration-note-${id()}`}>{o().migrationNote}</p>
               </Show>

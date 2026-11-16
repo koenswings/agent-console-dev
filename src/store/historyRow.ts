@@ -11,7 +11,10 @@ import { plainEngineText } from './plainError';
 import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
 import { logJson, logText } from './logText';
 import { traceInstanceRefs } from './commandResult';
-import { appTitleOf, COMMAND as UPDATE_COMMAND, restartFailedFromTraceResult, restartFailedText, UNKNOWN_APP_NAME } from './updateApp';
+import {
+  appTitleOf, COMMAND as UPDATE_COMMAND, friendlyUpdateError, isTempBackupRefusal, restartFailedFromTraceResult, restartFailedText,
+  UNKNOWN_APP_NAME,
+} from './updateApp';
 import type { Store } from '../types/store';
 
 export type HistoryRowTone = 'ok' | 'error' | 'info';
@@ -59,10 +62,26 @@ export const historyRestartFailedText = (trace: CommandTrace, appTitle?: string 
     ? restartFailedText(appTitle || UNKNOWN_APP_NAME)
     : null;
 
+/**
+ * engine#469: the plain sentence for an updateApp refusal about the temporary pre-update
+ * backup on the system disk (TEMP_BACKUP_NO_SPACE, TEMP_BACKUP_FAILED, HELPER_OUTDATED for
+ * it). Such a refusal comes before the operation, so History is where it stays after a reload.
+ */
+export const historyTempBackupText = (trace: CommandTrace, appTitle?: string | null): string | null => {
+  if (trace.command !== UPDATE_COMMAND || trace.status !== 'error') return null;
+  const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
+  if (!raw || !isTempBackupRefusal(raw)) return null;
+  return friendlyUpdateError(raw, { app: appTitle || UNKNOWN_APP_NAME, fromVersion: '', engine: '', diskName: null });
+};
+
+/** The agreed plain sentence for an updateApp error trace (raw text behind Technical details), or null. */
+export const historyUpdatePlainText = (trace: CommandTrace, appTitle?: string | null): string | null =>
+  historyRestartFailedText(trace, appTitle) ?? historyTempBackupText(trace, appTitle);
+
 /** Icon, tone and collapsed-row message for a finished command trace. */
 export const historyRowView = (trace: CommandTrace, appTitle?: string | null): HistoryRowView => {
-  const restartFailed = historyRestartFailedText(trace, appTitle);
-  if (restartFailed) return { tone: 'error', icon: '✗', message: restartFailed };
+  const updatePlain = historyUpdatePlainText(trace, appTitle);
+  if (updatePlain) return { tone: 'error', icon: '✗', message: updatePlain };
   if (trace.command === 'setBackupMode') {
     if (trace.status === 'ok') {
       const result = parseTraceResult(trace);

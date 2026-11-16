@@ -592,14 +592,32 @@ never run a backup is covered, and `'stop'` / `'hook'` win over an older
 `lastResult.method: 'none'` (the method changed). Only when `backupMethod` is unset does
 it fall back to `lastResult.method === 'none'`. For such an instance:
 
-- the update gate needs no backup: `majorNeedsBackup(..., methodNone)` is false and an
-  Engine `NEEDS_BACKUP` refusal does not lock the badge (`UpdateAppControl`; the
-  refusal's error line still shows);
+- a major update needs no backup: `majorNeedsBackup(..., methodNone)` is false (the
+  confirm has no "IDEA makes a backup first" line) and an Engine `NEEDS_BACKUP` refusal
+  does not lock the badge (`UpdateAppControl`; the refusal's error line still shows);
 - `RestorePanel` shows "Not backed up: its content is on the App Disk"
   (`METHOD_NONE_COPY`, once: the same status line is not repeated) instead of
   "Never backed up", and offers no target disk or Restore. A none instance that still
   has an older `lastBackup` (a real archive from before the method changed) keeps its
   date and Restore.
+
+**Pre-update backup of a major update (idea#448, engine#469 / agent-engine-dev#472).** The
+Engine makes the backup a major update needs itself: to a linked Backup Disk docked on the
+same Engine, else a temporary backup on the Engine's own (system) disk, deleted after the
+health gate and kept when the update fails. So the Console no longer blocks Update when
+`lastBackup` is older than an hour: `majorNeedsBackup` only adds "IDEA makes a backup of
+<App> first, so it takes a little longer." to the confirm. An older Engine that still
+refuses `NEEDS_BACKUP` (nothing stopped) locks the badge with "Dock a Backup Disk and make a
+backup first", as before. While the op's `stepLabel` starts with `Pre-update backup` or
+`Temporary pre-update backup` and live progress is at most Snapshot, the step reads "Making
+a backup first" (`currentStep` → `BACKUP_STEP`); without live progress (reload, another
+Console) the step comes from `currentStep` / `totalSteps`, not the long Engine label. The
+refusals `TEMP_BACKUP_NO_SPACE` (need = the backup plus, on the same disk, the snapshot),
+`TEMP_BACKUP_FAILED` and `HELPER_OUTDATED` for the temporary backup have plain sentences
+(`REFUSAL_TEXT`, naming the Engine the App runs on: `RefusalCtx.hostEngine`). They come
+before the operation, so History shows the same sentence (`historyTempBackupText`) with the
+raw text behind Technical details. The Ops card still shows the Engine's `stepLabel` and
+error text.
 
 **Stopped after a failed update restart (console#227, engine#442 / #445).** While the
 instance is `Error` and its newest updateApp op is finished with `restartFailed: true` (or
