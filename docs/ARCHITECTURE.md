@@ -111,13 +111,15 @@ src/
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
 │   ├── EjectConfirm.tsx         Eject confirmation for combined disks: roles + everything affected
-│   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk (and Files erase-first)
-│   ├── UnformattedDiskView.tsx  Right pane for Engine.unformattedDisks candidates
+│   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk, Files erase-first, or makeBackupDisk
+│   ├── UnformattedDiskView.tsx  Right pane for unformatted candidates (Files, Make a Backup Disk, Erase)
+│   ├── MakeBackupDiskProgress.tsx  makeBackupDisk Operation steps (Check, Erase, Re-dock, Create)
 │   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
 ├── store/
 │   ├── engine.ts                Real Automerge WebSocket connection
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
+│   ├── makeBackupDisk.ts        makeBackupDisk command helpers, error wording, step labels (idea#404)
 │   ├── setBackupMode.ts         setBackupMode validation, error wording, success copy (idea#400)
 │   ├── demoApps.ts              Demo apps gating, targets, step/error wording (idea#235, engine#369)
 │   ├── backupStatus.ts          Backup Disk status-line copy (idea#404 / Engine f114a28)
@@ -211,7 +213,7 @@ Automerge document. The commands module:
 - Holds a module-level `sendCommand` function set by `App.tsx` after connection.
 - Exports typed command builders (`buildStartInstanceCommand`, etc.) as pure functions.
 - Exports dispatching functions (`startInstance`, `stopInstance`, `ejectDisk`, `backupApp`,
-  `createBackupDisk`).
+  `createBackupDisk`, `makeBackupDisk`).
 
 Command string format: `"<commandName> <arg1> <arg2>"` — mirrors Engine's `commandUtils.ts`.
 
@@ -246,6 +248,12 @@ Engine refused to clear anything but did not throw; result shape `{ cleared, mes
 agent-engine-dev#332) is shown on the collapsed History row as a neutral info line
 with `result.message`, not a green check and not red (`historyRow.ts`, idea#454).
 `clearBackupLock` is not wired through `commandResult`.
+
+A finished `makeBackupDisk` trace (idea#404) uses the same History row helper:
+success shows “This disk is now a Backup Disk.”; a failure shows the plain
+wording for its result code (`errorCode`, else the leading `CODE:`; for example
+TOO_SMALL → “Too small: needs more than 8 GB. Choose a disk larger than all the App data on this Pi.”),
+never the code token.
 
 ### Command feedback (`commandResult.ts`, `CommandFeedback.tsx`, `remoteConfirm.ts`)
 
@@ -312,6 +320,7 @@ OperationProgress log matches by command kind only.
 | ejectDisk | disk gone / undocked / no device | — | 3 min |
 | cancelOperation | op no longer Pending / Running | — | 3 min |
 | createBackupDisk / createFilesDisk | disk gets the backup / files role | — | 10 min (default) |
+| makeBackupDisk | diskTypes includes 'backup' | error trace (plain wording) | 15 s to first trace, then until the op closes (longRunning) |
 
 "New" / "newly created" means created after the send, never a record that already
 existed: the op / instance id was not in the store at send time (Engine ids are fresh
@@ -464,6 +473,7 @@ App.filesMount?:       { path; services[] } | null   // Files Disk opt-in (x-app
 Instance.filesMounts?: DiskID[]                      // Files Disks mounted into the instance
 Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskIdArgs', 'filesDisk', 'eraseDisk',
                                                      // 'scheduledBackups' (Engine f114a28 / PR #353);
+                                                     // 'makeBackupDisk' (engine#355 / bc5bd78, always on);
                                                      // 'backupCleanup' helper-gated like flashCard (Engine PR #354)
                                                      // 'traceInstanceId' (engine#399 / PR #403, see Command feedback)
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
@@ -531,9 +541,13 @@ constant as Engine `MAKE_BACKUP_DISK_MIN_BYTES`, and is compared with total
 capacity on an empty or new disk; a later caller (console#211) can pass
 `freeBytes` for a disk that already holds App or Files data.
 
-- EmptyDiskPanel: the ticked Apps, excluding `backupMethod: 'none'`.
-- Initialise as a Backup Disk: every instance on a disk docked to this Engine,
-  excluding demos, instances stored on the target disk, and `backupMethod: 'none'`.
+- EmptyDiskPanel (`createBackupDisk` form): the ticked Apps, excluding `backupMethod: 'none'`.
+- Initialise as a Backup Disk, and Make a Backup Disk (`makeBackupDisk`, on an
+  empty IDEA disk or a blank stick, `makeBackupDiskSizeGate`): every instance
+  on a disk docked to this Engine, excluding demos, instances stored on the
+  target disk, and `backupMethod: 'none'`. This is the set the Engine's
+  scheduler backs up for a disk with no links (engine#424, Engine
+  `src/monitors/backupScheduler.ts` `scheduledTargets`).
 
 If the data is known and the disk is too small, the action is disabled and
 the command is not sent. If `dataBytes` is unknown, or the disk's size is
@@ -919,6 +933,98 @@ unknown"), requires typing the summary `label` exactly, then sends
 (15 s no-response / 5 min slow warning on the Console clock). On success the disk is republished
 `['empty']` and the Empty Disk panel opens. The Files shortcut **Erase the disk first** runs the
 same dialog then `createFilesDisk` once the empty disk appears.
+
+### Make a Backup Disk (idea#404)
+
+Coded to Engine main bc5bd78 (agent-engine-dev#355, `src/data/MakeBackupDisk.ts`,
+COMMANDS.md `makeBackupDisk`). Gated on the `'makeBackupDisk'` capability
+(always on in that Engine) with the usual `capabilitiesBootedAt === lastBooted`
+freshness rule. Without a fresh flag (older or rolled-back Engines) nothing
+changes: empty disks keep the `createBackupDisk` form (mode and linked apps)
+and an unformatted candidate has no Make a Backup Disk action.
+
+Engine contract the Console follows:
+
+- **Command:** `makeBackupDisk <targetId> [<summaryTraceId> <confirmName…>]`.
+  `targetId` is a docked disk id or an unformatted `candidateId`. The summary
+  trace id and the typed label are required when the Engine will erase (a
+  candidate) and left out when it will not (an adopted IDEA disk).
+- **Operation:** kind `makeBackupDisk`, subject `{ type: 'disk', id: targetId }`,
+  args `{ targetId, summaryTraceId?, confirmName? }`. `stepLabel` is **Check,
+  Erase, Re-dock, Create** with a 0-based `currentStep` (0..3, `totalSteps` 4).
+  On an adopted disk the Engine reports `Erase (skipped)` and `Re-dock (skipped)`.
+- **Result:** the trace closes ok with `result { targetId, diskId, erased, mode:
+  'scheduled', schedule: '02:30' }`. After an erase the disk keeps the
+  candidate id as its disk id. Create writes `BACKUP.yaml` (scheduled, daily
+  02:30, no links) and re-processes the disk, so `diskTypes` gains `'backup'`.
+  Koen's decision (idea#404): a new Backup Disk backs up **every App on its
+  Pi**, new ones included, with no link step. engine#424 (Engine PR #431,
+  merged as 865df67) implements it: a scheduled disk with no links backs up,
+  at each run, every instance stored on a disk docked to the same Engine,
+  except demo instances and instances stored on the Backup Disk itself
+  (`backupScheduler.ts` `scheduledTargets`); explicit links still win. The
+  Console copy states this behaviour and does not promise a first backup at a
+  set time.
+- **Failures:** `CODE: text` in the trace (`errorCode` too) and the Operation
+  `error`: BAD_ARGS, NOT_FOUND, SYSTEM_DISK, NOT_DOCKED, ALREADY_BACKUP, BUSY,
+  IN_USE, SUMMARY_STALE, CONFIRM_MISMATCH, SERIAL_MISMATCH, TOO_SMALL (8 GiB,
+  Engine-owned), UNPLUGGED, REDOCK_TIMEOUT, HIDDEN_PARTITIONS, OS_ROOTFS,
+  INVALID_INSTANCE_ID, WRITE_FAILED. Each maps to one plain sentence
+  (`MAKE_BACKUP_DISK_ERROR_TEXT`); codes, borg, YAML and helper never show.
+
+When the flag is fresh:
+
+- **Empty IDEA disk** (`EmptyDiskPanel`): “Make this a Backup Disk” opens a
+  confirm that names the disk and says nothing is erased and that backups run
+  every day at 02:30 for every App on this Pi. The backup-sizing line
+  (engine#441) is shown on this confirm, as on the older createBackupDisk form.
+  Confirm sends `makeBackupDisk <diskId>`. Progress shows Check and Create.
+- **Blank stick / unformatted candidate** (`UnformattedDiskView`): “Make a Backup
+  Disk” reuses `EraseDialog`: `summariseDisk`, the content summary, the erase
+  warning naming the stick, the typed label, then
+  `makeBackupDisk <candidateId> <summaryTraceId> <label>` (not `eraseDisk`).
+  Progress shows all four steps. The confirm label on screen is uppercased by
+  CSS; the Console matches what you type case-insensitively after trimming
+  (and collapsing internal whitespace) via `confirmLabelMatches`, and the same
+  helper is used for Erase. The Engine still compares with
+  `summary.label !== confirmName` (`MakeBackupDisk.ts` / `EraseDisk.ts`), so
+  the command always sends the canonical summary label, not the typed casing.
+- The result uses `createCommandResult` (trace `makeBackupDisk`, `args.targetId`,
+  long-running), then `diskDB[targetId].diskTypes` includes `'backup'`. Success
+  says “This disk is now a Backup Disk.”, that backups run every day at 02:30
+  for every App on this Pi, and “Apps pause for a moment while a backup runs.” (Apps without `x-app.backup`
+  use the Engine's default method `stop`, which stops and restarts a running
+  App around the copy.) When the candidate has left `unformattedDisks`, the
+  pane header shows the new disk's name and role (Backup Disk, or empty after
+  Erase) instead of “UNFORMATTED”.
+- **Size gate:** the shared Backup Disk size gate (console#219, above) via
+  `makeBackupDiskSizeGate`: the Engine's 8 GiB floor
+  (`MAKE_BACKUP_DISK_MIN_BYTES` = 8·1024³ bytes; the Engine refuses
+  `bytes < min`) plus 1.5× the measured App data of every App on this Pi
+  (the engine#424 set). A disk that fails is greyed out before anything is
+  typed. When only the floor fails the reason is “Too small: needs more than
+  8 GB. Choose a disk larger than all the App data on this Pi.”
+  (`MAKE_BACKUP_DISK_TOO_SMALL_REASON`, also the TOO_SMALL error text); a stick
+  sold as “8 GB” (8·10⁹ bytes) is under 8 GiB, hence “more than 8 GB”. When
+  the App data does not fit it reads, for example, “This disk is too small for
+  this Pi's Apps. They use about 12 GB, so the Backup Disk needs about 18 GB.
+  Choose a larger disk.” Where the need is stated on its own (the blank-stick
+  hint) the text is “Needs a disk larger than 8 GB. Choose a disk larger than
+  all the App data on this Pi.” (`MAKE_BACKUP_DISK_SIZE_NEED`). Unmeasured Apps
+  or an unknown size give a calm warning (on the empty-disk confirm and under
+  the blank-stick hint) and do not block. The backup-sizing line (“This Pi's
+  Apps use about X GB”) stays on the empty-disk confirm. The size comes from
+  the same store fields the Engine reads:
+  `Disk.sizeBytes` for a disk docked to that Engine, else
+  `Engine.unformattedDisks[].sizeBytes`, else an erasable `usbDisk` in
+  `Engine.diskCandidates[].sizeBytes` (`makeBackupDiskSizeBytes`). An unknown
+  size (null, 0, missing) is not greyed out; the Engine decides and `TOO_SMALL`
+  stays mapped as a fallback. The Engine itself only checks the 8 GiB floor;
+  the App-data rule is Console-only.
+- Only empty IDEA disks and blank sticks are offered. The Engine also adopts an
+  App or Files disk without erasing; the Console does not offer that yet.
+- `ClientCardsSection`'s `initialiseDisk … backup` path is unchanged (the Engine
+  now gives it the same Create defaults).
 
 ---
 

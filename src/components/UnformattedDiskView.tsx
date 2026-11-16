@@ -1,11 +1,19 @@
 /**
  * UnformattedDiskView — right pane for an Engine.unformattedDisks candidate
- * (files-disk.md §8, idea#136): Make this a Files Disk (erase-first only) and
- * Erase this disk….
+ * (files-disk.md §8, idea#136): Make this a Files Disk (erase-first only),
+ * Make a Backup Disk (when the Engine has 'makeBackupDisk'), and Erase this disk….
  */
-import { Show, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import EraseDialog, { type EraseMode } from './EraseDialog';
+import RoleBadges from './RoleBadges';
 import { DEFAULT_SHARE_NAME, UPDATE_ENGINE_TOOLTIP, engineHasCapability, validateShareName } from '../store/commands';
+import {
+  MAKE_BACKUP_DISK_CAPABILITY,
+  MAKE_BACKUP_DISK_SIZE_NEED,
+  makeBackupDiskBlockedReason,
+  makeBackupDiskSizeBlock,
+  makeBackupDiskSizeGate,
+} from '../store/makeBackupDisk';
 import { eraseBlockedReason, findUnformatted } from '../store/erase';
 import { formatBytes as fmt } from '../store/diskRoles';
 import { STICK_FS_LINE, stickForCandidate, stickRowLabel } from '../store/usbSticks';
@@ -32,6 +40,26 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   const filesBlocked = createMemo((): string | undefined =>
     engineHasCapability(engine(), 'filesDisk') ? undefined : UPDATE_ENGINE_TOOLTIP
   );
+  const canMakeBackupDisk = createMemo(() =>
+    engineHasCapability(engine(), MAKE_BACKUP_DISK_CAPABILITY)
+  );
+  const makeBackupBlocked = createMemo(() =>
+    makeBackupDiskBlockedReason(engine(), props.store(), props.candidateId)
+  );
+  // Shared size gate (console#219): 8 GiB floor + 1.5× this Pi's App data.
+  const makeBackupSizeGate = createMemo(() =>
+    makeBackupDiskSizeGate(engine(), props.store(), props.candidateId)
+  );
+  // After erase / makeBackupDisk the candidate leaves unformattedDisks and the
+  // new Disk is republished under the same id. Show that disk's name and role
+  // in the header (not "UNFORMATTED"). Remember the last label for the brief
+  // gap while the stick is being re-docked.
+  const adopted = createMemo(() => props.store()?.diskDB[props.candidateId]);
+  const [rememberedLabel, setRememberedLabel] = createSignal(props.candidateId);
+  createEffect(() => {
+    const name = adopted()?.name ?? candidate()?.label;
+    if (name) setRememberedLabel(name);
+  });
 
   const [dialog, setDialog] = createSignal<{ mode: EraseMode; shareName?: string } | null>(null);
   const [shareName, setShareName] = createSignal(DEFAULT_SHARE_NAME);
@@ -39,6 +67,11 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
   const [filesOpen, setFilesOpen] = createSignal(false);
 
   const openErase = (mode: EraseMode) => {
+    if (mode === 'make-backup-disk') {
+      if (makeBackupBlocked()) return;
+      setDialog({ mode });
+      return;
+    }
     if (eraseBlocked()) return;
     if (mode === 'erase-then-files' && (filesBlocked() || shareErr())) return;
     setDialog({ mode, shareName: shareName() });
@@ -49,18 +82,34 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
       <header class="disk-view__header">
         <span class="disk-view__icon" aria-hidden="true">💾</span>
         <Show
-          when={stick()}
+          when={adopted()}
           fallback={
-            <>
-              <span class="disk-view__title">{candidate()?.label ?? props.candidateId}</span>
-              <span class="disk-view__badge-unformatted">unformatted</span>
-            </>
+            <Show
+              when={stick()}
+              fallback={
+                <>
+                  <span class="disk-view__title">{candidate()?.label ?? rememberedLabel()}</span>
+                  <Show when={candidate()}>
+                    <span class="disk-view__badge-unformatted">unformatted</span>
+                  </Show>
+                </>
+              }
+            >
+              {(st) => (
+                <>
+                  <span class="disk-view__title">{stickRowLabel(st())}</span>
+                  <span class="disk-view__badge-readonly">read-only</span>
+                </>
+              )}
+            </Show>
           }
         >
-          {(st) => (
+          {(disk) => (
             <>
-              <span class="disk-view__title">{stickRowLabel(st())}</span>
-              <span class="disk-view__badge-readonly">read-only</span>
+              <span class="disk-view__title">{disk().name}</span>
+              <span class="disk-view__badges">
+                <RoleBadges disk={() => disk()} store={props.store} />
+              </span>
             </>
           )}
         </Show>
@@ -125,6 +174,27 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
           </Show>
         </section>
 
+        <Show when={canMakeBackupDisk()}>
+          <section class="disk-section" aria-label="Make a Backup Disk">
+            <button
+              class="btn"
+              data-testid="make-backup-disk-unformatted"
+              disabled={!!makeBackupBlocked()}
+              title={makeBackupBlocked()}
+              onClick={() => openErase('make-backup-disk')}
+            >
+              Make a Backup Disk
+            </button>
+            <p class="edp-form__hint" data-testid="make-backup-disk-unformatted-hint">
+              {makeBackupDiskSizeBlock(makeBackupSizeGate())
+                ?? `Erases this stick, then makes it a Backup Disk with daily backups at 02:30. ${MAKE_BACKUP_DISK_SIZE_NEED}`}
+            </p>
+            <Show when={makeBackupSizeGate()?.warning}>
+              {(msg) => <p class="edp-form__hint" data-testid="make-backup-disk-size-warn">{msg()}</p>}
+            </Show>
+          </section>
+        </Show>
+
         <div class="disk-view__erase">
           <button
             class="btn-text btn-text--danger"
@@ -157,6 +227,10 @@ const UnformattedDiskView: Component<UnformattedDiskViewProps> = (props) => {
               props.onSelect({ type: 'disk', id });
             }}
             onFilesFailed={(id, _msg) => {
+              setDialog(null);
+              props.onSelect({ type: 'disk', id });
+            }}
+            onBecameBackup={(id) => {
               setDialog(null);
               props.onSelect({ type: 'disk', id });
             }}

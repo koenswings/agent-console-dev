@@ -540,6 +540,8 @@ export type OperationKind =
   // idea#201 §10 (Engine API contract v2)
   | 'flashCard'
   | 'initialiseDisk'
+  // idea#404: agreed Operation kind makeBackupDisk
+  | 'makeBackupDisk'
   // engine#369 §3 (idea#235 Demo apps)
   | 'setupDemo'
   | 'removeDemo';

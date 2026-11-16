@@ -133,6 +133,20 @@ export const sizeText = (n: number | null | undefined): string =>
 export const countText = (n: number, partial: boolean): string =>
   partial ? `at least ${n}` : String(n);
 
+/**
+ * Typed-confirm match for Erase and Make a Backup Disk (console#187).
+ * The on-screen label is uppercased by CSS (`text-transform: uppercase` on
+ * `.edp-form__label`), so compare case-insensitively after trim and collapsing
+ * internal whitespace. The Engine still checks `summary.label !== confirmName`
+ * (MakeBackupDisk.ts / EraseDisk.ts), so the Console must send the canonical
+ * summary label, not the user's typed casing.
+ */
+export const normalizeConfirmLabel = (value: string): string =>
+  value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+export const confirmLabelMatches = (typed: string, expected: string): boolean =>
+  normalizeConfirmLabel(typed) === normalizeConfirmLabel(expected);
+
 /** Disk republished after erase with the same ID and exactly ['empty']. */
 export const isErasedEmptyDisk = (disk: Disk | undefined): boolean =>
   !!disk && (disk.diskTypes ?? []).length === 1 && disk.diskTypes![0] === 'empty';

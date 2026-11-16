@@ -160,6 +160,18 @@ describe('EraseDialog flow (idea#136)', () => {
     expect(eraseBtn().disabled).toBe(false);
   });
 
+  it('enables Erase on a case-insensitive trimmed name and sends the canonical label', () => {
+    const t = renderDialog();
+    t.setCls(log(summariseOk()));
+    const name = MOCK_FILES_STORE.diskDB[I.FA_APP].name;
+    const input = t.container.querySelector('#erase-confirm-name') as HTMLInputElement;
+    const eraseBtn = () => [...t.container.querySelectorAll('button')].find((b) => b.textContent === 'Erase this disk')!;
+    fireEvent.input(input, { target: { value: '  kolibri   disk  ' } });
+    expect(eraseBtn().disabled).toBe(false);
+    fireEvent.click(eraseBtn());
+    expect(sent).toHaveBeenCalledWith(I.ENGINE_A, `eraseDisk ${I.FA_APP} sum-1 ${name}`);
+  });
+
   it('sends eraseDisk with summaryTraceId and label, then shows success after empty republish', () => {
     const t = renderDialog();
     t.setCls(log(summariseOk()));

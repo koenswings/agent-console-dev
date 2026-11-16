@@ -8,6 +8,11 @@
  */
 import type { CommandTrace } from '../types/commandLog';
 import { plainEngineText } from './plainError';
+import {
+  MAKE_BACKUP_DISK_COMMAND,
+  MAKE_BACKUP_DISK_SUCCESS_MESSAGE,
+  makeBackupDiskErrorText,
+} from './makeBackupDisk';
 import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
 import { logJson, logText } from './logText';
 import { traceInstanceRefs } from './commandResult';
@@ -101,6 +106,14 @@ export const historyRowView = (trace: CommandTrace, appTitle?: string | null): H
         : null;
       return { tone: 'info', icon: 'ℹ', message };
     }
+  }
+  if (trace.command === MAKE_BACKUP_DISK_COMMAND) {
+    if (trace.status === 'ok') {
+      return { tone: 'ok', icon: '✓', message: MAKE_BACKUP_DISK_SUCCESS_MESSAGE };
+    }
+    const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
+    const code = trace.errorCode ?? null;
+    return { tone: 'error', icon: '✗', message: raw || code ? makeBackupDiskErrorText(raw, code) : null };
   }
   if (trace.status === 'ok') {
     return { tone: 'ok', icon: '✓', message: null };
