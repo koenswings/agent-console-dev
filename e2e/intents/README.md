@@ -411,7 +411,7 @@ After Confirm, restore may **SIGTERM** kolibri (exit 143) while Automerge stays 
 
 | Step | Contract |
 |---|---|
-| Confirm | Wait `restore-confirm-*` hidden |
+| First gate | An Engine signal: Restore shows "Operation in progress", CommandFeedback sent/error, or the harness `waitOperation` hook. A closed confirm dialog is **not** a signal (console#236). A refusal fails with the Engine reason. |
 | Unlock | Wait Restore leave "Operation in progress" (`DURATION_RESTORE_SETTLE_MS` ≥120s) |
 | Min dwell | `DURATION_RESTORE_MIN_DWELL_MS` default **10s** after Confirm (not unlock-alone) |
 | Overview | ALL APPS / opOverview |

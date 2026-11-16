@@ -5,6 +5,13 @@
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
 import { awaitOperationIfWired } from './operationWait';
+import {
+  RESTORE_FIRST_GATE_TIMEOUT_MS,
+  decideRestoreFirstGate,
+  restoreRefusalMessage,
+  type RestoreFirstGateObservation,
+  type RestoreOpSignal,
+} from './restoreFirstGate';
 import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -671,19 +678,51 @@ export function restoreMinDwellMs(env: NodeJS.ProcessEnv = process.env): number 
 export async function settleAfterRestoreConfirm(
   page: Page,
   linkedId: string,
+  already?: { opStatus?: RestoreOpSignal; opError?: string | null },
 ): Promise<void> {
   const confirmedAt = Date.now();
   const confirm = page.locator(sel.restoreConfirm(linkedId));
-  try {
-    await confirm.waitFor({ state: 'hidden', timeout: 15_000 });
-  } catch {
-    throw new Error(
-      `idea#168 restore_from_backup: restore-confirm-${linkedId} still visible after Confirm. No soft-pass.`,
-    );
+  const btn = page.locator(sel.restoreBtn(linkedId));
+  const firstTimeout = RESTORE_FIRST_GATE_TIMEOUT_MS;
+
+  // First gate: an Engine signal, not a hidden confirm dialog (console#236).
+  if (already?.opStatus === 'Error') {
+    throw new Error(restoreRefusalMessage(already.opError?.trim() || 'Restore failed.'));
+  }
+  let sawEngineSignal = already?.opStatus === 'Running' || already?.opStatus === 'Done';
+  while (!sawEngineSignal) {
+    const elapsedMs = Date.now() - confirmedAt;
+    const btnText = ((await btn.textContent().catch(() => '')) ?? '').trim();
+    const errLoc = page.locator(sel.restoreFeedbackError(linkedId));
+    const feedbackError = (await errLoc.isVisible().catch(() => false))
+      ? ((await errLoc.textContent()) ?? '').trim() || null
+      : null;
+    const obs: RestoreFirstGateObservation = {
+      confirmVisible: await confirm.isVisible().catch(() => false),
+      operationInProgress: /operation in progress/i.test(btnText),
+      feedbackSent: await page.locator(sel.restoreFeedbackSent(linkedId)).isVisible().catch(() => false),
+      feedbackError,
+      feedbackTimeout: await page.locator(sel.restoreFeedbackTimeout(linkedId)).isVisible().catch(() => false),
+      opStatus: already?.opStatus ?? 'absent',
+      opError: already?.opError ?? null,
+      elapsedMs,
+      timeoutMs: firstTimeout,
+    };
+    const decision = decideRestoreFirstGate(obs);
+    if (decision.kind === 'refusal') {
+      throw new Error(restoreRefusalMessage(decision.message));
+    }
+    if (decision.kind === 'timeout') {
+      throw new Error(decision.message);
+    }
+    if (decision.kind === 'signal') {
+      sawEngineSignal = true;
+      break;
+    }
+    await page.waitForTimeout(250);
   }
 
   // Restore locks the instance ("Operation in progress" on Restore btn)
-  const btn = page.locator(sel.restoreBtn(linkedId));
   const budget = restoreSettleTimeoutMs();
   const deadline = Date.now() + budget;
   let sawProgress = false;
@@ -804,12 +843,16 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId, 
   const restoreSince = Date.now();
   await page.locator(sel.restoreConfirm(linkedId)).click();
   // r64: wait for the restoreApp Operation to end (harness store hook) before the post-restore Start/settle.
-  await awaitOperationIfWired(
+  const waited = await awaitOperationIfWired(
     { page, instanceId, diskId, waitOperation },
     { kind: 'restoreApp', instanceId: linkedId, sinceMs: restoreSince },
     'restore_from_backup',
   );
-  await settleAfterRestoreConfirm(page, linkedId);
+  await settleAfterRestoreConfirm(
+    page,
+    linkedId,
+    waited ? { opStatus: waited.status, opError: waited.detail } : undefined,
+  );
 };
 
 /**
