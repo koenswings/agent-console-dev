@@ -6,11 +6,12 @@ const ANSI_RE = /\u001b\[[0-9;]*m/g;
 /**
  * Engine error for debug views (idea#76): the plain sentence first, the raw
  * Engine text inside a closed "Technical details" toggle. The toggle is left
- * out when the raw text is empty or the same as the sentence.
+ * out when the raw text is empty or the same as the sentence. A caller that
+ * knows the agreed sentence (e.g. restartFailed, console#227) passes `plain`.
  */
-const TechnicalDetails: Component<{ raw: string | null | undefined; class?: string; testId?: string }> = (props) => {
+const TechnicalDetails: Component<{ raw: string | null | undefined; plain?: string | null; class?: string; testId?: string }> = (props) => {
   const raw = () => String(props.raw ?? '').replace(ANSI_RE, '').trim();
-  const plain = () => plainEngineText(raw());
+  const plain = () => props.plain || plainEngineText(raw());
   return (
     <div class={`tech-details ${props.class ?? ''}`.trim()} data-testid={props.testId}>
       <span class="tech-details__plain">{plain()}</span>

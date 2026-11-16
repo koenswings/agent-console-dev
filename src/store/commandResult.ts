@@ -29,6 +29,7 @@ import { restartFailedFromTraceResult } from './updateApp';
 import { traceIdSnapshot } from './ejectResult';
 import { noteConnectedEngine } from './connectedEngine';
 import { formatWait, type RemoteWatch } from './remoteConfirm';
+import { isImmutableString, logJson, logText } from './logText';
 
 /** How long to wait for the Engine's answer. */
 export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
@@ -50,10 +51,62 @@ const clean = (s: string): string => s.replace(ANSI_RE, '').trim();
 /** Parsed trace args: an object (named), an array (positional) or null. */
 const parsedArgs = (trace: CommandTrace): unknown => {
   try {
-    return typeof trace.args === 'string' ? JSON.parse(trace.args) : trace.args;
+    return logJson(trace.args);
   } catch {
     return null; // malformed args: not ours
   }
+};
+
+/**
+ * The instance references of a trace (console#227): named args `instanceId` /
+ * `instanceName`, or, for a positional trace, the first token of the first
+ * arg. updateApp is positional: agent-engine-dev src/data/Commands.ts:726
+ * declares one unnamed rest-of-line arg, src/utils/commandUtils.ts:104 keeps the
+ * whole line as one token and :153 falls back to the positional array, so its
+ * trace args are `["<instance> <newAppId> [--allow-major] [--source <diskId>]"]`.
+ */
+export const traceInstanceRefs = (trace: CommandTrace): string[] => {
+  const args = parsedArgs(trace);
+  if (Array.isArray(args)) {
+    const first = args[0] == null ? '' : String(args[0]).trim().split(/\s+/)[0];
+    return first ? [first] : [];
+  }
+  if (args && typeof args === 'object') {
+    const a = args as Record<string, unknown>;
+    return [a.instanceId, a.instanceName]
+      .filter((v) => v != null && v !== '')
+      .map((v) => String(v));
+  }
+  return [];
+};
+
+/** True when the trace is about this instance (by id, or by name when given). */
+export const traceIsForInstance = (trace: CommandTrace, instanceId: string, instanceName?: string | null): boolean => {
+  const refs = traceInstanceRefs(trace);
+  return refs.includes(instanceId) || (!!instanceName && refs.includes(instanceName));
+};
+
+/** The newest trace of `command` for this instance, or null. */
+export const latestInstanceTrace = (
+  cls: CommandLogState,
+  command: string,
+  instanceId: string,
+  instanceName?: string | null,
+): CommandTrace | null => {
+  if (!cls || 'error' in cls) return null;
+  return Object.values(cls.traces ?? {})
+    .filter((t) => t.command === command && traceIsForInstance(t, instanceId, instanceName))
+    .sort((a, b) => b.startedAt - a.startedAt)[0] ?? null;
+};
+
+/**
+ * Trace args as an object for display (History detail): parsed JSON text
+ * (string or ImmutableString, engine#471 b) or a legacy object; null when
+ * the args are empty, not an object, or malformed.
+ */
+export const traceArgsObject = (trace: CommandTrace): Record<string, unknown> | null => {
+  const args = parsedArgs(trace);
+  return args && typeof args === 'object' ? (args as Record<string, unknown>) : null;
 };
 
 /** Reads a named argument of a trace (object args, or a JSON string). */
@@ -176,7 +229,9 @@ export const traceMatchesArg = (
     // The primary IS the sent name (an older Engine): only with the disk, i.e. the alt above.
     return !alt || alt.value !== argValue;
   }
-  const raw = typeof trace.args === 'string' ? trace.args : JSON.stringify(trace.args ?? '');
+  const raw = typeof trace.args === 'string' || isImmutableString(trace.args)
+    ? logText(trace.args) ?? ''
+    : JSON.stringify(trace.args ?? '');
   return raw.includes(argValue);
 };
 
@@ -200,8 +255,7 @@ export const findCommandTrace = (
 export const traceErrorCode = (trace: CommandTrace): string | null => {
   if (typeof trace.errorCode === 'string' && trace.errorCode) return trace.errorCode;
   try {
-    const raw: unknown = trace.result;
-    const r = (typeof raw === 'string' && raw ? JSON.parse(raw) : raw) as { code?: unknown } | null;
+    const r = logJson(trace.result) as { code?: unknown } | null;
     return typeof r?.code === 'string' && /^[A-Z][A-Z_]+$/.test(r.code) ? r.code : null;
   } catch {
     return null;
@@ -212,13 +266,13 @@ export const traceErrorCode = (trace: CommandTrace): string | null => {
 export const traceOutcome = (trace: CommandTrace, command: string): TraceOutcome | null => {
   if (trace.status === 'running') return null;
   const errorLogs = (trace.logs ?? []).filter((l) => l.level === 'error');
-  const lastErrorLog = errorLogs.length > 0 ? clean(errorLogs[errorLogs.length - 1].message) : '';
+  const lastErrorLog = errorLogs.length > 0 ? clean(logText(errorLogs[errorLogs.length - 1].message) ?? '') : '';
   if (trace.status === 'error') {
     const code = traceErrorCode(trace);
     const restartFailed = restartFailedFromTraceResult(trace.result);
     return {
       kind: 'error',
-      message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed`,
+      message: clean(logText(trace.errorMessage) ?? '') || lastErrorLog || `${command} failed`,
       ...(code ? { code } : {}),
       ...(restartFailed ? { restartFailed: true } : {}),
     };

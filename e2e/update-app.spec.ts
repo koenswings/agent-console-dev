@@ -16,7 +16,7 @@
  *   UPDATE_E2E_MINOR_INSTANCE_ID + UPDATE_E2E_MINOR_TO   instance on 1.0 + expected new version (1.1.0)
  *   UPDATE_E2E_MAJOR_INSTANCE_ID + UPDATE_E2E_MAJOR_TO   instance on 1.x + expected new version (2.0.0)
  *   UPDATE_E2E_BACKUP_DISK_ID    Backup Disk docked on the Engine (fresh backup for the major case)
- *   UPDATE_E2E_STALE_INSTANCE_ID instance offered the major, last backup older than 1 h (or none)
+ *   UPDATE_E2E_STALE_INSTANCE_ID instance offered the major, last backup older than 1 h (or none) (read-only check of the confirm)
  *   UPDATE_E2E_TIMEOUT_MS        per-update wait (default 15 min)
  *
  *   UPDATE_E2E_ENGINE_HOST=idea04.local CONSOLE_USER=… CONSOLE_PASSWORD=… \
@@ -105,7 +105,7 @@ test('major update with a fresh backup succeeds', async ({ page }) => {
   const backupDisk = BACKUP_DISK;
   test.setTimeout(2 * UPDATE_TIMEOUT + 120_000);
   await openAllApps(page);
-  // Fresh backup first (the Engine needs one under 1 h old for a major).
+  // Fresh backup first (with one under 1 h old the Engine makes no pre-update backup).
   await page.getByTestId(`backup-instance-${id}`).click();
   // The picker only opens with 2+ linked Backup Disks; with one, Back up starts straight away.
   const pick = page.getByTestId(`backup-to-disk-${backupDisk}`);
@@ -113,8 +113,10 @@ test('major update with a fresh backup succeeds', async ({ page }) => {
   if (picker) await pick.click();
   await openConfirm(page, id, to);
   const update = page.getByTestId(`update-confirm-btn-${id}`);
-  // The Console's gate reads instance.lastBackup: Update unlocks once the backup lands.
-  await expect(update).toBeEnabled({ timeout: UPDATE_TIMEOUT });
+  // The confirm reads instance.lastBackup: once the backup lands it no longer says the
+  // backup comes first (engine#469: Update itself is never held back for it).
+  await expect(page.getByTestId(`update-confirm-${id}`)).not.toContainText('makes a backup of', { timeout: UPDATE_TIMEOUT });
+  await expect(update).toBeEnabled();
   await expect(page.getByTestId(`update-confirm-${id}`)).toContainText('is a major update');
   await update.click();
   await expectUpdated(page, id);
@@ -125,13 +127,16 @@ test('major update with a fresh backup succeeds', async ({ page }) => {
 
 test.describe('major, stale backup', () => {
 test.skip(!STALE_ID || !MAJOR_TO, 'UPDATE_E2E_STALE_INSTANCE_ID / MAJOR_TO not set');
-test('major update with a stale backup is held back', async ({ page }) => {
+// engine#469: the Engine makes the backup first (linked Backup Disk, else temporarily on its
+// own disk), so the Console no longer holds Update back. Read-only: the update is not sent.
+test('major update with a stale backup says the backup comes first', async ({ page }) => {
   const id = STALE_ID;
   const to = MAJOR_TO;
   await openAllApps(page);
   await openConfirm(page, id, to);
-  await expect(page.getByTestId(`update-confirm-btn-${id}`)).toBeDisabled();
-  await expect(page.getByTestId(`update-confirm-needs-backup-${id}`)).toHaveText('Make a backup first');
+  await expect(page.getByTestId(`update-confirm-btn-${id}`)).toBeEnabled();
+  await expect(page.getByTestId(`update-confirm-${id}`)).toContainText('makes a backup of');
+  await expect(page.getByTestId(`update-confirm-needs-backup-${id}`)).toHaveCount(0);
   await noCliText(page, id);
 });
 });

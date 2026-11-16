@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { DEMO_USERNAME, DEMO_PASSWORD } from './helpers';
+import { DEMO_USERNAME, DEMO_PASSWORD, serveEmptyHiddenInstances } from './helpers';
 
 test.describe('Demo login flow', () => {
   const consoleErrors: string[] = [];
@@ -15,6 +15,7 @@ test.describe('Demo login flow', () => {
       }
     });
     page.on('pageerror', (err) => pageErrors.push(err));
+    await serveEmptyHiddenInstances(page);
 
     // Fresh preview-mode boot — no engine hostname, preview flag set explicitly
     await page.addInitScript(() => {

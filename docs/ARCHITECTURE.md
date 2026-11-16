@@ -298,8 +298,12 @@ On an older Engine the name match itself also needs the disk to follow, so a nam
 another disk (same Engine) is not ours. Not matched reliably: a name containing a double
 quote (the Engine's quote handling regroups the tokens), and a name-only refusal from a
 namesake (nothing in it tells them apart). backupApp / restoreApp send the id and have no
-second value. The InstanceRow trace list (expanded steps) matches either `args.instanceId`
-or `args.instanceName`. renameInstance, removeInstance and updateApp match the id anywhere
+second value. The InstanceRow trace list (expanded steps) matches `args.instanceId` or
+`args.instanceName`, or for a positional trace the first token of the first arg
+(`traceIsForInstance`, console#227): updateApp's trace args are
+`["<instance> <newAppId> [--allow-major] [--source <diskId>]"]` (one unnamed rest-of-line
+arg, agent-engine-dev `src/data/Commands.ts:726`, `src/utils/commandUtils.ts:104,153`).
+renameInstance, removeInstance and updateApp match the id anywhere
 in the raw args (`matchMode: 'includes'`), which works with both shapes. The
 OperationProgress log matches by command kind only.
 
@@ -475,6 +479,9 @@ Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskI
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
+CommandTrace text fields  // args, result, errorMessage, error, logs[].message: plain string (old logs)
+                          // or Automerge ImmutableString (engine#471 b); always read via logText /
+                          // logJson in src/store/logText.ts (symbol check, not instanceof)
 
 Instance {
   ...                               // standard fields
@@ -599,14 +606,42 @@ never run a backup is covered, and `'stop'` / `'hook'` win over an older
 `lastResult.method: 'none'` (the method changed). Only when `backupMethod` is unset does
 it fall back to `lastResult.method === 'none'`. For such an instance:
 
-- the update gate needs no backup: `majorNeedsBackup(..., methodNone)` is false and an
-  Engine `NEEDS_BACKUP` refusal does not lock the badge (`UpdateAppControl`; the
-  refusal's error line still shows);
+- a major update needs no backup: `majorNeedsBackup(..., methodNone)` is false (the
+  confirm has no "IDEA makes a backup first" line) and an Engine `NEEDS_BACKUP` refusal
+  does not lock the badge (`UpdateAppControl`; the refusal's error line still shows);
 - `RestorePanel` shows "Not backed up: its content is on the App Disk"
   (`METHOD_NONE_COPY`, once: the same status line is not repeated) instead of
   "Never backed up", and offers no target disk or Restore. A none instance that still
   has an older `lastBackup` (a real archive from before the method changed) keeps its
   date and Restore.
+
+**Pre-update backup of a major update (idea#448, engine#469 / agent-engine-dev#472).** The
+Engine makes the backup a major update needs itself: to a linked Backup Disk docked on the
+same Engine, else a temporary backup on the Engine's own (system) disk, deleted after the
+health gate and kept when the update fails. So the Console no longer blocks Update when
+`lastBackup` is older than an hour: `majorNeedsBackup` only adds "IDEA makes a backup of
+<App> first, so it takes a little longer." to the confirm. An older Engine that still
+refuses `NEEDS_BACKUP` (nothing stopped) locks the badge with "Dock a Backup Disk and make a
+backup first", as before. While the op's `stepLabel` starts with `Pre-update backup` or
+`Temporary pre-update backup` and live progress is at most Snapshot, the step reads "Making
+a backup first" (`currentStep` → `BACKUP_STEP`); without live progress (reload, another
+Console) the step comes from `currentStep` / `totalSteps`, not the long Engine label. The
+refusals `TEMP_BACKUP_NO_SPACE` (need = the backup plus, on the same disk, the snapshot),
+`TEMP_BACKUP_FAILED` and `HELPER_OUTDATED` for the temporary backup have plain sentences
+(`REFUSAL_TEXT`, naming the Engine the App runs on: `RefusalCtx.hostEngine`). They come
+before the operation, so History shows the same sentence (`historyTempBackupText`) with the
+raw text behind Technical details. The Ops card still shows the Engine's `stepLabel` and
+error text.
+
+**Stopped after a failed update restart (console#227, engine#442 / #445).** While the
+instance is `Error` and its newest updateApp op is finished with `restartFailed: true` (or
+the matching trace result says so), `restartFailedOpFor` holds and the Console shows, from
+store state alone (so after a reload and in every Console): the agreed #217 sentence in
+`update-outcome-<id>` (`data-kind="failed"`), the Update badge disabled with "Start <App>
+again first, or ask for help", and Stop disabled ("Already stopped"). The Operations card
+and the History row show the same sentence, with the raw `ROLLED BACK: …` text behind
+Technical details. It clears once the instance leaves `Error`, a newer updateApp op exists
+without the flag, or `lastStarted` is later than the op.
 
 ### Backup Disk schedule controls (idea#400)
 
@@ -1099,5 +1134,6 @@ ACTIONS.md / school-day.yaml (`open_console_as_teacher`, `open_kolibri_as_teache
 fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
 `duration-kolibri-grade5a-001`). Engine-owned `infra_*` Intents are not registered here.
 `update_restart_failed` (console#217, engine#442) is hook-gated: it is registered, but
-it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, because the Engine
-has no fault-injection hook yet to fail the post-backup restart. See `e2e/intents/README.md`.
+it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, which says the Engine
+under test runs with engine#467's `IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>` hook
+(testMode only) for the same instance. See `e2e/intents/README.md`.

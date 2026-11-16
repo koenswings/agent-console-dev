@@ -4,6 +4,7 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 
 import LogLines from './LogLines';
 import TechnicalDetails from './TechnicalDetails';
+import { logText } from '../store/logText';
 
 interface CommandHistoryProps {
   commandLogStore: Accessor<import('../store/commandLog').CommandLogState>;
@@ -67,8 +68,8 @@ const CommandHistory: Component<CommandHistoryProps> = (props) => {
                       {expandedIds().has(trace.traceId) ? '▲' : '▼'}
                     </span>
                   </div>
-                  <Show when={trace.errorMessage}>
-                    <TechnicalDetails raw={trace.errorMessage} class="command-history__error" testId="command-history-error" />
+                  <Show when={logText(trace.errorMessage)}>
+                    <TechnicalDetails raw={logText(trace.errorMessage)} class="command-history__error" testId="command-history-error" />
                   </Show>
                   <Show when={expandedIds().has(trace.traceId)}>
                     <div class="command-history__logs">

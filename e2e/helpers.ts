@@ -6,6 +6,23 @@ export const DEMO_USERNAME = 'admin';
 export const DEMO_PASSWORD = 'admin911!';
 
 /**
+ * Serve the optional dashboard hide list (idea#212) as an empty list.
+ *
+ * The Console already treats a missing `/hidden-instances.json` as "nothing
+ * hidden" without logging (src/store/hiddenInstances.ts, covered by
+ * test/AppBrowser.test.tsx). Chromium itself still prints "Failed to load
+ * resource: 404" for any 404 fetch, which no page code can silence, so specs
+ * that assert zero console errors serve the file the way an operator would:
+ * `{ "hidden": [] }`. The e2e build must not ship the file in dist, because a
+ * build-produced copy wins over the live one on deploy (scripts/swap-dist.mjs).
+ */
+export async function serveEmptyHiddenInstances(page: Page): Promise<void> {
+  await page.route('**/hidden-instances.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"hidden":[]}' }),
+  );
+}
+
+/**
  * Log in as the pre-provisioned demo operator.
  *
  * Sets previewMode in localStorage before navigation so the app boots with the

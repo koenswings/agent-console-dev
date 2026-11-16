@@ -61,7 +61,8 @@ describe('update_restart_failed selectors and text (console#217, engine#442)', (
     const msg = restartFailedMissingHookMessage();
     expect(msg).toContain(RESTART_FAILED_HOOK_ENV);
     expect(msg).toContain(RESTART_FAILED_INSTANCE_ENV);
-    expect(msg).toContain('no IDEA_TEST_');
+    expect(msg).toContain('IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>');
+    expect(msg).toContain('testMode');
     expect(msg).toContain('No soft-pass');
   });
 

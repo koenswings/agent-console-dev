@@ -2,18 +2,20 @@
  * updateApp UI (console#168): badge, confirm, step progress and result.
  * All Engine shapes come from store/updateApp.ts. Renders nothing unless the
  * Engine has the `updateApp` capability and the instance offers an update,
- * or an update op is running / just finished.
+ * or an update op is running / just finished, or the App is still stopped
+ * after an update whose restart failed (console#227, from Engine state).
  */
 import { For, Show, createEffect, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import { sendRawCommand } from '../store/commands';
-import { createCommandResult } from '../store/commandResult';
+import { createCommandResult, latestInstanceTrace } from '../store/commandResult';
 import type { CommandLogState } from '../store/commandLog';
 import { isBackupMethodNone } from '../store/backupStatus';
 import { engineStatus, live, liveNow, liveSince } from '../store/live';
 import {
-  COMMAND, MAKE_BACKUP_FIRST_TEXT, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
+  COMMAND, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
-  latestUpdateOp, parseRefusal, pausedText, previousVersionOf, restartFailedFromOp, stepLabel, updateOfferFor, updateOutcome,
+  latestUpdateOp, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
+  restartFailedText, stepLabel, updateOfferFor, updateOutcome,
   updateProgress, type RefusalCtx,
 } from '../store/updateApp';
 import type { Engine, Instance, Store } from '../types/store';
@@ -32,6 +34,16 @@ const UpdateAppControl: Component<Props> = (props) => {
   const offer = createMemo(() => updateOfferFor(props.store(), props.instance(), props.engine()));
   const op = createMemo(() => (canUpdate(props.engine()) ? latestUpdateOp(props.store(), id()) : null));
   const running = createMemo(() => isUpdateRunning(op()));
+  // console#227: "stopped after a failed restart" comes from Engine state (instance
+  // Error + newest updateApp op / trace restartFailed), not from this session, so it
+  // survives a reload and clears once the App runs again.
+  const restartFailedNow = createMemo(() => {
+    const inst = props.instance();
+    if (!canUpdate(props.engine()) || !inst) return false;
+    const cls = props.commandLog();
+    const trace = cls && !('error' in cls) ? latestInstanceTrace(cls, COMMAND, String(inst.id), inst.name) : null;
+    return restartFailedOpFor(props.store(), inst, trace?.status === 'error' ? trace.result : null) !== null;
+  });
   const prog = createMemo(() => updateProgress()[id()] ?? null);
   const [confirming, setConfirming] = createSignal(false);
   const [watching, setWatching] = createSignal(false);
@@ -55,6 +67,7 @@ const UpdateAppControl: Component<Props> = (props) => {
     engine: sourceName() ?? engineLabel(props.store(), props.engine()?.id ?? null),
     diskName: diskName(),
     toVersion: offer()?.toVersion ?? null,
+    hostEngine: props.engine() ? engineLabel(props.store(), props.engine()!.id) : null,
   });
 
   const result = createCommandResult({ commandLog: props.commandLog, command: COMMAND, argKey: 'instanceId', matchMode: 'includes', longRunning: true });
@@ -69,9 +82,12 @@ const UpdateAppControl: Component<Props> = (props) => {
   // idea#403: a backup-method-none instance never gets lastBackup and needs no backup.
   const methodNone = () => isBackupMethodNone(props.instance());
   const refusedForBackup = () => !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
-  const majorBackupMissing = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow(), methodNone());
-  const needsBackup = () => refusedForBackup() || majorBackupMissing();
-  const backupHint = () => (refusedForBackup() ? NEEDS_BACKUP_TEXT : MAKE_BACKUP_FIRST_TEXT);
+  // engine#469: a missing backup no longer blocks a major update: the Engine makes it first
+  // (linked Backup Disk, else temporarily on its own disk). An older Engine refuses NEEDS_BACKUP
+  // before anything stops, and then the badge stays disabled with the hint.
+  const backupFirst = () => majorNeedsBackup(offer(), props.instance()?.lastBackup, liveNow(), methodNone());
+  const needsBackup = () => refusedForBackup();
+  const backupHint = () => NEEDS_BACKUP_TEXT;
   const showBadge = () => {
     const o = offer();
     return !!o && !running() && !isDismissed(id(), o.toAppId);
@@ -94,14 +110,21 @@ const UpdateAppControl: Component<Props> = (props) => {
   const paused = () => fetchPausedOf(props.instance(), op());
   const step = () => stepLabel(currentStep(op(), prog()), prog(), sourceName() ?? 'the other Engine');
   const outcome = createMemo(() => {
+    if (restartFailedNow()) return { kind: 'failed' as const, text: restartFailedText(props.appTitle()) };
     if (!watching()) return null;
+    // A restartFailed op whose App runs again (or was started since) has nothing left to say.
+    if (restartFailedFromOp(op())) return null;
     const from = fromVersion() ?? previousVersionOf(props.store(), props.instance()) ?? '';
     return updateOutcome(op(), props.instance(), props.appTitle(), from, { ...ctx(), fromVersion: from });
   });
   const errorText = () => {
     const s = result.state();
     if (s.kind !== 'error') return null;
-    return friendlyUpdateError(s.message, ctx(), { restartFailed: !!s.restartFailed || restartFailedFromOp(op()) });
+    const restartFailed = !!s.restartFailed || restartFailedFromOp(op());
+    // With the op in the store, the outcome line owns the restart-failed sentence
+    // (shown while the App is stopped, cleared once it runs again).
+    if (restartFailed && op()) return null;
+    return friendlyUpdateError(s.message, ctx(), { restartFailed });
   };
 
   return (
@@ -113,8 +136,10 @@ const UpdateAppControl: Component<Props> = (props) => {
               class="update-app__badge"
               classList={{ 'update-app__badge--offline': sourceOffline() }}
               data-testid={`update-badge-${id()}`}
-              disabled={sourceOffline() || refusedForBackup()}
-              title={sourceOffline() ? `${sourceName()} is switched off` : refusedForBackup() ? NEEDS_BACKUP_TEXT : 'Update'}
+              disabled={sourceOffline() || refusedForBackup() || restartFailedNow()}
+              title={restartFailedNow()
+                ? restartFailedBadgeTitle(props.appTitle())
+                : sourceOffline() ? `${sourceName()} is switched off` : refusedForBackup() ? NEEDS_BACKUP_TEXT : 'Update'}
               onClick={() => { result.reset(); setConfirming(true); }}
             >
               {badgeText(offer()!, sourceName())}
@@ -128,7 +153,7 @@ const UpdateAppControl: Component<Props> = (props) => {
         <Show when={confirming() && offer()}>
           {(o) => (
             <div class="update-app__confirm" role="alertdialog" aria-label={`Update ${props.appTitle()}`} data-testid={`update-confirm-${id()}`}>
-              <For each={confirmText(props.appTitle(), o(), sourceName())}>{(line) => <p class="update-app__line">{line}</p>}</For>
+              <For each={confirmText(props.appTitle(), o(), sourceName(), backupFirst())}>{(line) => <p class="update-app__line">{line}</p>}</For>
               <Show when={o().major && o().migrationNote}>
                 <p class="update-app__note" data-testid={`update-migration-note-${id()}`}>{o().migrationNote}</p>
               </Show>
