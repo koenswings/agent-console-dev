@@ -33,6 +33,7 @@ import {
   busyState,
   effectiveRefusal,
 } from '../store/clientCards';
+import { logText } from '../store/logText';
 
 interface FlashDialogProps {
   engineId: string;
@@ -116,7 +117,7 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
       if (!t || t.status === 'running') return { kind: 'progress' };
       const r = parseFlashResult(t);
       if (r?.safeToRemove === true) return { kind: 'done', safe: true, note: null };
-      const e = parseEngineError(t.errorMessage);
+      const e = parseEngineError(logText(t.errorMessage));
       return {
         kind: 'done',
         safe: false,

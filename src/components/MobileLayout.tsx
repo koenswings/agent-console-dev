@@ -71,6 +71,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
         <Show when={activeTab() === 'history'}>
           <HistoryPanel
             commandLogStore={props.commandLogStore}
+            store={props.store}
             onClose={() => setActiveTab('apps')}
           />
         </Show>

@@ -569,6 +569,7 @@ const App: Component = () => {
         <Match when={showHistory()}>
           <HistoryPanel
             commandLogStore={commandLogStore}
+            store={store}
             onClose={() => setShowHistory(false)}
           />
         </Match>

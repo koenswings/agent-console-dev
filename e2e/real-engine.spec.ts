@@ -16,9 +16,11 @@
  *
  * ## Strategy for operator-only actions
  *
- * `.settings-panel__change-engine-btn` is only rendered when `isOperator()`.
- * For tests that need it, we log into preview mode first (guaranteed to work),
- * then navigate to real engine from within the preview session.
+ * Settings → Engine Connection → "Change Engine…" (`switch-engine-connect`)
+ * opens Connection Management; Settings is operator-only. (The old
+ * `.settings-panel__change-engine-btn` / `.change-engine-dialog` were removed
+ * in #157.) For tests that need it, we log into preview mode first (guaranteed
+ * to work), then switch to the real engine via the manual hostname entry.
  * This tests the real switching flow without depending on real-engine user sync timing.
  */
 
@@ -197,24 +199,23 @@ test.describe('Real engine', () => {
   //    and use the preview switch button. This tests the switch UI without needing
   //    the real engine store to have synced users.
   // -------------------------------------------------------------------------
-  test('switches from real engine to preview mode via change-engine dialog', async ({ page }) => {
-    // Log in as demo operator so the change-engine button is available
+  test('switches from real engine to preview mode via Connection Management', async ({ page }) => {
+    // Log in as demo operator so Settings (and Change Engine…) is available
     await loginAsDemo(page);
 
-    // We're in preview mode now — settings gear shows the change-engine dialog
+    // We're in preview mode now — Settings → Change Engine… opens Connection Management
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
-    await page.locator('.settings-panel__change-engine-btn').click();
-    await expect(page.locator('.change-engine-dialog')).toBeVisible();
+    await page.getByTestId('switch-engine-connect').click();
+    await expect(page.getByTestId('connection-management')).toBeVisible();
 
     // Check engine reachability before attempting to switch
     test.skip(!await isEngineReachable(), 'Engine not reachable from browser (port 80 blocked in sandbox)');
 
     // First switch to the real engine via the hostname input
-    const hostnameInput = page.locator('.change-engine-dialog__input');
-    await hostnameInput.clear();
-    await hostnameInput.fill(ENGINE_HOSTNAME);
-    await page.locator('.change-engine-dialog__input-row button').click();
+    await page.getByTestId('connection-manual-link').click();
+    await page.getByTestId('connection-manual-host').fill(ENGINE_HOSTNAME);
+    await page.getByTestId('connect-engine-manual').click();
 
     // PREVIEW badge disappears once switched to real engine mode
     await expect(page.locator('.status-bar__preview-badge')).not.toBeVisible({ timeout: 15_000 });
@@ -234,25 +235,24 @@ test.describe('Real engine', () => {
   // -------------------------------------------------------------------------
   // 5. Switch from preview mode → real engine
   // -------------------------------------------------------------------------
-  test('switches from preview mode back to real engine via change-engine dialog', async ({ page }) => {
+  test('switches from preview mode back to real engine via Connection Management', async ({ page }) => {
     // Start logged in as demo operator
     await loginAsDemo(page);
     await expect(page.locator('.status-bar__preview-badge')).toBeVisible();
 
-    // Open settings → change engine dialog (operator-only — works because we're logged in)
+    // Open Settings → Change Engine… (operator-only — works because we're logged in)
     await page.locator('.status-bar__settings-btn').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
-    await page.locator('.settings-panel__change-engine-btn').click();
-    await expect(page.locator('.change-engine-dialog')).toBeVisible();
+    await page.getByTestId('switch-engine-connect').click();
+    await expect(page.getByTestId('connection-management')).toBeVisible();
 
     // Check engine reachability before attempting to switch
     test.skip(!await isEngineReachable(), 'Engine not reachable from browser (port 80 blocked in sandbox)');
 
     // Enter real engine hostname and connect
-    const hostnameInput = page.locator('.change-engine-dialog__input');
-    await hostnameInput.clear();
-    await hostnameInput.fill(ENGINE_HOSTNAME);
-    await page.locator('.change-engine-dialog__input-row button').click();
+    await page.getByTestId('connection-manual-link').click();
+    await page.getByTestId('connection-manual-host').fill(ENGINE_HOSTNAME);
+    await page.getByTestId('connect-engine-manual').click();
 
     // PREVIEW badge disappears once switched to real engine mode
     await expect(page.locator('.status-bar__preview-badge')).not.toBeVisible({ timeout: 15_000 });

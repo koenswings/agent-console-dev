@@ -487,19 +487,29 @@ no Retry/Resume, and still shows the InstanceRow error hint (Steve).
 This path cannot be triggered on a stock Engine: it needs a pre-swap update
 failure **and** a failed restart. engine#445 sets `Operation.restartFailed` and
 the command-log `{ restartFailed: true }` result when `start()` throws or the
-instance is not Running/Starting, but there is **no** Engine `IDEA_TEST_*` env,
-command flag, or duration fixture to force that. Do **not** sample this edge in
-a duration walk until that hook exists.
+instance is not Running/Starting. engine#467 (agent-engine-dev `5836f87`,
+engine#449) adds the hook to force it: start the Engine under test with
+`IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>` and `config.settings.testMode` on.
+`updateApp` for that one instance then fails pre-swap and the old-version restart
+throws `test hook: forced restart failure`. The hook is ignored when testMode is
+off. Only sample this edge in a duration walk on a test Pi with the hook armed
+for the instance the Intent targets.
 
 | Step | Contract |
 |---|---|
-| Gate | Loud-fail unless `DURATION_UPDATE_RESTART_FAILED_HOOK=1` **and** an instance id (`DURATION_UPDATE_RESTART_FAILED_INSTANCE_ID` or `ctx.instanceId`). No soft-pass. |
+| Gate | Loud-fail unless `DURATION_UPDATE_RESTART_FAILED_HOOK=1` (the Engine was started with the hook armed for the same instance) **and** an instance id (`DURATION_UPDATE_RESTART_FAILED_INSTANCE_ID` or `ctx.instanceId`). No soft-pass. |
 | App name | `DURATION_UPDATE_RESTART_FAILED_APP`, else the row's `.instance-row__app` title |
 | Click | Update badge → confirm Update (instance must have an offer; Update must be enabled) |
 | Alert | Wait (default 15 min, `DURATION_UPDATE_RESTART_FAILED_MS`) for `update-outcome-<id>` or `update-error-<id>` to equal: `The update didn't start, and <App> couldn't be started again, so it is stopped. Its version and data are unchanged. Start <App> again, or ask for help if it doesn't start.` |
 | Kind | `data-kind="failed"` when the outcome node is shown |
 | No CTA | No button named Retry or Resume on the update control or the row |
 | Hint | Collapse the row if expanded, then `instance-error-hint-<id>` must be visible |
+| Reload | `page.reload()`, back to ALL APPS, and the same alert must come back within 60 s from Engine state alone (instance `Error` + newest updateApp op `restartFailed`, console#227); `update-badge-<id>` must be disabled (Start is the next step) |
+
+Since console#227 the Console reads this state from the store, so every Console and a
+reload show the sentence while the App is stopped; it clears once the App runs again.
+Because the badge then stays disabled, run the Intent on a fresh offer: a second run on a
+held instance loud-fails at "update-badge-<id> is disabled".
 
 Selectors live in `selectors.ts` (`updateBadge`, `updateOutcome`, `updateRestartFailedAlert`, `instanceErrorHint`, …). Box-runnable coverage is `test/updateRestartFailedIntent.test.ts` (text, selectors, hook gate) — this Intent is not run against a Pi from `pnpm test`.
 

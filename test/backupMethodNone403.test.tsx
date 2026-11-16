@@ -120,6 +120,7 @@ describe('UpdateAppControl', () => {
     fireEvent.click(screen.getByTestId('update-badge-i1'));
     expect(confirmBtn().disabled).toBe(false);
     expect(screen.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
+    expect(screen.getByTestId('update-confirm-i1').textContent).not.toContain('makes a backup');
   });
 
   it("fresh none App (backupMethod 'none', no lastResult), major: Update enabled", () => {
@@ -129,19 +130,23 @@ describe('UpdateAppControl', () => {
     expect(screen.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
   });
 
-  it("negative: backupMethod 'stop' with an older lastResult none, major: still needs a backup", () => {
+  // engine#469: a missing backup no longer blocks Update; the Engine makes it first and the
+  // confirm says so. The none App gets no such line.
+  const BACKUP_FIRST = 'IDEA makes a backup of Kiwix first, so it takes a little longer.';
+  it("negative: backupMethod 'stop' with an older lastResult none, major: the backup is made first", () => {
     setup(inst({ backupMethod: 'stop', lastResult: NONE_RESULT, updateAvailable: { appId: 'kiwix-1.0.0' } }));
     fireEvent.click(screen.getByTestId('update-badge-i1'));
-    expect(confirmBtn().disabled).toBe(true);
-    expect(screen.getByTestId('update-confirm-needs-backup-i1').textContent).toBe('Make a backup first');
+    expect(confirmBtn().disabled).toBe(false);
+    expect(screen.getByTestId('update-confirm-i1').textContent).toContain(BACKUP_FIRST);
+    expect(screen.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
   });
 
   for (const [label, lastResult] of [['stop', STOP_RESULT], ['hook', HOOK_RESULT], ['never run', null]] as const) {
-    it(`negative (${label}), major, no lastBackup: Update disabled with "Make a backup first"`, () => {
+    it(`negative (${label}), major, no lastBackup: Update enabled, the confirm says the backup is made first`, () => {
       setup(inst({ lastResult, updateAvailable: { appId: 'kiwix-1.0.0' } }));
       fireEvent.click(screen.getByTestId('update-badge-i1'));
-      expect(confirmBtn().disabled).toBe(true);
-      expect(screen.getByTestId('update-confirm-needs-backup-i1').textContent).toBe('Make a backup first');
+      expect(confirmBtn().disabled).toBe(false);
+      expect(screen.getByTestId('update-confirm-i1').textContent).toContain(BACKUP_FIRST);
     });
   }
 

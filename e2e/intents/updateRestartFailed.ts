@@ -6,14 +6,25 @@
  * the InstanceRow error hint (Steve).
  *
  * This path needs an update that fails before a swap AND a failed restart of
- * the old version. The Engine has no fault-injection hook for that yet, so the
- * Intent is hook-gated: it runs only when DURATION_UPDATE_RESTART_FAILED_HOOK
- * is set and an instance id is provided. Without the hook it loud-fails with
- * a clear missing-hook message (no soft-pass). Do not sample this edge in a
- * duration walk until the Engine can force the restart failure.
+ * the old version. engine#467 (agent-engine-dev 5836f87, engine#449) adds the
+ * Engine hook: start the Engine with IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>
+ * and config.settings.testMode on, and updateApp for that one instance fails
+ * pre-swap and the old-version restart throws. The hook is ignored when
+ * testMode is off, so it never fires on a school Pi.
  *
- * Live, once a hook exists: click Update on the offered instance, wait for the
- * #217 alert, then assert the hint and the absence of Retry/Resume.
+ * The Intent stays gated on the harness side: it runs only when
+ * DURATION_UPDATE_RESTART_FAILED_HOOK is set (meaning the Engine under test was
+ * started with the hook armed for the same instance) and an instance id is
+ * provided. Without that it loud-fails with a clear missing-hook message (no
+ * soft-pass).
+ *
+ * Live: click Update on the offered instance, wait for the #217 alert, then
+ * assert the hint and the absence of Retry/Resume. Then reload the page: the
+ * alert must come back from Engine state alone (instance Error + the updateApp
+ * op's restartFailed, console#227) and the Update badge must be disabled, since
+ * Start is the next step. Run it on a fresh offer: once the App is stopped
+ * after a failed restart the badge stays disabled, so a second run on the same
+ * held instance stops at "update-badge-<id> is disabled".
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -55,14 +66,13 @@ export function restartFailedTimeoutMs(env: NodeJS.ProcessEnv = process.env): nu
 }
 
 export const RESTART_FAILED_MISSING_HOOK =
-  `idea#168 update_restart_failed: this Intent needs an Engine fault-injection hook ` +
-  `to fail the post-backup restart (engine#442 restartFailed). The Engine today ` +
-  `sets Operation.restartFailed and the command-log trace result when start() throws ` +
-  `or the instance is not Running/Starting after a pre-swap failure, but it has no ` +
-  `IDEA_TEST_* env, command flag, or duration fixture to force that path. ` +
-  `Set ${RESTART_FAILED_HOOK_ENV}=1 and ${RESTART_FAILED_INSTANCE_ID_PLACEHOLDER()} ` +
-  `(optional ${RESTART_FAILED_APP_ENV} for the App display name) only when that hook ` +
-  `is in place, then include this action in the walk. No soft-pass.`;
+  `idea#168 update_restart_failed: this Intent needs the Engine fault-injection hook ` +
+  `to fail the post-backup restart (engine#442 restartFailed). Start the Engine under test ` +
+  `with IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId> and config.settings.testMode on ` +
+  `(engine#467); the hook is ignored without testMode. ` +
+  `Then set ${RESTART_FAILED_HOOK_ENV}=1 and ${RESTART_FAILED_INSTANCE_ID_PLACEHOLDER()} ` +
+  `to the same instance (optional ${RESTART_FAILED_APP_ENV} for the App display name) ` +
+  `and include this action in the walk. No soft-pass.`;
 
 function RESTART_FAILED_INSTANCE_ID_PLACEHOLDER(): string {
   return RESTART_FAILED_INSTANCE_ENV;
@@ -79,6 +89,27 @@ const ensureOverview = async (page: Page): Promise<void> => {
     .first()
     .waitFor({ state: 'visible', timeout: 15_000 });
 };
+
+/** The visible #217 alert text for `id` once it equals `expected`, else the last text seen. */
+const waitForAlertText = async (page: Page, id: string, expected: string, budget: number): Promise<string> => {
+  const alert = page.locator(sel.updateRestartFailedAlert(id));
+  const deadline = Date.now() + budget;
+  let text = '';
+  while (Date.now() < deadline) {
+    const n = await alert.count();
+    for (let i = 0; i < n; i++) {
+      const loc = alert.nth(i);
+      if (!(await loc.isVisible().catch(() => false))) continue;
+      text = ((await loc.textContent()) ?? '').trim();
+      if (text === expected) return text;
+    }
+    await page.waitForTimeout(500);
+  }
+  return text;
+};
+
+/** console#227: after a reload the alert must come back from Engine state alone. */
+export const RESTART_FAILED_RELOAD_MS = 60_000;
 
 const collapseRowIfExpanded = async (page: Page, id: string): Promise<void> => {
   const hide = page.locator(`${sel.instance(id)} button[aria-expanded="true"]`);
@@ -161,20 +192,7 @@ export const update_restart_failed: IntentFn = async ({ page, instanceId }) => {
   }
   const expected = restartFailedAlertText(app);
   const budget = restartFailedTimeoutMs();
-  const alert = page.locator(sel.updateRestartFailedAlert(id));
-  const deadline = Date.now() + budget;
-  let text = '';
-  while (Date.now() < deadline) {
-    const n = await alert.count();
-    for (let i = 0; i < n; i++) {
-      const loc = alert.nth(i);
-      if (!(await loc.isVisible().catch(() => false))) continue;
-      text = ((await loc.textContent()) ?? '').trim();
-      if (text === expected) break;
-    }
-    if (text === expected) break;
-    await page.waitForTimeout(500);
-  }
+  const text = await waitForAlertText(page, id, expected, budget);
   if (text !== expected) {
     throw new Error(
       `idea#168 update_restart_failed: expected the #217 alert for ${app} within ${budget}ms, ` +
@@ -209,6 +227,30 @@ export const update_restart_failed: IntentFn = async ({ page, instanceId }) => {
     throw new Error(
       `idea#168 update_restart_failed: InstanceRow error hint for ${id} is not visible. ` +
         `Steve kept this hint (status Error + statusCondition, row collapsed). No soft-pass.`,
+    );
+  }
+
+  // console#227: the sentence comes from Engine state, so it must survive a reload,
+  // and the Update badge must not invite a plain retry while the App is stopped.
+  await page.reload();
+  await ensureOverview(page);
+  const allAppsAgain = page.locator(sel.networkAllApps);
+  if (await allAppsAgain.isVisible().catch(() => false)) {
+    await allAppsAgain.click().catch(() => {});
+  }
+  await page.locator(sel.instance(id)).waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+  const afterReload = await waitForAlertText(page, id, expected, RESTART_FAILED_RELOAD_MS);
+  if (afterReload !== expected) {
+    throw new Error(
+      `idea#168 update_restart_failed: after a page reload the #217 alert for ${app} is ` +
+        `${JSON.stringify(afterReload || '(missing)')} (console#227: it must come from Engine state). No soft-pass.`,
+    );
+  }
+  const badgeAfter = page.locator(sel.updateBadge(id));
+  if ((await badgeAfter.count()) && !(await badgeAfter.isDisabled().catch(() => false))) {
+    throw new Error(
+      `idea#168 update_restart_failed: after a reload update-badge-${id} is still enabled while ${app} ` +
+        `is stopped (console#227: Start is the next step). No soft-pass.`,
     );
   }
 };

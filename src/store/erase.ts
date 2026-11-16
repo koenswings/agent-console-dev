@@ -16,6 +16,7 @@ import type {
   Store,
   UnformattedDisk,
 } from '../types/store';
+import { logJson } from './logText';
 
 /** Summary older than this (Console clock) is refused; typed-name box is replaced. */
 export const SUMMARY_MAX_AGE_MS = 10 * 60 * 1000;
@@ -113,7 +114,7 @@ export const findTargetTrace = (
 export const parseContentSummary = (trace: CommandTrace | null | undefined): ContentSummary | null => {
   if (!trace?.result) return null;
   try {
-    const raw = typeof trace.result === 'string' ? JSON.parse(trace.result) : trace.result;
+    const raw = logJson(trace.result);
     if (!raw || typeof raw !== 'object' || typeof (raw as ContentSummary).label !== 'string') return null;
     return raw as ContentSummary;
   } catch {

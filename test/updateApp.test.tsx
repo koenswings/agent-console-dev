@@ -164,7 +164,9 @@ describe('updateApp adapter (provisional shapes)', () => {
     const lines = confirmText('Kolibri', o, null);
     expect(lines[0]).toBe('Update Kolibri to 1.1-0.19.5?');
     expect(lines[1]).toBe(majorConfirmText('Kolibri', o));
-    expect(lines[1]).toBe('Kolibri 1.1-0.19.5 is a major update. It only starts if Kolibri was backed up in the last hour.');
+    expect(lines[1]).toBe('Kolibri 1.1-0.19.5 is a major update.');
+    // engine#469: when the backup is due the Engine makes it first; the confirm says so.
+    expect(confirmText('Kolibri', o, null, true)[1]).toBe('Kolibri 1.1-0.19.5 is a major update. IDEA makes a backup of Kolibri first, so it takes a little longer.');
     expect(buildUpdateAppCommand('i1', o)).toContain('--allow-major');
   });
   it('major: upfront backup gate from lastBackup; version label (idea#76)', () => {
@@ -347,8 +349,10 @@ describe('UpdateAppControl in InstanceRow', () => {
     const r = row(mkStore(inst({ updateAvailable: { appId: 'kolibri-1.0.0' } })));
     fireEvent.click(r.getByTestId('update-badge-i1'));
     expect(r.getByTestId('update-migration-note-i1').textContent).toBe('Big change: lessons move.');
-    expect((r.getByTestId('update-confirm-btn-i1') as HTMLButtonElement).disabled).toBe(true);
-    expect(r.getByTestId('update-confirm-needs-backup-i1').textContent).toBe('Make a backup first');
+    // engine#469: no upfront backup gate; the Engine makes the backup first.
+    expect((r.getByTestId('update-confirm-btn-i1') as HTMLButtonElement).disabled).toBe(false);
+    expect(r.queryByTestId('update-confirm-needs-backup-i1')).toBeNull();
+    expect(r.getByTestId('update-confirm-i1').textContent).toContain('IDEA makes a backup of Kolibri first');
   });
   it('major with a backup under 1 h: Update enabled', () => {
     const r = row(mkStore(inst({ lastBackup: Date.now() - 60_000, updateAvailable: { appId: 'kolibri-1.0.0' } })));

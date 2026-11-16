@@ -18,6 +18,7 @@ import type {
   Operation,
   Store,
 } from '../types/store';
+import { logJson } from './logText';
 
 // ── Capabilities (contract §0) ──────────────────────────────────────────────
 export const CAP = {
@@ -227,7 +228,7 @@ export interface FlashTraceResult {
 export const parseFlashResult = (trace: CommandTrace | null | undefined): FlashTraceResult | null => {
   if (!trace?.result) return null;
   try {
-    const r = typeof trace.result === 'string' ? JSON.parse(trace.result) : trace.result;
+    const r = logJson(trace.result);
     return r && typeof r === 'object' ? (r as FlashTraceResult) : null;
   } catch {
     return null;

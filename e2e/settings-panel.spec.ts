@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsDemo } from './helpers';
+import { loginAsDemo, serveEmptyHiddenInstances } from './helpers';
 
 test.describe('Settings panel', () => {
   const consoleErrors: string[] = [];
@@ -16,6 +16,7 @@ test.describe('Settings panel', () => {
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
+    await serveEmptyHiddenInstances(page);
     await loginAsDemo(page);
 
     // Main layout must be visible before any settings interactions

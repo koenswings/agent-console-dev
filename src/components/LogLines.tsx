@@ -1,5 +1,6 @@
 import { For, createEffect, createSignal, type Component } from 'solid-js';
 import type { LogEntry } from '../types/commandLog';
+import { logText } from '../store/logText';
 
 interface LogLinesProps {
   logs: LogEntry[];
@@ -31,7 +32,7 @@ const LogLines: Component<LogLinesProps> = (props) => {
 
   const handleCopy = () => {
     const text = props.logs
-      .map((e) => `[${formatTime(e.timestamp)}] ${e.message}`)
+      .map((e) => `[${formatTime(e.timestamp)}] ${logText(e.message) ?? ''}`)
       .join('\n');
 
     const finish = () => {
@@ -71,7 +72,7 @@ const LogLines: Component<LogLinesProps> = (props) => {
           {(entry) => (
             <div class="log-lines__row">
               <span class="log-lines__ts">[{formatTime(entry.timestamp)}]</span>
-              <span class={msgClass(entry.level)}>{stripAnsi(entry.message)}</span>
+              <span class={msgClass(entry.level)}>{stripAnsi(logText(entry.message) ?? '')}</span>
             </div>
           )}
         </For>

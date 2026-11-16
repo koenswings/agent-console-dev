@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsDemo } from './helpers';
+import { loginAsDemo, serveEmptyHiddenInstances } from './helpers';
 
 test.describe('Engine switch (operator only)', () => {
   const consoleErrors: string[] = [];
@@ -16,15 +16,17 @@ test.describe('Engine switch (operator only)', () => {
     });
     page.on('pageerror', (err) => pageErrors.push(err));
 
+    await serveEmptyHiddenInstances(page);
     await loginAsDemo(page);
   });
 
   test('shows mock engines from demo data', async ({ page }) => {
     await expect(page.locator('.main-layout')).toBeVisible();
 
-    // The mock store has two engines: appdocker01 and appdocker02
-    await expect(page.getByText('appdocker01')).toBeVisible();
-    await expect(page.getByText('appdocker02')).toBeVisible();
+    // The mock store has two engines: appdocker01 and appdocker02. Look in the
+    // network tree only: the status bar also shows the connected hostname.
+    await expect(page.locator('.tree-item__label', { hasText: /^appdocker01$/ })).toBeVisible();
+    await expect(page.locator('.tree-item__label', { hasText: /^appdocker02$/ })).toBeVisible();
 
     expect(consoleErrors).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);
