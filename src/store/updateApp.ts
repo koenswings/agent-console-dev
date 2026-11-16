@@ -28,6 +28,7 @@ import { createSignal } from 'solid-js';
 import { engineHasCapability } from './commands';
 import type { App, Engine, Instance, Operation, Store } from '../types/store';
 import { plainEngineText } from './plainError';
+import { logJson } from './logText';
 
 // ── Capabilities ────────────────────────────────────────────────────────────
 export const CAP_UPDATE = 'updateApp' as const;
@@ -292,7 +293,7 @@ export const restartFailedFromOp = (op: Operation | null | undefined): boolean =
  */
 export const restartFailedFromTraceResult = (result: unknown): boolean => {
   try {
-    const raw = typeof result === 'string' && result ? JSON.parse(result) : result;
+    const raw = logJson(result);
     return isRestartFailed((raw as { restartFailed?: unknown } | null | undefined)?.restartFailed);
   } catch {
     return false;

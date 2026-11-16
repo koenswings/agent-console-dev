@@ -10,6 +10,7 @@
  */
 import type { CommandLogState } from './commandLog';
 import type { CommandTrace } from '../types/commandLog';
+import { logJson, logText } from './logText';
 
 /** How long to wait for the Engine's eject trace before giving up. */
 export const EJECT_TIMEOUT_MS = 15_000;
@@ -31,7 +32,7 @@ export const traceIdSnapshot = (cls: CommandLogState): Set<string> => {
 /** Reads the disk ID an `ejectDisk` trace was called with (named or positional args). */
 const traceDiskId = (trace: CommandTrace): string | null => {
   try {
-    const args: unknown = typeof trace.args === 'string' ? JSON.parse(trace.args) : trace.args;
+    const args: unknown = logJson(trace.args);
     if (Array.isArray(args)) return args[0] != null ? String(args[0]) : null;
     if (args && typeof args === 'object') {
       const v = (args as Record<string, unknown>)['diskId'];
@@ -68,10 +69,10 @@ export const findEjectOutcome = (
   if (!trace) return null;
 
   const errorLogs = (trace.logs ?? []).filter((l) => l.level === 'error');
-  const lastErrorLog = errorLogs.length > 0 ? clean(errorLogs[errorLogs.length - 1].message) : '';
+  const lastErrorLog = errorLogs.length > 0 ? clean(logText(errorLogs[errorLogs.length - 1].message) ?? '') : '';
 
   if (trace.status === 'error') {
-    const msg = clean(trace.errorMessage ?? '') || lastErrorLog || 'Eject failed';
+    const msg = clean(logText(trace.errorMessage) ?? '') || lastErrorLog || 'Eject failed';
     return { kind: 'error', message: msg };
   }
   if (lastErrorLog) return { kind: 'error', message: lastErrorLog };

@@ -29,6 +29,7 @@ import { restartFailedFromTraceResult } from './updateApp';
 import { traceIdSnapshot } from './ejectResult';
 import { noteConnectedEngine } from './connectedEngine';
 import { formatWait, type RemoteWatch } from './remoteConfirm';
+import { isImmutableString, logJson, logText } from './logText';
 
 /** How long to wait for the Engine's answer. */
 export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
@@ -50,10 +51,20 @@ const clean = (s: string): string => s.replace(ANSI_RE, '').trim();
 /** Parsed trace args: an object (named), an array (positional) or null. */
 const parsedArgs = (trace: CommandTrace): unknown => {
   try {
-    return typeof trace.args === 'string' ? JSON.parse(trace.args) : trace.args;
+    return logJson(trace.args);
   } catch {
     return null; // malformed args: not ours
   }
+};
+
+/**
+ * Trace args as an object for display (History detail): parsed JSON text
+ * (string or ImmutableString, engine#471 b) or a legacy object; null when
+ * the args are empty, not an object, or malformed.
+ */
+export const traceArgsObject = (trace: CommandTrace): Record<string, unknown> | null => {
+  const args = parsedArgs(trace);
+  return args && typeof args === 'object' ? (args as Record<string, unknown>) : null;
 };
 
 /** Reads a named argument of a trace (object args, or a JSON string). */
@@ -176,7 +187,9 @@ export const traceMatchesArg = (
     // The primary IS the sent name (an older Engine): only with the disk, i.e. the alt above.
     return !alt || alt.value !== argValue;
   }
-  const raw = typeof trace.args === 'string' ? trace.args : JSON.stringify(trace.args ?? '');
+  const raw = typeof trace.args === 'string' || isImmutableString(trace.args)
+    ? logText(trace.args) ?? ''
+    : JSON.stringify(trace.args ?? '');
   return raw.includes(argValue);
 };
 
@@ -200,8 +213,7 @@ export const findCommandTrace = (
 export const traceErrorCode = (trace: CommandTrace): string | null => {
   if (typeof trace.errorCode === 'string' && trace.errorCode) return trace.errorCode;
   try {
-    const raw: unknown = trace.result;
-    const r = (typeof raw === 'string' && raw ? JSON.parse(raw) : raw) as { code?: unknown } | null;
+    const r = logJson(trace.result) as { code?: unknown } | null;
     return typeof r?.code === 'string' && /^[A-Z][A-Z_]+$/.test(r.code) ? r.code : null;
   } catch {
     return null;
@@ -212,13 +224,13 @@ export const traceErrorCode = (trace: CommandTrace): string | null => {
 export const traceOutcome = (trace: CommandTrace, command: string): TraceOutcome | null => {
   if (trace.status === 'running') return null;
   const errorLogs = (trace.logs ?? []).filter((l) => l.level === 'error');
-  const lastErrorLog = errorLogs.length > 0 ? clean(errorLogs[errorLogs.length - 1].message) : '';
+  const lastErrorLog = errorLogs.length > 0 ? clean(logText(errorLogs[errorLogs.length - 1].message) ?? '') : '';
   if (trace.status === 'error') {
     const code = traceErrorCode(trace);
     const restartFailed = restartFailedFromTraceResult(trace.result);
     return {
       kind: 'error',
-      message: clean(trace.errorMessage ?? '') || lastErrorLog || `${command} failed`,
+      message: clean(logText(trace.errorMessage) ?? '') || lastErrorLog || `${command} failed`,
       ...(code ? { code } : {}),
       ...(restartFailed ? { restartFailed: true } : {}),
     };

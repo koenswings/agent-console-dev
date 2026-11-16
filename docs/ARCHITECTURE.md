@@ -465,6 +465,9 @@ Engine.capabilities?, Engine.capabilitiesBootedAt?   // per-Engine flags: 'diskI
 Engine.unformattedDisks?  // non-ext4 whole disks { candidateId, device, sizeBytes, model, fsType, label }[]
 Engine.eraseInProgress?   // { targetId, label, step } | null during eraseDisk
 CommandTrace.result?      // JSON string; summariseDisk returns contentSummary
+CommandTrace text fields  // args, result, errorMessage, error, logs[].message: plain string (old logs)
+                          // or Automerge ImmutableString (engine#471 b); always read via logText /
+                          // logJson in src/store/logText.ts (symbol check, not instanceof)
 
 Instance {
   ...                               // standard fields

@@ -40,6 +40,7 @@ import {
   engineShowsBackupStatus,
   instanceBackupStatusLines,
 } from '../store/backupStatus';
+import { logJson } from '../store/logText';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -313,9 +314,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return Object.values(cls.traces)
       .filter((t) => {
         try {
-          const args: Record<string, string> = typeof t.args === 'string'
-            ? JSON.parse(t.args) as Record<string, string>
-            : t.args as Record<string, string>;
+          const args = logJson(t.args) as Record<string, string>;
           return String(args['instanceId']) === String(instanceId) || String(args['instanceName']) === String(instanceName);
         } catch {
           return false;

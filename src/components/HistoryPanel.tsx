@@ -5,6 +5,8 @@ import type { CommandLogState, CommandLogError } from '../store/commandLog';
 import LogLines from './LogLines';
 import TechnicalDetails from './TechnicalDetails';
 import { historyRowView } from '../store/historyRow';
+import { logText } from '../store/logText';
+import { traceArgsObject } from '../store/commandResult';
 
 interface HistoryPanelProps {
   commandLogStore: Accessor<CommandLogState>;
@@ -117,8 +119,8 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                             </button>
                             <Show when={expandedIds().has(id)}>
                               <div class="history-entry__detail">
-                                <Show when={t().errorMessage}>
-                                  <TechnicalDetails raw={t().errorMessage} class="history-entry__error-detail" testId="history-error-details" />
+                                <Show when={logText(t().errorMessage)}>
+                                  <TechnicalDetails raw={logText(t().errorMessage)} class="history-entry__error-detail" testId="history-error-details" />
                                 </Show>
                                 <dl class="history-entry__meta">
                                   <div><dt>Started</dt><dd>{formatTime(t().startedAt)}</dd></div>
@@ -126,8 +128,8 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                                     <div><dt>Finished</dt><dd>{formatTime(t().completedAt!)}</dd></div>
                                     <div><dt>Duration</dt><dd>{((t().completedAt! - t().startedAt) / 1000).toFixed(1)}s</dd></div>
                                   </Show>
-                                  <Show when={typeof t().args === 'object' && t().args !== null}>
-                                    <For each={Object.entries(t().args as Record<string, string>)}>
+                                  <Show when={traceArgsObject(t())}>
+                                    <For each={Object.entries(traceArgsObject(t()) ?? {})}>
                                       {([k, v]) => (
                                         <div><dt>{k}</dt><dd>{String(v)}</dd></div>
                                       )}

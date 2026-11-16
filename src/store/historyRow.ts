@@ -9,6 +9,7 @@
 import type { CommandTrace } from '../types/commandLog';
 import { plainEngineText } from './plainError';
 import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
+import { logJson, logText } from './logText';
 
 export type HistoryRowTone = 'ok' | 'error' | 'info';
 
@@ -23,9 +24,8 @@ const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
 
 /** Parse a trace result that may be a JSON string or an already-parsed object. */
 export const parseTraceResult = (trace: CommandTrace): Record<string, unknown> | null => {
-  if (trace.result == null || trace.result === '') return null;
   try {
-    const raw = typeof trace.result === 'string' ? JSON.parse(trace.result) : trace.result;
+    const raw = logJson(trace.result);
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     return raw as Record<string, unknown>;
   } catch {
@@ -43,7 +43,7 @@ export const historyRowView = (trace: CommandTrace): HistoryRowView => {
       const icon = tone === 'info' ? 'ℹ' : '✓';
       return { tone, icon, message };
     }
-    const raw = trace.errorMessage ? stripAnsi(trace.errorMessage).trim() : '';
+    const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
     return { tone: 'error', icon: '✗', message: raw ? setBackupModeErrorText(raw) : null };
   }
   if (trace.command === 'clearBackupLock' && trace.status === 'ok') {
@@ -58,6 +58,6 @@ export const historyRowView = (trace: CommandTrace): HistoryRowView => {
   if (trace.status === 'ok') {
     return { tone: 'ok', icon: '✓', message: null };
   }
-  const raw = trace.errorMessage ? stripAnsi(trace.errorMessage).trim() : '';
+  const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
   return { tone: 'error', icon: '✗', message: raw ? plainEngineText(raw) : null };
 };
