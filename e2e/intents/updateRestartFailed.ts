@@ -6,14 +6,20 @@
  * the InstanceRow error hint (Steve).
  *
  * This path needs an update that fails before a swap AND a failed restart of
- * the old version. The Engine has no fault-injection hook for that yet, so the
- * Intent is hook-gated: it runs only when DURATION_UPDATE_RESTART_FAILED_HOOK
- * is set and an instance id is provided. Without the hook it loud-fails with
- * a clear missing-hook message (no soft-pass). Do not sample this edge in a
- * duration walk until the Engine can force the restart failure.
+ * the old version. engine#467 (agent-engine-dev 5836f87, engine#449) adds the
+ * Engine hook: start the Engine with IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>
+ * and config.settings.testMode on, and updateApp for that one instance fails
+ * pre-swap and the old-version restart throws. The hook is ignored when
+ * testMode is off, so it never fires on a school Pi.
  *
- * Live, once a hook exists: click Update on the offered instance, wait for the
- * #217 alert, then assert the hint and the absence of Retry/Resume.
+ * The Intent stays gated on the harness side: it runs only when
+ * DURATION_UPDATE_RESTART_FAILED_HOOK is set (meaning the Engine under test was
+ * started with the hook armed for the same instance) and an instance id is
+ * provided. Without that it loud-fails with a clear missing-hook message (no
+ * soft-pass).
+ *
+ * Live: click Update on the offered instance, wait for the #217 alert, then
+ * assert the hint and the absence of Retry/Resume.
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -55,14 +61,13 @@ export function restartFailedTimeoutMs(env: NodeJS.ProcessEnv = process.env): nu
 }
 
 export const RESTART_FAILED_MISSING_HOOK =
-  `idea#168 update_restart_failed: this Intent needs an Engine fault-injection hook ` +
-  `to fail the post-backup restart (engine#442 restartFailed). The Engine today ` +
-  `sets Operation.restartFailed and the command-log trace result when start() throws ` +
-  `or the instance is not Running/Starting after a pre-swap failure, but it has no ` +
-  `IDEA_TEST_* env, command flag, or duration fixture to force that path. ` +
-  `Set ${RESTART_FAILED_HOOK_ENV}=1 and ${RESTART_FAILED_INSTANCE_ID_PLACEHOLDER()} ` +
-  `(optional ${RESTART_FAILED_APP_ENV} for the App display name) only when that hook ` +
-  `is in place, then include this action in the walk. No soft-pass.`;
+  `idea#168 update_restart_failed: this Intent needs the Engine fault-injection hook ` +
+  `to fail the post-backup restart (engine#442 restartFailed). Start the Engine under test ` +
+  `with IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId> and config.settings.testMode on ` +
+  `(engine#467); the hook is ignored without testMode. ` +
+  `Then set ${RESTART_FAILED_HOOK_ENV}=1 and ${RESTART_FAILED_INSTANCE_ID_PLACEHOLDER()} ` +
+  `to the same instance (optional ${RESTART_FAILED_APP_ENV} for the App display name) ` +
+  `and include this action in the walk. No soft-pass.`;
 
 function RESTART_FAILED_INSTANCE_ID_PLACEHOLDER(): string {
   return RESTART_FAILED_INSTANCE_ENV;

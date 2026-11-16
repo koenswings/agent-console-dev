@@ -993,5 +993,6 @@ ACTIONS.md / school-day.yaml (`open_console_as_teacher`, `open_kolibri_as_teache
 fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
 `duration-kolibri-grade5a-001`). Engine-owned `infra_*` Intents are not registered here.
 `update_restart_failed` (console#217, engine#442) is hook-gated: it is registered, but
-it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, because the Engine
-has no fault-injection hook yet to fail the post-backup restart. See `e2e/intents/README.md`.
+it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, which says the Engine
+under test runs with engine#467's `IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>` hook
+(testMode only) for the same instance. See `e2e/intents/README.md`.
