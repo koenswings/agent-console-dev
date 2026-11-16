@@ -123,9 +123,9 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 |---|---|
 | `open_settings` | Panel + Engine tab + `settings-engine-status` (connected/preview). Account: `settings-change-password-*`. |
 | `close_settings` | Panel must **hide** after settings-btn (loud if still open). |
-| `switch_engine` | Prefer A r44: open ConnectionManagement; if status-bar hostname **already matches** `DURATION_SWITCH_ENGINE_HOST` → **PASS** (already connected; "No engine found" is N/A — do **not** manual-Connect retry). Connect/retry only when status hostname ≠ HOST. Scan `DURATION_SWITCH_ENGINE_SCAN_MS`; connect `DURATION_SWITCH_ENGINE_CONNECT_MS`. |
+| `switch_engine` | Prefer A r44: open ConnectionManagement; if status-bar hostname **already matches** `DURATION_SWITCH_ENGINE_HOST` → **PASS** (already connected; "No engine found" is N/A — do **not** manual-Connect retry). Connect/retry only when status hostname ≠ HOST. Scan `DURATION_SWITCH_ENGINE_SCAN_MS`; connect `DURATION_SWITCH_ENGINE_CONNECT_MS`. kc10: returns only when the operator layout is back with Engine rows (`DURATION_OP_LAYOUT_MS`, default 60 s); else loud-fail naming the screen (Settings, Connection Management, signed out). |
 | `notice_usb_dock` | NetworkTree visible **and** ≥1 `disk-*` within 20s. No soft 500ms dwell. |
-| `reboot_engine` | Prefer A r48: hostname row match (r47) plus page.once(dialog, accept) BEFORE click. Native confirm() blocks click — do not Promise.all dialog with click. Loud if no dialog. |
+| `reboot_engine` | Prefer A r48: hostname row match (r47) plus page.once(dialog, accept) BEFORE click. Native confirm() blocks click — do not Promise.all dialog with click. Loud if no dialog. kc10: closes Settings / Connection Management **before** waiting for the operator layout (`operatorLayout.ts`), and a timeout names the screen shown. |
 | `open_copied_instance` | `DURATION_COPY_INSTANCE_ID` or ctx.instanceId required — **no** silent Grade5A remap. ALL APPS → instance controls. |
 | `confirm_eject` / `cancel_eject` | Dialog must hide after OK/Cancel (no soft `.catch`). |
 | `leave_*` / `back_to_console` | Close app tabs + overlays; assert `console-overview` / `op-overview`. Dismisses ConnectionManagement via `connection-mgmt-btn` if open. |

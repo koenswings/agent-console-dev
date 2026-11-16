@@ -9,6 +9,7 @@ import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
+import { waitForOperatorLayout } from './operatorLayout';
 import { DURATION_FIXTURES } from './fixtures';
 import {
   openAppInstance,
@@ -1645,6 +1646,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
       );
     }
     await waitForConsoleStoreLoaded(page, 'switch_engine');
+    await waitForOperatorLayout(page, 'switch_engine');
     return;
   }
 
@@ -1656,6 +1658,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
   if (hostEnv && switchHostsMatch(statusAfterScan, hostEnv)) {
     await dismissConnectionManagement(page);
     await waitForConsoleStoreLoaded(page, 'switch_engine');
+    await waitForOperatorLayout(page, 'switch_engine');
     return;
   }
   if (settle === 'empty' && hostEnv && !switchHostsMatch(statusAfterScan, hostEnv)) {
@@ -1674,6 +1677,9 @@ export const switch_engine: IntentFn = async ({ page }) => {
   await connectEngineWithRetries(page, candidates);
   // r86s FAIL@128: Connect reloads the store from scratch — wait until it is back.
   await waitForConsoleStoreLoaded(page, 'switch_engine');
+  // kc10 FAIL@133: "connected, tree not on screen" is not enough after a Connect —
+  // the operator layout must come back with Engine rows, or fail here, naming the screen.
+  await waitForOperatorLayout(page, 'switch_engine');
 };
 
 /**
@@ -1745,14 +1751,9 @@ async function hoverAndClickReboot(
  * Loud-fail if no dialog; assert engine row survives (command dispatched).
  */
 export const reboot_engine: IntentFn = async ({ page, engineId }) => {
-  await ensureOpLayout(page);
-  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
-    await page.locator(sel.settingsBtn).click().catch(() => {});
-  }
-  if (await page.locator(sel.connectionManagement).isVisible().catch(() => false)) {
-    const cm = page.locator(sel.connectionMgmtBtn);
-    if (await cm.count()) await cm.click().catch(() => {});
-  }
+  // kc10 FAIL@133: close Settings / Connection Management FIRST (the walker reaches
+  // here from op_settings), then require the operator layout with Engine rows.
+  await waitForOperatorLayout(page, 'reboot_engine');
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
   // r86s FAIL@128: tree can be visible with zero Engine rows while the store reloads.
   await waitForConsoleStoreLoaded(page, 'reboot_engine');
