@@ -7,6 +7,7 @@ import { createSignal } from 'solid-js';
 import NetworkTree from '../src/components/NetworkTree';
 import { setSendCommandFn } from '../src/store/commands';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../src/store/ejectResult';
+import { clearEjectCommandResult } from '../src/store/ejectCommandResult';
 import { MOCK_STORE } from '../src/mock/mockStore';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
@@ -126,6 +127,8 @@ const ejectAndConfirm = (container: HTMLElement): void => {
   confirmEjectOk(container);
 };
 
+
+afterEach(() => { clearEjectCommandResult(); });
 
 describe('NetworkTree eject — sends the disk ID (idea#152)', () => {
   let sent: ReturnType<typeof vi.fn>;

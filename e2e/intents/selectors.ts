@@ -31,6 +31,8 @@ export const sel = {
   ejectConfirm: '[data-testid="eject-confirm"]',
   ejectConfirmOk: '[data-testid="eject-confirm-ok"]',
   ejectConfirmCancel: '[data-testid="eject-confirm-cancel"]',
+  ejectNotice: (id: string) => `[data-testid="eject-notice-${id}"]`,
+  ejectCommandResult: '[data-testid="eject-command-result"]',
   eraseDialog: '[data-testid="erase-dialog"]',
   eraseConfirmName: '[data-testid="erase-confirm-name"]',
   eraseConfirmOk: '[data-testid="erase-confirm-ok"]',

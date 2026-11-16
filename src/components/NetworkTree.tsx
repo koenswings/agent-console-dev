@@ -5,6 +5,7 @@ import { liveNow } from '../store/live';
 import { ejectDisk, rebootEngine } from '../store/commands';
 import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
+import { clearEjectCommandResult, publishEjectCommandResult } from '../store/ejectCommandResult';
 import type { CommandLogState } from '../store/commandLog';
 import type { Disk, Store, UnformattedDisk } from '../types/store';
 import { formatBytes } from '../store/diskRoles';
@@ -307,14 +308,17 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                     clearEjectTimer();
                     if (outcome.kind === 'error') {
                       console.warn(`[eject] ${disk()?.name ?? diskId} (${diskId}): ${outcome.message}`);
+                      publishEjectCommandResult({ status: 'error', targetId: diskId, message: outcome.message });
                       setEjectState({ kind: 'error', message: outcome.message });
                     } else {
+                      publishEjectCommandResult({ status: 'ok', targetId: diskId });
                       setEjectState({ kind: 'idle' });
                     }
                   });
 
                   const startEject = (engineId: string) => {
                     clearEjectTimer();
+                    clearEjectCommandResult();
                     const baseline = traceIdSnapshot(props.commandLogStore?.() ?? null);
                     const watch = remoteWatchFor(props.store, engineId, 'ejectDisk', confirmEjected(props.store, diskId));
                     if (watch) {
@@ -322,17 +326,19 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                       ejectTimer = setTimeout(() => {
                         ejectTimer = null;
                         if (ejectState().kind === 'sent') {
-                          setEjectState({
-                            kind: 'error',
-                            message: `No confirmation from ${watch.engineLabel} after ${formatWait(watch.timeoutMs)}. Check History on ${watch.engineLabel}.`,
-                          });
+                          const message = `No confirmation from ${watch.engineLabel} after ${formatWait(watch.timeoutMs)}. Check History on ${watch.engineLabel}.`;
+                          publishEjectCommandResult({ status: 'error', targetId: diskId, message });
+                          setEjectState({ kind: 'error', message });
                         }
                       }, watch.timeoutMs);
                     } else {
                       setEjectState({ kind: 'pending', baseline });
                       ejectTimer = setTimeout(() => {
                         ejectTimer = null;
-                        if (ejectState().kind === 'pending') setEjectState({ kind: 'timeout' });
+                        if (ejectState().kind === 'pending') {
+                          publishEjectCommandResult({ status: 'timeout', targetId: diskId, message: 'No response from the Engine.' });
+                          setEjectState({ kind: 'timeout' });
+                        }
                       }, EJECT_TIMEOUT_MS);
                     }
                     ejectDisk(engineId, diskId);

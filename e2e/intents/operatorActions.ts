@@ -6,11 +6,18 @@
  * Proposal snake_case for remaining operator edges.
  */
 import type { Page } from '@playwright/test';
-import type { IntentFn } from './types';
+import type { IntentContext, IntentFn } from './types';
 import { sel } from './selectors';
 import { DURATION_FIXTURES } from './fixtures';
 import { performOperatorSignIn } from './signInReady';
 import { ensureEmptyDiskPanel } from './emptyDisk';
+import {
+  CONFIRM_EJECT_TIMEOUT_MS,
+  commandSignalFromEjectMarker,
+  confirmEjectRefusalMessage,
+  decideConfirmEject,
+  type ConfirmEjectObservation,
+} from './confirmEjectOutcome';
 
 /**
  * Preference only (env → ctx → kolibri fixture). Prefer A post-erase walks must
@@ -156,16 +163,100 @@ export const eject_disk: IntentFn = async ({ page, diskId }) => {
   }
 };
 
-export const confirm_eject: IntentFn = async ({ page }) => {
-  await page.locator(sel.ejectConfirm).waitFor({ state: 'visible', timeout: 10_000 });
+/**
+ * Preferred disk id for confirm_eject (env → ctx; DOM discovery is separate).
+ */
+export function resolveConfirmEjectDiskId(
+  ctx: Pick<IntentContext, 'diskId'> = {},
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return env.DURATION_EJECT_DISK_ID?.trim() || ctx.diskId || undefined;
+}
+
+async function confirmEjectTargetDiskId(
+  page: Page,
+  preferred?: string,
+): Promise<string | undefined> {
+  if (preferred) return preferred;
+  const confirm = page.locator(sel.ejectConfirm);
+  const prev = confirm.locator('xpath=preceding-sibling::*[starts-with(@data-testid,"disk-")][1]');
+  if (await prev.count()) {
+    const testId = await prev.getAttribute('data-testid');
+    if (testId) return testId.replace(/^disk-/, '');
+  }
+  const selected = page.locator(
+    `${sel.networkTree} [data-testid^="disk-"][aria-selected="true"]`,
+  );
+  if (await selected.count()) {
+    const testId = await selected.first().getAttribute('data-testid');
+    if (testId) return testId.replace(/^disk-/, '');
+  }
+  return undefined;
+}
+
+async function readEjectCommandMarker(
+  page: Page,
+): Promise<{ seq: number; status: string; error: string | null } | null> {
+  const loc = page.locator(sel.ejectCommandResult);
+  if (!(await loc.count())) return null;
+  const seq = Number((await loc.getAttribute('data-seq')) ?? '0') || 0;
+  const status = (await loc.getAttribute('data-status')) ?? '';
+  if (!status) return null;
+  return { seq, status, error: await loc.getAttribute('data-error') };
+}
+
+/**
+ * Confirm eject and wait for the Engine ejectDisk result or the disk leaving
+ * the tree — never a closed dialog alone (console#235).
+ */
+export const confirm_eject: IntentFn = async (ctx) => {
+  const { page } = ctx;
+  const dialog = page.locator(sel.ejectConfirm);
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+  const targetId = await confirmEjectTargetDiskId(page, resolveConfirmEjectDiskId(ctx));
+  const baselineMarker = await readEjectCommandMarker(page);
+  const baselineSeq = baselineMarker?.seq ?? 0;
   await page.locator(sel.ejectConfirmOk).click();
-  try {
-    await page.locator(sel.ejectConfirm).waitFor({ state: 'hidden', timeout: 15_000 });
-  } catch {
-    throw new Error(
-      'idea#168 confirm_eject: clicked eject-confirm-ok but dialog still visible after 15s. ' +
-        'Engine eject may be stuck — Prefer A loud-fail (no soft-pass).',
-    );
+
+  const startedAt = Date.now();
+  const timeoutMs = CONFIRM_EJECT_TIMEOUT_MS;
+  while (true) {
+    const elapsedMs = Date.now() - startedAt;
+    const notice = targetId ? page.locator(sel.ejectNotice(targetId)) : page.locator('[data-testid^="eject-notice-"]');
+    const noticeCount = await notice.count();
+    const noticeStateRaw = noticeCount
+      ? ((await notice.first().getAttribute('data-eject-state')) ?? 'none')
+      : 'none';
+    const noticeState =
+      noticeStateRaw === 'error' || noticeStateRaw === 'timeout' || noticeStateRaw === 'sent'
+        ? noticeStateRaw
+        : 'none';
+    const noticeMessage = noticeCount
+      ? ((await notice.first().textContent()) ?? '').trim() || null
+      : null;
+    const diskLeftTree = targetId
+      ? (await page.locator(sel.disk(targetId)).count()) === 0
+      : false;
+    const obs: ConfirmEjectObservation = {
+      dialogVisible: await dialog.isVisible().catch(() => false),
+      command: commandSignalFromEjectMarker(await readEjectCommandMarker(page), baselineSeq),
+      noticeState,
+      noticeMessage,
+      diskLeftTree,
+      elapsedMs,
+      timeoutMs,
+    };
+    const decision = decideConfirmEject(obs);
+    if (decision.kind === 'refusal') {
+      throw new Error(confirmEjectRefusalMessage(decision.message));
+    }
+    if (decision.kind === 'timeout') {
+      throw new Error(decision.message);
+    }
+    if (decision.kind === 'success') {
+      return;
+    }
+    await page.waitForTimeout(250);
   }
 };
 

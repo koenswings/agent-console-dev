@@ -127,7 +127,8 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 | `notice_usb_dock` | NetworkTree visible **and** ≥1 `disk-*` within 20s. No soft 500ms dwell. |
 | `reboot_engine` | Prefer A r48: hostname row match (r47) plus page.once(dialog, accept) BEFORE click. Native confirm() blocks click — do not Promise.all dialog with click. Loud if no dialog. |
 | `open_copied_instance` | `DURATION_COPY_INSTANCE_ID` or ctx.instanceId required — **no** silent Grade5A remap. ALL APPS → instance controls. |
-| `confirm_eject` / `cancel_eject` | Dialog must hide after OK/Cancel (no soft `.catch`). |
+| `confirm_eject` | After OK, success only on an `ejectDisk` command ok (`[data-testid=eject-command-result]`) or the disk leaving the NetworkTree. A closed dialog is **not** success (console#235). Engine refusal (eject notice / command error) fails with the reason. Timeout 20s, loud. |
+| `cancel_eject` | Dialog must hide after Cancel (no soft `.catch`). |
 | `leave_*` / `back_to_console` | Close app tabs + overlays; assert `console-overview` / `op-overview`. Dismisses ConnectionManagement via `connection-mgmt-btn` if open. |
 
 ### Dwell / return / inventory / files role (Prefer A)
