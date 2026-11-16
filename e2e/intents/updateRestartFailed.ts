@@ -19,7 +19,12 @@
  * soft-pass).
  *
  * Live: click Update on the offered instance, wait for the #217 alert, then
- * assert the hint and the absence of Retry/Resume.
+ * assert the hint and the absence of Retry/Resume. Then reload the page: the
+ * alert must come back from Engine state alone (instance Error + the updateApp
+ * op's restartFailed, console#227) and the Update badge must be disabled, since
+ * Start is the next step. Run it on a fresh offer: once the App is stopped
+ * after a failed restart the badge stays disabled, so a second run on the same
+ * held instance stops at "update-badge-<id> is disabled".
  */
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
@@ -84,6 +89,27 @@ const ensureOverview = async (page: Page): Promise<void> => {
     .first()
     .waitFor({ state: 'visible', timeout: 15_000 });
 };
+
+/** The visible #217 alert text for `id` once it equals `expected`, else the last text seen. */
+const waitForAlertText = async (page: Page, id: string, expected: string, budget: number): Promise<string> => {
+  const alert = page.locator(sel.updateRestartFailedAlert(id));
+  const deadline = Date.now() + budget;
+  let text = '';
+  while (Date.now() < deadline) {
+    const n = await alert.count();
+    for (let i = 0; i < n; i++) {
+      const loc = alert.nth(i);
+      if (!(await loc.isVisible().catch(() => false))) continue;
+      text = ((await loc.textContent()) ?? '').trim();
+      if (text === expected) return text;
+    }
+    await page.waitForTimeout(500);
+  }
+  return text;
+};
+
+/** console#227: after a reload the alert must come back from Engine state alone. */
+export const RESTART_FAILED_RELOAD_MS = 60_000;
 
 const collapseRowIfExpanded = async (page: Page, id: string): Promise<void> => {
   const hide = page.locator(`${sel.instance(id)} button[aria-expanded="true"]`);
@@ -166,20 +192,7 @@ export const update_restart_failed: IntentFn = async ({ page, instanceId }) => {
   }
   const expected = restartFailedAlertText(app);
   const budget = restartFailedTimeoutMs();
-  const alert = page.locator(sel.updateRestartFailedAlert(id));
-  const deadline = Date.now() + budget;
-  let text = '';
-  while (Date.now() < deadline) {
-    const n = await alert.count();
-    for (let i = 0; i < n; i++) {
-      const loc = alert.nth(i);
-      if (!(await loc.isVisible().catch(() => false))) continue;
-      text = ((await loc.textContent()) ?? '').trim();
-      if (text === expected) break;
-    }
-    if (text === expected) break;
-    await page.waitForTimeout(500);
-  }
+  const text = await waitForAlertText(page, id, expected, budget);
   if (text !== expected) {
     throw new Error(
       `idea#168 update_restart_failed: expected the #217 alert for ${app} within ${budget}ms, ` +
@@ -214,6 +227,30 @@ export const update_restart_failed: IntentFn = async ({ page, instanceId }) => {
     throw new Error(
       `idea#168 update_restart_failed: InstanceRow error hint for ${id} is not visible. ` +
         `Steve kept this hint (status Error + statusCondition, row collapsed). No soft-pass.`,
+    );
+  }
+
+  // console#227: the sentence comes from Engine state, so it must survive a reload,
+  // and the Update badge must not invite a plain retry while the App is stopped.
+  await page.reload();
+  await ensureOverview(page);
+  const allAppsAgain = page.locator(sel.networkAllApps);
+  if (await allAppsAgain.isVisible().catch(() => false)) {
+    await allAppsAgain.click().catch(() => {});
+  }
+  await page.locator(sel.instance(id)).waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+  const afterReload = await waitForAlertText(page, id, expected, RESTART_FAILED_RELOAD_MS);
+  if (afterReload !== expected) {
+    throw new Error(
+      `idea#168 update_restart_failed: after a page reload the #217 alert for ${app} is ` +
+        `${JSON.stringify(afterReload || '(missing)')} (console#227: it must come from Engine state). No soft-pass.`,
+    );
+  }
+  const badgeAfter = page.locator(sel.updateBadge(id));
+  if ((await badgeAfter.count()) && !(await badgeAfter.isDisabled().catch(() => false))) {
+    throw new Error(
+      `idea#168 update_restart_failed: after a reload update-badge-${id} is still enabled while ${app} ` +
+        `is stopped (console#227: Start is the next step). No soft-pass.`,
     );
   }
 };

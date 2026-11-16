@@ -504,6 +504,12 @@ for the instance the Intent targets.
 | Kind | `data-kind="failed"` when the outcome node is shown |
 | No CTA | No button named Retry or Resume on the update control or the row |
 | Hint | Collapse the row if expanded, then `instance-error-hint-<id>` must be visible |
+| Reload | `page.reload()`, back to ALL APPS, and the same alert must come back within 60 s from Engine state alone (instance `Error` + newest updateApp op `restartFailed`, console#227); `update-badge-<id>` must be disabled (Start is the next step) |
+
+Since console#227 the Console reads this state from the store, so every Console and a
+reload show the sentence while the App is stopped; it clears once the App runs again.
+Because the badge then stays disabled, run the Intent on a fresh offer: a second run on a
+held instance loud-fails at "update-badge-<id> is disabled".
 
 Selectors live in `selectors.ts` (`updateBadge`, `updateOutcome`, `updateRestartFailedAlert`, `instanceErrorHint`, …). Box-runnable coverage is `test/updateRestartFailedIntent.test.ts` (text, selectors, hook gate) — this Intent is not run against a Pi from `pnpm test`.
 

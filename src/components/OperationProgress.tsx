@@ -17,6 +17,7 @@ import { createCommandResult } from '../store/commandResult';
 import CommandFeedback from './CommandFeedback';
 import { confirmCancelled, remoteWatchFor } from '../store/remoteConfirm';
 import LogLines from './LogLines';
+import TechnicalDetails from './TechnicalDetails';
 import StepProgressBar from './StepProgressBar';
 import { plainEngineText } from '../store/plainError';
 import { demoErrorText, demoHeartbeat } from '../store/demoApps';
@@ -24,6 +25,7 @@ import { live, liveNow } from '../store/live';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 import { dismissOp, isCancellable, isOpDismissed } from '../store/dismissedOps';
 import { isMoveDoneNotMoved, moveOpOutcome } from '../store/moveApp';
+import { updateOpRestartFailedText } from '../store/updateApp';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -180,9 +182,20 @@ const OpCard: Component<OpCardProps> = (props) => {
       </Show>
 
       <Show when={isFailed() && props.op.error}>
-        <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo'
-          ? demoErrorText(props.op.error, demoHeartbeat(live(), props.op.engineId).internet)
-          : (moveView()?.text ?? plainEngineText(props.op.error))}</div>
+        <Show
+          when={updateOpRestartFailedText(props.op, props.store)}
+          fallback={
+            <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo'
+              ? demoErrorText(props.op.error, demoHeartbeat(live(), props.op.engineId).internet)
+              : (moveView()?.text ?? plainEngineText(props.op.error))}</div>
+          }
+        >
+          {(sentence) => (
+            <div class="operation-card__error">
+              <TechnicalDetails raw={props.op.error} plain={sentence()} testId={`operation-error-${props.op.id}`} />
+            </div>
+          )}
+        </Show>
       </Show>
 
       <Show when={logExpanded()}>

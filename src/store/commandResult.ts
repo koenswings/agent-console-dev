@@ -58,6 +58,48 @@ const parsedArgs = (trace: CommandTrace): unknown => {
 };
 
 /**
+ * The instance references of a trace (console#227): named args `instanceId` /
+ * `instanceName`, or, for a positional trace, the first token of the first
+ * arg. updateApp is positional: agent-engine-dev src/data/Commands.ts:726
+ * declares one unnamed rest-of-line arg, src/utils/commandUtils.ts:104 keeps the
+ * whole line as one token and :153 falls back to the positional array, so its
+ * trace args are `["<instance> <newAppId> [--allow-major] [--source <diskId>]"]`.
+ */
+export const traceInstanceRefs = (trace: CommandTrace): string[] => {
+  const args = parsedArgs(trace);
+  if (Array.isArray(args)) {
+    const first = args[0] == null ? '' : String(args[0]).trim().split(/\s+/)[0];
+    return first ? [first] : [];
+  }
+  if (args && typeof args === 'object') {
+    const a = args as Record<string, unknown>;
+    return [a.instanceId, a.instanceName]
+      .filter((v) => v != null && v !== '')
+      .map((v) => String(v));
+  }
+  return [];
+};
+
+/** True when the trace is about this instance (by id, or by name when given). */
+export const traceIsForInstance = (trace: CommandTrace, instanceId: string, instanceName?: string | null): boolean => {
+  const refs = traceInstanceRefs(trace);
+  return refs.includes(instanceId) || (!!instanceName && refs.includes(instanceName));
+};
+
+/** The newest trace of `command` for this instance, or null. */
+export const latestInstanceTrace = (
+  cls: CommandLogState,
+  command: string,
+  instanceId: string,
+  instanceName?: string | null,
+): CommandTrace | null => {
+  if (!cls || 'error' in cls) return null;
+  return Object.values(cls.traces ?? {})
+    .filter((t) => t.command === command && traceIsForInstance(t, instanceId, instanceName))
+    .sort((a, b) => b.startedAt - a.startedAt)[0] ?? null;
+};
+
+/**
  * Trace args as an object for display (History detail): parsed JSON text
  * (string or ImmutableString, engine#471 b) or a legacy object; null when
  * the args are empty, not an object, or malformed.

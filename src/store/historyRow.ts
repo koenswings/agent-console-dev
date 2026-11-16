@@ -10,6 +10,9 @@ import type { CommandTrace } from '../types/commandLog';
 import { plainEngineText } from './plainError';
 import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
 import { logJson, logText } from './logText';
+import { traceInstanceRefs } from './commandResult';
+import { appTitleOf, COMMAND as UPDATE_COMMAND, restartFailedFromTraceResult, restartFailedText, UNKNOWN_APP_NAME } from './updateApp';
+import type { Store } from '../types/store';
 
 export type HistoryRowTone = 'ok' | 'error' | 'info';
 
@@ -33,8 +36,33 @@ export const parseTraceResult = (trace: CommandTrace): Record<string, unknown> |
   }
 };
 
+/**
+ * App display name for a trace's instance (by id, else by name), for the
+ * agreed sentences in History; null when the instance is unknown.
+ */
+export const traceAppTitle = (store: Store | null, trace: CommandTrace): string | null => {
+  const db = store?.instanceDB ?? {};
+  for (const ref of traceInstanceRefs(trace)) {
+    const inst = db[ref] ?? Object.values(db).find((i) => i?.name === ref);
+    if (inst) return appTitleOf(store, inst) || null;
+  }
+  return null;
+};
+
+/**
+ * console#227: the agreed sentence for an updateApp error trace whose result
+ * says `restartFailed: true`, instead of the raw `ROLLED BACK: …` text; null
+ * for any other trace.
+ */
+export const historyRestartFailedText = (trace: CommandTrace, appTitle?: string | null): string | null =>
+  trace.command === UPDATE_COMMAND && trace.status === 'error' && restartFailedFromTraceResult(trace.result)
+    ? restartFailedText(appTitle || UNKNOWN_APP_NAME)
+    : null;
+
 /** Icon, tone and collapsed-row message for a finished command trace. */
-export const historyRowView = (trace: CommandTrace): HistoryRowView => {
+export const historyRowView = (trace: CommandTrace, appTitle?: string | null): HistoryRowView => {
+  const restartFailed = historyRestartFailedText(trace, appTitle);
+  if (restartFailed) return { tone: 'error', icon: '✗', message: restartFailed };
   if (trace.command === 'setBackupMode') {
     if (trace.status === 'ok') {
       const result = parseTraceResult(trace);

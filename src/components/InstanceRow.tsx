@@ -9,12 +9,12 @@ const stripAnsi = (s: string): string => s.replace(ANSI_RE, '');
 import LogLines from './LogLines';
 import StepProgressBar from './StepProgressBar';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
-import { createCommandResult } from '../store/commandResult';
+import { createCommandResult, latestInstanceTrace, traceIsForInstance } from '../store/commandResult';
 import { traceInstanceMatch } from '../store/traceInstance';
 import CommandFeedback from './CommandFeedback';
 import RenameInstanceName from './RenameInstanceName';
 import UpdateAppControl from './UpdateAppControl';
-import { canUpdate, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND } from '../store/updateApp';
+import { canUpdate, COMMAND as UPDATE_COMMAND, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND, restartFailedOpFor } from '../store/updateApp';
 import RemoveInstanceControl from './RemoveInstanceControl';
 import { canOfferRemove } from '../store/removeInstance';
 import {
@@ -40,7 +40,6 @@ import {
   engineShowsBackupStatus,
   instanceBackupStatusLines,
 } from '../store/backupStatus';
-import { logJson } from '../store/logText';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -304,23 +303,28 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     return op && rowFailureVisible(op, props.store?.() ?? null, live(), liveNow()) ? op : null;
   });
 
-  // All CommandTraces for this instance - matched by instanceId or instanceName in args, newest first
+  // All CommandTraces for this instance, newest first: named args (instanceId /
+  // instanceName) or a positional first token such as updateApp's (console#227).
   const instanceTraces = createMemo((): CommandTrace[] => {
     if (!props.commandLogStore) return [];
     const cls = props.commandLogStore();
     if (!cls || (typeof cls === 'object' && 'error' in cls)) return [];
-    const instanceId = props.instanceId;
-    const instanceName = props.instance()?.name;
+    const instanceId = String(props.instanceId);
+    const instanceName = props.instance()?.name ?? null;
     return Object.values(cls.traces)
-      .filter((t) => {
-        try {
-          const args = logJson(t.args) as Record<string, string>;
-          return String(args['instanceId']) === String(instanceId) || String(args['instanceName']) === String(instanceName);
-        } catch {
-          return false;
-        }
-      })
+      .filter((t) => traceIsForInstance(t, instanceId, instanceName))
       .sort((a, b) => b.startedAt - a.startedAt);
+  });
+
+  // console#227: the App is stopped after an update whose restart failed (Engine
+  // state: Error + newest updateApp op / trace restartFailed). Its containers are
+  // down, so Stop has nothing to do.
+  const stoppedAfterRestartFailure = createMemo((): boolean => {
+    const inst = props.instance();
+    if (!inst) return false;
+    const cls = props.commandLogStore?.() ?? null;
+    const trace = cls && !('error' in cls) ? latestInstanceTrace(cls, UPDATE_COMMAND, String(inst.id), inst.name) : null;
+    return restartFailedOpFor(props.store?.() ?? null, inst, trace?.status === 'error' ? trace.result : null) !== null;
   });
 
   // Running trace → live steps; fallback to most recent finished trace for the expanded panel
@@ -577,6 +581,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           <div
             class="instance-row__error-hint"
             data-testid={`instance-error-hint-${props.instanceId ?? props.instance()?.id ?? ''}`}
+            title={plainEngineText(props.instance()!.statusCondition)}
           >
             {plainEngineText(props.instance()!.statusCondition)}
           </div>
@@ -608,9 +613,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
         <button
           class="btn btn--stop" data-testid={`stop-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
-          disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'stopping'}
+          disabled={isStopDisabled(props.instance()?.status ?? 'Stopped') || stoppedAfterRestartFailure() || locked() || pendingAction() === 'stopping'}
           onClick={handleStop}
-          title={locked() ? 'Operation in progress' : pendingAction() === 'stopping' ? 'Stopping...' : 'Stop app'}
+          title={stoppedAfterRestartFailure() ? 'Already stopped' : locked() ? 'Operation in progress' : pendingAction() === 'stopping' ? 'Stopping...' : 'Stop app'}
           aria-label={`Stop ${props.instance()?.name}`}
         >
           Stop

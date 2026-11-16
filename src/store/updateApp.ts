@@ -407,6 +407,55 @@ export const updateOutcome = (
   return { kind: 'failed', text: friendlyUpdateError(err, ctx) };
 };
 
+/** App display name for the agreed sentences: the App title, else the instance name. */
+export const appTitleOf = (store: Store | null, inst: Instance | undefined): string => {
+  if (!inst) return '';
+  const title = str(rawOf(store?.appDB?.[String(inst.instanceOf)]).title);
+  return title ?? String(inst.name ?? inst.id ?? '');
+};
+
+/**
+ * console#227: the instance is still stopped after an update whose restart
+ * failed (engine#442 / #445; forced on test Pis by engine#467). Read from Engine
+ * state only, so it survives a page reload and shows in every Console:
+ * the instance is in Error, and its newest updateApp op is finished and
+ * restartFailed (Operation.restartFailed, or `{ restartFailed: true }` on the
+ * matching command-log trace when given). Null once the instance runs again,
+ * once a newer updateApp op exists without the flag, or once a later start
+ * attempt (Instance.lastStarted after the op) has happened.
+ */
+export const restartFailedOpFor = (
+  store: Store | null,
+  inst: Instance | undefined,
+  traceResult?: unknown,
+): Operation | null => {
+  if (!inst || inst.status !== 'Error') return null;
+  const op = latestUpdateOp(store, String(inst.id));
+  if (!op || isUpdateRunning(op)) return null;
+  if (!restartFailedFromOp(op) && !restartFailedFromTraceResult(traceResult)) return null;
+  const since = op.completedAt ?? op.startedAt;
+  if (typeof inst.lastStarted === 'number' && typeof since === 'number' && inst.lastStarted > since) return null;
+  return op;
+};
+
+/** Fallback App name when neither the instance nor its App is known. */
+export const UNKNOWN_APP_NAME = 'the app';
+
+/**
+ * Plain card line for a Failed updateApp op whose restart failed (console#227):
+ * the agreed sentence instead of the raw `ROLLED BACK: …` error. Null for any
+ * other op, which keeps its existing text.
+ */
+export const updateOpRestartFailedText = (op: Operation, store: Store | null): string | null => {
+  if (op.kind !== OP_KIND || !restartFailedFromOp(op)) return null;
+  const inst = store?.instanceDB?.[String(op.args?.instanceId ?? '')];
+  return restartFailedText(appTitleOf(store, inst) || str(op.args?.instanceName) || UNKNOWN_APP_NAME);
+};
+
+/** Update badge title while the App is stopped after a failed restart (console#227). */
+export const restartFailedBadgeTitle = (app: string): string =>
+  `${app} is stopped. Start ${app} again first, or ask for help if it doesn't start.`;
+
 /** The version the instance came from, for "Updated from X" (previousAppId). */
 export const previousVersionOf = (store: Store | null, inst: Instance | undefined): string | null => {
   const prev = str(rawOf(inst as unknown as Raw).previousAppId);

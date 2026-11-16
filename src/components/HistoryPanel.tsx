@@ -4,13 +4,16 @@ import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { CommandLogState, CommandLogError } from '../store/commandLog';
 import LogLines from './LogLines';
 import TechnicalDetails from './TechnicalDetails';
-import { historyRowView } from '../store/historyRow';
+import { historyRestartFailedText, historyRowView, traceAppTitle } from '../store/historyRow';
+import type { Store } from '../types/store';
 import { logText } from '../store/logText';
 import { traceArgsObject } from '../store/commandResult';
 
 interface HistoryPanelProps {
   commandLogStore: Accessor<CommandLogState>;
   onClose: () => void;
+  /** Network store, for App names in the agreed sentences (console#227). Optional. */
+  store?: Accessor<Store | null>;
 }
 
 const timeAgo = (ts: number): string => {
@@ -91,7 +94,8 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                   return (
                     <Show when={trace()}>
                       {(t) => {
-                        const view = () => historyRowView(t());
+                        const appTitle = () => traceAppTitle(props.store?.() ?? null, t());
+                        const view = () => historyRowView(t(), appTitle());
                         return (
                           <div class="history-entry" data-testid={`history-entry-${id}`}>
                             <button
@@ -120,7 +124,7 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                             <Show when={expandedIds().has(id)}>
                               <div class="history-entry__detail">
                                 <Show when={logText(t().errorMessage)}>
-                                  <TechnicalDetails raw={logText(t().errorMessage)} class="history-entry__error-detail" testId="history-error-details" />
+                                  <TechnicalDetails raw={logText(t().errorMessage)} plain={historyRestartFailedText(t(), appTitle())} class="history-entry__error-detail" testId="history-error-details" />
                                 </Show>
                                 <dl class="history-entry__meta">
                                   <div><dt>Started</dt><dd>{formatTime(t().startedAt)}</dd></div>

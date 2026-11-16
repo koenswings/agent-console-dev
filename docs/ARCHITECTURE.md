@@ -290,8 +290,12 @@ On an older Engine the name match itself also needs the disk to follow, so a nam
 another disk (same Engine) is not ours. Not matched reliably: a name containing a double
 quote (the Engine's quote handling regroups the tokens), and a name-only refusal from a
 namesake (nothing in it tells them apart). backupApp / restoreApp send the id and have no
-second value. The InstanceRow trace list (expanded steps) matches either `args.instanceId`
-or `args.instanceName`. renameInstance, removeInstance and updateApp match the id anywhere
+second value. The InstanceRow trace list (expanded steps) matches `args.instanceId` or
+`args.instanceName`, or for a positional trace the first token of the first arg
+(`traceIsForInstance`, console#227): updateApp's trace args are
+`["<instance> <newAppId> [--allow-major] [--source <diskId>]"]` (one unnamed rest-of-line
+arg, agent-engine-dev `src/data/Commands.ts:726`, `src/utils/commandUtils.ts:104,153`).
+renameInstance, removeInstance and updateApp match the id anywhere
 in the raw args (`matchMode: 'includes'`), which works with both shapes. The
 OperationProgress log matches by command kind only.
 
@@ -596,6 +600,16 @@ it fall back to `lastResult.method === 'none'`. For such an instance:
   "Never backed up", and offers no target disk or Restore. A none instance that still
   has an older `lastBackup` (a real archive from before the method changed) keeps its
   date and Restore.
+
+**Stopped after a failed update restart (console#227, engine#442 / #445).** While the
+instance is `Error` and its newest updateApp op is finished with `restartFailed: true` (or
+the matching trace result says so), `restartFailedOpFor` holds and the Console shows, from
+store state alone (so after a reload and in every Console): the agreed #217 sentence in
+`update-outcome-<id>` (`data-kind="failed"`), the Update badge disabled with "Start <App>
+again first, or ask for help", and Stop disabled ("Already stopped"). The Operations card
+and the History row show the same sentence, with the raw `ROLLED BACK: …` text behind
+Technical details. It clears once the instance leaves `Error`, a newer updateApp op exists
+without the flag, or `lastStarted` is later than the op.
 
 ### Backup Disk schedule controls (idea#400)
 
