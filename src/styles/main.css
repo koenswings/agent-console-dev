@@ -2699,6 +2699,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* console#231: many cards must not push the selected disk's view to zero height. */
+  flex-shrink: 0;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+/* Cards keep their size; the Operations list scrolls instead. */
+.operation-progress > * {
+  flex-shrink: 0;
 }
 
 .operation-progress__header {
@@ -3414,6 +3423,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .disk-view__header {
