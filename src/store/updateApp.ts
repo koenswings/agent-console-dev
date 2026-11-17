@@ -28,6 +28,9 @@
  *             `Temporary pre-update backup on the system disk …`, op args `tempBackup`,
  *             `tempBackupStamp`, `tempBackupState`); refusals `TEMP_BACKUP_NO_SPACE`,
  *             `TEMP_BACKUP_FAILED`, and `HELPER_OUTDATED` naming the temporary backup
+ *  - console#230: op args `tempBackupState` (`created | deleted | delete-failed | kept`,
+ *             UpdateApp.ts setTempBackupOpArgs), `tempBackup` (path), `tempBackupWarning`
+ *             (delete-failed only); trace result `tempBackup: { path, sizeBytes, deleted }`
  */
 import { createSignal } from 'solid-js';
 import { engineHasCapability } from './commands';
@@ -465,7 +468,7 @@ export const updateOutcome = (
 ): UpdateOutcome | null => {
   if (!op || isUpdateRunning(op)) return null;
   const s = stateOf(op);
-  const err = op.error ?? '';
+  const err = stripTempBackupKept(op.error ?? '');
   if (s === 'done') return { kind: 'updated', text: `Updated from ${fromVersion}` };
   // engine#442: whatever the error code (including ROLLED_BACK), say the App is stopped.
   if (restartFailedFromOp(op)) return { kind: 'failed', text: restartFailedText(app) };
@@ -477,6 +480,68 @@ export const updateOutcome = (
   }
   return { kind: 'failed', text: friendlyUpdateError(err, ctx) };
 };
+
+// ── Leftover temporary pre-update backup (console#230) ──────────────────────
+/** engine#469: a failed update's error ends with this clause naming the backup's path. */
+const TEMP_BACKUP_KEPT_RE = /;\s*the temporary pre-update backup is kept at .*$/s;
+/** The error without the kept-backup clause (the leftover line says it, without the path). */
+export const stripTempBackupKept = (error: string): string => error.replace(TEMP_BACKUP_KEPT_RE, '');
+
+export type LeftoverTempBackupState = 'delete-failed' | 'kept';
+export interface LeftoverTempBackup {
+  state: LeftoverTempBackupState;
+  /** Raw path on the Engine's system disk (Technical details only). */
+  path: string | null;
+  sizeBytes: number | null;
+  /** The Engine's own warning (`args.tempBackupWarning`), delete-failed only. */
+  warning: string | null;
+}
+
+/**
+ * The temporary pre-update backup still on the Engine's system disk after a finished
+ * updateApp op (engine#469 / agent-engine-dev#472): `delete-failed` after a Done update,
+ * or `kept` after a failed one. Null for `created`, `deleted`, no state, or a running op.
+ * The size comes from the matching ok trace result (`tempBackup.sizeBytes`); the op
+ * args have no size.
+ */
+export const leftoverTempBackupOf = (op: Operation | null | undefined, traceResult?: unknown): LeftoverTempBackup | null => {
+  if (!op || op.kind !== OP_KIND || isUpdateRunning(op)) return null;
+  const args = rawOf(op.args);
+  const state = str(args.tempBackupState);
+  const done = stateOf(op) === 'done';
+  if (!(state === 'delete-failed' && done) && !(state === 'kept' && !done)) return null;
+  const path = str(args.tempBackup);
+  let sizeBytes: number | null = null;
+  if (state === 'delete-failed') {
+    try {
+      const tb = rawOf(rawOf(logJson(traceResult)).tempBackup);
+      const size = num(tb.sizeBytes);
+      if (size != null && size > 0 && tb.deleted !== true && (!path || str(tb.path) === path)) sizeBytes = size;
+    } catch {
+      sizeBytes = null;
+    }
+  }
+  return { state, path, sizeBytes, warning: state === 'delete-failed' ? str(args.tempBackupWarning) : null };
+};
+
+const aboutGb = (bytes: number): string => (bytes < GB / 10 ? 'less than 0.1 GB' : `about ${gb(bytes)} GB`);
+
+/**
+ * console#230 teacher sentence for a leftover backup (no path, no Engine words).
+ * `engine` is the Engine's hostname, else "this Engine".
+ */
+export const leftoverTempBackupText = (lb: LeftoverTempBackup, app: string, engine: string | null): string => {
+  const where = `${engine || 'this Engine'}'s own disk`;
+  if (lb.state === 'kept') {
+    return `IDEA kept the backup it made before the update on ${where}, in case ${app || UNKNOWN_APP_NAME} needs it. Ask for help before removing it.`;
+  }
+  const size = lb.sizeBytes != null ? `takes ${aboutGb(lb.sizeBytes)}` : 'takes up space';
+  return `A backup made before the update is still on ${where} and ${size}. Ask for help to remove it when you no longer need it.`;
+};
+
+/** Raw text behind Technical details: the Engine's warning, else the path. */
+export const leftoverTempBackupRaw = (lb: LeftoverTempBackup): string =>
+  lb.warning ?? (lb.path ? `temporary pre-update backup kept at ${lb.path}` : '');
 
 /** App display name for the agreed sentences: the App title, else the instance name. */
 export const appTitleOf = (store: Store | null, inst: Instance | undefined): string => {

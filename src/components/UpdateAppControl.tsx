@@ -3,7 +3,8 @@
  * All Engine shapes come from store/updateApp.ts. Renders nothing unless the
  * Engine has the `updateApp` capability and the instance offers an update,
  * or an update op is running / just finished, or the App is still stopped
- * after an update whose restart failed (console#227, from Engine state).
+ * after an update whose restart failed (console#227, from Engine state), or a
+ * temporary pre-update backup is still on the Engine's own disk (console#230).
  */
 import { For, Show, createEffect, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
 import { sendRawCommand } from '../store/commands';
@@ -14,11 +15,12 @@ import { engineStatus, live, liveNow, liveSince } from '../store/live';
 import {
   COMMAND, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
-  latestUpdateOp, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
+  latestUpdateOp, leftoverTempBackupOf, leftoverTempBackupRaw, leftoverTempBackupText, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
   restartFailedText, stepLabel, updateOfferFor, updateOutcome,
   updateProgress, type RefusalCtx,
 } from '../store/updateApp';
 import type { Engine, Instance, Store } from '../types/store';
+import TechnicalDetails from './TechnicalDetails';
 
 interface Props {
   instance: Accessor<Instance | undefined>;
@@ -43,6 +45,15 @@ const UpdateAppControl: Component<Props> = (props) => {
     const cls = props.commandLog();
     const trace = cls && !('error' in cls) ? latestInstanceTrace(cls, COMMAND, String(inst.id), inst.name) : null;
     return restartFailedOpFor(props.store(), inst, trace?.status === 'error' ? trace.result : null) !== null;
+  });
+  // console#230: from Engine state (newest updateApp op args), so it shows after a reload too.
+  const leftover = createMemo(() => {
+    const inst = props.instance();
+    const o = op();
+    if (!inst || !o) return null;
+    const cls = props.commandLog();
+    const trace = cls && !('error' in cls) ? latestInstanceTrace(cls, COMMAND, String(inst.id), inst.name) : null;
+    return leftoverTempBackupOf(o, trace?.status === 'ok' ? trace.result : null);
   });
   const prog = createMemo(() => updateProgress()[id()] ?? null);
   const [confirming, setConfirming] = createSignal(false);
@@ -189,6 +200,16 @@ const UpdateAppControl: Component<Props> = (props) => {
             >
               {out().text}
             </p>
+          )}
+        </Show>
+        <Show when={leftover()}>
+          {(lb) => (
+            <TechnicalDetails
+              class="update-app__leftover"
+              testId={`update-leftover-backup-${id()}`}
+              plain={leftoverTempBackupText(lb(), props.appTitle(), props.engine() ? engineLabel(props.store(), props.engine()!.id) : null)}
+              raw={leftoverTempBackupRaw(lb())}
+            />
           )}
         </Show>
         <Show when={errorText()}>

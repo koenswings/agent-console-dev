@@ -3751,6 +3751,12 @@ body {
 .update-app__ok {
   color: #1b5e20;
 }
+/* console#230: a temporary pre-update backup still on the Engine's own disk */
+.update-app__leftover {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+  color: var(--colour-warning, #b26a00);
+}
 
 /* idea#347: remove an instance from its disk (quarantine) */
 .instance-remove {

@@ -629,6 +629,21 @@ and the History row show the same sentence, with the raw `ROLLED BACK: …` text
 Technical details. It clears once the instance leaves `Error`, a newer updateApp op exists
 without the flag, or `lastStarted` is later than the op.
 
+**Leftover temporary pre-update backup (console#230, engine#469 / agent-engine-dev#472).**
+`leftoverTempBackupOf` reads the newest finished updateApp op's args: `tempBackupState`
+`delete-failed` on a Done op (the Engine could not delete the backup after the health gate),
+or `kept` on a Failed op (kept on purpose for a manual restore). `created`, `deleted`, no
+state or a running op show nothing. Below the update outcome, from store state alone,
+`update-leftover-backup-<id>` says (`leftoverTempBackupText`): "A backup made before the update
+is still on <Engine>'s own disk and takes about X GB. Ask for help to remove it when you no
+longer need it." (the size from the matching ok trace result `tempBackup.sizeBytes`;
+without it "takes up space"), or for `kept`: "IDEA kept the backup it made before the update
+on <Engine>'s own disk, in case <App> needs it. Ask for help before removing it." The path
+and the Engine's `tempBackupWarning` are behind Technical details only, and the failed
+outcome line drops the Engine's "; the temporary pre-update backup is kept at <path>"
+clause. There is no delete button: removal is an Ops action. The line stays until a newer
+updateApp op or the op leaves the store.
+
 ### Backup Disk schedule controls (idea#400)
 
 When the docked Engine advertises a fresh `scheduledBackups` capability
