@@ -3,7 +3,7 @@ import { render, screen } from '@solidjs/testing-library';
 import OperationProgress from '../src/components/OperationProgress';
 import { MOCK_IDS, MOCK_STORE } from '../src/mock/mockStore';
 import { noteConnectedEngine, resetConnectedEngine } from '../src/store/connectedEngine';
-import { setupFailedText } from '../src/store/updateApp';
+import { isRolledBackUpdateError, setupFailedText, settleFailedText, updateOpFailedPlainText, updatePendingText } from '../src/store/updateApp';
 import type { Instance, Operation, Store } from '../src/types/store';
 import type { CommandLogStore } from '../src/types/commandLog';
 
@@ -175,6 +175,35 @@ describe('OperationProgress', () => {
     expect(toggle).toBeTruthy();
     expect(toggle!.open).toBe(false);
     expect(toggle!.querySelector('summary')?.textContent).toBe('Technical details');
+    expect(details.querySelector('.tech-details__raw')?.textContent).toBe(error);
+  });
+
+  it.each([
+    [`SETTLE_FAILED: exit 1; the temporary pre-update backup is kept at ${KEPT_PATH}`, settleFailedText('Kolibri Learning Platform')],
+    [`MIGRATIONS_PENDING: timed out; the temporary pre-update backup is kept at ${KEPT_PATH}`, updatePendingText('Kolibri Learning Platform')],
+  ])('Failed SETTLE_FAILED / MIGRATIONS_PENDING: running-instance sentence, not a rollback, path only in Technical details', (error, plain) => {
+    expect(isRolledBackUpdateError(error)).toBe(false);
+    const op = makeOp({
+      id: 'upd-running-fail',
+      kind: 'updateApp',
+      status: 'Failed',
+      error,
+      args: { instanceId: 'kolibri-inst-001' },
+    });
+    expect(updateOpFailedPlainText(op, storeWith({ [op.id]: op })())).toBe(plain);
+    expect(plain).not.toBe(SETUP);
+    const { getByTestId } = render(() => (
+      <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />
+    ));
+    const details = getByTestId('operation-error-upd-running-fail');
+    expect(details.querySelector('.tech-details__plain')?.textContent).toBe(plain);
+    expect(visibleText(details)).toContain(plain);
+    expect(visibleText(details)).not.toContain('put the old version back');
+    expect(visibleText(details)).not.toContain('kept at');
+    expect(visibleText(details)).not.toContain(KEPT_PATH);
+    const toggle = details.querySelector('details.tech-details__toggle') as HTMLDetailsElement | null;
+    expect(toggle).toBeTruthy();
+    expect(toggle!.open).toBe(false);
     expect(details.querySelector('.tech-details__raw')?.textContent).toBe(error);
   });
 

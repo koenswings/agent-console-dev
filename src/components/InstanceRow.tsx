@@ -14,7 +14,7 @@ import { traceInstanceMatch } from '../store/traceInstance';
 import CommandFeedback from './CommandFeedback';
 import RenameInstanceName from './RenameInstanceName';
 import UpdateAppControl from './UpdateAppControl';
-import { canUpdate, COMMAND as UPDATE_COMMAND, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND, restartFailedOpFor } from '../store/updateApp';
+import { canUpdate, COMMAND as UPDATE_COMMAND, isUpdateRunning, latestUpdateOp, OP_KIND as UPDATE_OP_KIND, restartFailedOpFor, startInstanceErrorText, updateInFlightEngineName } from '../store/updateApp';
 import RemoveInstanceControl from './RemoveInstanceControl';
 import { canOfferRemove } from '../store/removeInstance';
 import {
@@ -389,6 +389,13 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
     if (cmdResult.state().kind === 'error') setPendingWithTimeout(null);
   });
   const storeAcc = () => props.store?.() ?? null;
+  // Derived only while a start is refused UPDATE_IN_FLIGHT: the owning Engine's
+  // hostname from that op's engineId, else none (no broad store read otherwise).
+  const inFlightEngineName = createMemo(() => {
+    const s = cmdResult.state();
+    if (s.kind !== 'error' || !s.message.trim().startsWith('UPDATE_IN_FLIGHT:')) return null;
+    return updateInFlightEngineName(storeAcc(), s.message);
+  });
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -616,6 +623,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           result={cmdResult}
           subject={() => props.instance()?.name ?? ''}
           testId={`instance-cmd-${props.instanceId ?? props.instance()?.id ?? ''}`}
+          formatError={(message) => startInstanceErrorText(message, props.app()?.title ?? props.instance()?.name ?? 'the app', inFlightEngineName())}
         />
       </div>
 

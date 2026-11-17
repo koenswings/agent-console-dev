@@ -96,6 +96,17 @@ describe('update offer version guard (agent-engine-dev#337, idea#459)', () => {
     expect(isNewerVersion('1.0', '1.0.0')).toBe(false);
   });
 
+  it('engine#505 Resume: fromVersion == toVersion on the current app is a Finish-update offer', () => {
+    const i = offer('kolibri-1.1', { appId: 'kolibri-1.1', fromVersion: '1.1', toVersion: '1.1' });
+    const o = updateOfferFor(mkStore(i), i, caps)!;
+    expect(o).toEqual({
+      toAppId: 'kolibri-1.1', fromVersion: '1.1', toVersion: '1.1', major: false,
+      sourceDiskId: null, sourceEngineId: null, estimatedMinutes: null, sizeBytes: null, migrationNote: null, resume: true,
+    });
+    expect(buildUpdateAppCommand('i1', o)).toBe('updateApp i1 kolibri-1.1');
+    expect(buildUpdateAppCommand('i1', { ...o, major: true, sourceDiskId: 'r1' })).toBe('updateApp i1 kolibri-1.1');
+  });
+
   it('older bundle: the offer is hidden', () => {
     const i = offer('kolibri-1.1', { appId: 'kolibri-1.0', fromVersion: '1.1', toVersion: '1.0' });
     expect(updateOfferFor(mkStore(i), i, caps)).toBeNull();
@@ -239,13 +250,14 @@ describe('updateApp adapter (provisional shapes)', () => {
     expect(pausedText({ reason: 'thermal', bytesDone: null, bytesTotal: null, since: null }, 'library-pi'))
       .toBe('Paused while library-pi cools down. The copy continues by itself.');
     const next = applyUpdateProgress({}, { type: 'idea/updateProgress', engineId: 'ENG1', instanceId: 'i1', step: 'Fetch', bytesDone: 1, bytesTotal: 2 }, 5);
-    expect(next.i1).toEqual({ step: 'Fetch', bytesDone: 1, bytesTotal: 2, fetchPaused: null, receivedAt: 5 });
+    expect(next.i1).toEqual({ step: 'Fetch', bytesDone: 1, bytesTotal: 2, fetchPaused: null, phaseNote: null, receivedAt: 5 });
     expect(applyUpdateProgress(next, { type: 'idea/hb', engineId: 'ENG1' }, 6)).toBe(next);
   });
   it('engine PR #274 shapes: fetchPaused on idea/updateProgress, TRANSFER_FAILED with colon, --source keeps newAppId', () => {
     const msg = { type: 'idea/updateProgress', engineId: 'ENG1', instanceId: 'i9', step: 'Fetch', bytesDone: 0, bytesTotal: 1000,
       fetchPaused: { reason: 'thermal', bytesDone: 0, bytesTotal: 1000, since: 1000 } };
     expect(applyUpdateProgress({}, msg, 7).i9.fetchPaused).toEqual({ reason: 'thermal', bytesDone: 0, bytesTotal: 1000, since: 1000 });
+    expect(applyUpdateProgress({}, { ...msg, step: 'Settle', phaseNote: 'not yet: waiting for cron' }, 9).i9.phaseNote).toBe('not yet: waiting for cron');
     receiveUpdateProgress(msg, 7);
     const i9 = inst({ id: 'i9' });
     expect(fetchPausedOf(i9, null)).toEqual({ reason: 'thermal', bytesDone: 0, bytesTotal: 1000, since: 1000 });

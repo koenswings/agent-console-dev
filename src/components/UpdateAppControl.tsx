@@ -17,7 +17,7 @@ import {
   COMMAND, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
   latestUpdateOp, leftoverTempBackupFor, leftoverTempBackupRaw, leftoverTempBackupText, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
-  restartFailedText, stepLabel, updateOfferFor, updateOutcome,
+  isResumeUpdate, isRollbackStartFailed, phaseNoteStepText, rollbackStartFailedText, restartFailedText, stepLabel, updateOfferFor, updateOutcome, updatePendingStartFirstText, updatePendingText,
   updateProgress, type RefusalCtx,
 } from '../store/updateApp';
 import type { Engine, Instance, Store } from '../types/store';
@@ -37,6 +37,11 @@ const UpdateAppControl: Component<Props> = (props) => {
   const offer = createMemo(() => updateOfferFor(props.store(), props.instance(), props.engine()));
   const op = createMemo(() => (canUpdate(props.engine()) ? latestUpdateOp(props.store(), id()) : null));
   const running = createMemo(() => isUpdateRunning(op()));
+  const pending = createMemo(() => isResumeUpdate(props.instance()));
+  const canFinish = createMemo(() => {
+    const s = props.instance()?.status;
+    return s === 'Running' || s === 'Starting';
+  });
   // console#227: "stopped after a failed restart" comes from Engine state (instance
   // Error + newest updateApp op / trace restartFailed), not from this session, so it
   // survives a reload and clears once the App runs again.
@@ -94,7 +99,7 @@ const UpdateAppControl: Component<Props> = (props) => {
 
   // idea#403: a backup-method-none instance never gets lastBackup and needs no backup.
   const methodNone = () => isBackupMethodNone(props.instance());
-  const refusedForBackup = () => !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
+  const refusedForBackup = () => !pending() && !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
   // engine#469: a missing backup no longer blocks a major update: the Engine makes it first
   // (linked Backup Disk, else temporarily on its own disk). An older Engine refuses NEEDS_BACKUP
   // before anything stops, and then the badge stays disabled with the hint.
@@ -103,7 +108,7 @@ const UpdateAppControl: Component<Props> = (props) => {
   const backupHint = () => NEEDS_BACKUP_TEXT;
   const showBadge = () => {
     const o = offer();
-    return !!o && !running() && !isDismissed(id(), o.toAppId);
+    return !!o && !running() && (pending() || !isDismissed(id(), o.toAppId));
   };
 
   const send = () => {
@@ -123,12 +128,17 @@ const UpdateAppControl: Component<Props> = (props) => {
   const paused = () => fetchPausedOf(props.instance(), op());
   const step = () => stepLabel(currentStep(op(), prog()), prog(), sourceName() ?? 'the other Engine');
   const outcome = createMemo(() => {
+    if (isRollbackStartFailed(props.instance())) return { kind: 'stopped' as const, text: rollbackStartFailedText(props.appTitle()) };
     if (restartFailedNow()) return { kind: 'failed' as const, text: restartFailedText(props.appTitle()) };
     if (!watching()) return null;
     // A restartFailed op whose App runs again (or was started since) has nothing left to say.
     if (restartFailedFromOp(op())) return null;
     const from = fromVersion() ?? previousVersionOf(props.store(), props.instance()) ?? '';
     return updateOutcome(op(), props.instance(), props.appTitle(), from, { ...ctx(), fromVersion: from });
+  });
+  const visibleOutcome = createMemo(() => {
+    const out = outcome();
+    return out && pending() && out.text === updatePendingText(props.appTitle()) ? null : out;
   });
   const errorText = () => {
     const s = result.state();
@@ -149,13 +159,16 @@ const UpdateAppControl: Component<Props> = (props) => {
               class="update-app__badge"
               classList={{ 'update-app__badge--offline': sourceOffline() }}
               data-testid={`update-badge-${id()}`}
-              disabled={sourceOffline() || refusedForBackup() || restartFailedNow()}
+              disabled={sourceOffline() || refusedForBackup() || restartFailedNow() || (pending() && !canFinish())}
               title={restartFailedNow()
                 ? restartFailedBadgeTitle(props.appTitle())
-                : sourceOffline() ? `${sourceName()} is switched off` : refusedForBackup() ? NEEDS_BACKUP_TEXT : 'Update'}
-              onClick={() => { result.reset(); setConfirming(true); }}
+                : sourceOffline() ? `${sourceName()} is switched off`
+                  : refusedForBackup() ? NEEDS_BACKUP_TEXT
+                    : pending() && !canFinish() ? updatePendingStartFirstText(props.appTitle())
+                      : pending() ? 'Finish update' : 'Update'}
+              onClick={() => { result.reset(); if (pending()) send(); else setConfirming(true); }}
             >
-              {badgeText(offer()!, sourceName())}
+              {pending() ? 'Finish update' : badgeText(offer()!, sourceName())}
             </button>
             <Show when={refusedForBackup()}>
               <span class="edp-form__hint" data-testid={`update-needs-backup-${id()}`}>{backupHint()}</span>
@@ -187,12 +200,32 @@ const UpdateAppControl: Component<Props> = (props) => {
           )}
         </Show>
 
-        <Show when={running()}>
-          <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
-            {paused() ? pausedText(paused()!, sourceName() ?? 'the other Engine') : step() ?? 'Updating…'}
+        <Show when={pending() && !running()}>
+          <p class="update-app__pending" role="status" data-testid={`update-pending-${id()}`}>
+            {canFinish() ? updatePendingText(props.appTitle()) : updatePendingStartFirstText(props.appTitle())}
           </p>
         </Show>
-        <Show when={outcome()}>
+        <Show when={running()}>
+          <Show when={paused()}>
+            <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
+              {pausedText(paused()!, sourceName() ?? 'the other Engine')}
+            </p>
+          </Show>
+          <Show when={!paused() && prog()?.phaseNote}>
+            <TechnicalDetails
+              class="update-app__step"
+              testId={`update-step-${id()}`}
+              plain={phaseNoteStepText(currentStep(op(), prog()))}
+              raw={prog()!.phaseNote}
+            />
+          </Show>
+          <Show when={!paused() && !prog()?.phaseNote}>
+            <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
+              {step() ?? 'Updating…'}
+            </p>
+          </Show>
+        </Show>
+        <Show when={visibleOutcome()}>
           {(out) => (
             <p
               class={out().kind === 'updated' ? 'update-app__ok' : 'edp-form__error'}

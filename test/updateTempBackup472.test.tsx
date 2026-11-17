@@ -127,7 +127,7 @@ describe('backup step (engine#469 / idea#448)', () => {
     expect(stepLabel(currentStep(snapshotDone, null), null, 'x')).toBe('Saving a safety copy');
     expect(currentStep(op({ stepLabel: 'Swap', currentStep: 3 }), null)).toBe('Swap');
     // Unknown step count: keep the label.
-    expect(currentStep(op({ stepLabel: 'Something', currentStep: 9, totalSteps: 12 }), null)).toBe('Something');
+    expect(currentStep(op({ stepLabel: 'Something', currentStep: 9, totalSteps: 10 }), null)).toBe('Something');
   });
   it('a finished op is never shown as backing up', () => {
     expect(currentStep(op({ status: 'Failed', completedAt: T + 1 }), null)).not.toBe(BACKUP_STEP);
