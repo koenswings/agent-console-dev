@@ -10,7 +10,7 @@ import OperationProgress from '../src/components/OperationProgress';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   BACKUP_STEP, BACKUP_STEP_TEXT, LEGACY_STEPS, ROLLBACK_FAILED_PREFIX, ROLLBACK_START_FAILED_PREFIX, STEPS,
-  buildUpdateAppCommand, contractInvalidText, currentStep, friendlyUpdateError, isResumeUpdate, isRollbackStartFailed, isRolledBackUpdateError, parseRefusal, resetDismissed, stagesUnsupportedText, startInstanceErrorText, stepLabel, updateInFlightStartText, updateOpErrorText,
+  buildUpdateAppCommand, contractInvalidText, currentStep, friendlyUpdateError, isResumeUpdate, isRollbackStartFailed, isRolledBackUpdateError, parseRefusal, PHASE_NOTE_STEP_TEXT, phaseNoteStepText, receiveUpdateProgress, resetDismissed, stagesUnsupportedText, startInstanceErrorText, stepLabel, updateInFlightEngineName, updateInFlightStartText, updateOpErrorText,
   updateOpFailedPlainText, updateOfferFor, updateOutcome, updatePendingStartFirstText, updatePendingText, type RefusalCtx,
 } from '../src/store/updateApp';
 import { historyRowView } from '../src/store/historyRow';
@@ -100,12 +100,20 @@ describe('engine#456 error text', () => {
     expect(friendlyUpdateError('UPDATE_CONTRACT_INVALID: x-app.update settle is missing interval; nothing was stopped or changed', ctx)).toBe(
       contractInvalidText('Kolibri'),
     );
-    expect(startInstanceErrorText('UPDATE_IN_FLIGHT: instances/i1 is in the middle of an update (operation op1 of Engine ENG1); it is not started until that Engine recovers it (engine#456)', 'Kolibri')).toBe(
-      updateInFlightStartText('Kolibri'),
+    const inFlight = 'UPDATE_IN_FLIGHT: instances/i1 is in the middle of an update (operation op1 of Engine ENG1); it is not started until that Engine recovers it (engine#456)';
+    expect(startInstanceErrorText(inFlight, 'Kolibri')).toBe(updateInFlightStartText('Kolibri'));
+    expect(startInstanceErrorText(inFlight, 'Kolibri', 'idea03')).toBe(
+      'IDEA is still updating Kolibri and cannot start it until idea03 recovers that update. Ask for help if it stays like this.',
+    );
+    expect(updateInFlightEngineName(mkStore(inst(), [op()]), inFlight)).toBe('idea03');
+    expect(updateInFlightEngineName(mkStore(inst()), inFlight)).toBe('idea03');
+    expect(updateInFlightEngineName(mkStore(inst()), 'UPDATE_IN_FLIGHT: instances/i1 is in the middle of an update (operation (unreadable marker)); it is not started until that Engine recovers it (engine#456)')).toBeNull();
+    expect(updateInFlightStartText('Kolibri')).toBe(
+      'IDEA is still updating Kolibri and cannot start it until that update is recovered. Ask for help if it stays like this.',
     );
     expect(parseRefusal('note PREPARE_FAILED: in a log').code).toBeNull();
     expect(parseRefusal('note UPDATE_CONTRACT_INVALID: in a log').code).toBeNull();
-    for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START, updatePendingStartFirstText('Kolibri'), stagesUnsupportedText('Kolibri'), contractInvalidText('Kolibri'), updateInFlightStartText('Kolibri')]) {
+    for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START, updatePendingStartFirstText('Kolibri'), stagesUnsupportedText('Kolibri'), contractInvalidText('Kolibri'), updateInFlightStartText('Kolibri'), updateInFlightStartText('Kolibri', 'idea03')]) {
       expect(text).not.toMatch(/[A-Z]{2,}_[A-Z]+|\/|Engine/);
     }
   });
@@ -139,6 +147,40 @@ describe('engine#456 error text', () => {
     expect(details.querySelector('.tech-details__raw')?.textContent).toBe('SETTLE_FAILED: exit 1');
     const trace = { traceId: 't1', command: 'updateApp', args: { instanceId: 'i1' }, startedAt: T, completedAt: T + 1, status: 'error', errorMessage: 'VERIFY_FAILED: exit 1', logs: [] } as unknown as CommandTrace;
     expect(historyRowView(trace, 'Kolibri')).toEqual({ tone: 'error', icon: '✗', message: SETUP });
+  });
+});
+
+describe('engine#505 phaseNote', () => {
+  const visibleText = (root: HTMLElement): string => {
+    const clone = root.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('details:not([open])').forEach((d) => {
+      d.querySelectorAll(':scope > :not(summary)').forEach((n) => n.remove());
+    });
+    return clone.textContent ?? '';
+  };
+  afterEach(() => {
+    receiveUpdateProgress({ type: 'idea/updateProgress', engineId: 'ENG1', instanceId: 'i1', step: 'Health', bytesDone: 0, bytesTotal: 0 }, T);
+  });
+  it('uses a short teacher sentence; the raw note stays behind Technical details', () => {
+    expect(phaseNoteStepText('Settle')).toBe(PHASE_NOTE_STEP_TEXT);
+    expect(phaseNoteStepText('Work')).toBe("Finishing the app's own setup steps");
+    expect(phaseNoteStepText('Prepare')).toBe('Preparing the new version');
+    expect(phaseNoteStepText('Verify')).toBe('Checking the new version');
+    receiveUpdateProgress({
+      type: 'idea/updateProgress', engineId: 'ENG1', instanceId: 'i1', step: 'Settle',
+      bytesDone: 0, bytesTotal: 0, phaseNote: 'not yet: waiting for cron',
+    }, T);
+    setup(inst(), [op({ status: 'Running', stepLabel: 'Settle' })]);
+    const details = screen.getByTestId('update-step-i1');
+    expect(details.querySelector('.tech-details__plain')?.textContent).toBe(PHASE_NOTE_STEP_TEXT);
+    expect(visibleText(details)).toContain(PHASE_NOTE_STEP_TEXT);
+    expect(visibleText(details)).not.toContain('not yet');
+    expect(visibleText(details)).not.toContain('waiting for cron');
+    const toggle = details.querySelector('details.tech-details__toggle') as HTMLDetailsElement | null;
+    expect(toggle).toBeTruthy();
+    expect(toggle!.open).toBe(false);
+    expect(toggle!.querySelector('summary')?.textContent).toBe('Technical details');
+    expect(details.querySelector('.tech-details__raw')?.textContent).toBe('not yet: waiting for cron');
   });
 });
 

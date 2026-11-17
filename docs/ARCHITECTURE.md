@@ -678,7 +678,10 @@ still be the engine#469 backup sentence. Only after the names does it use an ind
 older six-step Engine (`totalSteps` 6). Labels: LoadImages "Loading the new version", Prepare
 "Preparing the new version", Verify "Checking the new version", Work/Settle "Finishing the
 update". Ephemeral `idea/updateProgress` may include `phaseNote` (the step's last `ERROR:` /
-`not yet:` line, ≤ 200 characters); the running step line shows it when present.
+`not yet:` line, ≤ 200 characters). The running step line then uses a short teacher sentence
+instead of the raw note: Prepare "Preparing the new version", Verify "Checking the new
+version", Work/Settle (and any other hook step) "Finishing the app's own setup steps". The
+raw note stays behind Technical details for operators.
 
 Resume is signalled by `Instance.updatePending` (absent means false) **or** by
 `updateAvailable` with both `fromVersion` and `toVersion` present and equal (`appId` =
@@ -703,8 +706,11 @@ are not shown as a rollback. ROLLBACK_START_FAILED, or a Stopped statusCondition
 `ROLLBACK FAILED:` now means the data itself could not be restored. Check refusals before
 anything is stopped: `UPDATE_STAGES_UNSUPPORTED` (unknown stage key) and
 `UPDATE_CONTRACT_INVALID` (wrong shape); both say nothing changed. A `startInstance` refused
-`UPDATE_IN_FLIGHT` (in-flight marker on the App Disk) says the app cannot start until that
-update is recovered.
+`UPDATE_IN_FLIGHT` (in-flight marker on the App Disk) says "IDEA is still updating <App> and
+cannot start it until <Engine> recovers that update. Ask for help if it stays like this."
+`<Engine>` is that op's hostname from `operationDB[opId].engineId` in the store (the op id is
+in the refusal text). When the hostname is not known, the sentence falls back to "until that
+update is recovered".
 
 ### Backup Disk schedule controls (idea#400)
 

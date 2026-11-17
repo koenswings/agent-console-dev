@@ -17,7 +17,7 @@ import {
   COMMAND, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
   latestUpdateOp, leftoverTempBackupFor, leftoverTempBackupRaw, leftoverTempBackupText, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
-  isResumeUpdate, isRollbackStartFailed, rollbackStartFailedText, restartFailedText, stepLabel, updateOfferFor, updateOutcome, updatePendingStartFirstText, updatePendingText,
+  isResumeUpdate, isRollbackStartFailed, phaseNoteStepText, rollbackStartFailedText, restartFailedText, stepLabel, updateOfferFor, updateOutcome, updatePendingStartFirstText, updatePendingText,
   updateProgress, type RefusalCtx,
 } from '../store/updateApp';
 import type { Engine, Instance, Store } from '../types/store';
@@ -206,9 +206,24 @@ const UpdateAppControl: Component<Props> = (props) => {
           </p>
         </Show>
         <Show when={running()}>
-          <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
-            {paused() ? pausedText(paused()!, sourceName() ?? 'the other Engine') : `${step() ?? 'Updating…'}${prog()?.phaseNote ? ` — ${prog()!.phaseNote}` : ''}`}
-          </p>
+          <Show when={paused()}>
+            <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
+              {pausedText(paused()!, sourceName() ?? 'the other Engine')}
+            </p>
+          </Show>
+          <Show when={!paused() && prog()?.phaseNote}>
+            <TechnicalDetails
+              class="update-app__step"
+              testId={`update-step-${id()}`}
+              plain={phaseNoteStepText(currentStep(op(), prog()))}
+              raw={prog()!.phaseNote}
+            />
+          </Show>
+          <Show when={!paused() && !prog()?.phaseNote}>
+            <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
+              {step() ?? 'Updating…'}
+            </p>
+          </Show>
         </Show>
         <Show when={visibleOutcome()}>
           {(out) => (

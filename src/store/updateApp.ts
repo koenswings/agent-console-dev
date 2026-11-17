@@ -321,8 +321,33 @@ export const stagesUnsupportedText = (app: string): string =>
   `This version of ${app} needs a newer IDEA before it can be installed. Nothing changed.`;
 export const contractInvalidText = (app: string): string =>
   `This version of ${app} is not set up correctly for an update. Nothing changed. Ask for help.`;
-export const updateInFlightStartText = (app: string): string =>
-  `IDEA is still updating ${app} and cannot start it until that update is recovered. Ask for help if it stays like this.`;
+export const updateInFlightStartText = (app: string, engineName?: string | null): string =>
+  engineName
+    ? `IDEA is still updating ${app} and cannot start it until ${engineName} recovers that update. Ask for help if it stays like this.`
+    : `IDEA is still updating ${app} and cannot start it until that update is recovered. Ask for help if it stays like this.`;
+
+/** engine#505: `UPDATE_IN_FLIGHT: … (operation <opId> [of Engine <engineId>]); …` */
+const IN_FLIGHT_OP_RE = /\boperation (\([^)]+\)|[A-Za-z0-9._:-]+)/;
+const IN_FLIGHT_ENGINE_RE = /\bof Engine ([^);]+)/;
+
+export const updateInFlightOpId = (message: string): string | null => {
+  const m = IN_FLIGHT_OP_RE.exec(message);
+  if (!m || m[1].startsWith('(')) return null;
+  return m[1];
+};
+
+/**
+ * Hostname of the Engine that owns the in-flight update, from the op's
+ * `engineId` in the store, else the Engine id in the refusal text. Null when
+ * no hostname is known (the teacher sentence then uses the nameless fallback).
+ */
+export const updateInFlightEngineName = (store: Store | null, message: string): string | null => {
+  if (!message.trim().startsWith('UPDATE_IN_FLIGHT:')) return null;
+  const opId = updateInFlightOpId(message);
+  const engineId = (opId && store?.operationDB?.[opId]?.engineId) || IN_FLIGHT_ENGINE_RE.exec(message)?.[1]?.trim() || null;
+  const host = engineId ? store?.engineDB?.[engineId]?.hostname : null;
+  return typeof host === 'string' && host.trim() ? host.trim() : null;
+};
 
 export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => string> = {
   PREPARE_FAILED: (c) => setupFailedText(c.app),
@@ -471,6 +496,17 @@ export const stepLabel = (step: string | null, p: UpdateProgress | null, sourceE
   }
   if (step === BACKUP_STEP) return BACKUP_STEP_TEXT;
   return STEP_LABEL[step as keyof typeof STEP_LABEL] ?? step;
+};
+
+/**
+ * Teacher sentence for a running hook step that reported a phaseNote. The raw
+ * `ERROR:` / `not yet:` note stays behind Technical details (operators only).
+ */
+export const PHASE_NOTE_STEP_TEXT = "Finishing the app's own setup steps";
+export const phaseNoteStepText = (step: string | null): string => {
+  if (step === 'Prepare') return 'Preparing the new version';
+  if (step === 'Verify') return 'Checking the new version';
+  return PHASE_NOTE_STEP_TEXT;
 };
 
 /** The newest upgradeApp operation for this instance. */
@@ -826,5 +862,5 @@ export const dismissUpdate = (instanceId: string, toAppId: string): void => {
 export const resetDismissed = (): void => { setDismissed({}); };
 
 /** startInstance refusal while an in-flight update marker is on the App Disk (engine#505). */
-export const startInstanceErrorText = (message: string, app: string): string =>
-  message.trim().startsWith('UPDATE_IN_FLIGHT:') ? updateInFlightStartText(app) : message;
+export const startInstanceErrorText = (message: string, app: string, engineName?: string | null): string =>
+  message.trim().startsWith('UPDATE_IN_FLIGHT:') ? updateInFlightStartText(app, engineName) : message;
