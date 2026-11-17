@@ -18,7 +18,7 @@ import {
 import { getActiveOpsForInstance } from '../store/operations';
 import { moveErrorLineFor, moveWarningLineFor, settleMoveOutcome, type MoveCtx } from '../store/moveApp';
 import { live, liveNow, metricsFor } from '../store/live';
-import { startInstanceErrorText, updateInFlightEngineName } from '../store/updateApp';
+import { isUpdateInFlightRefusal, startInstanceErrorText, updateInFlightEngineName } from '../store/updateApp';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
 import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
@@ -291,8 +291,8 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
           });
           const inFlightEngineName = createMemo(() => {
             const s = cmdResult.state();
-            if (s.kind !== 'error' || !s.message.trim().startsWith('UPDATE_IN_FLIGHT:')) return null;
-            return updateInFlightEngineName(props.store() ?? null, s.message);
+            if (s.kind !== 'error' || (!isUpdateInFlightRefusal(s.message, s.code) && s.code !== 'IN_FLIGHT')) return null;
+            return updateInFlightEngineName(props.store() ?? null, s.message, s.code);
           });
           cardResults.set(id, cmdResult);
           onCleanup(() => { if (cardResults.get(id) === cmdResult) cardResults.delete(id); });
@@ -349,7 +349,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 result={cmdResult}
                 subject={() => i().name}
                 testId={`mobile-instance-cmd-${id}`}
-                formatError={(message) => startInstanceErrorText(message, app()?.title ?? i().name, inFlightEngineName())}
+                formatError={(message, code) => startInstanceErrorText(message, app()?.title ?? i().name, inFlightEngineName(), code)}
                 formatLine={(message, code) => {
                   const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
                   return m ? moveErrorLineFor(props.store(), id, m.since, message, code, m.ctx) : null;

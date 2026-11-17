@@ -61,7 +61,7 @@ interface CommandFeedbackProps {
   /** data-testid prefix: renders `<prefix>-error` / `<prefix>-timeout`. */
   testId: string;
   /** Optional: turn the Engine's raw error (refusal code) into a plain sentence. */
-  formatError?: (message: string) => string;
+  formatError?: (message: string, code?: string | null) => string;
   /** Optional: a complete sentence for this error (replaces "Couldn't <verb> <subject>: …"); null = default line. */
   formatLine?: (message: string, code: string | null) => string | null;
   /** Optional: hide the "Sent to …, waiting for confirmation" line (the caller shows progress instead). */
@@ -77,7 +77,7 @@ interface CommandFeedbackProps {
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
   const errorMessage = () => {
     const s = props.result.state();
-    return s.kind === 'error' ? plainEngineText(props.formatError ? props.formatError(s.message) : s.message) : null;
+    return s.kind === 'error' ? plainEngineText(props.formatError ? props.formatError(s.message, s.code ?? null) : s.message) : null;
   };
   const errorRaw = () => {
     const s = props.result.state();

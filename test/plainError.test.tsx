@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import CommandFeedback from '../src/components/CommandFeedback';
 import type { CommandResult, CommandResultState } from '../src/store/commandResult';
-import { GENERIC_ERROR_TEXT, looksLikeCli, plainEngineText } from '../src/store/plainError';
+import { GENERIC_ERROR_TEXT, looksLikeCli, plainEngineText, stripCommandPrefix } from '../src/store/plainError';
 import { REFUSAL_TEXT, friendlyUpdateError } from '../src/store/updateApp';
 import { REMOVE_REFUSALS, friendlyRemoveError } from '../src/store/removeInstance';
 import { RENAME_REFUSALS, friendlyRenameError } from '../src/store/renameInstance';
@@ -87,5 +87,13 @@ describe('no CLI wording or codes reach teachers (idea#76)', () => {
     expect(plainEngineText(null)).toBe(GENERIC_ERROR_TEXT);
     expect(looksLikeCli('pass --allow-major')).toBe(true);
     expect(looksLikeCli('Usage: x <id>')).toBe(true);
+  });
+  it('drops an optional <command>: prefix before a leading CODE', () => {
+    expect(stripCommandPrefix('startInstance: BUSY: the instance is busy')).toBe('BUSY: the instance is busy');
+    expect(stripCommandPrefix('BUSY: the instance is busy')).toBe('BUSY: the instance is busy');
+    expect(stripCommandPrefix('startInstance: just a sentence')).toBe('startInstance: just a sentence');
+    expect(plainEngineText('startInstance: NEW_CODE: the disk was removed')).toBe('the disk was removed');
+    expect(plainEngineText('updateApp: NEW_CODE: the disk was removed')).toBe('the disk was removed');
+    expect(plainEngineText('NEW_CODE: the disk was removed')).toBe('the disk was removed');
   });
 });

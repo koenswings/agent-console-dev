@@ -10,8 +10,8 @@ import OperationProgress from '../src/components/OperationProgress';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   BACKUP_STEP, BACKUP_STEP_TEXT, LEGACY_STEPS, ROLLBACK_FAILED_PREFIX, ROLLBACK_START_FAILED_PREFIX, STEPS,
-  buildUpdateAppCommand, contractInvalidText, currentStep, friendlyUpdateError, isResumeUpdate, isRollbackStartFailed, isRolledBackUpdateError, parseRefusal, PHASE_NOTE_STEP_TEXT, phaseNoteStepText, receiveUpdateProgress, resetDismissed, stagesUnsupportedText, startInstanceErrorText, stepLabel, updateInFlightEngineName, updateInFlightStartText, updateOpErrorText,
-  updateOpFailedPlainText, updateOfferFor, updateOutcome, updatePendingStartFirstText, updatePendingText, type RefusalCtx,
+  buildUpdateAppCommand, contractInvalidText, currentStep, friendlyUpdateError, isResumeUpdate, isRollbackStartFailed, isRolledBackUpdateError, isUpdate456Error, isUpdateInFlightRefusal, parseRefusal, PHASE_NOTE_STEP_TEXT, phaseNoteStepText, receiveUpdateProgress, resetDismissed, stagesUnsupportedText, startInstanceErrorText, stepLabel, UNKNOWN_APP_NAME, updateInFlightEngineName, updateInFlightOpId, updateInFlightPlainText, updateInFlightStartText, updateOpErrorText,
+  updateOpFailedPlainText, updateOfferFor, updateOutcome, updatePendingFirstText, updatePendingStartFirstText, updatePendingText, settleFailedText, type RefusalCtx,
 } from '../src/store/updateApp';
 import { historyRowView } from '../src/store/historyRow';
 import type { CommandLogState } from '../src/store/commandLog';
@@ -111,11 +111,56 @@ describe('engine#456 error text', () => {
     expect(updateInFlightStartText('Kolibri')).toBe(
       'IDEA is still updating Kolibri and cannot start it until that update is recovered. Ask for help if it stays like this.',
     );
+    const named = 'IDEA is still updating Kolibri and cannot start it until idea03 recovers that update. Ask for help if it stays like this.';
+    const prefixed = `startInstance: ${inFlight}`;
+    const buried = `error log: ${inFlight}`;
+    // message-only path (today the trace errorCode is null): match UPDATE_IN_FLIGHT: anywhere
+    expect(isUpdateInFlightRefusal(prefixed)).toBe(true);
+    expect(isUpdateInFlightRefusal(buried)).toBe(true);
+    expect(startInstanceErrorText(prefixed, 'Kolibri', 'idea03')).toBe(named);
+    expect(startInstanceErrorText(buried, 'Kolibri', 'idea03')).toBe(named);
+    expect(updateInFlightEngineName(mkStore(inst()), prefixed)).toBe('idea03');
+    expect(updateInFlightEngineName(mkStore(inst()), buried)).toBe('idea03');
+    expect(updateInFlightOpId(prefixed)).toBe('op1');
+    expect(updateInFlightOpId(buried)).toBe('op1');
+    // errorCode path: UPDATE_IN_FLIGHT is enough even when the message has no code token
+    expect(isUpdateInFlightRefusal('the instance is busy', 'UPDATE_IN_FLIGHT')).toBe(true);
+    expect(startInstanceErrorText('the instance is busy', 'Kolibri', 'idea03', 'UPDATE_IN_FLIGHT')).toBe(named);
+    expect(startInstanceErrorText('the instance is busy', 'Kolibri', null, 'UPDATE_IN_FLIGHT')).toBe(
+      'IDEA is still updating Kolibri and cannot start it until that update is recovered. Ask for help if it stays like this.',
+    );
+    expect(updateInFlightEngineName(mkStore(inst()), 'the instance is busy', 'UPDATE_IN_FLIGHT')).toBeNull();
+    expect(updateInFlightEngineName(mkStore(inst()), prefixed, 'UPDATE_IN_FLIGHT')).toBe('idea03');
+    // IN_FLIGHT (marker refusal): same start text when the message has UPDATE_IN_FLIGHT detail, else a plain line
+    expect(startInstanceErrorText(prefixed, 'Kolibri', 'idea03', 'IN_FLIGHT')).toBe(named);
+    expect(startInstanceErrorText('marker present', 'Kolibri', null, 'IN_FLIGHT')).toBe(
+      updateInFlightPlainText('Kolibri'),
+    );
+    expect(updateInFlightPlainText('Kolibri')).toBe(
+      'IDEA is still updating Kolibri and cannot start it yet. Ask for help if it stays like this.',
+    );
+    expect(parseRefusal('startInstance: MIGRATIONS_PENDING: timed out').code).toBe('MIGRATIONS_PENDING');
+    expect(isUpdate456Error('startInstance: MIGRATIONS_PENDING: timed out')).toBe(true);
     expect(parseRefusal('note PREPARE_FAILED: in a log').code).toBeNull();
     expect(parseRefusal('note UPDATE_CONTRACT_INVALID: in a log').code).toBeNull();
-    for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START, updatePendingStartFirstText('Kolibri'), stagesUnsupportedText('Kolibri'), contractInvalidText('Kolibri'), updateInFlightStartText('Kolibri'), updateInFlightStartText('Kolibri', 'idea03')]) {
+    for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START, updatePendingStartFirstText('Kolibri'), stagesUnsupportedText('Kolibri'), contractInvalidText('Kolibri'), updateInFlightStartText('Kolibri'), updateInFlightStartText('Kolibri', 'idea03'), updateInFlightPlainText('Kolibri')]) {
       expect(text).not.toMatch(/[A-Z]{2,}_[A-Z]+|\/|Engine/);
     }
+  });
+  it('capitalises the unknown-app fallback at the start of a sentence', () => {
+    expect(updatePendingText(UNKNOWN_APP_NAME)).toBe(
+      'The app is working, but its update is not finished yet. Press Finish update to finish it.',
+    );
+    expect(settleFailedText(UNKNOWN_APP_NAME)).toBe(
+      'The app runs the new version, but the last part of the update failed. Press Finish update to try again, or ask for help.',
+    );
+    expect(updatePendingFirstText(UNKNOWN_APP_NAME)).toBe(
+      'The last update of the app is not finished yet. Press Finish update to finish it first. Nothing changed.',
+    );
+    const pending = op({ id: 'op-missing', args: { instanceId: 'missing' }, status: 'Failed', completedAt: T + 1, error: 'MIGRATIONS_PENDING: timed out' });
+    expect(updateOpFailedPlainText(pending, mkStore(inst()))).toBe(
+      'The app is working, but its update is not finished yet. Press Finish update to finish it.',
+    );
   });
   it('handles rollback-start-failed like rollback-failed and keeps both prefixes', () => {
     expect(ROLLBACK_FAILED_PREFIX).toBe('ROLLBACK FAILED:');

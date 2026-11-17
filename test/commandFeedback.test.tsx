@@ -244,7 +244,52 @@ describe('InstanceRow shows the Engine error trace', () => {
     expect(screen.getByRole('alert').textContent)
       .toBe("Couldn't back up kolibri: No docked Backup Disk found named 'backup-disk'.");
   });
+
+  it('startInstance UPDATE_IN_FLIGHT in the message (no errorCode) names the owning Engine', () => {
+    const { setCls } = setup('Stopped');
+    fireEvent.click(screen.getByTestId(`start-instance-${KOLIBRI}`));
+    setCls(log(trace('t', {
+      command: 'startInstance',
+      args: JSON.stringify(['kolibri']),
+      status: 'error',
+      errorMessage: `startInstance: UPDATE_IN_FLIGHT: instances/${KOLIBRI} is in the middle of an update (operation SIMULATED-owner-gone-idea04 of Engine ${MOCK_IDS.ENGINE_2_ID}); it is not started until that Engine recovers it (engine#456)`,
+    })));
+    expect(screen.getByTestId(`instance-cmd-${KOLIBRI}-error`).textContent).toBe(
+      "Couldn't start kolibri: IDEA is still updating Kolibri Learning Platform and cannot start it until appdocker02 recovers that update. Ask for help if it stays like this.",
+    );
+  });
+
+  it('startInstance errorCode UPDATE_IN_FLIGHT is enough when the message has no code token', () => {
+    const { setCls } = setup('Stopped');
+    fireEvent.click(screen.getByTestId(`start-instance-${KOLIBRI}`));
+    setCls(log(trace('t', {
+      command: 'startInstance',
+      args: JSON.stringify(['kolibri']),
+      status: 'error',
+      errorCode: 'UPDATE_IN_FLIGHT',
+      errorMessage: 'the instance is in the middle of an update',
+    })));
+    expect(screen.getByTestId(`instance-cmd-${KOLIBRI}-error`).textContent).toBe(
+      "Couldn't start kolibri: IDEA is still updating Kolibri Learning Platform and cannot start it until that update is recovered. Ask for help if it stays like this.",
+    );
+  });
+
+  it('startInstance errorCode IN_FLIGHT without UPDATE_IN_FLIGHT detail uses the plain line', () => {
+    const { setCls } = setup('Stopped');
+    fireEvent.click(screen.getByTestId(`start-instance-${KOLIBRI}`));
+    setCls(log(trace('t', {
+      command: 'startInstance',
+      args: JSON.stringify(['kolibri']),
+      status: 'error',
+      errorCode: 'IN_FLIGHT',
+      errorMessage: 'in-flight marker present',
+    })));
+    expect(screen.getByTestId(`instance-cmd-${KOLIBRI}-error`).textContent).toBe(
+      "Couldn't start kolibri: IDEA is still updating Kolibri Learning Platform and cannot start it yet. Ask for help if it stays like this.",
+    );
+  });
 });
+
 
 // ---------------------------------------------------------------------------
 // MobileAppList (card + copy/move sheet)
@@ -274,6 +319,43 @@ describe('MobileAppList shows the Engine error trace on the card', () => {
     })));
     const alert = screen.getByTestId(`mobile-instance-cmd-${KOLIBRI}-error`);
     expect(alert.textContent).toContain("Couldn't copy kolibri: copyApp: Target engine 'X' is not currently reachable");
+  });
+
+  it('startInstance UPDATE_IN_FLIGHT in the message names the owning Engine on the card', () => {
+    const store = storeWith('Stopped');
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    setSendCommandFn(vi.fn());
+    render(() => <MobileAppList store={() => store} commandLogStore={cls} />);
+    const card = screen.getByTestId(`mobile-instance-${KOLIBRI}`);
+    fireEvent.click(card.querySelector('.btn--start')!);
+    setCls(log(trace('t', {
+      command: 'startInstance',
+      args: JSON.stringify(['kolibri']),
+      status: 'error',
+      errorMessage: `startInstance: UPDATE_IN_FLIGHT: instances/${KOLIBRI} is in the middle of an update (operation SIMULATED-owner-gone-idea04 of Engine ${MOCK_IDS.ENGINE_2_ID}); it is not started until that Engine recovers it (engine#456)`,
+    })));
+    expect(screen.getByTestId(`mobile-instance-cmd-${KOLIBRI}-error`).textContent).toBe(
+      "Couldn't start kolibri: IDEA is still updating Kolibri Learning Platform and cannot start it until appdocker02 recovers that update. Ask for help if it stays like this.",
+    );
+  });
+
+  it('startInstance errorCode UPDATE_IN_FLIGHT is enough when the message has no code token', () => {
+    const store = storeWith('Stopped');
+    const [cls, setCls] = createSignal<CommandLogState>(log());
+    setSendCommandFn(vi.fn());
+    render(() => <MobileAppList store={() => store} commandLogStore={cls} />);
+    const card = screen.getByTestId(`mobile-instance-${KOLIBRI}`);
+    fireEvent.click(card.querySelector('.btn--start')!);
+    setCls(log(trace('t', {
+      command: 'startInstance',
+      args: JSON.stringify(['kolibri']),
+      status: 'error',
+      errorCode: 'UPDATE_IN_FLIGHT',
+      errorMessage: 'the instance is in the middle of an update',
+    })));
+    expect(screen.getByTestId(`mobile-instance-cmd-${KOLIBRI}-error`).textContent).toBe(
+      "Couldn't start kolibri: IDEA is still updating Kolibri Learning Platform and cannot start it until that update is recovered. Ask for help if it stays like this.",
+    );
   });
 });
 

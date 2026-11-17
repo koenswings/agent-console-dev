@@ -42,7 +42,7 @@ import { createSignal } from 'solid-js';
 import { engineHasCapability } from './commands';
 import type { App, Engine, Instance, Operation, Store, TempBackupEntry } from '../types/store';
 import { tempBackupSize, tempBackupsForInstance } from './tempBackups';
-import { plainEngineText } from './plainError';
+import { plainEngineText, stripCommandPrefix } from './plainError';
 import { logJson } from './logText';
 
 // ── Capabilities ────────────────────────────────────────────────────────────
@@ -225,7 +225,7 @@ export const badgeText = (o: UpdateOffer, sourceEngine: string | null): string =
  * missing backup no longer blocks Update; `backupFirst` says it will be made first.
  */
 export const majorConfirmText = (app: string, o: Pick<UpdateOffer, 'toVersion'>, backupFirst = false): string =>
-  `${app} ${o.toVersion} is a major update.` + (backupFirst ? ` IDEA makes a backup of ${app} first, so it takes a little longer.` : '');
+  `${appAtStart(app)} ${o.toVersion} is a major update.` + (backupFirst ? ` IDEA makes a backup of ${app} first, so it takes a little longer.` : '');
 
 export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | null, backupFirst = false): string[] => {
   const lines = [
@@ -233,7 +233,7 @@ export const confirmText = (app: string, o: UpdateOffer, sourceEngine: string | 
     ...(o.major ? [majorConfirmText(app, o, backupFirst)] : []),
     "Your learners' work is kept.",
     o.estimatedMinutes != null
-      ? `${app} is unavailable for up to ${o.estimatedMinutes} minutes.`
+      ? `${appAtStart(app)} is unavailable for up to ${o.estimatedMinutes} minutes.`
       : 'This can take a while.',
     "If the new version doesn't work, IDEA switches back to the old one by itself.",
   ];
@@ -303,14 +303,19 @@ const dockBackupDisk = (c: RefusalCtx): string => `Dock a Backup Disk for ${c.ap
 
 const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` : '');
 
+/** Fallback App name when neither the instance nor its App is known. */
+export const UNKNOWN_APP_NAME = 'the app';
+/** Capitalise the unknown-app fallback when it starts a sentence. */
+const appAtStart = (app: string): string => (app === UNKNOWN_APP_NAME ? 'The app' : app);
+
 /** engine#456: the stored instance flag survives archived operations; undefined is false. */
 export const isUpdatePending = (inst: Instance | undefined): boolean => inst?.updatePending === true;
 export const updatePendingText = (app: string): string =>
-  `${app} is working, but its update is not finished yet. Press Finish update to finish it.`;
+  `${appAtStart(app)} is working, but its update is not finished yet. Press Finish update to finish it.`;
 export const setupFailedText = (app: string): string =>
   `The new version of ${app} could not be set up, so IDEA put the old version back. Your data is safe.`;
 export const settleFailedText = (app: string): string =>
-  `${app} runs the new version, but the last part of the update failed. Press Finish update to try again, or ask for help.`;
+  `${appAtStart(app)} runs the new version, but the last part of the update failed. Press Finish update to try again, or ask for help.`;
 export const updatePendingFirstText = (app: string): string =>
   `The last update of ${app} is not finished yet. Press Finish update to finish it first. Nothing changed.`;
 export const updatePendingStartFirstText = (app: string): string =>
@@ -325,13 +330,30 @@ export const updateInFlightStartText = (app: string, engineName?: string | null)
   engineName
     ? `IDEA is still updating ${app} and cannot start it until ${engineName} recovers that update. Ask for help if it stays like this.`
     : `IDEA is still updating ${app} and cannot start it until that update is recovered. Ask for help if it stays like this.`;
+/** errorCode `IN_FLIGHT` (in-flight-marker refusal) when the message has no UPDATE_IN_FLIGHT detail. */
+export const updateInFlightPlainText = (app: string): string =>
+  `IDEA is still updating ${app} and cannot start it yet. Ask for help if it stays like this.`;
 
 /** engine#505: `UPDATE_IN_FLIGHT: … (operation <opId> [of Engine <engineId>]); …` */
 const IN_FLIGHT_OP_RE = /\boperation (\([^)]+\)|[A-Za-z0-9._:-]+)/;
 const IN_FLIGHT_ENGINE_RE = /\bof Engine ([^);]+)/;
+/** Fallback when the trace errorCode is not yet set (today it is null). */
+const UPDATE_IN_FLIGHT_IN_TEXT_RE = /\bUPDATE_IN_FLIGHT:/;
+
+/** The Engine will set trace errorCode to UPDATE_IN_FLIGHT; `IN_FLIGHT` is the marker-refusal code. */
+export const isUpdateInFlightRefusal = (message: string, code?: string | null): boolean =>
+  code === 'UPDATE_IN_FLIGHT' || UPDATE_IN_FLIGHT_IN_TEXT_RE.test(message);
+
+/** The `UPDATE_IN_FLIGHT:` clause in `message`, wherever it appears; null when absent. */
+export const updateInFlightDetail = (message: string): string | null => {
+  const at = message.search(UPDATE_IN_FLIGHT_IN_TEXT_RE);
+  return at >= 0 ? message.slice(at) : null;
+};
 
 export const updateInFlightOpId = (message: string): string | null => {
-  const m = IN_FLIGHT_OP_RE.exec(message);
+  const detail = updateInFlightDetail(message);
+  if (!detail) return null;
+  const m = IN_FLIGHT_OP_RE.exec(detail);
   if (!m || m[1].startsWith('(')) return null;
   return m[1];
 };
@@ -341,10 +363,12 @@ export const updateInFlightOpId = (message: string): string | null => {
  * `engineId` in the store, else the Engine id in the refusal text. Null when
  * no hostname is known (the teacher sentence then uses the nameless fallback).
  */
-export const updateInFlightEngineName = (store: Store | null, message: string): string | null => {
-  if (!message.trim().startsWith('UPDATE_IN_FLIGHT:')) return null;
+export const updateInFlightEngineName = (store: Store | null, message: string, code?: string | null): string | null => {
+  if (!isUpdateInFlightRefusal(message, code) && code !== 'IN_FLIGHT') return null;
+  const detail = updateInFlightDetail(message);
+  if (!detail) return null;
   const opId = updateInFlightOpId(message);
-  const engineId = (opId && store?.operationDB?.[opId]?.engineId) || IN_FLIGHT_ENGINE_RE.exec(message)?.[1]?.trim() || null;
+  const engineId = (opId && store?.operationDB?.[opId]?.engineId) || IN_FLIGHT_ENGINE_RE.exec(detail)?.[1]?.trim() || null;
   const host = engineId ? store?.engineDB?.[engineId]?.hostname : null;
   return typeof host === 'string' && host.trim() ? host.trim() : null;
 };
@@ -364,7 +388,7 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   BUSY: (c) => `Something else is running on ${c.app}. Try again when it is done.`,
   SOURCE_MISSING: (c) => `The disk with the new version is no longer in ${c.engine}. Nothing changed.`,
   DIFFERENT_APP: () => 'That disk has a different app, not a new version of this one. Nothing changed.',
-  NOT_NEWER: (c) => `${c.app} is already on this version or newer. Nothing changed.`,
+  NOT_NEWER: (c) => `${appAtStart(c.app)} is already on this version or newer. Nothing changed.`,
   // Generic on purpose (Axle): also returned for an App whose x-app.updatesFrom doesn't list the current major.
   MAJOR_NOT_ALLOWED: (c) => `This version of ${c.app} can't be installed over the one you have. Nothing changed.`,
   NEEDS_BACKUP: (c) => `Make a backup of ${c.app} before updating to${newVersion(c) || ' the new version'}. ${NEEDS_BACKUP_TEXT}. Your current version keeps working.`,
@@ -384,7 +408,7 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   TRANSFER_FAILED: (c) => `The copy from ${c.engine} didn't finish, so nothing changed. ${c.app} is still on ${c.fromVersion}. Try again while ${c.engine} is switched on.`,
   SOURCE_UNSUPPORTED: (c) => `${c.engine} needs a newer IDEA version before it can share this update. Nothing changed.`,
   // idea#448 pre-update backup (console#213). HOOK_FAILED runs before anything is stopped.
-  HOOK_FAILED: (c) => `${c.app} couldn't prepare its backup, so it wasn't updated. Nothing was stopped or changed: ${c.app} works as before. Try again later. If it happens again, ask for help.`,
+  HOOK_FAILED: (c) => `${appAtStart(c.app)} couldn't prepare its backup, so it wasn't updated. Nothing was stopped or changed: ${c.app} works as before. Try again later. If it happens again, ask for help.`,
   // BACKUP_FAILED may come inside the snapshot stop: the old version is started again, version and data unchanged.
   BACKUP_FAILED: (c, detail) => {
     const disk = backupDiskFromDetail(detail) ?? 'the Backup Disk';
@@ -409,13 +433,16 @@ export const isTempBackupRefusal = (message: string): boolean => {
 
 /** engine#456: these codes are only codes at the start (`CODE: detail`), not in a path/log. */
 const UPDATE_456_CODES = ['PREPARE_FAILED', 'VERIFY_FAILED', 'MIGRATIONS_PENDING', 'SETTLE_FAILED', 'ROLLBACK_START_FAILED', 'UPDATE_PENDING', 'UPDATE_STAGES_UNSUPPORTED', 'UPDATE_CONTRACT_INVALID', 'UPDATE_IN_FLIGHT'];
-export const isUpdate456Error = (message: string): boolean =>
-  UPDATE_456_CODES.some((code) => message.trim().startsWith(`${code}:`));
+export const isUpdate456Error = (message: string): boolean => {
+  const text = stripCommandPrefix(message);
+  return UPDATE_456_CODES.some((code) => text.startsWith(`${code}:`));
+};
 
 /** `CODE: text` → [code, text]; code is null when the message has no known code. */
 export const parseRefusal = (message: string): { code: string | null; detail: string } => {
-  const m = /\b([A-Z][A-Z_]+)\b:?\s*(.*)$/s.exec(message.trim());
-  if (m && UPDATE_456_CODES.includes(m[1]) && !message.trim().startsWith(`${m[1]}:`)) return { code: null, detail: message };
+  const text = stripCommandPrefix(message);
+  const m = /\b([A-Z][A-Z_]+)\b:?\s*(.*)$/s.exec(text);
+  if (m && UPDATE_456_CODES.includes(m[1]) && !text.startsWith(`${m[1]}:`)) return { code: null, detail: message };
   if (m && REFUSAL_TEXT[m[1]]) return { code: m[1], detail: m[2].trim() };
   return { code: null, detail: message };
 };
@@ -600,7 +627,7 @@ export const updateOutcome = (
   // engine#442: whatever the error code (including ROLLED_BACK), say the App is stopped.
   if (restartFailedFromOp(op)) return { kind: 'failed', text: restartFailedText(app) };
   if (isRollbackFailed(inst) || err.trim().replace(/^INTERRUPTED:\s*/, '').startsWith(ROLLBACK_FAILED_PREFIX)) {
-    return { kind: 'stopped', text: `${app} is stopped. Nothing was deleted. Ask for help.` };
+    return { kind: 'stopped', text: `${appAtStart(app)} is stopped. Nothing was deleted. Ask for help.` };
   }
   if (s === 'rolledback' || /ROLLED BACK:/.test(err)) {
     return { kind: 'rolledBack', text: `The update didn't work, so ${app} is back on ${fromVersion} with all its data.` };
@@ -752,9 +779,6 @@ export const restartFailedOpFor = (
   return op;
 };
 
-/** Fallback App name when neither the instance nor its App is known. */
-export const UNKNOWN_APP_NAME = 'the app';
-
 const appNameForOp = (op: Operation, store: Store | null): string => {
   const inst = store?.instanceDB?.[String(op.args?.instanceId ?? '')];
   return appTitleOf(store, inst) || str(op.args?.instanceName) || UNKNOWN_APP_NAME;
@@ -811,7 +835,7 @@ export const updateOpErrorText = (op: Operation, store: Store | null): string | 
 
 /** Update badge title while the App is stopped after a failed restart (console#227). */
 export const restartFailedBadgeTitle = (app: string): string =>
-  `${app} is stopped. Start ${app} again first, or ask for help if it doesn't start.`;
+  `${appAtStart(app)} is stopped. Start ${app} again first, or ask for help if it doesn't start.`;
 
 /** The version the instance came from, for "Updated from X" (previousAppId). */
 export const previousVersionOf = (store: Store | null, inst: Instance | undefined): string | null => {
@@ -862,5 +886,8 @@ export const dismissUpdate = (instanceId: string, toAppId: string): void => {
 export const resetDismissed = (): void => { setDismissed({}); };
 
 /** startInstance refusal while an in-flight update marker is on the App Disk (engine#505). */
-export const startInstanceErrorText = (message: string, app: string, engineName?: string | null): string =>
-  message.trim().startsWith('UPDATE_IN_FLIGHT:') ? updateInFlightStartText(app, engineName) : message;
+export const startInstanceErrorText = (message: string, app: string, engineName?: string | null, code?: string | null): string => {
+  if (isUpdateInFlightRefusal(message, code)) return updateInFlightStartText(app, engineName);
+  if (code === 'IN_FLIGHT') return updateInFlightPlainText(app);
+  return message;
+};

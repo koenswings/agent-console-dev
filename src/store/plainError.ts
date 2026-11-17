@@ -12,6 +12,16 @@ export const GENERIC_ERROR_TEXT = "IDEA couldn't finish this. Try again, or ask 
 const FLAG_RE = /(^|\s)--?[a-z][a-z0-9-]*/i;
 const CODE_RE = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/;
 const LEADING_CODE_RE = /^\s*[A-Z][A-Z0-9_]{2,}:\s*/;
+/** A leading `<command>: ` only when a `CODE:` follows, e.g. `updateApp: BUSY:`. */
+const COMMAND_PREFIX_RE = /^(?![A-Z][A-Z0-9_]{2,}:)[A-Za-z_][A-Za-z0-9_]*:\s+(?=[A-Z][A-Z0-9_]{2,}:)/;
+
+/**
+ * Drop an optional leading `<identifier>: ` command prefix when the next token
+ * is an UPPER_SNAKE `CODE:`. A leading `CODE:` itself is kept.
+ */
+export const stripCommandPrefix = (message: string): string =>
+  message.trim().replace(COMMAND_PREFIX_RE, '');
+
 const CLI_RE = /\busage:|\b(too many|insufficient) arguments\b|\bunknown command\b|<[a-z][\w|-]*>|\[[a-z-]+\]|\bat \S+\.(ts|js):\d+|\berrno\b/i;
 /** errno names such as ENOENT, EACCES (case-sensitive). */
 const ERRNO_RE = /\bE(NOENT|ACCES|PERM|BUSY|EXIST|NOSPC|IO|INVAL|CONNREFUSED|TIMEDOUT)\b/;
@@ -27,10 +37,11 @@ export const looksLikeCli = (text: string): boolean => {
 
 /**
  * Plain text for an unmapped Engine message: the Engine's sentence when it is
- * already plain (a leading `CODE:` is dropped), otherwise GENERIC_ERROR_TEXT.
+ * already plain (an optional `<command>: ` prefix and a leading `CODE:` are
+ * dropped), otherwise GENERIC_ERROR_TEXT.
  */
 export const plainEngineText = (raw: string | null | undefined): string => {
-  const msg = String(raw ?? '').replace(ANSI_RE, '').trim();
+  const msg = stripCommandPrefix(String(raw ?? '').replace(ANSI_RE, ''));
   if (!msg) return GENERIC_ERROR_TEXT;
   const body = msg.replace(LEADING_CODE_RE, '').trim();
   if (!body || looksLikeCli(body) || /^[A-Z][A-Z0-9_]*$/.test(body)) return GENERIC_ERROR_TEXT;
