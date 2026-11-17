@@ -11,7 +11,7 @@ import InstanceRow from '../src/components/InstanceRow';
 import OperationProgress from '../src/components/OperationProgress';
 import HistoryPanel from '../src/components/HistoryPanel';
 import {
-  restartFailedBadgeTitle, restartFailedOpFor, restartFailedText, resetDismissed, updateOpRestartFailedText,
+  restartFailedBadgeTitle, restartFailedOpFor, restartFailedText, resetDismissed, setupFailedText, updateOpRestartFailedText,
 } from '../src/store/updateApp';
 import { latestInstanceTrace, traceInstanceRefs, traceIsForInstance } from '../src/store/commandResult';
 import { historyRestartFailedText, historyRowView, traceAppTitle } from '../src/store/historyRow';
@@ -198,11 +198,14 @@ describe('Operations card and History: plain sentence, raw behind Technical deta
     expect(details.querySelector('.tech-details__raw')?.textContent).toBe(RAW);
   });
 
-  it('a Failed update without restartFailed keeps its old card text', () => {
-    const s = mkStore(inst(), [op({ restartFailed: undefined, error: 'ROLLED BACK: x; nothing was changed' })]);
+  it('a Failed rolled-back update without restartFailed shows the setup sentence; raw error in closed Technical details', () => {
+    const raw = 'ROLLED BACK: x; nothing was changed';
+    const s = mkStore(inst(), [op({ restartFailed: undefined, error: raw })]);
     const r = render(() => <OperationProgress store={() => s} commandLogStore={() => null} />);
-    expect(r.queryByTestId('operation-error-op1')).toBeNull();
-    expect(r.container.querySelector('.operation-card__error')?.textContent).toBe('ROLLED BACK: x; nothing was changed');
+    const details = r.getByTestId('operation-error-op1');
+    expect(details.querySelector('.tech-details__plain')?.textContent).toBe(setupFailedText('Kolibri'));
+    expect(details.querySelector('details.tech-details__toggle')?.hasAttribute('open')).toBe(false);
+    expect(details.querySelector('.tech-details__raw')?.textContent).toBe(raw);
   });
 
   it('History row: the sentence with the App name; raw text in Technical details', () => {

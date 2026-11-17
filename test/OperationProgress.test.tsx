@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@solidjs/testing-library';
 import OperationProgress from '../src/components/OperationProgress';
 import { MOCK_STORE } from '../src/mock/mockStore';
+import { setupFailedText } from '../src/store/updateApp';
 import type { Operation, Store } from '../src/types/store';
 import type { CommandLogStore } from '../src/types/commandLog';
 
@@ -117,6 +118,69 @@ describe('OperationProgress', () => {
     expect(card.getAttribute('data-op-instance')).toBe('kolibri-grade5a-001');
     expect(container.querySelector('[data-testid="operation-progress"]')).toBeTruthy();
     expect(screen.getByText('Back up')).toBeInTheDocument();
+  });
+
+  // Text a user sees without opening any closed <details>.
+  const visibleText = (root: HTMLElement): string => {
+    const clone = root.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('details:not([open])').forEach((d) => {
+      d.querySelectorAll(':scope > :not(summary)').forEach((n) => n.remove());
+    });
+    return clone.textContent ?? '';
+  };
+
+  const KEPT_PATH = '/.idea-temp-backups/kolibri-inst-001/20261117T080000Z';
+  const SETUP = setupFailedText('Kolibri Learning Platform');
+
+  it.each([
+    `ROLLED BACK: Health failed: hook; the temporary pre-update backup is kept at ${KEPT_PATH}`,
+    `PREPARE_FAILED: exit 2; the temporary pre-update backup is kept at ${KEPT_PATH}`,
+    `VERIFY_FAILED: exit 1; the temporary pre-update backup is kept at ${KEPT_PATH}`,
+  ])('Failed rolled-back updateApp: plain sentence, no kept-at path, raw error in closed Technical details', (error) => {
+    const op = makeOp({
+      id: 'upd-fail',
+      kind: 'updateApp',
+      status: 'Failed',
+      error,
+      args: { instanceId: 'kolibri-inst-001' },
+    });
+    const { getByTestId } = render(() => (
+      <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />
+    ));
+    const details = getByTestId('operation-error-upd-fail');
+    expect(details.querySelector('.tech-details__plain')?.textContent).toBe(SETUP);
+    expect(visibleText(details)).toContain(SETUP);
+    expect(visibleText(details)).not.toContain('kept at');
+    expect(visibleText(details)).not.toContain(KEPT_PATH);
+    const toggle = details.querySelector('details.tech-details__toggle') as HTMLDetailsElement | null;
+    expect(toggle).toBeTruthy();
+    expect(toggle!.open).toBe(false);
+    expect(toggle!.querySelector('summary')?.textContent).toBe('Technical details');
+    expect(details.querySelector('.tech-details__raw')?.textContent).toBe(error);
+  });
+
+  it('other Failed op with a kept-at path: current text, path only in closed Technical details', () => {
+    const error = `The update stopped early; the temporary pre-update backup is kept at ${KEPT_PATH}`;
+    const op = makeOp({
+      id: 'upd-kept',
+      kind: 'updateApp',
+      status: 'Failed',
+      error,
+      args: { instanceId: 'kolibri-inst-001' },
+    });
+    const { getByTestId } = render(() => (
+      <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />
+    ));
+    const details = getByTestId('operation-error-upd-kept');
+    expect(details.querySelector('.tech-details__plain')?.textContent).toBe('The update stopped early');
+    expect(visibleText(details)).toContain('The update stopped early');
+    expect(visibleText(details)).not.toContain('kept at');
+    expect(visibleText(details)).not.toContain(KEPT_PATH);
+    const toggle = details.querySelector('details.tech-details__toggle') as HTMLDetailsElement | null;
+    expect(toggle).toBeTruthy();
+    expect(toggle!.open).toBe(false);
+    expect(toggle!.querySelector('summary')?.textContent).toBe('Technical details');
+    expect(details.querySelector('.tech-details__raw')?.textContent).toBe(error);
   });
 
 });

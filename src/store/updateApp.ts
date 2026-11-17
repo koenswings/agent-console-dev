@@ -631,6 +631,21 @@ export const restartFailedOpFor = (
 /** Fallback App name when neither the instance nor its App is known. */
 export const UNKNOWN_APP_NAME = 'the app';
 
+const appNameForOp = (op: Operation, store: Store | null): string => {
+  const inst = store?.instanceDB?.[String(op.args?.instanceId ?? '')];
+  return appTitleOf(store, inst) || str(op.args?.instanceName) || UNKNOWN_APP_NAME;
+};
+
+/** Approved Failed-card sentence when an update rolled back to the old version. */
+export const setupFailedText = (app: string): string =>
+  `The new version of ${app} could not be set up, so IDEA put the old version back. Your data is safe.`;
+
+/** Rolled-back updateApp error: `ROLLED BACK:` prefix, or a leading PREPARE_FAILED / VERIFY_FAILED. */
+export const isRolledBackUpdateError = (error: string): boolean => {
+  const err = error.trim().replace(/^INTERRUPTED:\s*/, '');
+  return /ROLLED BACK:/.test(err) || /^(PREPARE_FAILED|VERIFY_FAILED):/.test(err);
+};
+
 /**
  * Plain card line for a Failed updateApp op whose restart failed (console#227):
  * the agreed sentence instead of the raw `ROLLED BACK: …` error. Null for any
@@ -638,8 +653,23 @@ export const UNKNOWN_APP_NAME = 'the app';
  */
 export const updateOpRestartFailedText = (op: Operation, store: Store | null): string | null => {
   if (op.kind !== OP_KIND || !restartFailedFromOp(op)) return null;
-  const inst = store?.instanceDB?.[String(op.args?.instanceId ?? '')];
-  return restartFailedText(appTitleOf(store, inst) || str(op.args?.instanceName) || UNKNOWN_APP_NAME);
+  return restartFailedText(appNameForOp(op, store));
+};
+
+/**
+ * Plain Failed-card line: restartFailed and rolled-back updateApp ops get the
+ * agreed sentence; any other error that names a leftover backup path is shown
+ * without that path (stripTempBackupKept). Null keeps the card's existing text.
+ * The raw Engine error stays behind Technical details in OperationProgress.
+ */
+export const updateOpFailedPlainText = (op: Operation, store: Store | null): string | null => {
+  const restart = updateOpRestartFailedText(op, store);
+  if (restart) return restart;
+  const error = op.error ?? '';
+  if (op.kind === OP_KIND && isRolledBackUpdateError(error)) return setupFailedText(appNameForOp(op, store));
+  const stripped = stripTempBackupKept(error);
+  if (stripped !== error) return plainEngineText(stripped);
+  return null;
 };
 
 /** Update badge title while the App is stopped after a failed restart (console#227). */

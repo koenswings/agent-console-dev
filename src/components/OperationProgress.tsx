@@ -25,7 +25,7 @@ import { live, liveNow } from '../store/live';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 import { dismissOp, isCancellable, isOpDismissed } from '../store/dismissedOps';
 import { isMoveDoneNotMoved, moveOpOutcome } from '../store/moveApp';
-import { updateOpRestartFailedText } from '../store/updateApp';
+import { updateOpFailedPlainText } from '../store/updateApp';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -183,7 +183,7 @@ const OpCard: Component<OpCardProps> = (props) => {
 
       <Show when={isFailed() && props.op.error}>
         <Show
-          when={updateOpRestartFailedText(props.op, props.store)}
+          when={updateOpFailedPlainText(props.op, props.store)}
           fallback={
             <div class="operation-card__error">{props.op.kind === 'setupDemo' || props.op.kind === 'removeDemo'
               ? demoErrorText(props.op.error, demoHeartbeat(live(), props.op.engineId).internet)
