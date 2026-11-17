@@ -156,7 +156,7 @@ export interface Engine {
 /** One temporary pre-update backup on the Engine's own disk (Engine.tempBackups). */
 export interface TempBackupEntry {
   instanceId: InstanceID;
-  /** Backup stamp, e.g. `20261117T080000Z` (also the folder name). */
+  /** Backup stamp, e.g. `20261117T080000Z` or `20261117T085238517Z` (also the folder name). */
   stamp: string;
   /** Raw path on the Engine's system disk (Technical details only). */
   path: string;

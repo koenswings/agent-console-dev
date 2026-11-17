@@ -51,14 +51,14 @@ export const tempBackupsTotalBytes = (engine: Engine | null | undefined): number
 /** Only a finished backup can be removed from the Console (an unfinished one may still be written). */
 export const canRemoveTempBackup = (b: TempBackupEntry): boolean => b.complete === true;
 
-const STAMP_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
+const STAMP_RE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})?Z$/;
 
-/** The stamp (`YYYYMMDDTHHMMSSZ`, UTC) as epoch ms; null when it has another shape. */
+/** The stamp (`YYYYMMDDTHHMMSSZ` or `YYYYMMDDTHHMMSSMMMZ`, UTC) as epoch ms; null when it has another shape. */
 export const stampTime = (stamp: string): number | null => {
   const m = STAMP_RE.exec(stamp);
   if (!m) return null;
-  const [, y, mo, d, h, mi, s] = m.map(Number);
-  const t = Date.UTC(y, mo - 1, d, h, mi, s);
+  const [, y, mo, d, h, mi, s, ms] = m;
+  const t = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s), ms ? Number(ms) : 0);
   return Number.isFinite(t) ? t : null;
 };
 

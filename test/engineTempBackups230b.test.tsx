@@ -91,6 +91,16 @@ describe('Engine.tempBackups accessors', () => {
     expect(tempBackupWhen(entry())).toBe(backupDateText(Date.UTC(2026, 10, 17, 8, 0, 0)));
     expect(tempBackupWhen(entry({ stamp: 'x' }))).toBe('an unknown date');
   });
+  it('parses a real #469 stamp with milliseconds (20261117T085238517Z)', () => {
+    const stamp = '20261117T085238517Z';
+    const ms = Date.parse('2026-11-17T08:52:38.517Z');
+    expect(stampTime(stamp)).toBe(ms);
+    expect(stampTime(stamp)).toBe(Date.UTC(2026, 10, 17, 8, 52, 38, 517));
+    const when = tempBackupWhen(entry({ stamp }));
+    expect(when).toBe(backupDateText(ms));
+    expect(when).not.toBe('an unknown date');
+    expect(when).not.toMatch(/unknown date/i);
+  });
   it('sizes match the teacher line (1024³ GB)', () => {
     expect(tempBackupBytesText(2.5 * GiB)).toBe('2.5 GB');
     expect(tempBackupBytesText(1024)).toBe('less than 0.1 GB');
@@ -176,6 +186,21 @@ describe('TempBackupsSection (operator view)', () => {
     const st = screen.getByTestId(`temp-backup-state-${K}`);
     expect(st.querySelector('.tech-details__plain')?.textContent).toBe('Complete');
     expect(st.querySelector('.tech-details__raw')?.textContent).toBe(P1);
+  });
+  it('a real #469 millisecond stamp shows the formatted date on the row and in the confirm, not unknown date', () => {
+    const stamp = '20261117T085238517Z';
+    const b = entry({ stamp, path: `/.idea-temp-backups/i1/${stamp}` });
+    const key = tempBackupKey(b);
+    const when = tempBackupWhen(b);
+    expect(when).toBe(backupDateText(Date.parse('2026-11-17T08:52:38.517Z')));
+    expect(when).not.toMatch(/unknown date/i);
+    show(mkStore(engine([b])));
+    expect(screen.getByTestId(`temp-backup-meta-${key}`).textContent).toBe(`Made ${when} · 2.5 GB`);
+    expect(screen.getByTestId(`temp-backup-meta-${key}`).textContent).not.toMatch(/unknown date/i);
+    fireEvent.click(screen.getByTestId(`temp-backup-remove-${key}`));
+    expect(screen.getByTestId(`temp-backup-confirm-text-${key}`).textContent)
+      .toBe(removeTempBackupConfirmText('Kolibri', when, '2.5 GB'));
+    expect(screen.getByTestId(`temp-backup-confirm-text-${key}`).textContent).not.toMatch(/unknown date/i);
   });
   it('no Remove backup for an incomplete backup', () => {
     show(mkStore(engine([entry({ complete: false })])));
