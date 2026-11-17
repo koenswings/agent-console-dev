@@ -31,10 +31,13 @@
  *  - console#230: op args `tempBackupState` (`created | deleted | delete-failed | kept`,
  *             UpdateApp.ts setTempBackupOpArgs), `tempBackup` (path), `tempBackupWarning`
  *             (delete-failed only); trace result `tempBackup: { path, sizeBytes, deleted }`
+ *  - console#230 option A: stored `Engine.tempBackups` (store/tempBackups.ts) is the source
+ *             when present; the op args above are the fallback for older Engines
  */
 import { createSignal } from 'solid-js';
 import { engineHasCapability } from './commands';
-import type { App, Engine, Instance, Operation, Store } from '../types/store';
+import type { App, Engine, Instance, Operation, Store, TempBackupEntry } from '../types/store';
+import { tempBackupSize, tempBackupsForInstance } from './tempBackups';
 import { plainEngineText } from './plainError';
 import { logJson } from './logText';
 
@@ -495,6 +498,10 @@ export interface LeftoverTempBackup {
   sizeBytes: number | null;
   /** The Engine's own warning (`args.tempBackupWarning`), delete-failed only. */
   warning: string | null;
+  /** From Engine.tempBackups only: how many backups of this instance are left (default 1). */
+  count?: number;
+  /** From Engine.tempBackups only: every leftover path, newest first (Technical details only). */
+  paths?: string[];
 }
 
 /**
@@ -524,6 +531,46 @@ export const leftoverTempBackupOf = (op: Operation | null | undefined, traceResu
   return { state, path, sizeBytes, warning: state === 'delete-failed' ? str(args.tempBackupWarning) : null };
 };
 
+/**
+ * console#230 option A: the leftover line from the stored `Engine.tempBackups` entries of
+ * one instance (newest first). The newest finished updateApp op only says whether the
+ * newest backup was kept on purpose (Failed op, `tempBackupState` kept, same stamp) and
+ * adds the Engine's warning; the size is the sum of the entries. Null when none are left
+ * or while an update runs (its own backup is in the list then).
+ */
+export const leftoverFromTempBackups = (entries: readonly TempBackupEntry[], op: Operation | null | undefined): LeftoverTempBackup | null => {
+  if (entries.length === 0) return null;
+  if (op && isUpdateRunning(op)) return null;
+  const newest = entries[0];
+  const args = op && op.kind === OP_KIND ? rawOf(op.args) : {};
+  const same = str(args.tempBackupStamp) === newest.stamp || (!!newest.path && str(args.tempBackup) === newest.path);
+  const kept = !!op && same && str(args.tempBackupState) === 'kept' && stateOf(op) !== 'done';
+  const total = entries.reduce((sum, b) => sum + tempBackupSize(b), 0);
+  return {
+    state: kept ? 'kept' : 'delete-failed',
+    path: newest.path || null,
+    sizeBytes: total > 0 ? total : null,
+    warning: !kept && same ? str(args.tempBackupWarning) : null,
+    count: entries.length,
+    paths: entries.map((b) => b.path).filter((p) => !!p),
+  };
+};
+
+/**
+ * The leftover line for one instance: from `Engine.tempBackups` when the Engine publishes
+ * it, else (older Engine, field undefined) from the newest updateApp op's args (#242).
+ */
+export const leftoverTempBackupFor = (
+  engine: Engine | null | undefined,
+  instanceId: string,
+  op: Operation | null | undefined,
+  traceResult?: unknown,
+): LeftoverTempBackup | null => {
+  const entries = tempBackupsForInstance(engine, instanceId);
+  if (entries === undefined) return op ? leftoverTempBackupOf(op, traceResult) : null;
+  return leftoverFromTempBackups(entries, op);
+};
+
 const aboutGb = (bytes: number): string => (bytes < GB / 10 ? 'less than 0.1 GB' : `about ${gb(bytes)} GB`);
 
 /**
@@ -535,13 +582,20 @@ export const leftoverTempBackupText = (lb: LeftoverTempBackup, app: string, engi
   if (lb.state === 'kept') {
     return `IDEA kept the backup it made before the update on ${where}, in case ${app || UNKNOWN_APP_NAME} needs it. Ask for help before removing it.`;
   }
+  if ((lb.count ?? 1) > 1) {
+    const sizes = lb.sizeBytes != null ? `take ${aboutGb(lb.sizeBytes)}` : 'take up space';
+    return `Backups made before updates are still on ${where} and ${sizes}. Ask for help to remove them when you no longer need them.`;
+  }
   const size = lb.sizeBytes != null ? `takes ${aboutGb(lb.sizeBytes)}` : 'takes up space';
   return `A backup made before the update is still on ${where} and ${size}. Ask for help to remove it when you no longer need it.`;
 };
 
-/** Raw text behind Technical details: the Engine's warning, else the path. */
-export const leftoverTempBackupRaw = (lb: LeftoverTempBackup): string =>
-  lb.warning ?? (lb.path ? `temporary pre-update backup kept at ${lb.path}` : '');
+/** Raw text behind Technical details: the Engine's warning, else the path(s). */
+export const leftoverTempBackupRaw = (lb: LeftoverTempBackup): string => {
+  if (lb.warning) return lb.warning;
+  const paths = lb.paths && lb.paths.length > 0 ? lb.paths : lb.path ? [lb.path] : [];
+  return paths.map((p) => `temporary pre-update backup kept at ${p}`).join('\n');
+};
 
 /** App display name for the agreed sentences: the App title, else the instance name. */
 export const appTitleOf = (store: Store | null, inst: Instance | undefined): string => {

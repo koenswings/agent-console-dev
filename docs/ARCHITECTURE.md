@@ -641,8 +641,29 @@ without it "takes up space"), or for `kept`: "IDEA kept the backup it made befor
 on <Engine>'s own disk, in case <App> needs it. Ask for help before removing it." The path
 and the Engine's `tempBackupWarning` are behind Technical details only, and the failed
 outcome line drops the Engine's "; the temporary pre-update backup is kept at <path>"
-clause. There is no delete button: removal is an Ops action. The line stays until a newer
-updateApp op or the op leaves the store.
+clause. There is no delete button on the line: removal is an operator action (below). On an
+older Engine (no `Engine.tempBackups`) the line stays until a newer updateApp op or the op
+leaves the store.
+
+**Stored temporary backups (console#230 option A, Axle's Engine PR).** When the Engine
+publishes `Engine.tempBackups?: { instanceId, stamp, path, sizeBytes, complete }[]` (stored,
+refreshed after a create, a delete and at boot), it is the only source: `store/tempBackups.ts`
+(`tempBackupsOf`, `tempBackupsForInstance`, `tempBackupsTotalBytes`) returns `undefined` only
+when the field is absent, and only then does `leftoverTempBackupFor` fall back to the op args
+above. With the field, the leftover line shows whenever the instance has an entry (also after
+the op was archived), never while its update runs, with the summed size; the newest op only
+decides `kept` (Failed op, `tempBackupState` kept, same stamp) and supplies the Engine warning.
+Two or more backups of one App read "Backups made before updates are still on <Engine>'s own
+disk and take about X GB. Ask for help to remove them when you no longer need them."
+Selecting an Engine shows `TempBackupsSection` ("This Pi's own disk") under its app list when
+at least one backup is left: free space of its system disk (if published), "Backups left from
+updates" with the total, and one row per backup (App title, when it was made from the UTC
+stamp, size, Complete / not finished; the path behind Technical details). A complete backup
+has "Remove backup" with a confirm; it is disabled while that App's update runs and absent for
+an unfinished backup. It sends `buildDeleteTempBackupCommand` (commands.ts) through
+`sendCommand`: **provisional** syntax `deleteTempBackup <instanceId> <stamp>`, waiting on the
+Engine PR. Success is the entry leaving `Engine.tempBackups`. Sizes in this view use the same
+1024³ GB as the teacher line.
 
 ### Backup Disk schedule controls (idea#400)
 

@@ -482,6 +482,19 @@ export const removeInstance = (engineId: string, instanceId: string): void => {
 };
 
 /**
+ * Build the "deleteTempBackup" command string (console#230 option A).
+ * PROVISIONAL syntax, waiting on Axle's Engine PR: "deleteTempBackup <instanceId> <stamp>".
+ * Only this function knows the shape, so the final syntax is a one-line change.
+ */
+export const DELETE_TEMP_BACKUP_COMMAND = 'deleteTempBackup';
+export const buildDeleteTempBackupCommand = (instanceId: string, stamp: string): string =>
+  `${DELETE_TEMP_BACKUP_COMMAND} ${instanceId} ${stamp}`;
+
+export const deleteTempBackup = (engineId: string, instanceId: string, stamp: string): void => {
+  _sendCommand(engineId, buildDeleteTempBackupCommand(instanceId, stamp));
+};
+
+/**
  * Build the "setupDemo" command string (engine#369 §2, idea#235).
  * Format: "setupDemo <targetDiskId> [--apps kolibri,nextcloud]". Sent to the
  * Engine the disk is docked to, always by disk id. `--apps` is omitted when

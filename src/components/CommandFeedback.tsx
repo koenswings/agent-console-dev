@@ -46,6 +46,8 @@ export const COMMAND_VERBS: Record<string, string> = {
   // idea#235 / engine#369
   setupDemo: 'set up demo apps on',
   removeDemo: 'remove demo apps from',
+  // console#230 option A (provisional command name)
+  deleteTempBackup: 'remove the backup of',
 };
 
 export const commandVerb = (command: string | null): string =>

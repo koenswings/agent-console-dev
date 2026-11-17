@@ -3758,6 +3758,53 @@ body {
   color: var(--colour-warning, #b26a00);
 }
 
+/* console#230 option A: temporary pre-update backups on the Engine's own disk */
+.temp-backups__space {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0 0 0.5rem;
+}
+.temp-backups__space dt {
+  font-weight: 600;
+}
+.temp-backups__space dd {
+  margin: 0;
+}
+.temp-backups__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.temp-backups__row {
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--colour-border, #ddd);
+}
+.temp-backups__main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.temp-backups__app {
+  font-weight: 600;
+}
+.temp-backups__meta {
+  font-size: 0.9em;
+  color: var(--colour-muted, #555);
+}
+.temp-backups__state {
+  margin: 0.25rem 0;
+  font-size: 0.85em;
+}
+.temp-backups__confirm {
+  margin-top: 0.25rem;
+}
+.temp-backups__buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
 /* idea#347: remove an instance from its disk (quarantine) */
 .instance-remove {
   margin-top: 0.75rem;
