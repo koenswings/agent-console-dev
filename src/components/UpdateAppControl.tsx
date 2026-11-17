@@ -16,7 +16,7 @@ import {
   COMMAND, NEEDS_BACKUP_TEXT, majorNeedsBackup, badgeText, buildUpdateAppCommand, canUpdate, confirmText, currentStep,
   dismissUpdate, engineLabel, fetchPausedOf, friendlyUpdateError, isDismissed, isUpdateRunning,
   latestUpdateOp, leftoverTempBackupOf, leftoverTempBackupRaw, leftoverTempBackupText, parseRefusal, pausedText, previousVersionOf, restartFailedBadgeTitle, restartFailedFromOp, restartFailedOpFor,
-  restartFailedText, stepLabel, updateOfferFor, updateOutcome,
+  isUpdatePending, isRollbackStartFailed, rollbackStartFailedText, restartFailedText, stepLabel, updateOfferFor, updateOutcome, updatePendingText,
   updateProgress, type RefusalCtx,
 } from '../store/updateApp';
 import type { Engine, Instance, Store } from '../types/store';
@@ -36,6 +36,7 @@ const UpdateAppControl: Component<Props> = (props) => {
   const offer = createMemo(() => updateOfferFor(props.store(), props.instance(), props.engine()));
   const op = createMemo(() => (canUpdate(props.engine()) ? latestUpdateOp(props.store(), id()) : null));
   const running = createMemo(() => isUpdateRunning(op()));
+  const pending = createMemo(() => isUpdatePending(props.instance()));
   // console#227: "stopped after a failed restart" comes from Engine state (instance
   // Error + newest updateApp op / trace restartFailed), not from this session, so it
   // survives a reload and clears once the App runs again.
@@ -92,7 +93,7 @@ const UpdateAppControl: Component<Props> = (props) => {
 
   // idea#403: a backup-method-none instance never gets lastBackup and needs no backup.
   const methodNone = () => isBackupMethodNone(props.instance());
-  const refusedForBackup = () => !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
+  const refusedForBackup = () => !pending() && !methodNone() && backupNeededAt() !== undefined && backupNeededAt() === (props.instance()?.lastBackup ?? null);
   // engine#469: a missing backup no longer blocks a major update: the Engine makes it first
   // (linked Backup Disk, else temporarily on its own disk). An older Engine refuses NEEDS_BACKUP
   // before anything stops, and then the badge stays disabled with the hint.
@@ -101,7 +102,7 @@ const UpdateAppControl: Component<Props> = (props) => {
   const backupHint = () => NEEDS_BACKUP_TEXT;
   const showBadge = () => {
     const o = offer();
-    return !!o && !running() && !isDismissed(id(), o.toAppId);
+    return !!o && !running() && (pending() || !isDismissed(id(), o.toAppId));
   };
 
   const send = () => {
@@ -121,12 +122,17 @@ const UpdateAppControl: Component<Props> = (props) => {
   const paused = () => fetchPausedOf(props.instance(), op());
   const step = () => stepLabel(currentStep(op(), prog()), prog(), sourceName() ?? 'the other Engine');
   const outcome = createMemo(() => {
+    if (isRollbackStartFailed(props.instance())) return { kind: 'stopped' as const, text: rollbackStartFailedText(props.appTitle()) };
     if (restartFailedNow()) return { kind: 'failed' as const, text: restartFailedText(props.appTitle()) };
     if (!watching()) return null;
     // A restartFailed op whose App runs again (or was started since) has nothing left to say.
     if (restartFailedFromOp(op())) return null;
     const from = fromVersion() ?? previousVersionOf(props.store(), props.instance()) ?? '';
     return updateOutcome(op(), props.instance(), props.appTitle(), from, { ...ctx(), fromVersion: from });
+  });
+  const visibleOutcome = createMemo(() => {
+    const out = outcome();
+    return out && pending() && out.text === updatePendingText(props.appTitle()) ? null : out;
   });
   const errorText = () => {
     const s = result.state();
@@ -151,9 +157,9 @@ const UpdateAppControl: Component<Props> = (props) => {
               title={restartFailedNow()
                 ? restartFailedBadgeTitle(props.appTitle())
                 : sourceOffline() ? `${sourceName()} is switched off` : refusedForBackup() ? NEEDS_BACKUP_TEXT : 'Update'}
-              onClick={() => { result.reset(); setConfirming(true); }}
+              onClick={() => { result.reset(); if (pending()) send(); else setConfirming(true); }}
             >
-              {badgeText(offer()!, sourceName())}
+              {pending() ? 'Finish update' : badgeText(offer()!, sourceName())}
             </button>
             <Show when={refusedForBackup()}>
               <span class="edp-form__hint" data-testid={`update-needs-backup-${id()}`}>{backupHint()}</span>
@@ -185,12 +191,15 @@ const UpdateAppControl: Component<Props> = (props) => {
           )}
         </Show>
 
+        <Show when={pending() && !running()}>
+          <p class="update-app__pending" role="status" data-testid={`update-pending-${id()}`}>{updatePendingText(props.appTitle())}</p>
+        </Show>
         <Show when={running()}>
           <p class="update-app__step" role="status" data-testid={`update-step-${id()}`}>
             {paused() ? pausedText(paused()!, sourceName() ?? 'the other Engine') : step() ?? 'Updating…'}
           </p>
         </Show>
-        <Show when={outcome()}>
+        <Show when={visibleOutcome()}>
           {(out) => (
             <p
               class={out().kind === 'updated' ? 'update-app__ok' : 'edp-form__error'}

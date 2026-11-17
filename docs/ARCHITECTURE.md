@@ -644,6 +644,23 @@ outcome line drops the Engine's "; the temporary pre-update backup is kept at <p
 clause. There is no delete button: removal is an Ops action. The line stays until a newer
 updateApp op or the op leaves the store.
 
+**Update steps, pending work and setup errors (engine#456, draft until Axle's Engine PR).**
+`STEPS` is the final 12-step list: Fetch, Check, Backup, Snapshot, Swap, LoadImages, Prepare,
+Start, Health, Verify, Work, Settle. The Console reads `updateProgress.step` and
+`op.stepLabel` names first. A Backup stepLabel can still be the engine#469 backup sentence.
+Only after the names does it use an index: through `STEPS` for 12 steps, or `LEGACY_STEPS`
+(Fetch, Check, Snapshot, Swap, Start, Health) for an older six-step Engine. Labels:
+LoadImages "Loading the new version", Prepare "Preparing the new version", Verify "Checking the
+new version", Work/Settle "Finishing the update". Optional `Instance.updatePending` (absent means
+false) is the source for "<App> is working, but its update is not finished yet. Press Update to
+finish it." and the "Finish update" button. That button sends the existing updateApp command for
+the same instance and current App id, even without a newer offer. Leading op error codes get
+plain teacher text; the raw codes stay behind Technical details in Ops. PREPARE_FAILED and
+VERIFY_FAILED mean the old version is back, MIGRATIONS_PENDING uses the pending sentence, and
+SETTLE_FAILED asks teachers to press Update again. ROLLBACK_START_FAILED, or a Stopped
+statusCondition starting `ROLLBACK START FAILED:`, says the old version and data are back but
+the app does not start.
+
 ### Backup Disk schedule controls (idea#400)
 
 When the docked Engine advertises a fresh `scheduledBackups` capability

@@ -15,11 +15,12 @@
  *             (the agreed design's richer fields — diskId, major, fromVersion,
  *             toVersion, estimatedMinutes, sourceEngineId, sizeBytes, migrationNote —
  *             are read too when present)
- *  - op       kind `updateApp` (engine#268), steps Fetch/Check/Snapshot/Swap/Start/Health,
+ *  - op       kind `updateApp` (engine#268), steps in STEPS (12, engine#456), legacy 6 in LEGACY_STEPS,
  *             states running/done/failed/rolledBack, failure text `ROLLED BACK: <why>` (confirmed);
  *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed);
  *             `restartFailed?: true` (engine#442 / agent-engine-dev#445) when the update failed
  *             before a swap and the old version could not be restarted
+ *  - engine#456: optional Instance.updatePending; updateApp resumes work/settle on the same instance
  *  - command-log trace result `{ restartFailed: true }` on that error (JSON on the trace)
  *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
  *  - refusals `CODE: text` in the trace error
@@ -138,6 +139,14 @@ export const engineIdOfInstance = (store: Store | null, inst: Instance | undefin
  */
 export const updateOfferFor = (store: Store | null, inst: Instance | undefined, engine: Engine | undefined): UpdateOffer | null => {
   if (!inst || !canUpdate(engine)) return null;
+  // engine#456: resume the committed update, not a newer offered bundle. The command
+  // builder stays unchanged: updateApp on this same instance and its running App id.
+  if (isUpdatePending(inst)) {
+    const version = versionOf(store?.appDB, String(inst.instanceOf));
+    return { toAppId: String(inst.instanceOf), fromVersion: version, toVersion: version,
+      major: false, sourceDiskId: null, sourceEngineId: null, estimatedMinutes: null,
+      sizeBytes: null, migrationNote: null };
+  }
   const u = rawOf((inst as unknown as Raw).updateAvailable);
   const toAppId = str(u.appId);
   if (!toAppId) return null;
@@ -268,7 +277,23 @@ const dockBackupDisk = (c: RefusalCtx): string => `Dock a Backup Disk for ${c.ap
 
 const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` : '');
 
+/** engine#456: the stored instance flag survives archived operations; undefined is false. */
+export const isUpdatePending = (inst: Instance | undefined): boolean => inst?.updatePending === true;
+export const updatePendingText = (app: string): string =>
+  `${app} is working, but its update is not finished yet. Press Update to finish it.`;
+export const setupFailedText = (app: string): string =>
+  `The new version of ${app} could not be set up, so IDEA put the old version back. Your data is safe.`;
+export const settleFailedText = (app: string): string =>
+  `${app} runs the new version, but the last part of the update failed. Press Update to try again, or ask for help.`;
+export const rollbackStartFailedText = (app: string): string =>
+  `IDEA put back the old version of ${app} and its data, but it does not start. Ask for help.`;
+
 export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => string> = {
+  PREPARE_FAILED: (c) => setupFailedText(c.app),
+  VERIFY_FAILED: (c) => setupFailedText(c.app),
+  MIGRATIONS_PENDING: (c) => updatePendingText(c.app),
+  SETTLE_FAILED: (c) => settleFailedText(c.app),
+  ROLLBACK_START_FAILED: (c) => rollbackStartFailedText(c.app),
   NOT_DOCKED: (c) => `The disk with ${c.app} is not in this Engine. Nothing changed.`,
   BUSY: (c) => `Something else is running on ${c.app}. Try again when it is done.`,
   SOURCE_MISSING: (c) => `The disk with the new version is no longer in ${c.engine}. Nothing changed.`,
@@ -316,9 +341,15 @@ export const isTempBackupRefusal = (message: string): boolean => {
   return code === 'TEMP_BACKUP_NO_SPACE' || code === 'TEMP_BACKUP_FAILED' || (code === 'HELPER_OUTDATED' && isTempBackupDetail(detail));
 };
 
+/** engine#456: these codes are only codes at the start (`CODE: detail`), not in a path/log. */
+const UPDATE_456_CODES = ['PREPARE_FAILED', 'VERIFY_FAILED', 'MIGRATIONS_PENDING', 'SETTLE_FAILED', 'ROLLBACK_START_FAILED'];
+export const isUpdate456Error = (message: string): boolean =>
+  UPDATE_456_CODES.some((code) => message.trim().startsWith(`${code}:`));
+
 /** `CODE: text` → [code, text]; code is null when the message has no known code. */
 export const parseRefusal = (message: string): { code: string | null; detail: string } => {
   const m = /\b([A-Z][A-Z_]+)\b:?\s*(.*)$/s.exec(message.trim());
+  if (m && UPDATE_456_CODES.includes(m[1]) && !message.trim().startsWith(`${m[1]}:`)) return { code: null, detail: message };
   if (m && REFUSAL_TEXT[m[1]]) return { code: m[1], detail: m[2].trim() };
   return { code: null, detail: message };
 };
@@ -359,24 +390,32 @@ export const friendlyUpdateError = (message: string, ctx: RefusalCtx, opts?: { r
 };
 
 // ── Operation / progress ────────────────────────────────────────────────────
-export type UpdateStep = 'Fetch' | 'Check' | 'Snapshot' | 'Swap' | 'Start' | 'Health';
-export const STEPS: UpdateStep[] = ['Fetch', 'Check', 'Snapshot', 'Swap', 'Start', 'Health'];
-const STEP_LABEL: Record<Exclude<UpdateStep, 'Fetch'>, string> = {
-  Check: 'Checking',
-  Snapshot: 'Saving a safety copy',
-  Swap: 'Installing',
-  Start: 'Starting',
-  Health: 'Checking it works',
-};
-
-/**
- * idea#448 / engine#469: the op's stepLabel while updateApp makes its pre-update backup
- * (`Pre-update backup to <disk> (…)` or `Temporary pre-update backup on the system disk (…)`).
- * Live progress only says Check or Snapshot then.
- */
-const BACKUP_STEP_RE = /^(?:Temporary pre-update backup|Pre-update backup)\b/;
+export type UpdateStep = 'Fetch' | 'Check' | 'Backup' | 'Snapshot' | 'Swap' | 'LoadImages' | 'Prepare' | 'Start' | 'Health' | 'Verify' | 'Work' | 'Settle';
+/** Final engine#456 contract; skipped steps are never entered. */
+export const STEPS: UpdateStep[] = ['Fetch', 'Check', 'Backup', 'Snapshot', 'Swap', 'LoadImages', 'Prepare', 'Start', 'Health', 'Verify', 'Work', 'Settle'];
+/** Older Engine index mapping. Never apply a 12-step index to a six-step Engine. */
+export const LEGACY_STEPS: UpdateStep[] = ['Fetch', 'Check', 'Snapshot', 'Swap', 'Start', 'Health'];
 export const BACKUP_STEP = 'Backup' as const;
 export const BACKUP_STEP_TEXT = 'Making a backup first';
+const STEP_LABEL: Record<Exclude<UpdateStep, 'Fetch'>, string> = {
+  Check: 'Checking',
+  Backup: BACKUP_STEP_TEXT,
+  Snapshot: 'Saving a safety copy',
+  Swap: 'Installing',
+  LoadImages: 'Loading the new version',
+  Prepare: 'Preparing the new version',
+  Start: 'Starting',
+  Health: 'Checking it works',
+  Verify: 'Checking the new version',
+  Work: 'Finishing the update',
+  Settle: 'Finishing the update',
+};
+
+/** engine#469 backup stepLabel text, retained by engine#456 instead of the name Backup. */
+const BACKUP_STEP_RE = /^(?:Temporary pre-update backup|Pre-update backup)\b/;
+const stepName = (value: string | null | undefined): UpdateStep | null =>
+  value === BACKUP_STEP || BACKUP_STEP_RE.test(value ?? '') ? BACKUP_STEP
+    : STEPS.includes(value as UpdateStep) ? value as UpdateStep : null;
 
 export interface UpdateProgress { step: string | null; bytesDone: number | null; bytesTotal: number | null; fetchPaused?: FetchPaused | null; receivedAt: number }
 
@@ -411,19 +450,21 @@ export const isUpdateRunning = (op: Operation | null): boolean => {
 };
 
 /**
- * The step to show: the backup phase from the op's stepLabel (engine#469), else the live
- * progress step, else the op's step index (after a reload the stepLabel can be a long
- * Engine line such as `Snapshot <path> (<bytes> …)`), else the raw stepLabel.
+ * Named steps first (including the engine#469 Backup prose); indices only for a
+ * known total: 12 for engine#456, or the old six-step list. No guessed mapping for
+ * an unknown Engine (then the raw stepLabel, as before). A live Check/Snapshot
+ * does not hide the more specific backup stepLabel of a running op.
  */
 export const currentStep = (op: Operation | null, p: UpdateProgress | null): string | null => {
-  const live = p?.step ?? str(rawOf(op as unknown as Raw).step);
-  if (isUpdateRunning(op) && BACKUP_STEP_RE.test(op?.stepLabel ?? '') && (!live || live === 'Check' || live === 'Snapshot')) {
-    return BACKUP_STEP;
-  }
+  const live = stepName(p?.step ?? str(rawOf(op as unknown as Raw).step));
+  const label = stepName(op?.stepLabel);
+  if (isUpdateRunning(op) && label === BACKUP_STEP && (!live || live === 'Check' || live === 'Snapshot' || live === BACKUP_STEP)) return BACKUP_STEP;
   if (live) return live;
+  if (label && label !== BACKUP_STEP) return label;
+  const steps = op?.totalSteps === STEPS.length ? STEPS : op?.totalSteps === LEGACY_STEPS.length ? LEGACY_STEPS : null;
   const i = op?.currentStep;
-  if (typeof i === 'number' && STEPS[i] && op?.totalSteps === STEPS.length) return STEPS[i];
-  return op?.stepLabel ?? null;
+  const byIndex = steps && typeof i === 'number' && Number.isInteger(i) ? steps[i] ?? null : null;
+  return byIndex ?? (label ? null : op?.stepLabel ?? null);
 };
 
 export interface FetchPaused { reason: string; bytesDone: number | null; bytesTotal: number | null; since: number | null }
@@ -449,6 +490,10 @@ export const pausedText = (p: FetchPaused, sourceEngine: string): string =>
 
 /** Confirmed by Axle: a failed rollback leaves the instance Stopped with this statusCondition prefix. */
 export const ROLLBACK_FAILED_PREFIX = 'ROLLBACK FAILED:';
+/** engine#456: old data/version restored but the old App could not start. */
+export const ROLLBACK_START_FAILED_PREFIX = 'ROLLBACK START FAILED:';
+export const isRollbackStartFailed = (inst: Instance | undefined): boolean =>
+  inst?.status === 'Stopped' && (inst.statusCondition ?? '').trim().startsWith(ROLLBACK_START_FAILED_PREFIX);
 export const isRollbackFailed = (inst: Instance | undefined): boolean =>
   inst?.status === 'Stopped' && (inst.statusCondition ?? '').trim().startsWith(ROLLBACK_FAILED_PREFIX);
 
@@ -469,6 +514,11 @@ export const updateOutcome = (
   if (!op || isUpdateRunning(op)) return null;
   const s = stateOf(op);
   const err = stripTempBackupKept(op.error ?? '');
+  if (isRollbackStartFailed(inst) || err.trim().replace(/^INTERRUPTED:\s*/, '').startsWith(ROLLBACK_START_FAILED_PREFIX)) {
+    return { kind: 'stopped', text: rollbackStartFailedText(app) };
+  }
+  // These errors already say exactly what happened, before the generic rolled-back case.
+  if (isUpdate456Error(err)) return { kind: parseRefusal(err).code === 'ROLLBACK_START_FAILED' ? 'stopped' : 'failed', text: friendlyUpdateError(err, ctx) };
   if (s === 'done') return { kind: 'updated', text: `Updated from ${fromVersion}` };
   // engine#442: whatever the error code (including ROLLED_BACK), say the App is stopped.
   if (restartFailedFromOp(op)) return { kind: 'failed', text: restartFailedText(app) };
@@ -586,6 +636,18 @@ export const updateOpRestartFailedText = (op: Operation, store: Store | null): s
   if (op.kind !== OP_KIND || !restartFailedFromOp(op)) return null;
   const inst = store?.instanceDB?.[String(op.args?.instanceId ?? '')];
   return restartFailedText(appTitleOf(store, inst) || str(op.args?.instanceName) || UNKNOWN_APP_NAME);
+};
+
+/** Plain error for an update operation; raw codes/paths stay behind Technical details. */
+export const updateOpErrorText = (op: Operation, store: Store | null): string | null => {
+  if (op.kind !== OP_KIND) return null;
+  const restart = updateOpRestartFailedText(op, store);
+  if (restart) return restart;
+  const error = op.error ?? '';
+  const inst = store?.instanceDB?.[String(op.args?.instanceId ?? '')];
+  const app = appTitleOf(store, inst) || str(op.args?.instanceName) || UNKNOWN_APP_NAME;
+  if (isUpdate456Error(error)) return friendlyUpdateError(error, { app, fromVersion: '', engine: '', diskName: null });
+  return error.trim().startsWith(ROLLBACK_START_FAILED_PREFIX) ? rollbackStartFailedText(app) : null;
 };
 
 /** Update badge title while the App is stopped after a failed restart (console#227). */

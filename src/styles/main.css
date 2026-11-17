@@ -3744,6 +3744,10 @@ body {
   gap: 0.5rem;
 }
 .update-app__step,
+.update-app__pending {
+  margin: 0.25rem 0 0;
+  color: var(--colour-warning, #b26a00);
+}
 .update-app__ok {
   margin: 0.25rem 0 0;
   font-size: 0.85em;

@@ -14,6 +14,7 @@ import { traceInstanceRefs } from './commandResult';
 import {
   appTitleOf, COMMAND as UPDATE_COMMAND, friendlyUpdateError, isTempBackupRefusal, restartFailedFromTraceResult, restartFailedText,
   UNKNOWN_APP_NAME,
+  isUpdate456Error,
 } from './updateApp';
 import type { Store } from '../types/store';
 
@@ -74,9 +75,18 @@ export const historyTempBackupText = (trace: CommandTrace, appTitle?: string | n
   return friendlyUpdateError(raw, { app: appTitle || UNKNOWN_APP_NAME, fromVersion: '', engine: '', diskName: null });
 };
 
+/** engine#456 update errors in History: plain teacher sentence; raw code behind Technical details. */
+export const historyUpdate456Text = (trace: CommandTrace, appTitle?: string | null): string | null => {
+  if (trace.command !== UPDATE_COMMAND || trace.status !== 'error') return null;
+  const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
+  return raw && isUpdate456Error(raw)
+    ? friendlyUpdateError(raw, { app: appTitle || UNKNOWN_APP_NAME, fromVersion: '', engine: '', diskName: null })
+    : null;
+};
+
 /** The agreed plain sentence for an updateApp error trace (raw text behind Technical details), or null. */
 export const historyUpdatePlainText = (trace: CommandTrace, appTitle?: string | null): string | null =>
-  historyRestartFailedText(trace, appTitle) ?? historyTempBackupText(trace, appTitle);
+  historyRestartFailedText(trace, appTitle) ?? historyTempBackupText(trace, appTitle) ?? historyUpdate456Text(trace, appTitle);
 
 /** Icon, tone and collapsed-row message for a finished command trace. */
 export const historyRowView = (trace: CommandTrace, appTitle?: string | null): HistoryRowView => {
