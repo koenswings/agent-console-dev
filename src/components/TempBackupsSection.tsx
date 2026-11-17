@@ -14,7 +14,7 @@ import { remoteWatchFor } from '../store/remoteConfirm';
 import { sameIds } from '../store/sameIds';
 import { isUpdateRunning, latestUpdateOp } from '../store/updateApp';
 import {
-  canRemoveTempBackup, removeTempBackupConfirmText, systemDiskOf, tempBackupAppTitle, tempBackupKey,
+  canRemoveTempBackup, deleteTempBackupRefusalText, removeTempBackupConfirmText, systemDiskOf, tempBackupAppTitle, tempBackupKey,
   tempBackupBytesText, tempBackupSize, tempBackupWhen, tempBackupsOf, tempBackupsTotalBytes,
 } from '../store/tempBackups';
 import CommandFeedback from './CommandFeedback';
@@ -39,7 +39,7 @@ const TempBackupRow: Component<{
   commandLog: Accessor<CommandLogState>;
 }> = (props) => {
   const [confirming, setConfirming] = createSignal(false);
-  const result = createCommandResult({ commandLog: props.commandLog, command: DELETE_TEMP_BACKUP_COMMAND, argKey: 'instanceId', matchMode: 'includes', longRunning: true });
+  const result = createCommandResult({ commandLog: props.commandLog, command: DELETE_TEMP_BACKUP_COMMAND, argKey: 'stamp', longRunning: true });
   const busy = () => { const k = result.state().kind; return k === 'pending' || k === 'sent'; };
   const title = createMemo(() => { const e = props.entry(); return e ? tempBackupAppTitle(props.store(), e.instanceId) : ''; });
   const when = () => { const e = props.entry(); return e ? tempBackupWhen(e) : ''; };
@@ -57,11 +57,11 @@ const TempBackupRow: Component<{
     const gone = () => !(tempBackupsOf(props.store()?.engineDB?.[props.engineId]) ?? []).some((b) => tempBackupKey(b) === key);
     result.start(stamp, () => deleteTempBackup(props.engineId, instanceId, stamp), {
       command: DELETE_TEMP_BACKUP_COMMAND,
-      argKey: 'instanceId',
-      matchMode: 'includes',
+      argKey: 'stamp',
       longRunning: true,
       engineId: props.engineId,
       remote: remoteWatchFor(props.store, props.engineId, DELETE_TEMP_BACKUP_COMMAND, () => (gone() ? 'ok' : null)),
+      confirm: () => (gone() ? 'ok' : null),
     });
   };
 
@@ -109,7 +109,13 @@ const TempBackupRow: Component<{
       <Show when={busy()}>
         <p class="edp-form__hint" role="status">Removing…</p>
       </Show>
-      <CommandFeedback result={result} subject={title} testId={`temp-backup-${props.backupKey}`} />
+      <CommandFeedback
+        result={result}
+        subject={title}
+        testId={`temp-backup-${props.backupKey}`}
+        formatLine={(message, code) => deleteTempBackupRefusalText(message, title(), code)}
+        details
+      />
     </li>
   );
 };

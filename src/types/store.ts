@@ -145,10 +145,10 @@ export interface Engine {
   eraseInProgress?: EraseInProgress | null;
   /**
    * Temporary pre-update backups still on this Engine's own (system) disk
-   * (console#230 option A, Axle's Engine PR, contract agreed 2026-11-17).
-   * Stored; the Engine refreshes it after a create, a delete and at boot.
+   * (console#230 option A, engine#501 at 91e791e). Stored; the Engine
+   * replaces the whole list after a create, a delete and at boot.
    * Absent on older Engines: the Console then falls back to the newest
-   * updateApp op's args (console#230 / #242).
+   * updateApp op's args (console#230 / #242). An empty array means none left.
    */
   tempBackups?: TempBackupEntry[];
 }

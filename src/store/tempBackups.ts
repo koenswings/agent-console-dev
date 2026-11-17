@@ -71,12 +71,39 @@ export const systemDiskOf = (store: Store | null, engineId: string): Disk | null
     (d) => d?.dockedTo === engineId && (d.diskTypes ?? []).includes('system'),
   ) ?? null;
 
-/** App title for a backup row: the instance's App title, else its name, else "an app that is no longer here". */
+/** App title for a backup row: the instance's App title, else its name, else the instanceId (orphans of a removed App). */
 export const tempBackupAppTitle = (store: Store | null, instanceId: string): string => {
   const inst = store?.instanceDB?.[instanceId] as Instance | undefined;
-  if (!inst) return 'An app that is no longer on this Pi';
+  if (!inst) return instanceId;
   const app = store?.appDB?.[String(inst.instanceOf)] as { title?: unknown } | undefined;
   return (typeof app?.title === 'string' && app.title) || String(inst.name ?? instanceId);
+};
+
+/**
+ * deleteTempBackup refusals (engine#501): `CODE: text`, nothing deleted.
+ * Teacher-friendly sentences; the raw Engine text stays behind Technical details.
+ */
+export const DELETE_TEMP_BACKUP_REFUSAL_TEXT: Record<string, (app: string) => string> = {
+  NOT_FOUND: () => 'This backup is no longer on this Pi.',
+  IN_USE: () => 'This backup is being used by an update that is still running. Try again when the update has finished.',
+  UPDATE_PENDING: (app) => `The last update of ${app} is not finished yet. Press Finish update to finish it first. Nothing changed.`,
+  BAD_PATH: () => 'IDEA could not remove this backup. Ask for help.',
+  HELPER_OUTDATED: () => 'This Pi needs an IDEA update before it can remove backups. Ask for help.',
+  DELETE_FAILED: () => 'IDEA could not remove this backup. Ask for help.',
+};
+
+/** `CODE: text` only when the code is a known deleteTempBackup refusal at the start of the message. */
+export const parseDeleteTempBackupRefusal = (message: string): { code: string | null; detail: string } => {
+  const m = /^\s*([A-Z][A-Z_]+):\s*(.*)$/s.exec(String(message ?? '').trim());
+  if (m && DELETE_TEMP_BACKUP_REFUSAL_TEXT[m[1]]) return { code: m[1], detail: m[2].trim() };
+  return { code: null, detail: message };
+};
+
+/** Plain sentence for a deleteTempBackup refusal, or null when the message has no known code. */
+export const deleteTempBackupRefusalText = (message: string, app: string, code?: string | null): string | null => {
+  const parsed = parseDeleteTempBackupRefusal(message);
+  const c = parsed.code ?? (code && DELETE_TEMP_BACKUP_REFUSAL_TEXT[code] ? code : null);
+  return c ? DELETE_TEMP_BACKUP_REFUSAL_TEXT[c](app) : null;
 };
 
 /** Confirm text for "Remove backup" (operator view). */

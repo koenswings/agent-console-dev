@@ -1,6 +1,6 @@
 /**
  * console#230 option A: the stored Engine.tempBackups field (Axle's Engine PR,
- * provisional deleteTempBackup command) drives the teacher leftover line, the
+ * deleteTempBackup command, engine#501) drives the teacher leftover line, the
  * Engine's own-disk space line and the operator list with "Remove backup".
  * The #242 op-args path stays as the fallback when the field is absent.
  */
@@ -10,13 +10,15 @@ import { render, cleanup, screen, fireEvent } from '@solidjs/testing-library';
 import UpdateAppControl from '../src/components/UpdateAppControl';
 import TempBackupsSection, { INCOMPLETE_TEXT, TEMP_BACKUPS_LABEL, updateRunningHint } from '../src/components/TempBackupsSection';
 import { buildDeleteTempBackupCommand, setSendCommandFn } from '../src/store/commands';
+import { createCommandResult } from '../src/store/commandResult';
 import {
-  canRemoveTempBackup, removeTempBackupConfirmText, tempBackupBytesText, stampTime, tempBackupAppTitle, tempBackupKey, tempBackupWhen,
+  canRemoveTempBackup, deleteTempBackupRefusalText, removeTempBackupConfirmText, tempBackupBytesText, stampTime, tempBackupAppTitle, tempBackupKey, tempBackupWhen,
   tempBackupsForInstance, tempBackupsOf, tempBackupsTotalBytes,
 } from '../src/store/tempBackups';
 import { leftoverFromTempBackups, leftoverTempBackupFor, leftoverTempBackupRaw, leftoverTempBackupText, resetDismissed } from '../src/store/updateApp';
 import { backupDateText } from '../src/store/restoreConfirm';
 import type { CommandLogState } from '../src/store/commandLog';
+import type { CommandTrace } from '../src/types/commandLog';
 import type { App, Disk, Engine, Instance, Operation, Store, TempBackupEntry } from '../src/types/store';
 
 const T = 1_700_000_000_000;
@@ -98,12 +100,12 @@ describe('Engine.tempBackups accessors', () => {
     expect(canRemoveTempBackup(entry())).toBe(true);
     expect(canRemoveTempBackup(entry({ complete: false }))).toBe(false);
   });
-  it('app title, else the instance name, else a plain fallback', () => {
+  it('app title, else the instance name, else the instanceId for an orphan leftover', () => {
     const s = mkStore(engine());
     expect(tempBackupAppTitle(s, 'i1')).toBe('Kolibri');
-    expect(tempBackupAppTitle(s, 'gone')).toBe('An app that is no longer on this Pi');
+    expect(tempBackupAppTitle(s, 'gone-app')).toBe('gone-app');
   });
-  it('provisional command syntax: deleteTempBackup <instanceId> <stamp>', () => {
+  it('command syntax: deleteTempBackup <instanceId> <stamp> (engine#501)', () => {
     expect(buildDeleteTempBackupCommand('i1', S1)).toBe(`deleteTempBackup i1 ${S1}`);
   });
 });
@@ -180,7 +182,7 @@ describe('TempBackupsSection (operator view)', () => {
     expect(screen.getByTestId(`temp-backup-state-${K}`).querySelector('.tech-details__plain')?.textContent).toBe(INCOMPLETE_TEXT);
     expect(screen.queryByTestId(`temp-backup-remove-${K}`)).toBeNull();
   });
-  it('Remove backup confirms first, then sends the provisional command; Cancel sends nothing', () => {
+  it('Remove backup confirms first, then sends deleteTempBackup <instanceId> <stamp>; Cancel sends nothing', () => {
     const send = vi.fn();
     setSendCommandFn(send);
     show(mkStore(engine([entry()])));
@@ -206,5 +208,100 @@ describe('TempBackupsSection (operator view)', () => {
     show(mkStore(engine([entry()]), [op({}, { status: 'Running', completedAt: null })]));
     expect((screen.getByTestId(`temp-backup-remove-${K}`) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByTestId(`temp-backup-hint-${K}`).textContent).toBe(updateRunningHint('Kolibri'));
+  });
+});
+
+
+const visibleText = (root: HTMLElement): string => {
+  const clone = root.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('details:not([open])').forEach((d) => {
+    d.querySelectorAll(':scope > :not(summary)').forEach((n) => n.remove());
+  });
+  return clone.textContent ?? '';
+};
+
+const REFUSALS: Array<[string, string, string]> = [
+  ['NOT_FOUND', 'temporary pre-update backup is not on this Engine', 'This backup is no longer on this Pi.'],
+  ['IN_USE', 'in use by an in-flight update of i1', 'This backup is being used by an update that is still running. Try again when the update has finished.'],
+  ['UPDATE_PENDING', 'instance i1 has an update in progress', 'The last update of Kolibri is not finished yet. Press Finish update to finish it first. Nothing changed.'],
+  ['BAD_PATH', 'path /etc/passwd is not a temporary pre-update backup', 'IDEA could not remove this backup. Ask for help.'],
+  ['HELPER_OUTDATED', 'needs the app-data root helper v18 or later', 'This Pi needs an IDEA update before it can remove backups. Ask for help.'],
+  ['DELETE_FAILED', 'removing the temporary pre-update backup failed: busy', 'IDEA could not remove this backup. Ask for help.'],
+];
+
+describe('deleteTempBackup refusals (engine#501)', () => {
+  it.each(REFUSALS)('%s maps to a plain sentence and hides the code', (code, detail, sentence) => {
+    expect(deleteTempBackupRefusalText(`${code}: ${detail}`, 'Kolibri')).toBe(sentence);
+  });
+  it('unknown or mid-text codes are not mapped', () => {
+    expect(deleteTempBackupRefusalText('something failed', 'Kolibri')).toBeNull();
+    expect(deleteTempBackupRefusalText('note NOT_FOUND: in a log', 'Kolibri')).toBeNull();
+  });
+  it.each(REFUSALS)('Remove backup shows the %s sentence; raw error in closed Technical details', (code, detail, sentence) => {
+    const raw = `${code}: ${detail}`;
+    const [log, setLog] = createSignal<CommandLogState>({ traces: {}, recentTraceIds: [] });
+    const send = vi.fn();
+    setSendCommandFn(send);
+    const K = `i1:${S1}`;
+    render(() => <TempBackupsSection engineId="ENG1" store={() => mkStore(engine([entry()]))} commandLogStore={log} />);
+    fireEvent.click(screen.getByTestId(`temp-backup-remove-${K}`));
+    fireEvent.click(screen.getByTestId(`temp-backup-confirm-${K}`));
+    expect(send).toHaveBeenCalledWith('ENG1', `deleteTempBackup i1 ${S1}`);
+    const trace: CommandTrace = {
+      traceId: 't-del', command: 'deleteTempBackup', args: { instanceId: 'i1', stamp: S1 },
+      startedAt: T, completedAt: T + 1, status: 'error', errorMessage: raw, logs: [],
+    };
+    setLog({ traces: { 't-del': trace }, recentTraceIds: ['t-del'] });
+    const el = screen.getByTestId(`temp-backup-${K}-error`);
+    const details = screen.getByTestId(`temp-backup-${K}-error-details`);
+    expect(details.querySelector('.tech-details__plain')?.textContent).toBe(sentence);
+    expect(visibleText(el)).toContain(sentence);
+    expect(visibleText(el)).not.toContain(code);
+    expect(visibleText(el)).not.toMatch(/CODE|NOT_FOUND|IN_USE|UPDATE_PENDING|BAD_PATH|HELPER_OUTDATED|DELETE_FAILED/);
+    const toggle = details.querySelector('details.tech-details__toggle') as HTMLDetailsElement | null;
+    expect(toggle).toBeTruthy();
+    expect(toggle!.open).toBe(false);
+    expect(toggle!.querySelector('summary')?.textContent).toBe('Technical details');
+    expect(details.querySelector('.tech-details__raw')?.textContent).toBe(raw);
+  });
+});
+
+describe('deleteTempBackup success and orphan leftovers', () => {
+  const K = `i1:${S1}`;
+
+  it('success when the entry leaves Engine.tempBackups', () => {
+    const [s, setS] = createSignal(mkStore(engine([entry()])));
+    const Probe = () => {
+      const result = createCommandResult({ commandLog: () => null, command: 'deleteTempBackup', timeoutMs: 15_000 });
+      const gone = () => !(tempBackupsOf(s().engineDB.ENG1) ?? []).some((b) => tempBackupKey(b) === K);
+      return (
+        <button
+          data-testid="send-delete"
+          onClick={() => result.start(S1, () => {}, { confirm: () => (gone() ? 'ok' : null) })}
+        >
+          {result.state().kind}
+        </button>
+      );
+    };
+    render(() => <Probe />);
+    fireEvent.click(screen.getByTestId('send-delete'));
+    expect(screen.getByTestId('send-delete').textContent).toBe('pending');
+    setS(mkStore(engine([])));
+    expect(screen.getByTestId('send-delete').textContent).toBe('success');
+  });
+
+  it('an orphan leftover with no instance is listed and removable, labelled with the instanceId', () => {
+    const orphan = entry({ instanceId: 'gone-app', path: `/.idea-temp-backups/gone-app/${S1}` });
+    const key = tempBackupKey(orphan);
+    const send = vi.fn();
+    setSendCommandFn(send);
+    render(() => <TempBackupsSection engineId="ENG1" store={() => mkStore(engine([orphan]))} commandLogStore={noLog} />);
+    expect(screen.getByTestId(`temp-backup-app-${key}`).textContent).toBe('gone-app');
+    expect(screen.getByTestId(`temp-backup-remove-${key}`)).toBeTruthy();
+    fireEvent.click(screen.getByTestId(`temp-backup-remove-${key}`));
+    expect(screen.getByTestId(`temp-backup-confirm-text-${key}`).textContent)
+      .toBe(removeTempBackupConfirmText('gone-app', tempBackupWhen(orphan), '2.5 GB'));
+    fireEvent.click(screen.getByTestId(`temp-backup-confirm-${key}`));
+    expect(send).toHaveBeenCalledWith('ENG1', `deleteTempBackup gone-app ${S1}`);
   });
 });

@@ -658,12 +658,15 @@ disk and take about X GB. Ask for help to remove them when you no longer need th
 Selecting an Engine shows `TempBackupsSection` ("This Pi's own disk") under its app list when
 at least one backup is left: free space of its system disk (if published), "Backups left from
 updates" with the total, and one row per backup (App title, when it was made from the UTC
-stamp, size, Complete / not finished; the path behind Technical details). A complete backup
-has "Remove backup" with a confirm; it is disabled while that App's update runs and absent for
-an unfinished backup. It sends `buildDeleteTempBackupCommand` (commands.ts) through
-`sendCommand`: **provisional** syntax `deleteTempBackup <instanceId> <stamp>`, waiting on the
-Engine PR. Success is the entry leaving `Engine.tempBackups`. Sizes in this view use the same
-1024³ GB as the teacher line.
+stamp, size, Complete / not finished; the path behind Technical details). A leftover of an App
+that is no longer on the Pi still appears and can be removed; the label falls back to the
+`instanceId` (the exact folder name). A complete backup has "Remove backup" with a confirm; it
+is disabled while that App's update runs and absent for an unfinished backup. It sends
+`buildDeleteTempBackupCommand` (commands.ts) through `sendCommand`: `deleteTempBackup
+<instanceId> <stamp>` (engine#501). Success is the entry leaving `Engine.tempBackups`.
+Refusals `NOT_FOUND`, `IN_USE`, `UPDATE_PENDING`, `BAD_PATH`, `HELPER_OUTDATED` and
+`DELETE_FAILED` show a plain sentence, with the raw `CODE: text` behind Technical details.
+Sizes in this view use the same 1024³ GB as the teacher line.
 
 ### Backup Disk schedule controls (idea#400)
 

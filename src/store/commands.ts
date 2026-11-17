@@ -482,9 +482,9 @@ export const removeInstance = (engineId: string, instanceId: string): void => {
 };
 
 /**
- * Build the "deleteTempBackup" command string (console#230 option A).
- * PROVISIONAL syntax, waiting on Axle's Engine PR: "deleteTempBackup <instanceId> <stamp>".
- * Only this function knows the shape, so the final syntax is a one-line change.
+ * Build the "deleteTempBackup" command string (console#230 option A / engine#501).
+ * Final syntax: "deleteTempBackup <instanceId> <stamp>". instanceId is the exact
+ * folder name, so a leftover of a removed App can still be deleted.
  */
 export const DELETE_TEMP_BACKUP_COMMAND = 'deleteTempBackup';
 export const buildDeleteTempBackupCommand = (instanceId: string, stamp: string): string =>
