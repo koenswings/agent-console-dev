@@ -641,8 +641,32 @@ without it "takes up space"), or for `kept`: "IDEA kept the backup it made befor
 on <Engine>'s own disk, in case <App> needs it. Ask for help before removing it." The path
 and the Engine's `tempBackupWarning` are behind Technical details only, and the failed
 outcome line drops the Engine's "; the temporary pre-update backup is kept at <path>"
-clause. There is no delete button: removal is an Ops action. The line stays until a newer
-updateApp op or the op leaves the store.
+clause. There is no delete button on the line: removal is an operator action (below). On an
+older Engine (no `Engine.tempBackups`) the line stays until a newer updateApp op or the op
+leaves the store.
+
+**Stored temporary backups (console#230 option A, Axle's Engine PR).** When the Engine
+publishes `Engine.tempBackups?: { instanceId, stamp, path, sizeBytes, complete }[]` (stored,
+refreshed after a create, a delete and at boot), it is the only source: `store/tempBackups.ts`
+(`tempBackupsOf`, `tempBackupsForInstance`, `tempBackupsTotalBytes`) returns `undefined` only
+when the field is absent, and only then does `leftoverTempBackupFor` fall back to the op args
+above. With the field, the leftover line shows whenever the instance has an entry (also after
+the op was archived), never while its update runs, with the summed size; the newest op only
+decides `kept` (Failed op, `tempBackupState` kept, same stamp) and supplies the Engine warning.
+Two or more backups of one App read "Backups made before updates are still on <Engine>'s own
+disk and take about X GB. Ask for help to remove them when you no longer need them."
+Selecting an Engine shows `TempBackupsSection` ("This Pi's own disk") under its app list when
+at least one backup is left: free space of its system disk (if published), "Backups left from
+updates" with the total, and one row per backup (App title, when it was made from the UTC
+stamp, size, Complete / not finished; the path behind Technical details). A leftover of an App
+that is no longer on the Pi still appears and can be removed; the label falls back to the
+`instanceId` (the exact folder name). A complete backup has "Remove backup" with a confirm; it
+is disabled while that App's update runs and absent for an unfinished backup. It sends
+`buildDeleteTempBackupCommand` (commands.ts) through `sendCommand`: `deleteTempBackup
+<instanceId> <stamp>` (engine#501). Success is the entry leaving `Engine.tempBackups`.
+Refusals `NOT_FOUND`, `IN_USE`, `UPDATE_PENDING`, `BAD_PATH`, `HELPER_OUTDATED` and
+`DELETE_FAILED` show a plain sentence, with the raw `CODE: text` behind Technical details.
+Sizes in this view use the same 1024³ GB as the teacher line.
 
 **Update steps, pending work and setup errors (engine#456, draft until Axle's Engine PR).**
 `STEPS` is the final 12-step list: Fetch, Check, Backup, Snapshot, Swap, LoadImages, Prepare,
@@ -652,14 +676,16 @@ Only after the names does it use an index: through `STEPS` for 12 steps, or `LEG
 (Fetch, Check, Snapshot, Swap, Start, Health) for an older six-step Engine. Labels:
 LoadImages "Loading the new version", Prepare "Preparing the new version", Verify "Checking the
 new version", Work/Settle "Finishing the update". Optional `Instance.updatePending` (absent means
-false) is the source for "<App> is working, but its update is not finished yet. Press Update to
-finish it." and the "Finish update" button. That button sends the existing updateApp command for
-the same instance and current App id, even without a newer offer. Leading op error codes get
-plain teacher text; the raw codes stay behind Technical details in Ops. PREPARE_FAILED and
-VERIFY_FAILED mean the old version is back, MIGRATIONS_PENDING uses the pending sentence, and
-SETTLE_FAILED asks teachers to press Update again. ROLLBACK_START_FAILED, or a Stopped
-statusCondition starting `ROLLBACK START FAILED:`, says the old version and data are back but
-the app does not start.
+false) is the source for "<App> is working, but its update is not finished yet. Press Finish
+update to finish it." and the "Finish update" button. That button sends the existing updateApp
+command for the same instance and current App id, even without a newer offer. Leading op error
+codes get plain teacher text; the raw codes stay behind Technical details in Ops.
+`updateOpFailedPlainText` (also exported as `updateOpErrorText`) is the Failed-card helper:
+PREPARE_FAILED, VERIFY_FAILED and a `ROLLED BACK:` error use the "put the old version back"
+sentence; MIGRATIONS_PENDING uses the pending sentence; SETTLE_FAILED asks teachers to press
+Finish update again. Those last two leave the instance Running, so they are not shown as a
+rollback. ROLLBACK_START_FAILED, or a Stopped statusCondition starting `ROLLBACK START FAILED:`,
+says the old version and data are back but the app does not start.
 
 ### Backup Disk schedule controls (idea#400)
 

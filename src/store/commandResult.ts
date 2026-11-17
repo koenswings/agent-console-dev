@@ -37,7 +37,7 @@ export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
 /** Timeout message for the Files actions (files-disk.md §4). */
 export const FILES_TIMEOUT_MESSAGE = "The Engine didn't respond. It may not support Files Disks yet.";
 
-export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId' | 'instanceId' | 'backupDiskId' | 'targetDiskId' | 'instanceIds';
+export type TraceArgKey = 'diskId' | 'targetId' | 'instanceName' | 'operationId' | 'candidateId' | 'instanceId' | 'backupDiskId' | 'targetDiskId' | 'instanceIds' | 'stamp';
 
 export type TraceOutcome =
   | { kind: 'ok'; code?: string | null }
@@ -332,6 +332,12 @@ export interface CommandResultTarget {
    * an ok trace or Done op that did not move the app becomes a warning, engine#388).
    */
   settle?: (o: TraceOutcome) => TraceOutcome;
+  /**
+   * Optional store confirmation on any Engine, including the connected one
+   * (deleteTempBackup: the entry left Engine.tempBackups). Unlike `remote`,
+   * this does not show "Sent to …" and resolves to success when it returns 'ok'.
+   */
+  confirm?: () => 'ok' | null;
 }
 
 export interface CommandResultOptions {
@@ -371,6 +377,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     remote: RemoteWatch | null;
     remoteBaseline: Set<string>;
     settle: ((o: TraceOutcome) => TraceOutcome) | null;
+    confirm: (() => 'ok' | null) | null;
   };
   const [pending, setPending] = createSignal<Pending | null>(null);
   const [state, setState] = createSignal<CommandResultState>({ kind: 'idle' });
@@ -386,6 +393,13 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     const trace = findCommandTrace(opts.commandLog(), p.baseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
     if (!trace) return null;
     return { accepted: true, outcome: traceOutcome(trace, p.command) };
+  });
+
+  // Store confirmation on this Engine (deleteTempBackup: the entry left the list).
+  const confirmed = createMemo((): TraceOutcome | null => {
+    const p = pending();
+    if (!p?.confirm) return null;
+    return p.confirm() === 'ok' ? { kind: 'ok' } : null;
   });
 
   // Cross-engine: the target's own log (approach i) and the store check (ii).
@@ -448,6 +462,12 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     finish(o);
   });
 
+  createEffect(() => {
+    const o = confirmed();
+    if (!o || !pending()) return;
+    finish(o);
+  });
+
   const start = (argValue: string, send: () => void, target?: CommandResultTarget) => {
     clearTimer();
     const cmd = target?.command ?? opts.command ?? '';
@@ -465,6 +485,7 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
       remote,
       remoteBaseline: remote?.log ? traceIdSnapshot(remote.log()) : new Set(),
       settle: target?.settle ?? null,
+      confirm: target?.confirm ?? null,
     });
     if (remote) {
       // Neutral until confirmed; red only on a real error or the long timeout.

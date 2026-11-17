@@ -143,6 +143,26 @@ export interface Engine {
    * eraseDisk finishes; used for progress while the Disk record is gone.
    */
   eraseInProgress?: EraseInProgress | null;
+  /**
+   * Temporary pre-update backups still on this Engine's own (system) disk
+   * (console#230 option A, engine#501 at 91e791e). Stored; the Engine
+   * replaces the whole list after a create, a delete and at boot.
+   * Absent on older Engines: the Console then falls back to the newest
+   * updateApp op's args (console#230 / #242). An empty array means none left.
+   */
+  tempBackups?: TempBackupEntry[];
+}
+
+/** One temporary pre-update backup on the Engine's own disk (Engine.tempBackups). */
+export interface TempBackupEntry {
+  instanceId: InstanceID;
+  /** Backup stamp, e.g. `20261117T080000Z` or `20261117T085238517Z` (also the folder name). */
+  stamp: string;
+  /** Raw path on the Engine's system disk (Technical details only). */
+  path: string;
+  sizeBytes: number;
+  /** False while being written, or when the backup never finished. */
+  complete: boolean;
 }
 
 // ---------------------------------------------------------------------------

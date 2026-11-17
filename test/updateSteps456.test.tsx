@@ -10,8 +10,8 @@ import OperationProgress from '../src/components/OperationProgress';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   BACKUP_STEP, BACKUP_STEP_TEXT, LEGACY_STEPS, ROLLBACK_FAILED_PREFIX, ROLLBACK_START_FAILED_PREFIX, STEPS,
-  currentStep, friendlyUpdateError, isRollbackStartFailed, parseRefusal, resetDismissed, stepLabel, updateOpErrorText,
-  updateOutcome, updatePendingText, type RefusalCtx,
+  currentStep, friendlyUpdateError, isRollbackStartFailed, isRolledBackUpdateError, parseRefusal, resetDismissed, stepLabel, updateOpErrorText,
+  updateOpFailedPlainText, updateOutcome, updatePendingText, type RefusalCtx,
 } from '../src/store/updateApp';
 import { historyRowView } from '../src/store/historyRow';
 import type { CommandLogState } from '../src/store/commandLog';
@@ -100,6 +100,19 @@ describe('engine#456 error text', () => {
     const i = inst({ status: 'Stopped', statusCondition: 'ROLLBACK START FAILED: compose failed' });
     expect(isRollbackStartFailed(i)).toBe(true);
     expect(updateOutcome(op({ status: 'Failed', completedAt: T + 1, error: 'ROLLBACK_START_FAILED: compose failed' }), i, 'Kolibri', '0.15.5', ctx)).toEqual({ kind: 'stopped', text: ROLLBACK_START });
+  });
+  it('SETTLE_FAILED and MIGRATIONS_PENDING are not rolled-back Failed-card text', () => {
+    const settle = op({ status: 'Failed', completedAt: T + 1, error: 'SETTLE_FAILED: exit 1; the temporary pre-update backup is kept at /x' });
+    const pending = op({ id: 'op2', status: 'Failed', completedAt: T + 1, error: 'MIGRATIONS_PENDING: timed out' });
+    const rolled = op({ id: 'op3', status: 'Failed', completedAt: T + 1, error: 'PREPARE_FAILED: exit 2' });
+    const s = mkStore(inst(), [settle, pending, rolled]);
+    expect(isRolledBackUpdateError(settle.error!)).toBe(false);
+    expect(isRolledBackUpdateError(pending.error!)).toBe(false);
+    expect(isRolledBackUpdateError(rolled.error!)).toBe(true);
+    expect(updateOpFailedPlainText(settle, s)).toBe(SETTLE);
+    expect(updateOpErrorText(settle, s)).toBe(SETTLE);
+    expect(updateOpFailedPlainText(pending, s)).toBe(PENDING);
+    expect(updateOpFailedPlainText(rolled, s)).toBe(SETUP);
   });
   it('the Ops card and History show plain text with raw codes behind Technical details', () => {
     const o = op({ status: 'Failed', completedAt: T + 1, error: 'SETTLE_FAILED: exit 1' });

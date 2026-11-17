@@ -14,6 +14,7 @@
 import { Show, type Accessor, type Component } from 'solid-js';
 import type { CommandResult } from '../store/commandResult';
 import { plainEngineText } from '../store/plainError';
+import TechnicalDetails from './TechnicalDetails';
 
 /** Verb per Engine command, for "Couldn't <verb> <subject>: <message>". */
 export const COMMAND_VERBS: Record<string, string> = {
@@ -46,6 +47,8 @@ export const COMMAND_VERBS: Record<string, string> = {
   // idea#235 / engine#369
   setupDemo: 'set up demo apps on',
   removeDemo: 'remove demo apps from',
+  // console#230 option A / engine#501
+  deleteTempBackup: 'remove the backup of',
 };
 
 export const commandVerb = (command: string | null): string =>
@@ -67,12 +70,23 @@ interface CommandFeedbackProps {
   formatWarning?: (message: string, code: string | null) => string | null;
   /** Optional: hide the warning line (the caller shows the same outcome itself). */
   hideWarning?: Accessor<boolean>;
+  /** Optional: put the raw Engine error behind a closed Technical details toggle. */
+  details?: boolean;
 }
 
 const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
   const errorMessage = () => {
     const s = props.result.state();
     return s.kind === 'error' ? plainEngineText(props.formatError ? props.formatError(s.message) : s.message) : null;
+  };
+  const errorRaw = () => {
+    const s = props.result.state();
+    return s.kind === 'error' ? s.message : '';
+  };
+  const errorLine = (msg: string): string => {
+    const s = props.result.state();
+    const line = s.kind === 'error' && props.formatLine ? props.formatLine(s.message, s.code ?? null) : null;
+    return line ?? `Couldn't ${commandVerb(props.result.command())} ${props.subject()}: ${msg}`;
   };
   // A finished command that did not do what was asked (moveApp SOURCE_CHANGED, engine#388): a plain sentence, amber.
   const warning = () => {
@@ -100,18 +114,28 @@ const CommandFeedback: Component<CommandFeedbackProps> = (props) => {
       </Show>
       <Show when={errorMessage()}>
         {(msg) => (
-          <p
-            class="edp-form__error"
-            role="alert"
-            data-testid={`${props.testId}-error`}
-            data-command={props.result.command() ?? ''}
+          <Show
+            when={props.details}
+            fallback={
+              <p
+                class="edp-form__error"
+                role="alert"
+                data-testid={`${props.testId}-error`}
+                data-command={props.result.command() ?? ''}
+              >
+                {errorLine(msg())}
+              </p>
+            }
           >
-            {(() => {
-              const raw = props.result.state();
-              const line = raw.kind === 'error' && props.formatLine ? props.formatLine(raw.message, raw.code ?? null) : null;
-              return line ?? `Couldn't ${commandVerb(props.result.command())} ${props.subject()}: ${msg()}`;
-            })()}
-          </p>
+            <div
+              class="edp-form__error"
+              role="alert"
+              data-testid={`${props.testId}-error`}
+              data-command={props.result.command() ?? ''}
+            >
+              <TechnicalDetails raw={errorRaw()} plain={errorLine(msg())} testId={`${props.testId}-error-details`} />
+            </div>
+          </Show>
         )}
       </Show>
       <Show when={warning()}>

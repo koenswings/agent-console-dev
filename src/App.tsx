@@ -5,6 +5,7 @@ import SettingsPanel from './components/SettingsPanel';
 import AccountScreen from './components/AccountScreen';
 import NetworkTree from './components/NetworkTree';
 import ClientCardsSection from './components/ClientCardsSection';
+import TempBackupsSection from './components/TempBackupsSection';
 import InstanceList from './components/InstanceList';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
 import DiskView from './components/DiskView';
@@ -661,7 +662,10 @@ const App: Component = () => {
                       {/* idea#201 §10.2: Client cards per Engine */}
                       <Show when={selection().type === 'engine' ? selection().id : null} keyed>
                         {(engineId) => (
-                          <ClientCardsSection engineId={engineId} store={store} commandLogStore={commandLogStore} />
+                          <>
+                            <ClientCardsSection engineId={engineId} store={store} commandLogStore={commandLogStore} />
+                            <TempBackupsSection engineId={engineId} store={store} commandLogStore={commandLogStore} />
+                          </>
                         )}
                       </Show>
                     </Match>
