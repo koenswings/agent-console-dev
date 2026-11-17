@@ -354,7 +354,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const activeOpProgressLabel = createMemo((): string => {
     const op = firstActiveOp();
     if (!op) return '';
-    const parked = op.kind === 'moveApp' ? parkedMoveStatusText(op) : null;
+    const parked = op.kind === 'moveApp' ? parkedMoveStatusText(op, props.store?.() ?? null) : null;
     if (parked) return parked;
     const stepLabel = activeOpStepLabel();
     if (stepLabel) return stepLabel;

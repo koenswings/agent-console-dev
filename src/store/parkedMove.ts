@@ -13,6 +13,8 @@
  * and is only shown when the source is still on the source disk.
  */
 import type { Operation, Store } from '../types/store';
+import { engineDisplayName } from './appUrl';
+import { engineLabel } from './updateApp';
 
 export const SOURCE_STOPPED_HINT = 'Source stopped until the move resumes or gives up';
 
@@ -20,6 +22,26 @@ export const SOURCE_STOPPED_HINT = 'Source stopped until the move resumes or giv
 export const PARKED_WAITING_STATUS = 'Waiting for the disk to come back';
 /** Parked after a counted failure; resumes at the next boot or dock. */
 export const PARKED_PENDING_STATUS = 'Waiting to try again';
+/** Parked waiting for a named Engine whose hostname is not in the store. */
+export const PARKED_WAITING_OTHER_PI = 'Waiting for the other Pi to come back';
+export const parkedWaitingEngineStatus = (name: string): string =>
+  `Waiting for ${name} to come back`;
+
+/** `RESUME_WAITING: Engine ENGINE_… is not connected: …` (engine#511). */
+const ENGINE_IN_ERROR_RE = /\bEngine\s+(ENGINE_[A-Za-z0-9]+)\b/;
+
+export const engineIdFromParkedError = (raw: string | null | undefined): string | null =>
+  String(raw ?? '').match(ENGINE_IN_ERROR_RE)?.[1] ?? null;
+
+const waitingStatusFor = (raw: string, store?: Store | null): string => {
+  const engineId = engineIdFromParkedError(raw);
+  if (!engineId) return PARKED_WAITING_STATUS;
+  const label = engineLabel(store ?? null, engineId);
+  const hostname = String(store?.engineDB?.[engineId]?.hostname ?? '').trim();
+  // engineLabel falls back to the raw id; never show ENGINE_… in the waiting line.
+  const name = hostname ? engineDisplayName(label) || hostname : '';
+  return name ? parkedWaitingEngineStatus(name) : PARKED_WAITING_OTHER_PI;
+};
 
 /** Local parked / mid-resume phases (engine#509). */
 const LOCAL_HINT_PHASES = new Set(['copying', 'verified']);
@@ -66,10 +88,10 @@ export const isResumeParkedText = (raw: string | null | undefined, code?: string
   code === 'RESUME_PARKED' || /^(?:MOVE PAUSED:\s*)?RESUME_(WAITING|PENDING)\b/.test(String(raw ?? '').trim());
 
 /** Plain waiting line from a parked error or `MOVE PAUSED: RESUME_…` trace text. */
-export const parkedStatusFromText = (raw: string | null | undefined): string | null => {
+export const parkedStatusFromText = (raw: string | null | undefined, store?: Store | null): string | null => {
   const m = String(raw ?? '').trim().match(/^(?:MOVE PAUSED:\s*)?RESUME_(WAITING|PENDING)\b/);
   if (!m) return null;
-  return m[1] === 'WAITING' ? PARKED_WAITING_STATUS : PARKED_PENDING_STATUS;
+  return m[1] === 'WAITING' ? waitingStatusFor(String(raw ?? ''), store) : PARKED_PENDING_STATUS;
 };
 
 /** Pending move waiting for a disk (WAITING) or the next boot or dock (PENDING). */
@@ -106,9 +128,9 @@ export const showsSourceStoppedHint = (
  * in-flight resumes, return null so the card keeps "Pending" / "Running"
  * and never shows a raw code.
  */
-export const parkedMoveStatusText = (op: Operation | null | undefined): string | null => {
+export const parkedMoveStatusText = (op: Operation | null | undefined, store?: Store | null): string | null => {
   if (!isResumableMove(op) || op!.status !== 'Pending') return null;
-  return parkedStatusFromText(errorText(op!));
+  return parkedStatusFromText(errorText(op!), store);
 };
 
 /**

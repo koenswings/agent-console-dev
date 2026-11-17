@@ -1,10 +1,12 @@
 /** Parked / resumed moveApp hint (engine#509 / engine#511 Console contract). */
 import { describe, it, expect } from 'vitest';
-import type { Instance, Operation, Store } from '../src/types/store';
+import type { Engine, Instance, Operation, Store } from '../src/types/store';
 import {
   SOURCE_STOPPED_HINT,
   PARKED_WAITING_STATUS,
   PARKED_PENDING_STATUS,
+  PARKED_WAITING_OTHER_PI,
+  parkedWaitingEngineStatus,
   isLocalResumableMove,
   isCrossResumableMove,
   isParkedMove,
@@ -99,6 +101,22 @@ const storeOf = (ops: Operation[], storedOn: string | null = SRC_DISK): Store =>
   userDB: {},
   operationDB: Object.fromEntries(ops.map((op) => [op.id, op])),
 });
+
+const eng = (id: string, hostname: string): Engine => ({
+  id,
+  hostname,
+  version: '1',
+  hostOS: 'Linux',
+  created: 0,
+  lastBooted: 0,
+  lastRun: 0,
+  lastHalted: null,
+  commands: [],
+});
+
+const WAITING_ENGINE_ERR =
+  'RESUME_WAITING: Engine ENGINE_gge6zxyl6ftmnri4qx6 is not connected: VERIFY_TIMEOUT: idea03 did not confirm the copy in time';
+const NAMED_ENGINE_ID = 'ENGINE_gge6zxyl6ftmnri4qx6';
 
 describe('parkedMove helpers — local', () => {
   it('parked waiting: hint + waiting status, no raw code', () => {
@@ -329,5 +347,55 @@ describe('parkedMove helpers — cross-Engine (engine#511)', () => {
     expect(MOVE_CODE_TEXT.HELPER_OUTDATED(c)).toBe(
       "Couldn't move kolibri: idea01 needs a system update before Apps can be moved. Nothing was removed: it is still on idea01.",
     );
+  });
+});
+
+describe('parkedMove waiting line when an Engine is named', () => {
+  const namedOp = () => cross({
+    args: { phase: 'checking', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
+    move: crossMove({ phase: 'checking' }),
+    error: WAITING_ENGINE_ERR,
+  });
+
+  it('Engine named and resolved: Waiting for <hostname> to come back', () => {
+    const op = namedOp();
+    const store = storeOf([op]);
+    store.engineDB[NAMED_ENGINE_ID] = eng(NAMED_ENGINE_ID, 'idea03');
+    expect(parkedMoveStatusText(op, store)).toBe(parkedWaitingEngineStatus('idea03'));
+    expect(parkedMoveStatusText(op, store)).toBe('Waiting for idea03 to come back');
+    expect(parkedStatusFromText(`MOVE PAUSED: ${WAITING_ENGINE_ERR}`, store))
+      .toBe('Waiting for idea03 to come back');
+    expect(parkedMoveStatusText(op, store)).not.toMatch(/RESUME_|ENGINE_/);
+  });
+
+  it('Engine named but unknown: Waiting for the other Pi to come back', () => {
+    const op = namedOp();
+    expect(parkedMoveStatusText(op)).toBe(PARKED_WAITING_OTHER_PI);
+    expect(parkedMoveStatusText(op, storeOf([op]))).toBe(PARKED_WAITING_OTHER_PI);
+    expect(parkedMoveStatusText(op, storeOf([op]))).toBe('Waiting for the other Pi to come back');
+    const emptyName = storeOf([op]);
+    emptyName.engineDB[NAMED_ENGINE_ID] = eng(NAMED_ENGINE_ID, '');
+    expect(parkedMoveStatusText(op, emptyName)).toBe(PARKED_WAITING_OTHER_PI);
+    expect(parkedMoveStatusText(op)).not.toMatch(/RESUME_|ENGINE_/);
+  });
+
+  it('no Engine named: Waiting for the disk to come back', () => {
+    const op = cross({ error: 'RESUME_WAITING: source disk left' });
+    const store = storeOf([op]);
+    store.engineDB[TGT] = eng(TGT, 'idea03');
+    expect(parkedMoveStatusText(op, store)).toBe(PARKED_WAITING_STATUS);
+    expect(parkedMoveStatusText(op, store)).toBe('Waiting for the disk to come back');
+    expect(parkedStatusFromText('MOVE PAUSED: RESUME_WAITING: source disk left', store))
+      .toBe(PARKED_WAITING_STATUS);
+  });
+
+  it('RESUME_PENDING stays Waiting to try again even if an Engine is named', () => {
+    const op = cross({
+      error: 'RESUME_PENDING (1/3): Engine ENGINE_gge6zxyl6ftmnri4qx6 is not connected',
+    });
+    const store = storeOf([op]);
+    store.engineDB[NAMED_ENGINE_ID] = eng(NAMED_ENGINE_ID, 'idea03');
+    expect(parkedMoveStatusText(op, store)).toBe(PARKED_PENDING_STATUS);
+    expect(parkedMoveStatusText(op, store)).toBe('Waiting to try again');
   });
 });

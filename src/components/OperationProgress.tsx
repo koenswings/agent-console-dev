@@ -107,7 +107,7 @@ const OpCard: Component<OpCardProps> = (props) => {
   const isActive = () => props.op.status === 'Pending' || props.op.status === 'Running';
   // idea#498: cross-Engine Move Checking step, live from the target Engine (null = stored label).
   const checkingLine = createMemo(() => (props.op.kind === 'moveApp' ? moveCheckingLine(props.op, moveChecking(), liveNow()) : null));
-  const parkedStatus = createMemo(() => parkedMoveStatusText(props.op));
+  const parkedStatus = createMemo(() => parkedMoveStatusText(props.op, props.store));
   const sourceStopped = createMemo(() => showsSourceStoppedHint(props.op, connectedEngineId(props.store), props.store));
   const parkedRaw = createMemo(() => (parkedStatus() ? String(props.op.error ?? '') : ''));
   const gaveUp = createMemo(() => isFailed() && String(props.op.error ?? '').startsWith('RESUME_GAVE_UP'));

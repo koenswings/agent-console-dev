@@ -367,7 +367,7 @@ export const settleMoveOutcome = (store: () => Store | null, instanceId: string,
   (o: TraceOutcome): TraceOutcome => {
     // engine#511: RESUME_PARKED is not an end state (text starts `MOVE PAUSED: RESUME_…`).
     if (o.kind === 'error' && isResumeParkedText(o.message, o.code ?? null)) {
-      return { kind: 'warning', message: parkedStatusFromText(o.message) ?? PARKED_WAITING_STATUS, code: 'RESUME_PARKED' };
+      return { kind: 'warning', message: parkedStatusFromText(o.message, store()) ?? PARKED_WAITING_STATUS, code: 'RESUME_PARKED' };
     }
     if (o.kind !== 'ok') return o;
     const s = store();
