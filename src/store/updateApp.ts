@@ -20,9 +20,12 @@
  *             failed rollback: instance Stopped, statusCondition `ROLLBACK FAILED: …` (confirmed);
  *             `restartFailed?: true` (engine#442 / agent-engine-dev#445) when the update failed
  *             before a swap and the old version could not be restarted
- *  - engine#456: optional Instance.updatePending; updateApp resumes work/settle on the same instance
+ *  - engine#456 / engine#505 7c20fd0: optional Instance.updatePending; Resume is also
+ *             signalled by updateAvailable with fromVersion == toVersion (appId = instanceOf).
+ *             Finish update sends `updateApp <id> <current appId>` (Engine also accepts the
+ *             bare version), with no --source and no --allow-major.
  *  - command-log trace result `{ restartFailed: true }` on that error (JSON on the trace)
- *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal }`
+ *  - progress ephemeral `{ type: 'idea/updateProgress', engineId, instanceId, step, bytesDone, bytesTotal, phaseNote? }`
  *  - refusals `CODE: text` in the trace error
  *  - engine#469 / agent-engine-dev#472: a due major backup with no linked Backup Disk docked is
  *             a temporary backup on the system disk inside the Snapshot stop (op stepLabel
@@ -64,6 +67,8 @@ export interface UpdateOffer {
   sourceEngineId: string | null;
   sizeBytes: number | null;
   migrationNote: string | null;
+  /** engine#505: true for a Resume offer (current version; no --source / --allow-major). */
+  resume?: boolean;
 }
 
 type Raw = Record<string, unknown>;
@@ -136,19 +141,35 @@ export const engineIdOfInstance = (store: Store | null, inst: Instance | undefin
 };
 
 /**
+ * engine#505 / #456: Resume is `Instance.updatePending`, or `updateAvailable` with
+ * both `fromVersion` and `toVersion` present and equal (the Engine writes appId =
+ * instanceOf). A same-appId offer that is not a Resume is still a stale leftover
+ * (idea#459) and stays hidden.
+ */
+export const isResumeUpdate = (inst: Instance | undefined): boolean => {
+  if (!inst) return false;
+  if (inst.updatePending === true) return true;
+  const u = rawOf((inst as unknown as Raw).updateAvailable);
+  const from = str(u.fromVersion);
+  const to = str(u.toVersion);
+  return !!from && from === to;
+};
+
+/**
  * The update on offer for `inst`, or null (no field, no capability, a
  * cross-Engine source the Engine can't fetch, or a stale offer of the version
  * already running / an older one — optional Console guard, agent-engine-dev#337).
  */
 export const updateOfferFor = (store: Store | null, inst: Instance | undefined, engine: Engine | undefined): UpdateOffer | null => {
   if (!inst || !canUpdate(engine)) return null;
-  // engine#456: resume the committed update, not a newer offered bundle. The command
-  // builder stays unchanged: updateApp on this same instance and its running App id.
-  if (isUpdatePending(inst)) {
-    const version = versionOf(store?.appDB, String(inst.instanceOf));
-    return { toAppId: String(inst.instanceOf), fromVersion: version, toVersion: version,
+  // engine#505: resume the committed update, not a newer offered bundle.
+  if (isResumeUpdate(inst)) {
+    const u = rawOf((inst as unknown as Raw).updateAvailable);
+    const toAppId = str(u.appId) || String(inst.instanceOf);
+    const version = str(u.fromVersion) || str(u.toVersion) || versionOf(store?.appDB, String(inst.instanceOf));
+    return { toAppId, fromVersion: version, toVersion: version,
       major: false, sourceDiskId: null, sourceEngineId: null, estimatedMinutes: null,
-      sizeBytes: null, migrationNote: null };
+      sizeBytes: null, migrationNote: null, resume: true };
   }
   const u = rawOf((inst as unknown as Raw).updateAvailable);
   const toAppId = str(u.appId);
@@ -183,10 +204,12 @@ export const engineLabel = (store: Store | null, engineId: string | null): strin
   (engineId && String(store?.engineDB?.[engineId]?.hostname ?? engineId)) || 'the other Engine';
 
 // ── Command ─────────────────────────────────────────────────────────────────
-export const buildUpdateAppCommand = (instanceId: string, offer: Pick<UpdateOffer, 'toAppId' | 'sourceDiskId' | 'major'>): string =>
-  [COMMAND, instanceId, offer.toAppId,
-    ...(offer.sourceDiskId ? ['--source', offer.sourceDiskId] : []),
-    ...(offer.major ? ['--allow-major'] : [])].join(' ');
+export const buildUpdateAppCommand = (instanceId: string, offer: Pick<UpdateOffer, 'toAppId' | 'sourceDiskId' | 'major' | 'resume'>): string =>
+  offer.resume
+    ? [COMMAND, instanceId, offer.toAppId].join(' ')
+    : [COMMAND, instanceId, offer.toAppId,
+      ...(offer.sourceDiskId ? ['--source', offer.sourceDiskId] : []),
+      ...(offer.major ? ['--allow-major'] : [])].join(' ');
 
 // ── Text ────────────────────────────────────────────────────────────────────
 /** "from X to Y", or just "Y" when the current version is a SHA/date nobody can read. */
@@ -290,8 +313,16 @@ export const settleFailedText = (app: string): string =>
   `${app} runs the new version, but the last part of the update failed. Press Finish update to try again, or ask for help.`;
 export const updatePendingFirstText = (app: string): string =>
   `The last update of ${app} is not finished yet. Press Finish update to finish it first. Nothing changed.`;
+export const updatePendingStartFirstText = (app: string): string =>
+  `Start ${app} first, then press Finish update to finish the update. Nothing changed.`;
 export const rollbackStartFailedText = (app: string): string =>
   `IDEA put back the old version of ${app} and its data, but it does not start. Ask for help.`;
+export const stagesUnsupportedText = (app: string): string =>
+  `This version of ${app} needs a newer IDEA before it can be installed. Nothing changed.`;
+export const contractInvalidText = (app: string): string =>
+  `This version of ${app} is not set up correctly for an update. Nothing changed. Ask for help.`;
+export const updateInFlightStartText = (app: string): string =>
+  `IDEA is still updating ${app} and cannot start it until that update is recovered. Ask for help if it stays like this.`;
 
 export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => string> = {
   PREPARE_FAILED: (c) => setupFailedText(c.app),
@@ -299,8 +330,11 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   MIGRATIONS_PENDING: (c) => updatePendingText(c.app),
   SETTLE_FAILED: (c) => settleFailedText(c.app),
   ROLLBACK_START_FAILED: (c) => rollbackStartFailedText(c.app),
-  // engine#456: another version was sent while an update is still pending (only Resume is accepted).
-  UPDATE_PENDING: (c) => updatePendingFirstText(c.app),
+  // engine#456 / #505: another target was sent while an update is still pending (only Resume is accepted).
+  // The Engine also uses this code when Resume is sent while the App is not Running or Starting.
+  UPDATE_PENDING: (c, detail) => /\bstart it\b/.test(detail) ? updatePendingStartFirstText(c.app) : updatePendingFirstText(c.app),
+  UPDATE_STAGES_UNSUPPORTED: (c) => stagesUnsupportedText(c.app),
+  UPDATE_CONTRACT_INVALID: (c) => contractInvalidText(c.app),
   NOT_DOCKED: (c) => `The disk with ${c.app} is not in this Engine. Nothing changed.`,
   BUSY: (c) => `Something else is running on ${c.app}. Try again when it is done.`,
   SOURCE_MISSING: (c) => `The disk with the new version is no longer in ${c.engine}. Nothing changed.`,
@@ -349,7 +383,7 @@ export const isTempBackupRefusal = (message: string): boolean => {
 };
 
 /** engine#456: these codes are only codes at the start (`CODE: detail`), not in a path/log. */
-const UPDATE_456_CODES = ['PREPARE_FAILED', 'VERIFY_FAILED', 'MIGRATIONS_PENDING', 'SETTLE_FAILED', 'ROLLBACK_START_FAILED', 'UPDATE_PENDING'];
+const UPDATE_456_CODES = ['PREPARE_FAILED', 'VERIFY_FAILED', 'MIGRATIONS_PENDING', 'SETTLE_FAILED', 'ROLLBACK_START_FAILED', 'UPDATE_PENDING', 'UPDATE_STAGES_UNSUPPORTED', 'UPDATE_CONTRACT_INVALID', 'UPDATE_IN_FLIGHT'];
 export const isUpdate456Error = (message: string): boolean =>
   UPDATE_456_CODES.some((code) => message.trim().startsWith(`${code}:`));
 
@@ -424,7 +458,7 @@ const stepName = (value: string | null | undefined): UpdateStep | null =>
   value === BACKUP_STEP || BACKUP_STEP_RE.test(value ?? '') ? BACKUP_STEP
     : STEPS.includes(value as UpdateStep) ? value as UpdateStep : null;
 
-export interface UpdateProgress { step: string | null; bytesDone: number | null; bytesTotal: number | null; fetchPaused?: FetchPaused | null; receivedAt: number }
+export interface UpdateProgress { step: string | null; bytesDone: number | null; bytesTotal: number | null; fetchPaused?: FetchPaused | null; phaseNote?: string | null; receivedAt: number }
 
 const GB = 1024 ** 3;
 const gb = (n: number): string => (n / GB).toFixed(1);
@@ -762,7 +796,7 @@ export const applyUpdateProgress = (
   if (m.type !== PROGRESS_TYPE) return state;
   const id = str(m.instanceId);
   if (!id) return state;
-  return { ...state, [id]: { step: str(m.step), bytesDone: num(m.bytesDone), bytesTotal: num(m.bytesTotal), fetchPaused: pausedFrom(rawOf(m.fetchPaused)), receivedAt } };
+  return { ...state, [id]: { step: str(m.step), bytesDone: num(m.bytesDone), bytesTotal: num(m.bytesTotal), fetchPaused: pausedFrom(rawOf(m.fetchPaused)), phaseNote: str(m.phaseNote), receivedAt } };
 };
 
 export const receiveUpdateProgress = (message: unknown, receivedAt: number = Date.now()): void => {
@@ -790,3 +824,7 @@ export const dismissUpdate = (instanceId: string, toAppId: string): void => {
   try { globalThis.localStorage?.setItem(DISMISS_KEY, JSON.stringify(next)); } catch { /* private mode: in-memory only */ }
 };
 export const resetDismissed = (): void => { setDismissed({}); };
+
+/** startInstance refusal while an in-flight update marker is on the App Disk (engine#505). */
+export const startInstanceErrorText = (message: string, app: string): string =>
+  message.trim().startsWith('UPDATE_IN_FLIGHT:') ? updateInFlightStartText(app) : message;

@@ -32,6 +32,7 @@ import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { live, liveNow, metricsFor } from '../store/live';
 import { plainEngineText } from '../store/plainError';
+import { startInstanceErrorText } from '../store/updateApp';
 import { latestRowFailure, rowFailureVisible } from '../store/rowFailure';
 import { isDemoInstance } from '../store/demoApps';
 import TechnicalDetails from './TechnicalDetails';
@@ -597,6 +598,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           result={cmdResult}
           subject={() => props.instance()?.name ?? ''}
           testId={`instance-cmd-${props.instanceId ?? props.instance()?.id ?? ''}`}
+          formatError={(message) => startInstanceErrorText(message, props.app()?.title ?? props.instance()?.name ?? 'the app')}
         />
       </div>
 

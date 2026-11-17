@@ -668,24 +668,43 @@ Refusals `NOT_FOUND`, `IN_USE`, `UPDATE_PENDING`, `BAD_PATH`, `HELPER_OUTDATED` 
 `DELETE_FAILED` show a plain sentence, with the raw `CODE: text` behind Technical details.
 Sizes in this view use the same 1024³ GB as the teacher line.
 
-**Update steps, pending work and setup errors (engine#456, draft until Axle's Engine PR).**
-`STEPS` is the final 12-step list: Fetch, Check, Backup, Snapshot, Swap, LoadImages, Prepare,
-Start, Health, Verify, Work, Settle. The Console reads `updateProgress.step` and
-`op.stepLabel` names first. A Backup stepLabel can still be the engine#469 backup sentence.
-Only after the names does it use an index: through `STEPS` for 12 steps, or `LEGACY_STEPS`
-(Fetch, Check, Snapshot, Swap, Start, Health) for an older six-step Engine. Labels:
-LoadImages "Loading the new version", Prepare "Preparing the new version", Verify "Checking the
-new version", Work/Settle "Finishing the update". Optional `Instance.updatePending` (absent means
-false) is the source for "<App> is working, but its update is not finished yet. Press Finish
-update to finish it." and the "Finish update" button. That button sends the existing updateApp
-command for the same instance and current App id, even without a newer offer. Leading op error
-codes get plain teacher text; the raw codes stay behind Technical details in Ops.
-`updateOpFailedPlainText` (also exported as `updateOpErrorText`) is the Failed-card helper:
-PREPARE_FAILED, VERIFY_FAILED and a `ROLLED BACK:` error use the "put the old version back"
-sentence; MIGRATIONS_PENDING uses the pending sentence; SETTLE_FAILED asks teachers to press
-Finish update again. Those last two leave the instance Running, so they are not shown as a
-rollback. ROLLBACK_START_FAILED, or a Stopped statusCondition starting `ROLLBACK START FAILED:`,
-says the old version and data are back but the app does not start.
+**Update steps, pending work and Resume (engine#456, aligned to engine#505 `7c20fd0`).**
+`STEPS` is the 12-step list: Fetch, Check, Backup, Snapshot, Swap, LoadImages, Prepare,
+Start, Health, Verify, Work, Settle. `totalSteps` is 12. Backup runs only when a pre-update
+backup is due; Prepare, Verify, Work and Settle run only when the new bundle declares them.
+The Console reads `updateProgress.step` and `op.stepLabel` names first. A Backup stepLabel can
+still be the engine#469 backup sentence. Only after the names does it use an index: through
+`STEPS` for 12 steps, or `LEGACY_STEPS` (Fetch, Check, Snapshot, Swap, Start, Health) for an
+older six-step Engine (`totalSteps` 6). Labels: LoadImages "Loading the new version", Prepare
+"Preparing the new version", Verify "Checking the new version", Work/Settle "Finishing the
+update". Ephemeral `idea/updateProgress` may include `phaseNote` (the step's last `ERROR:` /
+`not yet:` line, ≤ 200 characters); the running step line shows it when present.
+
+Resume is signalled by `Instance.updatePending` (absent means false) **or** by
+`updateAvailable` with both `fromVersion` and `toVersion` present and equal (`appId` =
+`instanceOf`). Either signal shows "<App> is working, but its update is not finished yet.
+Press Finish update to finish it." and a "Finish update" button (no confirm). That button
+sends `updateApp <id> <current appId>` with no `--source` and no `--allow-major` (the Engine
+also accepts the bare current version). A same-`appId` offer that is not a Resume is still a
+stale leftover (idea#459) and stays hidden. Resume needs the App Running or Starting; if it
+is not, the button is disabled and the line says "Start <App> first, then press Finish update
+to finish the update. Nothing changed." Sending a different target while pending is refused
+`UPDATE_PENDING`.
+
+Leading op error codes get plain teacher text; the raw codes stay behind Technical details in
+Ops. `updateOpFailedPlainText` (also exported as `updateOpErrorText`) is the Failed-card
+helper. PREPARE_FAILED and VERIFY_FAILED roll back (and a `ROLLED BACK:` error) use the "put
+the old version back" sentence. After the point of no return (Verify passed) the new version
+keeps Running and `updatePending` stays set: MIGRATIONS_PENDING (a Work failure, Settle still
+"not yet" at its deadline, or an Engine restart after Verify) uses the pending sentence;
+SETTLE_FAILED (any other Settle exit) asks teachers to press Finish update again. Those two
+are not shown as a rollback. ROLLBACK_START_FAILED, or a Stopped statusCondition starting
+`ROLLBACK START FAILED:`, says the old version and data are back but the app does not start.
+`ROLLBACK FAILED:` now means the data itself could not be restored. Check refusals before
+anything is stopped: `UPDATE_STAGES_UNSUPPORTED` (unknown stage key) and
+`UPDATE_CONTRACT_INVALID` (wrong shape); both say nothing changed. A `startInstance` refused
+`UPDATE_IN_FLIGHT` (in-flight marker on the App Disk) says the app cannot start until that
+update is recovered.
 
 ### Backup Disk schedule controls (idea#400)
 

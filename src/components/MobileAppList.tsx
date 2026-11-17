@@ -18,6 +18,7 @@ import {
 import { getActiveOpsForInstance } from '../store/operations';
 import { moveErrorLineFor, moveWarningLineFor, settleMoveOutcome, type MoveCtx } from '../store/moveApp';
 import { live, liveNow, metricsFor } from '../store/live';
+import { startInstanceErrorText } from '../store/updateApp';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, engineDisplayName, offlineAppHint } from '../store/appUrl';
 import { instanceCardTitle } from '../store/instanceTitle';
 import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
@@ -343,6 +344,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                 result={cmdResult}
                 subject={() => i().name}
                 testId={`mobile-instance-cmd-${id}`}
+                formatError={(message) => startInstanceErrorText(message, app()?.title ?? i().name)}
                 formatLine={(message, code) => {
                   const m = cmdResult.command() === 'moveApp' ? lastMoves.get(id) : undefined;
                   return m ? moveErrorLineFor(props.store(), id, m.since, message, code, m.ctx) : null;

@@ -10,8 +10,8 @@ import OperationProgress from '../src/components/OperationProgress';
 import { setSendCommandFn } from '../src/store/commands';
 import {
   BACKUP_STEP, BACKUP_STEP_TEXT, LEGACY_STEPS, ROLLBACK_FAILED_PREFIX, ROLLBACK_START_FAILED_PREFIX, STEPS,
-  currentStep, friendlyUpdateError, isRollbackStartFailed, isRolledBackUpdateError, parseRefusal, resetDismissed, stepLabel, updateOpErrorText,
-  updateOpFailedPlainText, updateOutcome, updatePendingText, type RefusalCtx,
+  buildUpdateAppCommand, contractInvalidText, currentStep, friendlyUpdateError, isResumeUpdate, isRollbackStartFailed, isRolledBackUpdateError, parseRefusal, resetDismissed, stagesUnsupportedText, startInstanceErrorText, stepLabel, updateInFlightStartText, updateOpErrorText,
+  updateOpFailedPlainText, updateOfferFor, updateOutcome, updatePendingStartFirstText, updatePendingText, type RefusalCtx,
 } from '../src/store/updateApp';
 import { historyRowView } from '../src/store/historyRow';
 import type { CommandLogState } from '../src/store/commandLog';
@@ -30,7 +30,7 @@ const engine = (): Engine => ({
   lastHalted: null, commands: [], capabilities: ['updateApp'] as Engine['capabilities'], capabilitiesBootedAt: T,
 } as Engine);
 const app = (id: string, version: string): App => ({ id, name: 'kolibri', version, title: 'Kolibri', description: null, url: null, category: 'education', icon: null, author: null } as App);
-const inst = (extra: Partial<Instance> = {}): Instance => ({
+const inst = (extra: Partial<Instance> & Record<string, unknown> = {}): Instance => ({
   id: 'i1', instanceOf: 'kolibri-1.0.0', name: 'kolibri', status: 'Running', port: 8080, serviceImages: [], created: T,
   lastBackup: null, lastStarted: T, storedOn: 'D1', statusCondition: null, currentStep: null, totalSteps: null,
   stepLabel: null, metrics: null, previousAppId: 'kolibri-0.15.5', ...extra,
@@ -91,8 +91,23 @@ describe('engine#456 error text', () => {
     expect(friendlyUpdateError('UPDATE_PENDING: finish the current update first', ctx)).toBe(
       'The last update of Kolibri is not finished yet. Press Finish update to finish it first. Nothing changed.',
     );
+    expect(friendlyUpdateError('UPDATE_PENDING: kolibri-1.0.0 is Stopped; start it, then send updateApp i1 kolibri-1.0.0 again to finish the update', ctx)).toBe(
+      updatePendingStartFirstText('Kolibri'),
+    );
+    expect(friendlyUpdateError('UPDATE_STAGES_UNSUPPORTED: this Engine does not run x-app.update stage foo; nothing was stopped or changed', ctx)).toBe(
+      stagesUnsupportedText('Kolibri'),
+    );
+    expect(friendlyUpdateError('UPDATE_CONTRACT_INVALID: x-app.update settle is missing interval; nothing was stopped or changed', ctx)).toBe(
+      contractInvalidText('Kolibri'),
+    );
+    expect(startInstanceErrorText('UPDATE_IN_FLIGHT: instances/i1 is in the middle of an update (operation op1 of Engine ENG1); it is not started until that Engine recovers it (engine#456)', 'Kolibri')).toBe(
+      updateInFlightStartText('Kolibri'),
+    );
     expect(parseRefusal('note PREPARE_FAILED: in a log').code).toBeNull();
-    for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START]) expect(text).not.toMatch(/[A-Z]{2,}_[A-Z]+|\/|Engine/);
+    expect(parseRefusal('note UPDATE_CONTRACT_INVALID: in a log').code).toBeNull();
+    for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START, updatePendingStartFirstText('Kolibri'), stagesUnsupportedText('Kolibri'), contractInvalidText('Kolibri'), updateInFlightStartText('Kolibri')]) {
+      expect(text).not.toMatch(/[A-Z]{2,}_[A-Z]+|\/|Engine/);
+    }
   });
   it('handles rollback-start-failed like rollback-failed and keeps both prefixes', () => {
     expect(ROLLBACK_FAILED_PREFIX).toBe('ROLLBACK FAILED:');
@@ -127,19 +142,35 @@ describe('engine#456 error text', () => {
   });
 });
 
-describe('Instance.updatePending', () => {
+describe('Instance.updatePending and Resume (engine#505)', () => {
   it('shows the pending sentence and Finish update even with no newer version', () => {
     setup(inst({ updatePending: true }));
     expect(screen.getByTestId('update-pending-i1').textContent).toBe(PENDING);
     expect(screen.getByTestId('update-badge-i1').textContent).toBe('Finish update');
     expect(updatePendingText('Kolibri')).toBe(PENDING);
   });
-  it('Finish update re-sends updateApp for the same instance with the existing builder', () => {
+  it('updateAvailable fromVersion == toVersion is Resume even without updatePending', () => {
+    const i = inst({ updateAvailable: { appId: 'kolibri-1.0.0', fromVersion: '1.0.0', toVersion: '1.0.0' } });
+    expect(isResumeUpdate(i)).toBe(true);
+    const o = updateOfferFor(mkStore(i), i, engine())!;
+    expect(o.resume).toBe(true);
+    expect(o.toAppId).toBe('kolibri-1.0.0');
+    expect(buildUpdateAppCommand('i1', o)).toBe('updateApp i1 kolibri-1.0.0');
+    setup(i);
+    expect(screen.getByTestId('update-pending-i1').textContent).toBe(PENDING);
+    expect(screen.getByTestId('update-badge-i1').textContent).toBe('Finish update');
+  });
+  it('Finish update re-sends updateApp for the current app id, with no --source or --allow-major', () => {
     const send = vi.fn();
     setSendCommandFn(send);
     setup(inst({ updatePending: true }));
     fireEvent.click(screen.getByTestId('update-badge-i1'));
     expect(send).toHaveBeenCalledWith('ENG1', 'updateApp i1 kolibri-1.0.0');
+  });
+  it('Finish update is disabled until the App is Running or Starting', () => {
+    setup(inst({ updatePending: true, status: 'Stopped' }));
+    expect(screen.getByTestId('update-pending-i1').textContent).toBe(updatePendingStartFirstText('Kolibri'));
+    expect(screen.getByTestId('update-badge-i1')).toBeDisabled();
   });
   it('MIGRATIONS_PENDING uses the pending line, not a second outcome line', () => {
     setup(inst({ updatePending: true }), [op({ status: 'Failed', completedAt: T + 1, error: 'MIGRATIONS_PENDING: timed out' })]);

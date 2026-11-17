@@ -455,7 +455,7 @@ export type Status =
   | 'Error';
 
 export interface Instance {
-  /** engine#456: App is running but work/settle still needs finishing; absent means false. */
+  /** engine#456 / #505: work/settle still needs finishing; absent means false. The Engine also writes updateAvailable with fromVersion == toVersion for Resume. */
   updatePending?: boolean;
   id: InstanceID;
   instanceOf: AppID;
