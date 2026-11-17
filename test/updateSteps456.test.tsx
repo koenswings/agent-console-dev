@@ -19,9 +19,9 @@ import type { CommandTrace } from '../src/types/commandLog';
 import type { App, Disk, Engine, Instance, Operation, Store } from '../src/types/store';
 
 const T = 1_700_000_000_000;
-const PENDING = 'Kolibri is working, but its update is not finished yet. Press Update to finish it.';
+const PENDING = 'Kolibri is working, but its update is not finished yet. Press Finish update to finish it.';
 const SETUP = 'The new version of Kolibri could not be set up, so IDEA put the old version back. Your data is safe.';
-const SETTLE = 'Kolibri runs the new version, but the last part of the update failed. Press Update to try again, or ask for help.';
+const SETTLE = 'Kolibri runs the new version, but the last part of the update failed. Press Finish update to try again, or ask for help.';
 const ROLLBACK_START = 'IDEA put back the old version of Kolibri and its data, but it does not start. Ask for help.';
 const ctx: RefusalCtx = { app: 'Kolibri', fromVersion: '0.15.5', engine: 'idea03', diskName: 'Apps disk', hostEngine: 'idea03' };
 
@@ -88,6 +88,9 @@ describe('engine#456 error text', () => {
     expect(friendlyUpdateError('MIGRATIONS_PENDING: timed out', ctx)).toBe(PENDING);
     expect(friendlyUpdateError('SETTLE_FAILED: exit 1', ctx)).toBe(SETTLE);
     expect(friendlyUpdateError('ROLLBACK_START_FAILED: compose failed', ctx)).toBe(ROLLBACK_START);
+    expect(friendlyUpdateError('UPDATE_PENDING: finish the current update first', ctx)).toBe(
+      'The last update of Kolibri is not finished yet. Press Finish update to finish it first. Nothing changed.',
+    );
     expect(parseRefusal('note PREPARE_FAILED: in a log').code).toBeNull();
     for (const text of [PENDING, SETUP, SETTLE, ROLLBACK_START]) expect(text).not.toMatch(/[A-Z]{2,}_[A-Z]+|\/|Engine/);
   });

@@ -280,11 +280,13 @@ const newVersion = (c: RefusalCtx): string => (c.toVersion ? ` ${c.toVersion}` :
 /** engine#456: the stored instance flag survives archived operations; undefined is false. */
 export const isUpdatePending = (inst: Instance | undefined): boolean => inst?.updatePending === true;
 export const updatePendingText = (app: string): string =>
-  `${app} is working, but its update is not finished yet. Press Update to finish it.`;
+  `${app} is working, but its update is not finished yet. Press Finish update to finish it.`;
 export const setupFailedText = (app: string): string =>
   `The new version of ${app} could not be set up, so IDEA put the old version back. Your data is safe.`;
 export const settleFailedText = (app: string): string =>
-  `${app} runs the new version, but the last part of the update failed. Press Update to try again, or ask for help.`;
+  `${app} runs the new version, but the last part of the update failed. Press Finish update to try again, or ask for help.`;
+export const updatePendingFirstText = (app: string): string =>
+  `The last update of ${app} is not finished yet. Press Finish update to finish it first. Nothing changed.`;
 export const rollbackStartFailedText = (app: string): string =>
   `IDEA put back the old version of ${app} and its data, but it does not start. Ask for help.`;
 
@@ -294,6 +296,8 @@ export const REFUSAL_TEXT: Record<string, (c: RefusalCtx, detail: string) => str
   MIGRATIONS_PENDING: (c) => updatePendingText(c.app),
   SETTLE_FAILED: (c) => settleFailedText(c.app),
   ROLLBACK_START_FAILED: (c) => rollbackStartFailedText(c.app),
+  // engine#456: another version was sent while an update is still pending (only Resume is accepted).
+  UPDATE_PENDING: (c) => updatePendingFirstText(c.app),
   NOT_DOCKED: (c) => `The disk with ${c.app} is not in this Engine. Nothing changed.`,
   BUSY: (c) => `Something else is running on ${c.app}. Try again when it is done.`,
   SOURCE_MISSING: (c) => `The disk with the new version is no longer in ${c.engine}. Nothing changed.`,
@@ -342,7 +346,7 @@ export const isTempBackupRefusal = (message: string): boolean => {
 };
 
 /** engine#456: these codes are only codes at the start (`CODE: detail`), not in a path/log. */
-const UPDATE_456_CODES = ['PREPARE_FAILED', 'VERIFY_FAILED', 'MIGRATIONS_PENDING', 'SETTLE_FAILED', 'ROLLBACK_START_FAILED'];
+const UPDATE_456_CODES = ['PREPARE_FAILED', 'VERIFY_FAILED', 'MIGRATIONS_PENDING', 'SETTLE_FAILED', 'ROLLBACK_START_FAILED', 'UPDATE_PENDING'];
 export const isUpdate456Error = (message: string): boolean =>
   UPDATE_456_CODES.some((code) => message.trim().startsWith(`${code}:`));
 
