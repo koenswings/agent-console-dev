@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { render, screen } from '@solidjs/testing-library';
 import OperationProgress from '../src/components/OperationProgress';
-import { MOCK_STORE } from '../src/mock/mockStore';
+import { MOCK_IDS, MOCK_STORE } from '../src/mock/mockStore';
+import { noteConnectedEngine, resetConnectedEngine } from '../src/store/connectedEngine';
 import { setupFailedText } from '../src/store/updateApp';
 import type { Operation, Store } from '../src/types/store';
 import type { CommandLogStore } from '../src/types/commandLog';
@@ -224,6 +225,58 @@ describe('OperationProgress', () => {
     expect(screen.getByTestId('operation-source-stopped-mv-parked').textContent).toBe(
       'Source stopped until the move resumes or gives up',
     );
+  });
+
+
+  describe('cross-Engine parked move hint (provisional, engine#497 option A)', () => {
+    const E1 = MOCK_IDS.ENGINE_1_ID;
+    const E2 = MOCK_IDS.ENGINE_2_ID;
+    beforeEach(() => resetConnectedEngine());
+    afterEach(() => resetConnectedEngine());
+
+    const crossParked = (): Operation => {
+      const op = localMove({
+        id: 'mv-cross',
+        engineId: E1,
+        args: {
+          instanceId: 'inst-src',
+          sourceDiskId: 'disk-src',
+          targetDiskId: 'disk-tgt',
+          phase: 'copying',
+          wasRunning: '1',
+          crossEngine: 'true',
+        },
+        error: 'RESUME_WAITING: source disk left',
+      });
+      (op as unknown as Record<string, unknown>).move = {
+        phase: 'copying',
+        targetEngineId: E2,
+        sourceInstanceId: 'inst-src',
+        targetInstanceId: 'inst-src',
+        code: null,
+        resultText: null,
+      };
+      return op;
+    };
+
+    it('shows the hint when this Console is the source Engine', () => {
+      noteConnectedEngine(E1);
+      const op = crossParked();
+      render(() => <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />);
+      expect(screen.getByTestId('operation-source-stopped-mv-cross').textContent).toBe(
+        'Source stopped until the move resumes or gives up',
+      );
+      expect(screen.getByText('Waiting for the disk to come back')).toBeInTheDocument();
+    });
+
+    it('hides the hint when this Console is the target Engine', () => {
+      noteConnectedEngine(E2);
+      const op = crossParked();
+      render(() => <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />);
+      expect(screen.queryByTestId('operation-source-stopped-mv-cross')).toBeNull();
+      expect(screen.getByText('Waiting for the disk to come back')).toBeInTheDocument();
+      expect(screen.queryByText(/RESUME_/)).toBeNull();
+    });
   });
 
 });

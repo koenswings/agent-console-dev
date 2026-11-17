@@ -284,7 +284,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   // engine#509: a parked / resumed local move may have stopped this source App.
   const sourceStoppedHint = createMemo((): string | null => {
     if (!props.instanceId || !props.store) return null;
-    return sourceStoppedMoveFor(props.store(), String(props.instanceId)) ? SOURCE_STOPPED_HINT : null;
+    return sourceStoppedMoveFor(props.store(), String(props.instanceId), props.engine()?.id) ? SOURCE_STOPPED_HINT : null;
   });
 
   // console#168: while an update runs (or the update UI owns the result), the

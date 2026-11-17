@@ -25,6 +25,7 @@ import { live, liveNow } from '../store/live';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 import { dismissOp, isCancellable, isOpDismissed } from '../store/dismissedOps';
 import { isMoveDoneNotMoved, moveOpOutcome } from '../store/moveApp';
+import { connectedEngineId } from '../store/connectedEngine';
 import { parkedMoveStatusText, showsSourceStoppedHint, SOURCE_STOPPED_HINT } from '../store/parkedMove';
 import { updateOpFailedPlainText } from '../store/updateApp';
 
@@ -107,7 +108,7 @@ const OpCard: Component<OpCardProps> = (props) => {
   // idea#498: cross-Engine Move Checking step, live from the target Engine (null = stored label).
   const checkingLine = createMemo(() => (props.op.kind === 'moveApp' ? moveCheckingLine(props.op, moveChecking(), liveNow()) : null));
   const parkedStatus = createMemo(() => parkedMoveStatusText(props.op));
-  const sourceStopped = createMemo(() => showsSourceStoppedHint(props.op));
+  const sourceStopped = createMemo(() => showsSourceStoppedHint(props.op, connectedEngineId(props.store)));
 
   const [logExpanded, setLogExpanded] = createSignal(false);
 
