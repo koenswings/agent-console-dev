@@ -123,9 +123,9 @@ Part B operator leftovers: `files_role_added`, `backup_configured_restored`,
 |---|---|
 | `open_settings` | Panel + Engine tab + `settings-engine-status` (connected/preview). Account: `settings-change-password-*`. |
 | `close_settings` | Panel must **hide** after settings-btn (loud if still open). |
-| `switch_engine` | Prefer A r44: open ConnectionManagement; if status-bar hostname **already matches** `DURATION_SWITCH_ENGINE_HOST` → **PASS** (already connected; "No engine found" is N/A — do **not** manual-Connect retry). Connect/retry only when status hostname ≠ HOST. Scan `DURATION_SWITCH_ENGINE_SCAN_MS`; connect `DURATION_SWITCH_ENGINE_CONNECT_MS`. |
+| `switch_engine` | Prefer A r44: open ConnectionManagement; if status-bar hostname **already matches** `DURATION_SWITCH_ENGINE_HOST` → **PASS** (already connected; "No engine found" is N/A — do **not** manual-Connect retry). Connect/retry only when status hostname ≠ HOST. Scan `DURATION_SWITCH_ENGINE_SCAN_MS`; connect `DURATION_SWITCH_ENGINE_CONNECT_MS`. kc10: returns only when the operator layout is back with Engine rows (`DURATION_OP_LAYOUT_MS`, default 60 s); else loud-fail naming the screen (Settings, Connection Management, signed out). |
 | `notice_usb_dock` | NetworkTree visible **and** ≥1 `disk-*` within 20s. No soft 500ms dwell. |
-| `reboot_engine` | Prefer A r48: hostname row match (r47) plus page.once(dialog, accept) BEFORE click. Native confirm() blocks click — do not Promise.all dialog with click. Loud if no dialog. |
+| `reboot_engine` | Prefer A r48: hostname row match (r47) plus page.once(dialog, accept) BEFORE click. Native confirm() blocks click — do not Promise.all dialog with click. Loud if no dialog. kc10: closes Settings / Connection Management **before** waiting for the operator layout (`operatorLayout.ts`), and a timeout names the screen shown. |
 | `open_copied_instance` | `DURATION_COPY_INSTANCE_ID` or ctx.instanceId required — **no** silent Grade5A remap. ALL APPS → instance controls. |
 | `confirm_eject` | After OK, success only on an `ejectDisk` command ok (`[data-testid=eject-command-result]`) or the disk leaving the NetworkTree. A closed dialog is **not** success (console#235). Engine refusal (eject notice / command error) fails with the reason. Timeout 20s, loud. |
 | `cancel_eject` | Dialog must hide after Cancel (no soft `.catch`). |
@@ -352,7 +352,7 @@ soft-ok while **"checking…"**; kolibri gone → `eject_disk` default failed.
 | Intent | Contract |
 |---|---|
 | `erase_disk` | `ensureEmptyDiskPanel` first — **never** Grade5A. Loud-fail if no empty (`DURATION_EMPTY_DISK_ID` / `duration-empty-001`). Then `erase-this-disk`. |
-| `confirm_erase` | Wait for confirm field → type label → OK → wait for `erase-complete` / Done (≤180s). **No soft-pass** on checking… |
+| `confirm_erase` | Wait for confirm field → type label → OK → success only on `erase-complete`, the Engine `eraseDisk` command result (`[data-testid=erase-command-result]` status=ok), or the disk coming back Empty after the click (≤180s). A closed dialog is **not** success (r86t / engine#488 / console#233). Engine refusal (dialog or command error) fails with the reason. **No soft-pass** on checking… or dialog close. |
 | `eject_disk` | If preferred disk missing (erased), discover surviving ejectable row; loud-fail with visible disk ids. |
 
 ## start_instance already Running (r17 FAIL@77)
@@ -412,7 +412,7 @@ After Confirm, restore may **SIGTERM** kolibri (exit 143) while Automerge stays 
 
 | Step | Contract |
 |---|---|
-| Confirm | Wait `restore-confirm-*` hidden |
+| First gate | An Engine signal: Restore shows "Operation in progress", CommandFeedback sent/error, or the harness `waitOperation` hook. A closed confirm dialog is **not** a signal (console#236). A refusal fails with the Engine reason. |
 | Unlock | Wait Restore leave "Operation in progress" (`DURATION_RESTORE_SETTLE_MS` ≥120s) |
 | Min dwell | `DURATION_RESTORE_MIN_DWELL_MS` default **10s** after Confirm (not unlock-alone) |
 | Overview | ALL APPS / opOverview |

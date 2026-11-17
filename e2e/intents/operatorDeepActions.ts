@@ -5,10 +5,18 @@
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
 import { awaitOperationIfWired } from './operationWait';
+import {
+  RESTORE_FIRST_GATE_TIMEOUT_MS,
+  decideRestoreFirstGate,
+  restoreRefusalMessage,
+  type RestoreFirstGateObservation,
+  type RestoreOpSignal,
+} from './restoreFirstGate';
 import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
+import { waitForOperatorLayout } from './operatorLayout';
 import { DURATION_FIXTURES } from './fixtures';
 import {
   openAppInstance,
@@ -671,19 +679,51 @@ export function restoreMinDwellMs(env: NodeJS.ProcessEnv = process.env): number 
 export async function settleAfterRestoreConfirm(
   page: Page,
   linkedId: string,
+  already?: { opStatus?: RestoreOpSignal; opError?: string | null },
 ): Promise<void> {
   const confirmedAt = Date.now();
   const confirm = page.locator(sel.restoreConfirm(linkedId));
-  try {
-    await confirm.waitFor({ state: 'hidden', timeout: 15_000 });
-  } catch {
-    throw new Error(
-      `idea#168 restore_from_backup: restore-confirm-${linkedId} still visible after Confirm. No soft-pass.`,
-    );
+  const btn = page.locator(sel.restoreBtn(linkedId));
+  const firstTimeout = RESTORE_FIRST_GATE_TIMEOUT_MS;
+
+  // First gate: an Engine signal, not a hidden confirm dialog (console#236).
+  if (already?.opStatus === 'Error') {
+    throw new Error(restoreRefusalMessage(already.opError?.trim() || 'Restore failed.'));
+  }
+  let sawEngineSignal = already?.opStatus === 'Running' || already?.opStatus === 'Done';
+  while (!sawEngineSignal) {
+    const elapsedMs = Date.now() - confirmedAt;
+    const btnText = ((await btn.textContent().catch(() => '')) ?? '').trim();
+    const errLoc = page.locator(sel.restoreFeedbackError(linkedId));
+    const feedbackError = (await errLoc.isVisible().catch(() => false))
+      ? ((await errLoc.textContent()) ?? '').trim() || null
+      : null;
+    const obs: RestoreFirstGateObservation = {
+      confirmVisible: await confirm.isVisible().catch(() => false),
+      operationInProgress: /operation in progress/i.test(btnText),
+      feedbackSent: await page.locator(sel.restoreFeedbackSent(linkedId)).isVisible().catch(() => false),
+      feedbackError,
+      feedbackTimeout: await page.locator(sel.restoreFeedbackTimeout(linkedId)).isVisible().catch(() => false),
+      opStatus: already?.opStatus ?? 'absent',
+      opError: already?.opError ?? null,
+      elapsedMs,
+      timeoutMs: firstTimeout,
+    };
+    const decision = decideRestoreFirstGate(obs);
+    if (decision.kind === 'refusal') {
+      throw new Error(restoreRefusalMessage(decision.message));
+    }
+    if (decision.kind === 'timeout') {
+      throw new Error(decision.message);
+    }
+    if (decision.kind === 'signal') {
+      sawEngineSignal = true;
+      break;
+    }
+    await page.waitForTimeout(250);
   }
 
   // Restore locks the instance ("Operation in progress" on Restore btn)
-  const btn = page.locator(sel.restoreBtn(linkedId));
   const budget = restoreSettleTimeoutMs();
   const deadline = Date.now() + budget;
   let sawProgress = false;
@@ -804,12 +844,16 @@ export const restore_from_backup: IntentFn = async ({ page, instanceId, diskId, 
   const restoreSince = Date.now();
   await page.locator(sel.restoreConfirm(linkedId)).click();
   // r64: wait for the restoreApp Operation to end (harness store hook) before the post-restore Start/settle.
-  await awaitOperationIfWired(
+  const waited = await awaitOperationIfWired(
     { page, instanceId, diskId, waitOperation },
     { kind: 'restoreApp', instanceId: linkedId, sinceMs: restoreSince },
     'restore_from_backup',
   );
-  await settleAfterRestoreConfirm(page, linkedId);
+  await settleAfterRestoreConfirm(
+    page,
+    linkedId,
+    waited ? { opStatus: waited.status, opError: waited.detail } : undefined,
+  );
 };
 
 /**
@@ -1645,6 +1689,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
       );
     }
     await waitForConsoleStoreLoaded(page, 'switch_engine');
+    await waitForOperatorLayout(page, 'switch_engine');
     return;
   }
 
@@ -1656,6 +1701,7 @@ export const switch_engine: IntentFn = async ({ page }) => {
   if (hostEnv && switchHostsMatch(statusAfterScan, hostEnv)) {
     await dismissConnectionManagement(page);
     await waitForConsoleStoreLoaded(page, 'switch_engine');
+    await waitForOperatorLayout(page, 'switch_engine');
     return;
   }
   if (settle === 'empty' && hostEnv && !switchHostsMatch(statusAfterScan, hostEnv)) {
@@ -1674,6 +1720,9 @@ export const switch_engine: IntentFn = async ({ page }) => {
   await connectEngineWithRetries(page, candidates);
   // r86s FAIL@128: Connect reloads the store from scratch — wait until it is back.
   await waitForConsoleStoreLoaded(page, 'switch_engine');
+  // kc10 FAIL@133: "connected, tree not on screen" is not enough after a Connect —
+  // the operator layout must come back with Engine rows, or fail here, naming the screen.
+  await waitForOperatorLayout(page, 'switch_engine');
 };
 
 /**
@@ -1745,14 +1794,9 @@ async function hoverAndClickReboot(
  * Loud-fail if no dialog; assert engine row survives (command dispatched).
  */
 export const reboot_engine: IntentFn = async ({ page, engineId }) => {
-  await ensureOpLayout(page);
-  if (await page.locator(sel.settingsPanel).isVisible().catch(() => false)) {
-    await page.locator(sel.settingsBtn).click().catch(() => {});
-  }
-  if (await page.locator(sel.connectionManagement).isVisible().catch(() => false)) {
-    const cm = page.locator(sel.connectionMgmtBtn);
-    if (await cm.count()) await cm.click().catch(() => {});
-  }
+  // kc10 FAIL@133: close Settings / Connection Management FIRST (the walker reaches
+  // here from op_settings), then require the operator layout with Engine rows.
+  await waitForOperatorLayout(page, 'reboot_engine');
   await page.locator(sel.networkTree).waitFor({ state: 'visible', timeout: 15_000 });
   // r86s FAIL@128: tree can be visible with zero Engine rows while the store reloads.
   await waitForConsoleStoreLoaded(page, 'reboot_engine');

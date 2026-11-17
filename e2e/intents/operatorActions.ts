@@ -18,6 +18,13 @@ import {
   decideConfirmEject,
   type ConfirmEjectObservation,
 } from './confirmEjectOutcome';
+import {
+  CONFIRM_ERASE_TIMEOUT_MS,
+  commandSignalFromMarker,
+  confirmEraseRefusalMessage,
+  decideConfirmErase,
+  type ConfirmEraseObservation,
+} from './confirmEraseOutcome';
 
 /**
  * Preference only (env → ctx → kolibri fixture). Prefer A post-erase walks must
@@ -308,12 +315,68 @@ export const cancel_erase: IntentFn = async ({ page }) => {
 };
 
 /**
- * Type live summary label, confirm erase, wait until **complete**
- * (erase-complete / Done) — never soft-pass while "checking…".
+ * Preferred disk id for confirm_erase Empty / republish checks
+ * (env → ctx; no silent Grade5A default).
  */
-export const confirm_erase: IntentFn = async ({ page }) => {
+export function resolveConfirmEraseDiskId(
+  ctx: Pick<IntentContext, 'diskId'> = {},
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return env.DURATION_EMPTY_DISK_ID?.trim() || ctx.diskId || undefined;
+}
+
+async function confirmEraseTargetDiskId(
+  page: Page,
+  preferred?: string,
+): Promise<string | undefined> {
+  if (preferred) return preferred;
+  const selected = page.locator(
+    `${sel.networkTree} [data-testid^="disk-"][aria-selected="true"]`,
+  );
+  if (await selected.count()) {
+    const testId = await selected.first().getAttribute('data-testid');
+    if (testId) return testId.replace(/^disk-/, '');
+  }
+  return undefined;
+}
+
+async function readEraseCommandMarker(
+  page: Page,
+): Promise<{ seq: number; status: string; error: string | null } | null> {
+  const loc = page.locator(sel.eraseCommandResult);
+  if (!(await loc.count())) return null;
+  const seq = Number((await loc.getAttribute('data-seq')) ?? '0') || 0;
+  const status = (await loc.getAttribute('data-status')) ?? '';
+  if (!status) return null;
+  return { seq, status, error: await loc.getAttribute('data-error') };
+}
+
+async function isTargetDiskEmpty(
+  page: Page,
+  diskId?: string,
+): Promise<boolean> {
+  if (!diskId) return false;
+  const row = page.locator(sel.disk(diskId));
+  if (await row.locator('[data-role="empty"]').count()) return true;
+  if (!(await row.count())) return false;
+  const selected = await row.getAttribute('aria-selected');
+  if (selected === 'true' && (await page.locator(sel.emptyDiskPanel).isVisible().catch(() => false))) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Type live summary label, confirm erase, wait until the Engine really finished.
+ * Success is erase-complete, an eraseDisk command ok, or the disk coming back
+ * Empty — never a closed dialog alone (console#233 / engine#488 / r86t).
+ */
+export const confirm_erase: IntentFn = async (ctx) => {
+  const { page } = ctx;
   const dialog = page.locator(sel.eraseDialog);
   await dialog.waitFor({ state: 'visible', timeout: 15_000 });
+
+  const targetId = await confirmEraseTargetDiskId(page, resolveConfirmEraseDiskId(ctx));
 
   // Wait past "Reading the disk…" for confirm field
   const nameInput = page.locator(sel.eraseConfirmName);
@@ -341,43 +404,57 @@ export const confirm_erase: IntentFn = async ({ page }) => {
       `idea#168 confirm_erase: erase-confirm-ok still disabled after typing "${label}".`,
     );
   }
+
+  const baselineMarker = await readEraseCommandMarker(page);
+  const baselineSeq = baselineMarker?.seq ?? 0;
+  const presentBefore = targetId
+    ? (await page.locator(sel.disk(targetId)).count()) > 0
+    : false;
   await ok.click();
 
-  // Wait for completion — not soft-ok on checking…
   const complete = page.locator(sel.eraseComplete);
   const doneBtn = page.locator(sel.eraseDone);
   const progress = page.locator(sel.eraseProgress);
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
+  const startedAt = Date.now();
+  let sawMissing = false;
+  const timeoutMs = CONFIRM_ERASE_TIMEOUT_MS;
+  while (true) {
+    const elapsedMs = Date.now() - startedAt;
     const err = dialog.locator('.edp-form__error[role="alert"]');
-    if (await err.isVisible().catch(() => false)) {
-      const msg = ((await err.textContent()) ?? '').trim();
-      // summary-error / removed / erase error
-      if (!/Type .+ to confirm/i.test(msg)) {
-        throw new Error(`idea#168 confirm_erase: erase failed — "${msg}". No soft-pass.`);
-      }
+    const dialogError = (await err.isVisible().catch(() => false))
+      ? ((await err.textContent()) ?? '').trim() || null
+      : null;
+    if (targetId && presentBefore && !(await page.locator(sel.disk(targetId)).count())) {
+      sawMissing = true;
     }
-    if (await complete.isVisible().catch(() => false)) {
+    const diskEmpty = await isTargetDiskEmpty(page, targetId);
+    const obs: ConfirmEraseObservation = {
+      dialogVisible: await dialog.isVisible().catch(() => false),
+      eraseCompleteVisible: await complete.isVisible().catch(() => false),
+      dialogError,
+      command: commandSignalFromMarker(await readEraseCommandMarker(page), baselineSeq),
+      diskEmpty,
+      diskRepublishedEmpty: sawMissing && diskEmpty,
+      elapsedMs,
+      timeoutMs,
+      progressStep: (await progress.getAttribute('data-erase-step').catch(() => null)) ?? '',
+      progressVisible: await progress.isVisible().catch(() => false),
+    };
+    const decision = decideConfirmErase(obs);
+    if (decision.kind === 'refusal') {
+      throw new Error(confirmEraseRefusalMessage(decision.message));
+    }
+    if (decision.kind === 'timeout') {
+      throw new Error(decision.message);
+    }
+    if (decision.kind === 'success') {
       if (await doneBtn.isVisible().catch(() => false)) {
         await doneBtn.click().catch(() => {});
       }
       return;
     }
-    // Dialog closed after onErasedEmpty auto-select — also success
-    if (!(await dialog.isVisible().catch(() => false))) {
-      // Prefer seeing empty badge somewhere
-      return;
-    }
     await page.waitForTimeout(500);
   }
-
-  const step = (await progress.getAttribute('data-erase-step').catch(() => null)) ?? '';
-  const stuck = await progress.isVisible().catch(() => false);
-  throw new Error(
-    `idea#168 confirm_erase: erase did not complete within 180s ` +
-      `(stuck progress=${stuck}, data-erase-step="${step}"). ` +
-      `r16 soft-passed while "checking…" — must wait for erase-complete. No soft-pass.`,
-  );
 };
 
 /**

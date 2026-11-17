@@ -12,6 +12,7 @@ import { setSendCommandFn } from '../src/store/commands';
 import { SUMMARY_MAX_AGE_MS } from '../src/store/erase';
 import { MOCK_FILES_STORE, FILES_IDS as I } from '../src/mock/filesFixtures';
 import { SAMPLE_SUMMARY, UNREADABLE_SUMMARY } from '../src/mock/eraseFixtures';
+import { clearEraseCommandResult, readEraseCommandResult } from '../src/store/eraseCommandResult';
 import type { CommandLogState } from '../src/store/commandLog';
 import type { CommandLogStore, CommandTrace } from '../src/types/commandLog';
 import type { Engine, Store } from '../src/types/store';
@@ -43,12 +44,13 @@ const eraseOk = (over: Partial<CommandTrace> = {}): CommandTrace => ({
   status: 'ok',
   errorMessage: null,
   logs: [],
+  result: JSON.stringify({ diskId: I.FA_APP, removedInstances: [] }),
   ...over,
 });
 
 let sent: ReturnType<typeof vi.fn>;
 beforeEach(() => { sent = vi.fn(); setSendCommandFn(sent); });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); clearEraseCommandResult(); });
 
 describe('DiskView — Erase this disk… gate (idea#136)', () => {
   const renderView = (diskId: string, store: Store = MOCK_FILES_STORE) => {
@@ -179,6 +181,11 @@ describe('EraseDialog flow (idea#136)', () => {
     });
     expect(t.container.textContent).toContain('Removed instances');
     expect(t.onErasedEmpty).toHaveBeenCalledWith(I.FA_APP);
+    expect(readEraseCommandResult()).toMatchObject({
+      status: 'ok',
+      targetId: I.FA_APP,
+      diskId: I.FA_APP,
+    });
   });
 
   it('replaces the typed-name box when the summary is older than 10 minutes', () => {

@@ -122,6 +122,20 @@ export const parseContentSummary = (trace: CommandTrace | null | undefined): Con
   }
 };
 
+/** Engine eraseDisk command result: { diskId, removedInstances }. */
+export const parseEraseDiskResult = (trace: CommandTrace | null | undefined): { diskId: string } | null => {
+  if (!trace?.result) return null;
+  try {
+    const raw = logJson(trace.result);
+    if (!raw || typeof raw !== 'object' || typeof (raw as { diskId?: unknown }).diskId !== 'string') {
+      return null;
+    }
+    return { diskId: (raw as { diskId: string }).diskId };
+  } catch {
+    return null;
+  }
+};
+
 export const isSummaryStale = (summary: ContentSummary, now: number): boolean =>
   now - summary.computedAt > SUMMARY_MAX_AGE_MS;
 

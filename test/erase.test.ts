@@ -16,6 +16,7 @@ import {
   isErasedEmptyDisk,
   isSummaryStale,
   parseContentSummary,
+  parseEraseDiskResult,
   sizeText,
   countText,
 } from '../src/store/erase';
@@ -132,5 +133,24 @@ describe('isErasedEmptyDisk', () => {
     expect(isErasedEmptyDisk({ ...d(I.FA_APP), diskTypes: ['empty'] })).toBe(true);
     expect(isErasedEmptyDisk(d(I.FA_APP))).toBe(false);
     expect(isErasedEmptyDisk(undefined)).toBe(false);
+  });
+});
+
+describe('parseEraseDiskResult', () => {
+  it('reads diskId from an eraseDisk command result', () => {
+    const trace: CommandTrace = {
+      traceId: 'e1',
+      command: 'eraseDisk',
+      args: { targetId: I.FA_APP },
+      startedAt: 1,
+      completedAt: 2,
+      status: 'ok',
+      errorMessage: null,
+      logs: [],
+      result: JSON.stringify({ diskId: I.FA_APP, removedInstances: [] }),
+    };
+    expect(parseEraseDiskResult(trace)).toEqual({ diskId: I.FA_APP });
+    expect(parseEraseDiskResult({ ...trace, result: null })).toBeNull();
+    expect(parseEraseDiskResult({ ...trace, result: '{' })).toBeNull();
   });
 });
