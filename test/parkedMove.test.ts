@@ -1,20 +1,44 @@
-/** Parked / resumed moveApp hint (engine#509; cross-Engine resume provisional on engine#497 option A). */
+/** Parked / resumed moveApp hint (engine#509 / engine#511 Console contract). */
 import { describe, it, expect } from 'vitest';
-import type { Operation, Store } from '../src/types/store';
+import type { Instance, Operation, Store } from '../src/types/store';
 import {
   SOURCE_STOPPED_HINT,
   PARKED_WAITING_STATUS,
   PARKED_PENDING_STATUS,
   isLocalResumableMove,
+  isCrossResumableMove,
   isParkedMove,
   isSourceEngineOp,
+  isResumeParkedText,
+  parkedStatusFromText,
   showsSourceStoppedHint,
   parkedMoveStatusText,
   sourceStoppedMoveFor,
 } from '../src/store/parkedMove';
+import { MOVE_CODE_TEXT, MOVE_REFUSAL_CODES, settleMoveOutcome } from '../src/store/moveApp';
 
 const SRC = 'ENGINE_1';
 const TGT = 'ENGINE_2';
+const SRC_DISK = 'disk-src';
+const TGT_DISK = 'disk-tgt';
+
+const inst = (storedOn: string, id = 'inst-src'): Instance => ({
+  id,
+  instanceOf: 'app-1',
+  name: 'kolibri',
+  status: 'Stopped',
+  port: 8080,
+  serviceImages: [],
+  created: 0,
+  lastBackup: null,
+  lastStarted: 0,
+  storedOn,
+  statusCondition: null,
+  currentStep: null,
+  totalSteps: null,
+  stepLabel: null,
+  metrics: null,
+});
 
 const base = (overrides: Partial<Operation> & { args?: Record<string, string>; move?: unknown } = {}): Operation => {
   const { args, move, ...rest } = overrides;
@@ -23,8 +47,8 @@ const base = (overrides: Partial<Operation> & { args?: Record<string, string>; m
     kind: 'moveApp',
     args: {
       instanceId: 'inst-src',
-      sourceDiskId: 'disk-src',
-      targetDiskId: 'disk-tgt',
+      sourceDiskId: SRC_DISK,
+      targetDiskId: TGT_DISK,
       targetInstanceId: 'inst-tgt',
       phase: 'copying',
       wasRunning: '1',
@@ -49,6 +73,7 @@ const base = (overrides: Partial<Operation> & { args?: Record<string, string>; m
 
 const crossMove = (extra: Record<string, unknown> = {}) => ({
   phase: 'copying',
+  sourceEngineId: SRC,
   targetEngineId: TGT,
   sourceInstanceId: 'inst-src',
   targetInstanceId: 'inst-src',
@@ -60,17 +85,17 @@ const crossMove = (extra: Record<string, unknown> = {}) => ({
 const cross = (overrides: Partial<Operation> & { args?: Record<string, string>; move?: unknown } = {}): Operation =>
   base({
     id: 'mv-cross',
-    args: { phase: 'copying', wasRunning: '1', crossEngine: 'true' },
+    args: { phase: 'copying', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
     move: crossMove(),
     error: 'RESUME_WAITING: source disk left',
     ...overrides,
   });
 
-const storeOf = (...ops: Operation[]): Store => ({
+const storeOf = (ops: Operation[], storedOn: string | null = SRC_DISK): Store => ({
   engineDB: {},
   diskDB: {},
   appDB: {},
-  instanceDB: {},
+  instanceDB: storedOn == null ? {} : { 'inst-src': inst(storedOn) },
   userDB: {},
   operationDB: Object.fromEntries(ops.map((op) => [op.id, op])),
 });
@@ -158,7 +183,7 @@ describe('parkedMove helpers — local', () => {
 
   it('sourceStoppedMoveFor finds the source instance and ignores the target id', () => {
     const op = base({ error: 'RESUME_WAITING: disk left' });
-    const store = storeOf(op);
+    const store = storeOf([op]);
     expect(sourceStoppedMoveFor(store, 'inst-src')?.id).toBe('mv-local');
     expect(sourceStoppedMoveFor(store, 'inst-tgt')).toBeNull();
     expect(sourceStoppedMoveFor(store, 'other')).toBeNull();
@@ -166,100 +191,143 @@ describe('parkedMove helpers — local', () => {
   });
 });
 
-describe('parkedMove helpers — cross-Engine (provisional, engine#497 option A)', () => {
+describe('parkedMove helpers — cross-Engine (engine#511)', () => {
   it('parked from the source Engine: hint + waiting status', () => {
     const op = cross();
+    const store = storeOf([op]);
     expect(isLocalResumableMove(op)).toBe(false);
+    expect(isCrossResumableMove(op)).toBe(true);
     expect(isParkedMove(op)).toBe(true);
     expect(isSourceEngineOp(op, SRC)).toBe(true);
-    expect(showsSourceStoppedHint(op, SRC)).toBe(true);
+    expect(showsSourceStoppedHint(op, SRC, store)).toBe(true);
     expect(parkedMoveStatusText(op)).toBe(PARKED_WAITING_STATUS);
-    expect(sourceStoppedMoveFor(storeOf(op), 'inst-src', SRC)?.id).toBe('mv-cross');
+    expect(sourceStoppedMoveFor(store, 'inst-src', SRC)?.id).toBe('mv-cross');
   });
 
   it('parked from the target Engine: no hint (remote source)', () => {
     const op = cross();
+    const store = storeOf([op]);
     expect(isSourceEngineOp(op, TGT)).toBe(false);
-    expect(showsSourceStoppedHint(op, TGT)).toBe(false);
-    expect(sourceStoppedMoveFor(storeOf(op), 'inst-src', TGT)).toBeNull();
-    // The move itself is still parked; the status line may appear on its card.
+    expect(showsSourceStoppedHint(op, TGT, store)).toBe(false);
+    expect(sourceStoppedMoveFor(store, 'inst-src', TGT)).toBeNull();
     expect(isParkedMove(op)).toBe(true);
     expect(parkedMoveStatusText(op)).toBe(PARKED_WAITING_STATUS);
   });
 
   it('engineId fallback: op.engineId when move.sourceEngineId is absent', () => {
-    const op = cross({ move: crossMove() }); // no sourceEngineId
+    const op = cross({ move: crossMove({ sourceEngineId: undefined }) });
+    delete (op as unknown as { move: Record<string, unknown> }).move.sourceEngineId;
+    const store = storeOf([op]);
     expect(isSourceEngineOp(op, SRC)).toBe(true);
     expect(isSourceEngineOp(op, TGT)).toBe(false);
-    expect(showsSourceStoppedHint(op, SRC)).toBe(true);
-    expect(showsSourceStoppedHint(op, TGT)).toBe(false);
+    expect(showsSourceStoppedHint(op, SRC, store)).toBe(true);
+    expect(showsSourceStoppedHint(op, TGT, store)).toBe(false);
   });
 
-  it('engineId: move.sourceEngineId wins over op.engineId when present', () => {
-    const op = cross({
-      engineId: TGT, // would be wrong if we only looked here
-      move: crossMove({ sourceEngineId: SRC }),
-    });
-    expect(isSourceEngineOp(op, SRC)).toBe(true);
-    expect(isSourceEngineOp(op, TGT)).toBe(false);
-    expect(showsSourceStoppedHint(op, SRC)).toBe(true);
-    expect(showsSourceStoppedHint(op, TGT)).toBe(false);
+  it("legacy cross-Engine op without crossResume '1': no hint", () => {
+    const op = cross({ args: { phase: 'copying', wasRunning: '1', crossEngine: 'true' } });
+    expect(isCrossResumableMove(op)).toBe(false);
+    expect(showsSourceStoppedHint(op, SRC, storeOf([op]))).toBe(false);
+    expect(sourceStoppedMoveFor(storeOf([op]), 'inst-src', SRC)).toBeNull();
   });
 
-  it('no hint when this Engine is unknown', () => {
-    const op = cross();
-    expect(isSourceEngineOp(op, null)).toBe(false);
-    expect(showsSourceStoppedHint(op)).toBe(false);
-    expect(showsSourceStoppedHint(op, null)).toBe(false);
-    expect(sourceStoppedMoveFor(storeOf(op), 'inst-src')).toBeNull();
-  });
-
-  it('checking phase (idea#79 mid-move) is treated as in-flight; removing is not', () => {
+  it('checking and removing (still on the source disk) show the hint; verified does not', () => {
+    const store = storeOf([cross()]);
     const checking = cross({
-      args: { phase: 'checking', wasRunning: '1', crossEngine: 'true' },
+      args: { phase: 'checking', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
       move: crossMove({ phase: 'checking' }),
     });
-    expect(showsSourceStoppedHint(checking, SRC)).toBe(true);
+    expect(showsSourceStoppedHint(checking, SRC, store)).toBe(true);
     const removing = cross({
-      args: { phase: 'removing', wasRunning: '1', crossEngine: 'true' },
+      args: { phase: 'removing', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
       move: crossMove({ phase: 'removing' }),
     });
-    expect(showsSourceStoppedHint(removing, SRC)).toBe(false);
-  });
-
-  it('phase may come from op.move when args.phase is absent', () => {
-    const op = cross({
-      args: { wasRunning: '1', crossEngine: 'true' },
-      move: crossMove({ phase: 'copying' }),
+    expect(showsSourceStoppedHint(removing, SRC, store)).toBe(true);
+    const verified = cross({
+      args: { phase: 'verified', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
+      move: crossMove({ phase: 'verified' }),
     });
-    expect(showsSourceStoppedHint(op, SRC)).toBe(true);
+    expect(showsSourceStoppedHint(verified, SRC, store)).toBe(false);
   });
 
-  it('gave up: Failed RESUME_GAVE_UP, no hint on source or target', () => {
+  it('storedOn mismatch (already flipped to the target): no hint, even in removing', () => {
+    const op = cross({
+      args: { phase: 'removing', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
+      move: crossMove({ phase: 'removing' }),
+    });
+    const store = storeOf([op], TGT_DISK);
+    expect(showsSourceStoppedHint(op, SRC, store)).toBe(false);
+    expect(sourceStoppedMoveFor(store, 'inst-src', SRC)).toBeNull();
+  });
+
+  it("give-up: Failed, move.phase 'failed', args.phase kept, no hint", () => {
     const op = cross({
       status: 'Failed',
       error: 'RESUME_GAVE_UP: rsync failed',
-      args: { phase: 'copying', wasRunning: '1', crossEngine: 'true', resumeFailures: '3' },
+      args: { phase: 'checking', wasRunning: '1', crossEngine: 'true', crossResume: '1', resumeFailures: '3' },
+      move: crossMove({ phase: 'failed', code: 'RESUME_GAVE_UP' }),
       completedAt: 1,
     });
+    const store = storeOf([op]);
     expect(isParkedMove(op)).toBe(false);
-    expect(showsSourceStoppedHint(op, SRC)).toBe(false);
-    expect(showsSourceStoppedHint(op, TGT)).toBe(false);
+    expect(showsSourceStoppedHint(op, SRC, store)).toBe(false);
+    expect(showsSourceStoppedHint(op, TGT, store)).toBe(false);
     expect(parkedMoveStatusText(op)).toBeNull();
-    expect(sourceStoppedMoveFor(storeOf(op), 'inst-src', SRC)).toBeNull();
+    expect(sourceStoppedMoveFor(store, 'inst-src', SRC)).toBeNull();
+  });
+
+  it('Done SOURCE_CHANGED: no hint; the existing not-moved sentence still applies', () => {
+    const op = cross({
+      status: 'Done',
+      error: 'MOVE STOPPED: the source was started; source kept',
+      args: { phase: 'done', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
+      move: crossMove({ phase: 'done', code: 'SOURCE_CHANGED' }),
+      completedAt: 1,
+    });
+    const store = storeOf([op]);
+    expect(isParkedMove(op)).toBe(false);
+    expect(showsSourceStoppedHint(op, SRC, store)).toBe(false);
+    expect(MOVE_CODE_TEXT.SOURCE_CHANGED({ app: 'kolibri', sourceEngine: 'idea01', targetEngine: 'idea03' }))
+      .toBe('kolibri was not moved: it changed on idea01 while it was being copied, so it stays there.');
   });
 
   it('Done: no hint on source or target', () => {
     const op = cross({
       status: 'Done',
       error: null,
-      args: { phase: 'done', wasRunning: '1', crossEngine: 'true' },
+      args: { phase: 'done', wasRunning: '1', crossEngine: 'true', crossResume: '1' },
       move: crossMove({ phase: 'done', code: 'MOVED' }),
       completedAt: 1,
     });
-    expect(isParkedMove(op)).toBe(false);
-    expect(showsSourceStoppedHint(op, SRC)).toBe(false);
-    expect(showsSourceStoppedHint(op, TGT)).toBe(false);
-    expect(parkedMoveStatusText(op)).toBeNull();
+    const store = storeOf([op]);
+    expect(showsSourceStoppedHint(op, SRC, store)).toBe(false);
+    expect(showsSourceStoppedHint(op, TGT, store)).toBe(false);
+  });
+
+  it('RESUME_PARKED trace text is treated as parked, not an end state', () => {
+    const pausedWaiting = 'MOVE PAUSED: RESUME_WAITING: source disk left';
+    const pausedPending = 'MOVE PAUSED: RESUME_PENDING (1/3): rsync failed';
+    expect(isResumeParkedText(pausedWaiting, 'RESUME_PARKED')).toBe(true);
+    expect(isResumeParkedText(pausedPending, 'RESUME_PARKED')).toBe(true);
+    expect(parkedStatusFromText(pausedWaiting)).toBe(PARKED_WAITING_STATUS);
+    expect(parkedStatusFromText(pausedPending)).toBe(PARKED_PENDING_STATUS);
+    expect(parkedStatusFromText(pausedWaiting)).not.toMatch(/RESUME_|MOVE PAUSED/);
+    const settle = settleMoveOutcome(() => storeOf([]), 'inst-src', 0, () => ({ app: 'kolibri', sourceEngine: 'idea01', targetEngine: 'idea03' }));
+    expect(settle({ kind: 'error', message: pausedWaiting, code: 'RESUME_PARKED' }))
+      .toEqual({ kind: 'warning', message: PARKED_WAITING_STATUS, code: 'RESUME_PARKED' });
+    expect(settle({ kind: 'error', message: pausedPending, code: 'RESUME_PARKED' }))
+      .toEqual({ kind: 'warning', message: PARKED_PENDING_STATUS, code: 'RESUME_PARKED' });
+  });
+
+  it('TARGET_OUTDATED and HELPER_OUTDATED already have Move-map sentences (no new keys)', () => {
+    expect(MOVE_REFUSAL_CODES).toContain('TARGET_OUTDATED');
+    expect(MOVE_REFUSAL_CODES).toContain('HELPER_OUTDATED');
+    const c = { app: 'kolibri', sourceEngine: 'idea01', targetEngine: 'idea03' };
+    expect(MOVE_CODE_TEXT.TARGET_OUTDATED(c)).toBe(
+      "Couldn't move kolibri: idea03 needs a system update before Apps can be moved to it. Nothing was removed: it is still on idea01.",
+    );
+    expect(MOVE_CODE_TEXT.HELPER_OUTDATED(c)).toBe(
+      "Couldn't move kolibri: idea01 needs a system update before Apps can be moved. Nothing was removed: it is still on idea01.",
+    );
   });
 });

@@ -108,6 +108,7 @@ const EXPECTED: Record<string, string> = {
   VERIFY_FAILED: "Couldn't move nextcloud: the copy on appdocker01 couldn't be checked. Nothing was removed: it is still on appdocker02.",
   INTERRUPTED: "Couldn't move nextcloud: appdocker02 restarted during the move. Nothing was removed: it is still on appdocker02.",
   SOURCE_KEPT: 'nextcloud was not moved, so it stays on appdocker02.',
+  RESUME_GAVE_UP: "Couldn't move nextcloud: the move was tried several times and then stopped. Nothing was removed: it is still on appdocker02.",
   SOURCE_CHANGED: 'nextcloud was not moved: it changed on appdocker02 while it was being copied, so it stays there.',
 };
 

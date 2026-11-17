@@ -31,6 +31,7 @@
  * Same-Engine Move is unchanged and never reaches this module's UI.
  */
 import { engineHasCapability } from './commands';
+import { isResumeParkedText, parkedStatusFromText, PARKED_WAITING_STATUS } from './parkedMove';
 import type { Engine, Operation, Store } from '../types/store';
 import type { TraceOutcome } from './commandResult';
 import { engineClockOf, live, liveNow } from './live';
@@ -122,7 +123,7 @@ const reasonOf = (text: string, prefix: string): string =>
 
 // ── Codes (engine#289 b5429d6, engine#381 53f151d, engine#388 4a30798; MOVE_CODES in src/data/MoveAppShapes.ts) ─
 export const MOVE_REFUSAL_CODES = ['NOT_FOUND', 'AMBIGUOUS', 'SOURCE_REMOTE', 'TARGET_UNREACHABLE', 'PEER_ACCESS', 'TARGET_OUTDATED', 'HELPER_OUTDATED', 'BUSY', 'INVALID', 'TARGET_EXISTS'] as const;
-export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED', 'INTERRUPTED', 'SOURCE_KEPT'] as const;
+export const MOVE_FAILURE_CODES = ['COPY_FAILED', 'VERIFY_NOT_FOUND', 'VERIFY_NOT_RUNNING', 'VERIFY_SIZE', 'VERIFY_TIMEOUT', 'VERIFY_FAILED', 'INTERRUPTED', 'SOURCE_KEPT', 'RESUME_GAVE_UP'] as const;
 export const MOVE_DONE_CODES = ['MOVED', 'SOURCE_NOT_REMOVED', 'SOURCE_CHANGED'] as const;
 
 export interface MoveCtx { app: string; sourceEngine: string; targetEngine: string }
@@ -159,7 +160,9 @@ export const MOVE_CODE_TEXT: Record<string, (c: MoveCtx) => string> = {
   INTERRUPTED: (c) => `Couldn't move ${midApp(c.app)}: ${c.sourceEngine} restarted during the move. ${kept(c)}`,
   // engine#388: any other pre-flip error in the Removing step (op Failed)
   SOURCE_KEPT: (c) => `${c.app} was not moved, so it stays on ${c.sourceEngine}.`,
-  // engine#388: op Done with an ok trace, but NOT a move (the source was started or written to)
+  // engine#511: Failed after three counted resume failures; the source is kept (and restarted if it was running)
+  RESUME_GAVE_UP: (c) => `Couldn't move ${midApp(c.app)}: the move was tried several times and then stopped. ${kept(c)}`,
+  // engine#388 / #511: op Done with an ok trace, but NOT a move (the source was started or written to, kept, and restarted if it was running; the target was quarantined)
   SOURCE_CHANGED: (c) => `${c.app} was not moved: it changed on ${c.sourceEngine} while it was being copied, so it stays there.`,
 };
 
@@ -218,7 +221,11 @@ export const targetCleanupLine = (cleanup: CleanupView, targetEngine: string): s
       : cleanup === 'pending' ? MOVE_TARGET_CLEANING(targetEngine) : null;
 
 const withCleanup = (line: string, code: string | null, cleanup: CleanupView, c: MoveCtx): string => {
-  const extra = code && MOVE_CLEANUP_CODES.has(code) ? targetCleanupLine(cleanup, c.targetEngine) : null;
+  const tracked = !!(code && MOVE_CLEANUP_CODES.has(code));
+  // engine#511: RESUME_GAVE_UP (not a MOVE_CLEANUP_CODE, so never "pending") adds a leftover /
+  // set-aside sentence only once targetCleanup has landed (gave up in checking).
+  const giveUpLanded = code === 'RESUME_GAVE_UP' && (cleanup === 'quarantined' || cleanup === 'failed');
+  const extra = targetCleanupLine(tracked ? cleanup : (giveUpLanded ? cleanup : null), c.targetEngine);
   return extra ? `${line} ${extra}` : line;
 };
 
@@ -307,7 +314,7 @@ export const moveOutcome = (op: Operation | null, c: MoveCtx, placement: MovePla
   if (!op || isMoveRunning(op)) return null;
   const info = moveInfo(op);
   const text = (op.error ?? info?.resultText ?? '').trim();
-  const code = info?.code ?? null;
+  const code = info?.code ?? (text.startsWith('RESUME_GAVE_UP') ? 'RESUME_GAVE_UP' : null);
   const cleanup = cleanupView(op, engineNow);
   if (op.status === 'Done') {
     if (code === 'SOURCE_CHANGED') return { kind: 'warning', text: sourceNotRemovedLine(code, placement, c, cleanup), moved: false };
@@ -358,6 +365,10 @@ export const isMoveDoneNotMoved = (store: Store | null, op: Operation | null): b
  */
 export const settleMoveOutcome = (store: () => Store | null, instanceId: string, since: number, ctx: () => MoveCtx) =>
   (o: TraceOutcome): TraceOutcome => {
+    // engine#511: RESUME_PARKED is not an end state (text starts `MOVE PAUSED: RESUME_…`).
+    if (o.kind === 'error' && isResumeParkedText(o.message, o.code ?? null)) {
+      return { kind: 'warning', message: parkedStatusFromText(o.message) ?? PARKED_WAITING_STATUS, code: 'RESUME_PARKED' };
+    }
     if (o.kind !== 'ok') return o;
     const s = store();
     const op = latestMoveOp(s, instanceId, since);

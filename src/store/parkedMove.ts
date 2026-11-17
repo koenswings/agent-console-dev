@@ -1,14 +1,16 @@
 /**
- * moveApp park / resume helpers (engine#509 / engine#497).
+ * moveApp park / resume helpers (engine#509 / engine#511 Console contract).
  *
- * A local move has kind `moveApp`, no `op.move`, and `args.phase` set.
- * A cross-Engine move has `op.move` (idea#79). Until Axle's option A
- * "Console contract" PR pins the (a) fields, cross-Engine resume reuses the
+ * A local move has kind `moveApp`, no `op.move`, and `args.phase` set
+ * (`copying` / `verified`). A new cross-Engine move has `op.move` and
+ * `args.crossResume === '1'` (engine#497 option A, engine#511). It reuses the
  * local markers (Pending + RESUME_WAITING / RESUME_PENDING, RETRY_MARKER,
- * Failed RESUME_GAVE_UP, args.wasRunning, and phase on args or op.move).
- * The hint is shown only for a move whose source is on this Engine
- * (`isSourceEngineOp`). While a move that stopped a running source is parked
- * or in flight again, the Console shows: "Source stopped until the move resumes or gives up".
+ * Failed RESUME_GAVE_UP, args.wasRunning). `args.phase === op.move.phase`
+ * while in flight or parked; after a give-up, `op.move.phase` becomes
+ * `failed` and `args.phase` keeps the phase it gave up in.
+ * Cross-Engine phases are copying → checking → removing → done/failed
+ * (no `verified`). The "Source stopped…" hint follows the engine#511 rule
+ * and is only shown when the source is still on the source disk.
  */
 import type { Operation, Store } from '../types/store';
 
@@ -21,12 +23,8 @@ export const PARKED_PENDING_STATUS = 'Waiting to try again';
 
 /** Local parked / mid-resume phases (engine#509). */
 const LOCAL_HINT_PHASES = new Set(['copying', 'verified']);
-/**
- * Cross-Engine: the same local names, plus `checking` (idea#79 mid-move,
- * storedOn has not flipped yet). `removing` is not included: storedOn may
- * already be on the target.
- */
-const CROSS_HINT_PHASES = new Set(['copying', 'verified', 'checking']);
+/** Cross-Engine mid-move phases (engine#511). No `verified`. */
+const CROSS_HINT_PHASES = new Set(['copying', 'checking', 'removing']);
 const HINT_STATUSES = new Set(['Pending', 'Running']);
 
 type Raw = Record<string, unknown>;
@@ -36,16 +34,12 @@ const rawMove = (op: Operation | null | undefined): unknown =>
   op ? (op as unknown as Raw).move : undefined;
 const errorText = (op: Operation): string => String(op.error ?? '');
 
-const phaseOf = (op: Operation): string =>
-  str(op.args?.phase) ?? str(rawOf(rawMove(op)).phase) ?? '';
-
-const sourceInstanceIdOf = (op: Operation): string =>
+export const sourceInstanceIdOf = (op: Operation): string =>
   String(str(rawOf(rawMove(op)).sourceInstanceId) ?? op.args?.instanceId ?? op.subject?.id ?? '');
 
 /**
- * Provisional: is this move's source on `engineId`? Prefer
- * `op.move.sourceEngineId` when present, else `op.engineId`.
- * One-line change once Axle pins the field in the Console contract PR.
+ * The source Engine of a move: `op.move.sourceEngineId` when present
+ * (new engine#511 ops; always equal to `op.engineId`), else `op.engineId`.
  */
 export const isSourceEngineOp = (op: Operation | null | undefined, engineId: string | null | undefined): boolean => {
   if (!op || engineId == null || engineId === '') return false;
@@ -59,35 +53,52 @@ export const isSourceEngineOp = (op: Operation | null | undefined, engineId: str
 export const isLocalResumableMove = (op: Operation | null | undefined): boolean =>
   !!op && op.kind === 'moveApp' && rawMove(op) == null && !!op.args?.phase;
 
-/** Local or cross-Engine moveApp that can park / resume in place. */
+/** A new cross-Engine resumable move (engine#511): op.move and args.crossResume '1'. */
+export const isCrossResumableMove = (op: Operation | null | undefined): boolean =>
+  !!op && op.kind === 'moveApp' && rawMove(op) != null && op.args?.crossResume === '1';
+
+/** Local or new cross-Engine moveApp that can park / resume in place. */
 export const isResumableMove = (op: Operation | null | undefined): boolean =>
-  !!op && op.kind === 'moveApp' && (rawMove(op) != null || !!op.args?.phase);
+  isLocalResumableMove(op) || isCrossResumableMove(op);
+
+/** Trace or op text for a parked run (engine#511): code RESUME_PARKED, text starts `MOVE PAUSED: RESUME_…`. */
+export const isResumeParkedText = (raw: string | null | undefined, code?: string | null): boolean =>
+  code === 'RESUME_PARKED' || /^(?:MOVE PAUSED:\s*)?RESUME_(WAITING|PENDING)\b/.test(String(raw ?? '').trim());
+
+/** Plain waiting line from a parked error or `MOVE PAUSED: RESUME_…` trace text. */
+export const parkedStatusFromText = (raw: string | null | undefined): string | null => {
+  const m = String(raw ?? '').trim().match(/^(?:MOVE PAUSED:\s*)?RESUME_(WAITING|PENDING)\b/);
+  if (!m) return null;
+  return m[1] === 'WAITING' ? PARKED_WAITING_STATUS : PARKED_PENDING_STATUS;
+};
 
 /** Pending move waiting for a disk (WAITING) or the next boot or dock (PENDING). */
 export const isParkedMove = (op: Operation | null | undefined): boolean =>
-  isResumableMove(op)
-  && op!.status === 'Pending'
-  && /^RESUME_(WAITING|PENDING)\b/.test(errorText(op!));
-
-const hintPhases = (op: Operation): Set<string> =>
-  rawMove(op) != null ? CROSS_HINT_PHASES : LOCAL_HINT_PHASES;
+  isResumableMove(op) && op!.status === 'Pending' && isResumeParkedText(errorText(op!));
 
 /**
  * Show the source-stopped hint for a parked or in-flight resumed move that
- * stopped a running source (`args.wasRunning === '1'`). Local moves are
- * unchanged (no engine id required). A cross-Engine move (`op.move` present)
- * also needs `engineId` to be the source Engine (`isSourceEngineOp`).
+ * stopped a running source (`args.wasRunning === '1'`).
+ *
+ * Local moves are unchanged (phases `copying` / `verified`). A cross-Engine
+ * move follows the engine#511 rule: `args.crossResume === '1'`, phase in
+ * `{copying, checking, removing}`, `instance.storedOn === args.sourceDiskId`,
+ * plus the source-Engine check (`isSourceEngineOp`). Older cross ops without
+ * `crossResume` get no hint.
  */
 export const showsSourceStoppedHint = (
   op: Operation | null | undefined,
   engineId?: string | null,
+  store?: Store | null,
 ): boolean => {
-  if (!isResumableMove(op)) return false;
-  if (!HINT_STATUSES.has(op!.status)) return false;
-  if (op!.args?.wasRunning !== '1') return false;
-  if (!hintPhases(op!).has(phaseOf(op!))) return false;
-  if (rawMove(op) != null) return isSourceEngineOp(op, engineId);
-  return true;
+  if (!op || op.kind !== 'moveApp' || !HINT_STATUSES.has(op.status) || op.args?.wasRunning !== '1') return false;
+  if (isLocalResumableMove(op)) return LOCAL_HINT_PHASES.has(String(op.args.phase));
+  if (!isCrossResumableMove(op)) return false;
+  if (!CROSS_HINT_PHASES.has(String(op.args?.phase ?? ''))) return false;
+  const instId = sourceInstanceIdOf(op);
+  const storedOn = store?.instanceDB?.[instId]?.storedOn;
+  if (String(storedOn ?? '') !== String(op.args?.sourceDiskId ?? '')) return false;
+  return isSourceEngineOp(op, engineId);
 };
 
 /**
@@ -97,10 +108,7 @@ export const showsSourceStoppedHint = (
  */
 export const parkedMoveStatusText = (op: Operation | null | undefined): string | null => {
   if (!isResumableMove(op) || op!.status !== 'Pending') return null;
-  const err = errorText(op!);
-  if (/^RESUME_WAITING\b/.test(err)) return PARKED_WAITING_STATUS;
-  if (/^RESUME_PENDING\b/.test(err)) return PARKED_PENDING_STATUS;
-  return null;
+  return parkedStatusFromText(errorText(op!));
 };
 
 /**
@@ -115,6 +123,6 @@ export const sourceStoppedMoveFor = (
   if (!store || !instanceId) return null;
   const id = String(instanceId);
   return Object.values(store.operationDB ?? {})
-    .filter((op) => showsSourceStoppedHint(op, engineId) && sourceInstanceIdOf(op) === id)
+    .filter((op) => showsSourceStoppedHint(op, engineId, store) && sourceInstanceIdOf(op) === id)
     .sort((a, b) => b.startedAt - a.startedAt)[0] ?? null;
 };
