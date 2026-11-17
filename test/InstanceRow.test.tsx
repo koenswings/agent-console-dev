@@ -701,3 +701,36 @@ describe('DockerMetricsPanel', () => {
     expect(container.textContent).toContain('Container metrics');
   });
 });
+
+describe('InstanceRow — parked local move (engine#509)', () => {
+  it('shows the source-stopped hint on a parked local move that stopped a running source', () => {
+    const op: Operation = {
+      ...makeRunningOp('inst-001', 'moveApp'),
+      status: 'Pending',
+      progressPercent: null,
+      args: {
+        instanceId: 'inst-001',
+        sourceDiskId: 'disk-src',
+        targetDiskId: 'disk-tgt',
+        phase: 'copying',
+        wasRunning: '1',
+      },
+      error: 'RESUME_WAITING: source disk left',
+    };
+    const store = makeStoreWithOps([op]);
+    const { getByTestId, getByRole, queryByText } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Stopped')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+        instanceId="inst-001"
+        store={() => store}
+      />
+    ));
+    expect(getByTestId('instance-source-stopped-inst-001').textContent).toBe(
+      'Source stopped until the move resumes or gives up',
+    );
+    expect(getByRole('button', { name: /start/i })).toBeDisabled();
+    expect(queryByText(/RESUME_/)).toBeNull();
+  });
+});

@@ -25,6 +25,7 @@ import { live, liveNow } from '../store/live';
 import { moveChecking, moveCheckingLine } from '../store/moveChecking';
 import { dismissOp, isCancellable, isOpDismissed } from '../store/dismissedOps';
 import { isMoveDoneNotMoved, moveOpOutcome } from '../store/moveApp';
+import { parkedMoveStatusText, showsSourceStoppedHint, SOURCE_STOPPED_HINT } from '../store/parkedMove';
 import { updateOpFailedPlainText } from '../store/updateApp';
 
 // ---------------------------------------------------------------------------
@@ -105,6 +106,8 @@ const OpCard: Component<OpCardProps> = (props) => {
   const isActive = () => props.op.status === 'Pending' || props.op.status === 'Running';
   // idea#498: cross-Engine Move Checking step, live from the target Engine (null = stored label).
   const checkingLine = createMemo(() => (props.op.kind === 'moveApp' ? moveCheckingLine(props.op, moveChecking(), liveNow()) : null));
+  const parkedStatus = createMemo(() => parkedMoveStatusText(props.op));
+  const sourceStopped = createMemo(() => showsSourceStoppedHint(props.op));
 
   const [logExpanded, setLogExpanded] = createSignal(false);
 
@@ -142,7 +145,7 @@ const OpCard: Component<OpCardProps> = (props) => {
         <span class="operation-card__kind">{KIND_LABEL[props.op.kind] ?? props.op.kind}</span>
         <div class="operation-card__top-right">
           <span class="operation-card__status">
-            {isDone() ? '✓ Done' : notMoved() ? '⚠ Not moved' : props.op.status}
+            {isDone() ? '✓ Done' : notMoved() ? '⚠ Not moved' : (parkedStatus() ?? props.op.status)}
           </span>
           <button
             class="operation-card__log-toggle"
@@ -166,6 +169,10 @@ const OpCard: Component<OpCardProps> = (props) => {
 
       <Show when={checkingLine() ?? props.op.stepLabel}>
         {(label) => <div class="operation-card__step-label" data-testid={`operation-step-label-${props.op.id}`}>{label()}</div>}
+      </Show>
+
+      <Show when={sourceStopped()}>
+        <div class="source-stopped-hint" data-testid={`operation-source-stopped-${props.op.id}`}>{SOURCE_STOPPED_HINT}</div>
       </Show>
 
       <Show when={!isFailed() && !notMoved()}>

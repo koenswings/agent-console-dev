@@ -183,4 +183,47 @@ describe('OperationProgress', () => {
     expect(details.querySelector('.tech-details__raw')?.textContent).toBe(error);
   });
 
+
+  const localMove = (overrides: Partial<Operation> = {}): Operation => makeOp({
+    id: 'mv-parked',
+    kind: 'moveApp',
+    status: 'Pending',
+    args: {
+      instanceId: 'inst-src',
+      sourceDiskId: 'disk-src',
+      targetDiskId: 'disk-tgt',
+      phase: 'copying',
+      wasRunning: '1',
+    },
+    error: 'RESUME_WAITING: source disk left',
+    ...overrides,
+  });
+
+  it('parked local move: waiting status, source-stopped hint, no raw RESUME_ code', () => {
+    const op = localMove();
+    render(() => <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />);
+    expect(screen.getByText('Waiting for the disk to come back')).toBeInTheDocument();
+    expect(screen.getByTestId('operation-source-stopped-mv-parked').textContent).toBe(
+      'Source stopped until the move resumes or gives up',
+    );
+    expect(screen.queryByText(/RESUME_/)).toBeNull();
+  });
+
+  it("parked local move with wasRunning 0: waiting status, no source-stopped hint", () => {
+    const op = localMove({ args: { instanceId: 'inst-src', phase: 'copying', wasRunning: '0' } });
+    render(() => <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />);
+    expect(screen.getByText('Waiting for the disk to come back')).toBeInTheDocument();
+    expect(screen.queryByTestId('operation-source-stopped-mv-parked')).toBeNull();
+    expect(screen.queryByText(/RESUME_/)).toBeNull();
+  });
+
+  it('resumed running local move shows the hint and keeps Running', () => {
+    const op = localMove({ status: 'Running', error: 'Retrying after interrupted run' });
+    render(() => <OperationProgress store={storeWith({ [op.id]: op })} commandLogStore={nullCommandLog} />);
+    expect(screen.getByText('Running')).toBeInTheDocument();
+    expect(screen.getByTestId('operation-source-stopped-mv-parked').textContent).toBe(
+      'Source stopped until the move resumes or gives up',
+    );
+  });
+
 });

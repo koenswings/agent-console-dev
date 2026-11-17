@@ -2794,6 +2794,18 @@ body {
   font-style: italic;
 }
 
+/* engine#509: parked / resumed local move that stopped the source App */
+.source-stopped-hint {
+  font-size: 0.78rem;
+  color: var(--colour-text-dim);
+  margin-top: 4px;
+}
+.instance-row .source-stopped-hint,
+.mobile-app-card .source-stopped-hint {
+  font-size: var(--font-size-xs);
+  margin-top: 2px;
+}
+
 /* ── OperationProgress additions ─────────────────────────────────────────── */
 .operation-card--done .operation-card__progress-fill {
   background: var(--colour-success, #22c55e);

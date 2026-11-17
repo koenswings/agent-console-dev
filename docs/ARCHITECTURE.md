@@ -790,6 +790,10 @@ All new store fields (`Instance.demo`, `Instance.demoPackWarning`,
 optional, so older Engines look as before. Contract: engine#369, its addendum,
 and Axle's answers (comment 6875670232). See `src/store/demoApps.ts`.
 
+### Local Move: parked and resumed (engine#509)
+
+A same-Engine `moveApp` (no `op.move` field, `args.phase` set) can pause and resume in the same operation (engine#509 / engine#497). While it is parked (`Pending` plus `RESUME_WAITING` or `RESUME_PENDING`) or running again after a resume, with `args.phase` `copying` or `verified` and `args.wasRunning` `'1'`, the Operations card and the source App row (desktop) or card (mobile) show: "Source stopped until the move resumes or gives up". The Operations card (and the row's progress label) uses "Waiting for the disk to come back" for `RESUME_WAITING` and "Waiting to try again" for `RESUME_PENDING`. The hint is hidden when the source was already stopped (`wasRunning` `'0'`), when the move finishes, gives up (`Failed` `RESUME_GAVE_UP`), is cancelled, or is a cross-Engine move (`op.move` present). Unknown `RESUME_` prefixes never appear in the teacher-facing text; helpers live in `src/store/parkedMove.ts`.
+
 ### Cross-Engine Move: live Checking progress (idea#498)
 
 During a cross-Engine Move's Checking step, the target Engine sends an ephemeral

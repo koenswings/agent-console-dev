@@ -24,6 +24,7 @@ import {
   remoteWatchFor,
 } from '../store/remoteConfirm';
 import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
+import { parkedMoveStatusText, sourceStoppedMoveFor, SOURCE_STOPPED_HINT } from '../store/parkedMove';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, offlineAppHint } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
 import type { Status } from '../types/store';
@@ -280,6 +281,12 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   const firstActiveOp = (): Operation | null => activeOps()[0] ?? null;
 
+  // engine#509: a parked / resumed local move may have stopped this source App.
+  const sourceStoppedHint = createMemo((): string | null => {
+    if (!props.instanceId || !props.store) return null;
+    return sourceStoppedMoveFor(props.store(), String(props.instanceId)) ? SOURCE_STOPPED_HINT : null;
+  });
+
   // console#168: while an update runs (or the update UI owns the result), the
   // update control shows the step; unhealthy/starting is not shown as an error.
   const updateOwned = createMemo((): boolean => canUpdate(props.engine()));
@@ -347,6 +354,8 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const activeOpProgressLabel = createMemo((): string => {
     const op = firstActiveOp();
     if (!op) return '';
+    const parked = op.kind === 'moveApp' ? parkedMoveStatusText(op) : null;
+    if (parked) return parked;
     const stepLabel = activeOpStepLabel();
     if (stepLabel) return stepLabel;
     const pct = op.progressPercent;
@@ -577,6 +586,16 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             <StepProgressBar currentStep={null} totalSteps={null} progressPercent={null} />
           </div>
         </Show>
+        <Show when={sourceStoppedHint()}>
+          {(hint) => (
+            <div
+              class="source-stopped-hint"
+              data-testid={`instance-source-stopped-${props.instanceId ?? props.instance()?.id ?? ''}`}
+            >
+              {hint()}
+            </div>
+          )}
+        </Show>
         <Show when={props.instance()?.status === 'Error' && props.instance()?.statusCondition && !expanded() && !updating()}>
           <div
             class="instance-row__error-hint"
@@ -605,7 +624,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
           class="btn btn--start" data-testid={`start-instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
           disabled={isStartDisabled(props.instance()?.status ?? 'Stopped') || locked() || pendingAction() === 'starting'}
           onClick={handleStart}
-          title={locked() ? 'Operation in progress' : pendingAction() === 'starting' ? 'Starting...' : 'Start app'}
+          title={sourceStoppedHint() ? SOURCE_STOPPED_HINT : locked() ? 'Operation in progress' : pendingAction() === 'starting' ? 'Starting...' : 'Start app'}
           aria-label={`Start ${props.instance()?.name}`}
         >
           Start
