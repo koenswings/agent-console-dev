@@ -630,3 +630,11 @@ Intents pass end to end there (Path A via library tile and Path B).
   heading "Numerator").
 - **`leave_wikipedia_as_teacher` / `_learner` (wiki_browse → console_*):** needs an open Kiwix tab, then the shared
   `leaveAppToConsole` (now also closes :18380 / `/viewer#` tabs); the Kiwix tab must be closed.
+
+## Judging an Operation (walk98)
+
+Never judge an OperationProgress card with `card.first()` or "any card for the instance": a fresh browser
+shows old Failed cards (nothing dismissed). Snapshot the card ids before the click (`snapshotOpIds` /
+`snapshotBackupAppOps`) and wait only for a card that is not in that snapshot (`waitForNewOp`,
+`e2e/intents/operationCards.ts`). The copy/move/restore Intents use the harness `waitOperation` hook
+with `sinceMs` taken at the click, which is the same rule on the store side.

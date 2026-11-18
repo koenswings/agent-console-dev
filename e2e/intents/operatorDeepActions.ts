@@ -5,6 +5,7 @@
  * Axle locked snake_case keys from proposal UI Interaction titles.
  */
 import { awaitOperationIfWired } from './operationWait';
+import { pageCardReader, snapshotOpIds, waitForNewOp, type NewOpOutcome } from './operationCards';
 import {
   RESTORE_FIRST_GATE_TIMEOUT_MS,
   decideRestoreFirstGate,
@@ -393,47 +394,60 @@ export async function confirmBackupPickerIfOpen(page: Page, instanceId: string):
 }
 
 /**
- * Wait until a backupApp Operation for `instanceId` appears in OperationProgress
- * (Pending / Running / Done), or fail loud on Failed / CommandFeedback error /
- * timeout. Appearance = success for the Intent: the Engine accepted backupApp
- * and wrote an Operation; the harness still verifies archive/Done separately.
+ * Card ids of backupApp Operations for `instanceId` visible now. Call BEFORE the Back up click and pass
+ * the result to waitForBackupAppOperation (walk98: stale Failed cards must not be judged).
+ */
+export function snapshotBackupAppOps(page: Page, instanceId: string): Promise<ReadonlySet<string>> {
+  return snapshotOpIds(pageCardReader(page, sel.backupAppOpForInstance(instanceId)));
+}
+
+/**
+ * Wait until a NEW backupApp Operation for `instanceId` (a card whose id is not in `baseline`, the ids
+ * visible before the click) appears in OperationProgress (Pending / Running / Done), or fail loud when
+ * that op is Failed, on a CommandFeedback error, or on timeout. Cards present before the click, such as
+ * an old Failed scheduled backup, are ignored. The harness still verifies archive/Done separately.
  */
 export async function waitForBackupAppOperation(
   page: Page,
   instanceId: string,
   budgetMs: number = backupOpAppearTimeoutMs(),
+  baseline: ReadonlySet<string> = new Set<string>(),
 ): Promise<void> {
-  const deadline = Date.now() + budgetMs;
-  const card = page.locator(sel.backupAppOpForInstance(instanceId));
   const feedbackErr = page.locator(sel.instanceCmdError(instanceId));
+  const out = await waitForNewOp(baseline, budgetMs, {
+    read: pageCardReader(page, sel.backupAppOpForInstance(instanceId)),
+    readRefusal: async () =>
+      (await feedbackErr.isVisible().catch(() => false))
+        ? (((await feedbackErr.first().textContent().catch(() => '')) ?? '').trim() || 'error')
+        : '',
+    now: () => Date.now(),
+    sleep: (ms) => page.waitForTimeout(ms),
+  });
+  throwUnlessNewBackupOpOk(out, instanceId, budgetMs);
+}
 
-  while (Date.now() < deadline) {
-    if (await feedbackErr.isVisible().catch(() => false)) {
-      const msg = ((await feedbackErr.first().textContent()) ?? '').trim();
-      throw new Error(
-        `idea#168 backup_instance: Engine refused / failed backup for ${instanceId} ` +
-          `(CommandFeedback: ${msg || 'error'}). No soft-pass.`,
-      );
-    }
-    const n = await card.count();
-    if (n > 0) {
-      const status = ((await card.first().getAttribute('data-op-status')) ?? '').trim();
-      if (status === 'Failed') {
-        const err = ((await card.first().locator('.operation-card__error').textContent().catch(() => '')) ?? '').trim();
-        throw new Error(
-          `idea#168 backup_instance: backupApp Operation Failed for ${instanceId}` +
-            `${err ? `: ${err}` : ''}. No soft-pass.`,
-        );
-      }
-      // Pending / Running / Done (Done may auto-dismiss in 3s — catching it counts)
-      return;
-    }
-    await page.waitForTimeout(250);
+/** Maps a waitForNewOp outcome to the Intent's loud failures (exported for unit tests). */
+export function throwUnlessNewBackupOpOk(out: NewOpOutcome, instanceId: string, budgetMs: number): void {
+  if (out.kind === 'seen') return;
+  if (out.kind === 'refused') {
+    throw new Error(
+      `idea#168 backup_instance: Engine refused / failed backup for ${instanceId} ` +
+        `(CommandFeedback: ${out.message}). No soft-pass.`,
+    );
   }
-
+  if (out.kind === 'failed') {
+    throw new Error(
+      `idea#168 backup_instance: backupApp Operation ${out.op.id} Failed for ${instanceId}` +
+        `${out.op.error ? `: ${out.op.error}` : ''}. No soft-pass.`,
+    );
+  }
+  const stale = out.ignoredStale.length
+    ? ` Ignored ${out.ignoredStale.length} older card(s) from before the click: ` +
+      `${out.ignoredStale.map((c) => `${c.id}=${c.status}`).join(', ')}.`
+    : '';
   throw new Error(
-    `idea#168 backup_instance: no backupApp Operation for ${instanceId} within ${budgetMs}ms ` +
-      `after Back up click (OperationProgress empty / no matching card). ` +
+    `idea#168 backup_instance: no NEW backupApp Operation for ${instanceId} within ${budgetMs}ms ` +
+      `after Back up click (only an op created by this click counts).${stale} ` +
       `r42 FAIL@112: Intent must not return ok on click alone. No soft-pass.`,
   );
 }
@@ -534,11 +548,13 @@ export const backup_instance: IntentFn = async ({ page, instanceId }) => {
     );
   }
 
+  // walk98: remember the cards that exist before the click; only an op created by the click is judged.
+  const opsBeforeClick = await snapshotBackupAppOps(page, id);
   await btn.click();
   // ≥2 linked Backup Disks: picker opens instead of sending — pick one or fail loud.
   await confirmBackupPickerIfOpen(page, id);
-  // r42 FAIL@112: do not return ok until the backupApp Operation is visible (or fails).
-  await waitForBackupAppOperation(page, id, backupOpAppearTimeoutMs());
+  // r42 FAIL@112: do not return ok until the NEW backupApp Operation is visible (or fails).
+  await waitForBackupAppOperation(page, id, backupOpAppearTimeoutMs(), opsBeforeClick);
 };
 
 /** Back to disk — select parent disk row (ctx.diskId) → DiskView / EmptyDiskPanel. */
