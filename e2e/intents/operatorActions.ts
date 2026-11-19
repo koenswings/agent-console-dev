@@ -18,6 +18,7 @@ import {
   decideConfirmEject,
   type ConfirmEjectObservation,
 } from './confirmEjectOutcome';
+import { readEjectDom } from './ejectDom';
 import {
   CONFIRM_ERASE_TIMEOUT_MS,
   commandSignalFromMarker,
@@ -221,35 +222,31 @@ export const confirm_eject: IntentFn = async (ctx) => {
   const dialog = page.locator(sel.ejectConfirm);
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   const targetId = await confirmEjectTargetDiskId(page, resolveConfirmEjectDiskId(ctx));
-  const baselineMarker = await readEjectCommandMarker(page);
-  const baselineSeq = baselineMarker?.seq ?? 0;
+  const domSel = {
+    notice: targetId ? sel.ejectNotice(targetId) : '[data-testid^="eject-notice-"]',
+    disk: targetId ? sel.disk(targetId) : null,
+    marker: sel.ejectCommandResult,
+  };
+  const baselineSeq = (await readEjectDom(page, domSel)).marker?.seq ?? 0;
   await page.locator(sel.ejectConfirmOk).click();
 
   const startedAt = Date.now();
   const timeoutMs = CONFIRM_EJECT_TIMEOUT_MS;
   while (true) {
     const elapsedMs = Date.now() - startedAt;
-    const notice = targetId ? page.locator(sel.ejectNotice(targetId)) : page.locator('[data-testid^="eject-notice-"]');
-    const noticeCount = await notice.count();
-    const noticeStateRaw = noticeCount
-      ? ((await notice.first().getAttribute('data-eject-state')) ?? 'none')
-      : 'none';
+    // One atomic read (ejectDom.ts): the notice vanishes the moment the remote Engine confirms, so a
+    // count() + getAttribute() pair would auto-wait 30 s on an element that is already gone (seed 42 @641).
+    const dom = await readEjectDom(page, domSel);
     const noticeState =
-      noticeStateRaw === 'error' || noticeStateRaw === 'timeout' || noticeStateRaw === 'sent'
-        ? noticeStateRaw
+      dom.noticeStateRaw === 'error' || dom.noticeStateRaw === 'timeout' || dom.noticeStateRaw === 'sent'
+        ? dom.noticeStateRaw
         : 'none';
-    const noticeMessage = noticeCount
-      ? ((await notice.first().textContent()) ?? '').trim() || null
-      : null;
-    const diskLeftTree = targetId
-      ? (await page.locator(sel.disk(targetId)).count()) === 0
-      : false;
     const obs: ConfirmEjectObservation = {
       dialogVisible: await dialog.isVisible().catch(() => false),
-      command: commandSignalFromEjectMarker(await readEjectCommandMarker(page), baselineSeq),
+      command: commandSignalFromEjectMarker(dom.marker, baselineSeq),
       noticeState,
-      noticeMessage,
-      diskLeftTree,
+      noticeMessage: dom.noticeMessage,
+      diskLeftTree: targetId ? !dom.diskPresent : false,
       elapsedMs,
       timeoutMs,
     };
