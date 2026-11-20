@@ -337,15 +337,27 @@ async function confirmEraseTargetDiskId(
   return undefined;
 }
 
-async function readEraseCommandMarker(
+/** Short per-call budget for reads inside a poll loop (Playwright's 30 s default would outlast the loop's own deadline). */
+const POLL_READ_TIMEOUT_MS = 2_000;
+
+/**
+ * Erase marker read inside the confirm_erase poll. A vanished/remounted marker is "no reading" (null), never a 30 s
+ * `getAttribute` timeout that aborts the step (same count()-then-getAttribute race as confirm_eject, console#250).
+ */
+export async function readEraseCommandMarker(
   page: Page,
 ): Promise<{ seq: number; status: string; error: string | null } | null> {
-  const loc = page.locator(sel.eraseCommandResult);
-  if (!(await loc.count())) return null;
-  const seq = Number((await loc.getAttribute('data-seq')) ?? '0') || 0;
-  const status = (await loc.getAttribute('data-status')) ?? '';
-  if (!status) return null;
-  return { seq, status, error: await loc.getAttribute('data-error') };
+  try {
+    const loc = page.locator(sel.eraseCommandResult);
+    if (!(await loc.count())) return null;
+    const o = { timeout: POLL_READ_TIMEOUT_MS };
+    const seq = Number((await loc.getAttribute('data-seq', o)) ?? '0') || 0;
+    const status = (await loc.getAttribute('data-status', o)) ?? '';
+    if (!status) return null;
+    return { seq, status, error: await loc.getAttribute('data-error', o) };
+  } catch {
+    return null;
+  }
 }
 
 async function isTargetDiskEmpty(
@@ -356,7 +368,7 @@ async function isTargetDiskEmpty(
   const row = page.locator(sel.disk(diskId));
   if (await row.locator('[data-role="empty"]').count()) return true;
   if (!(await row.count())) return false;
-  const selected = await row.getAttribute('aria-selected');
+  const selected = await row.getAttribute('aria-selected', { timeout: POLL_READ_TIMEOUT_MS }).catch(() => null);
   if (selected === 'true' && (await page.locator(sel.emptyDiskPanel).isVisible().catch(() => false))) {
     return true;
   }
@@ -419,7 +431,7 @@ export const confirm_erase: IntentFn = async (ctx) => {
     const elapsedMs = Date.now() - startedAt;
     const err = dialog.locator('.edp-form__error[role="alert"]');
     const dialogError = (await err.isVisible().catch(() => false))
-      ? ((await err.textContent()) ?? '').trim() || null
+      ? ((await err.textContent({ timeout: POLL_READ_TIMEOUT_MS }).catch(() => null)) ?? '').trim() || null
       : null;
     if (targetId && presentBefore && !(await page.locator(sel.disk(targetId)).count())) {
       sawMissing = true;
