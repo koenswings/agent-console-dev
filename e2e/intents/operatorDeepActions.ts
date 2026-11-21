@@ -15,7 +15,7 @@ import {
 } from './restoreFirstGate';
 import { appKindForUrl } from './sidecarUrls';
 import type { Page } from '@playwright/test';
-import type { IntentFn } from './types';
+import type { IntentContext, IntentFn } from './types';
 import { sel } from './selectors';
 import { waitForOperatorLayout } from './operatorLayout';
 import { DURATION_FIXTURES } from './fixtures';
@@ -341,14 +341,64 @@ export const make_backup_disk: IntentFn = async ({ page, diskId, instanceId }) =
   });
 };
 
+function safeContextPages(page: Page): Page[] {
+  try {
+    return page.context?.()?.pages?.() ?? [];
+  } catch {
+    return [];
+  }
+}
+
+const isAppTabUrl = (url: string): boolean =>
+  /kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
+    url,
+  ) ||
+  // r57: App tabs on store ports / any engine host form (e.g. Kiwix library idea03.local:18480/)
+  appKindForUrl(url) !== null;
+
+async function closeTabsAndFocusConsole(
+  consolePage: Page,
+  pages: Iterable<Page>,
+): Promise<void> {
+  for (const p of pages) {
+    if (p === consolePage) continue;
+    try {
+      if (!p.isClosed?.()) {
+        await p.close?.().catch(() => {});
+      }
+    } catch {
+      /* closed */
+    }
+  }
+  await consolePage.bringToFront?.().catch(() => {});
+}
+
 /**
  * Open app — ensure Running → Path A Open ↗ / Path B sidecar (defaults Kolibri).
  * Prefer A: never open against Stopped (r18 FAIL@79). Distinct from open_kolibri_as_* (no login).
+ * Single-step operator verify: close any opened App tab and bring Console back to front
+ * in try...finally so subsequent operator steps (and walk frames) never stay behind an App tab.
  */
-export const open_app: IntentFn = async ({ page, instanceId }) => {
+export async function runOpenApp(
+  { page, instanceId }: Pick<IntentContext, 'page' | 'instanceId'>,
+  openFn: typeof openAppInstance = openAppInstance,
+): Promise<void> {
   const id = resolveStartInstanceId(instanceId);
-  await openAppInstance(page, id);
-};
+  const pagesBefore = new Set(safeContextPages(page));
+  let appPage: Page | undefined;
+  try {
+    appPage = await openFn(page, id);
+  } finally {
+    const toClose = new Set<Page>();
+    if (appPage && appPage !== page) toClose.add(appPage);
+    for (const p of safeContextPages(page)) {
+      if (p !== page && !pagesBefore.has(p)) toClose.add(p);
+    }
+    await closeTabsAndFocusConsole(page, toClose);
+  }
+}
+
+export const open_app: IntentFn = (ctx) => runOpenApp(ctx);
 
 /** Budget to get Backup enabled after ensuring Running (DURATION_BACKUP_SETTLE_MS). */
 export function backupSettleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -1856,25 +1906,15 @@ export const reboot_engine: IntentFn = async ({ page, engineId }) => {
  * Close App tab if present; assert Console overview (teacher/learner) or op_overview.
  */
 export const leaveAppToConsole = async (page: import('@playwright/test').Page): Promise<void> => {
-  const pages = page.context().pages();
-  for (const p of pages) {
+  const appTabs: Page[] = [];
+  for (const p of safeContextPages(page)) {
     try {
-      const url = p.url();
-      if (
-        p !== page &&
-        (/kolibri|nextcloud|kiwix|18080|18081|18280|18380|\/learn|\/coach|\/facility|\/auth|\/device|\/apps\/files|\/viewer#/i.test(
-          url,
-        ) ||
-          // r57: App tabs on store ports / any engine host form (e.g. Kiwix library idea03.local:18480/)
-          appKindForUrl(url) !== null)
-      ) {
-        await p.close().catch(() => {});
-      }
+      if (p !== page && isAppTabUrl(p.url())) appTabs.push(p);
     } catch {
       /* closed */
     }
   }
-  await page.bringToFront().catch(() => {});
+  await closeTabsAndFocusConsole(page, appTabs);
   if (await page.locator(sel.connectionManagement).isVisible().catch(() => false)) {
     const cmBtn = page.locator(sel.connectionMgmtBtn);
     if (await cmBtn.count()) await cmBtn.click().catch(() => {});

@@ -46,6 +46,7 @@ await captureAfterIntent(page, { path, intent: action, settleMs: 300 });
 | Detail | Contract |
 |---|---|
 | Settle | `domcontentloaded` → best-effort `networkidle` → `settleMs` (default **300**) |
+| Focus | Console steps resolve the Console `page` and call `bringToFront()` before settling/capturing; multi-step in-app intents do not yank focus away from the active App tab. |
 | Screenshot | `fullPage: **false**` (viewport; stitch-friendly). Engine fallback may use `fullPage: true`. |
 | Soft-detect order | (1) `runDurationIntent` + `screenshotPath` writes PNG → (2) `captureAfterIntent` → (3) Engine `page.screenshot({ fullPage: true })` |
 | No double settle | When Pixel writes the file, Engine `captureFrame` returns on `existsSync` — no second wait. |
@@ -402,8 +403,9 @@ r19: Automerge **Running ≠ sidecar up** (ghost Running after move_app docker-m
 | Loud-fail | Sidecar timeout / cannot Open — **no** soft-pass connection refused |
 | Id | `DURATION_START_INSTANCE_ID` / `kolibri-grade5a-001` |
 | Classroom | No Start control → Path B still waits sidecar ready |
+| Cleanup | `open_app` closes any opened App tab and calls `page.bringToFront()` in `try...finally` (even on error) so subsequent operator steps never stay behind an App tab |
 | Engine | failAfter=1 on docker-missing welcome belt (no Console change) |
-| Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` share `openAppInstance` |
+| Siblings | `open_kolibri_as_*` / `open_nextcloud_as_*` share `openAppInstance` and keep the App tab open until `leave_*` / `back_to_console` |
 
 ## restore_from_backup settle (r21/r22)
 
