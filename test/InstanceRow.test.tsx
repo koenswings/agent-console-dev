@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@solidjs/testing-library';
 import InstanceRow, {
-  isStartDisabled,
-  isStopDisabled,
-  isBackupDisabled,
   formatLastBackup,
 } from '../src/components/InstanceRow';
+import { isBackupDisabled, isStartDisabled, isStopDisabled } from '../src/store/instanceActions';
 import type { Instance, App, Engine, Disk, Status, Store, Operation } from '../src/types/store';
 import * as commands from '../src/store/commands';
 
@@ -92,6 +90,7 @@ describe('isStartDisabled', () => {
   it('enables Start for Error', () => expect(isStartDisabled('Error')).toBe(false));
   it('enables Start for Undocked', () => expect(isStartDisabled('Undocked')).toBe(false));
   it('enables Start for Pauzed', () => expect(isStartDisabled('Pauzed')).toBe(false));
+  it('disables Start for Missing', () => expect(isStartDisabled('Missing')).toBe(true));
 });
 
 describe('isStopDisabled', () => {
@@ -102,6 +101,7 @@ describe('isStopDisabled', () => {
   it('enables Stop for Starting', () => expect(isStopDisabled('Starting')).toBe(false));
   it('enables Stop for Error', () => expect(isStopDisabled('Error')).toBe(false));
   it('enables Stop for Pauzed', () => expect(isStopDisabled('Pauzed')).toBe(false));
+  it('disables Stop for Missing', () => expect(isStopDisabled('Missing')).toBe(true));
 });
 
 describe('isBackupDisabled', () => {
@@ -110,6 +110,7 @@ describe('isBackupDisabled', () => {
   it('disables Backup for Docked', () => expect(isBackupDisabled('Docked')).toBe(true));
   it('disables Backup for Starting', () => expect(isBackupDisabled('Starting')).toBe(true));
   it('disables Backup for Error', () => expect(isBackupDisabled('Error')).toBe(true));
+  it('disables Backup for Missing', () => expect(isBackupDisabled('Missing')).toBe(true));
 });
 
 describe('formatLastBackup', () => {
@@ -205,6 +206,28 @@ describe('InstanceRow component', () => {
       />
     ));
     expect(getByRole('button', { name: /stop/i })).not.toBeDisabled();
+  });
+
+  it('Stop button is disabled when status is Missing', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Missing')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(getByRole('button', { name: /stop/i })).toBeDisabled();
+  });
+
+  it('Start button is disabled when status is Missing', () => {
+    const { getByRole } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Missing')}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    expect(getByRole('button', { name: /start/i })).toBeDisabled();
   });
 
   it('shows Open link when status is Running', () => {
