@@ -293,6 +293,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
   const updating = createMemo((): boolean =>
     updateOwned() && !!props.instanceId && isUpdateRunning(latestUpdateOp(props.store?.() ?? null, props.instanceId)));
 
+  const rowStatus = (): Status =>
+    updating() && props.instance()?.status === 'Error' ? 'Starting' : props.instance()?.status ?? 'Stopped';
+
   // Only show runtime failures on the app row (start/stop/backup/restore).
   // Copy/move failures are shown in the OperationProgress panel instead.
   const RUNTIME_OP_KINDS = new Set(['backupApp', 'restoreApp', 'upgradeApp', 'updateApp']);
@@ -539,7 +542,10 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
         aria-label={`${expanded() ? 'Hide' : 'Show'} details for ${props.instance()?.name}`}
         onClick={() => setExpanded((v) => !v)}
       >
-        <StatusDot status={updating() && props.instance()?.status === 'Error' ? 'Starting' : props.instance()?.status ?? 'Stopped'} />
+        <span class={`status-badge status-badge--${rowStatus().toLowerCase()}`}>
+          <StatusDot status={rowStatus()} />
+          <span class="status-badge__label">{rowStatus()}</span>
+        </span>
       </button>
 
       <div class="instance-row__info">

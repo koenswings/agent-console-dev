@@ -490,6 +490,7 @@ const App: Component = () => {
           </button>
         </div>
       </div>
+      <div class="kente-band" aria-hidden="true"></div>
 
       {/* ── Page content — exactly one Match renders at a time ────────────── */}
       <Switch>
