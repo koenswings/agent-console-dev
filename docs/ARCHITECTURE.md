@@ -9,9 +9,15 @@ two audiences in a single application:
   disks and backups, flash classroom computer cards, monitor Engine health. Operators log in from
   within the Console (👤 Account), elevating their session.
 
-It is built with Solid.js and TypeScript and ships as a static web app that the Engine serves
-(production web mode, the normal case on every Pi and kit). The Chrome Extension (Manifest V3)
-build is legacy: it still builds, but gets no new logic.
+The Console is a Solid.js + TypeScript single-page web app. Vite builds it into static files in
+`dist/`, and the Engine's HTTP server (`httpMonitor.ts`) serves that folder on port 80
+(`settings.httpPort` in the Engine's `config.yaml`, default 80; a few non-kit Engines are set to
+another port). Browsers load it from the Engine, connect back to the same Engine over an Automerge
+WebSocket, and need no internet and no install.
+
+The only other build output is `background.js` (`src/background/background.ts`), the service
+worker of a legacy Chrome Extension (Manifest V3). It still builds so the old entry does not break,
+but it gets no new logic and no Pi or kit uses it (see *Legacy: Chrome Extension build* at the end).
 
 ---
 
@@ -21,7 +27,7 @@ The Console runs in three contexts detected at runtime:
 
 | Context | How it starts | Hostname source | Store URL source |
 |---|---|---|---|
-| **Production web** (normal) | Engine HTTP server serves `dist/` on its `httpPort` (80 on kits; pool Pis and production `idea` use other ports) | `window.location.hostname` (+ `window.location.port`) | `GET /api/store-url` on same origin |
+| **Production web** (every Pi and kit) | Engine HTTP server serves `dist/` on port 80 (`httpPort`; fleet pool Pis and production `idea` are configured to other ports) | `window.location.hostname` (+ `window.location.port`) | `GET /api/store-url` on same origin |
 | **Dev (Tailscale)** | `pnpm dev` → Vite dev server on port 5173 | Connection Management → `localStorage` | `VITE_STORE_URL` env var or `GET /api/store-url` |
 | **Chrome Extension** (legacy) | Toolbar icon click | Connection Management → `chrome.storage.local` | Auto-fetch from `GET /api/store-url` or manual entry |
 
@@ -43,19 +49,23 @@ The Engine serves Console `dist/` via `httpMonitor.ts`. Two `config.yaml` settin
 
 ```yaml
 settings:
-  httpPort: 80          # or 8080 if not running with cap_net_bind_service
+  httpPort: 80          # default; serves the Console UI and /api/*
   consolePath: /home/pi/idea/agents/agent-console-dev/dist
 ```
 
 The Engine's default `config.yaml` sets `consolePath` to the nested Console checkout's build
 output, `/home/pi/idea/agents/agent-console-dev/dist`, so a Pi using the standard checkout layout
-serves the Console as soon as `pnpm build` has produced `dist/`. The Engine checks the folder once
-at startup: if it is missing, it logs `consolePath "…" not found — Console UI will not be served`
-and carries on (non-API routes return 404 "Console UI not configured on this Engine"). Restart the
-Engine after the first build so it picks up `dist/`. Setting `consolePath` to an empty string
-disables Console serving explicitly. This keeps Engine and Console deployable independently.
-`GET /api/store-url` is always available on the HTTP server regardless of whether the Console is
-being served.
+serves the Console as soon as `pnpm build` has produced `dist/`. The Engine checks for
+`<consolePath>/index.html` on every request (agent-engine-dev#264): while it is missing (for
+example before the first build) static requests get 503 "Console UI not built yet on this
+Engine", and a Console built after the Engine started is served without a restart. Setting
+`consolePath` to an empty string disables Console serving (404 "Console UI not configured on this
+Engine"). This keeps Engine and Console deployable independently. `/api/*` always works: known
+routes return JSON and unknown `/api/*` paths a JSON 404, never the SPA fallback (engine#357).
+
+When `httpPort` is not 80, the Engine also serves the same Console and API on
+`settings.ideaLocalHttpPort` (default 80), so `http://idea.local` reaches whichever Engine holds
+that name (idea#203).
 
 ---
 
@@ -493,37 +503,6 @@ HTTP calls (`/api/store-url`, `/api/command-log-url`) go to `http://<hostname>[:
 The port comes from a manual `host:port` entry in Connection Management (persisted as
 `enginePort` next to `engineHostname`/`storeUrl`; absent = default port 80), or from
 `window.location.port` in production web mode. See koenswings/idea#100.
-
----
-
-## Chrome Extension (Manifest V3, legacy)
-
-Legacy: it still builds (`background.js` entry) but gets no new logic, and is not how the
-Console is deployed.
-
-### Permissions
-
-```json
-"permissions": ["storage", "tabs", "sidePanel", "windows"]
-```
-
-### Background service worker (`src/background/background.ts`)
-
-Reads `displayMode` from `chrome.storage.local` and configures Chrome:
-
-| Mode | Mechanism |
-|---|---|
-| `sidePanel` (default) | `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` — native, no service worker dormancy issue |
-| `popup` | `action.setPopup({ popup: 'index.html' })` |
-| `window` | `action.onClicked` handler calls `windows.create()` (960×680) |
-
-Listens to `chrome.storage.onChanged` to apply mode changes in real time.
-
-### Display mode storage
-
-Key: `displayMode` in `chrome.storage.local`. Values: `sidePanel` | `popup` | `window`.
-Default: `sidePanel`. The current UI has no display-mode control any more; `storage.ts` and
-`background.ts` still read the key.
 
 ---
 
@@ -1153,7 +1132,7 @@ When active:
 Key Vite config:
 - `cacheDir: '/tmp/idea-console-vite-cache'` — avoids ownership conflicts on Pi
 - `server.allowedHosts: true` — permits Tailscale hostname in dev mode
-- `build.outDir: 'dist'` — Chrome Extension loads from here; also served by Engine HTTP server
+- `build.outDir: 'dist'` — the folder the Engine serves (`consolePath`); the legacy extension entry `background.js` is written there too
 - `build.emptyOutDir: false` — a direct `vite build` must not wipe a live `dist/` the Engine is serving
 
 `pnpm build` runs `scripts/build.mjs`, which always calls Vite `build()` with `mode: 'production'`
@@ -1222,9 +1201,9 @@ User mutations replicate to all peers via Automerge sync.
 
 The Engine's `httpMonitor.ts` serves Console `dist/` as a single-page app from `consolePath`
 in `config.yaml` (default `/home/pi/idea/agents/agent-console-dev/dist`). Falls back to
-`index.html` for all unmatched routes (SPA client-side routing). When `consolePath` is empty or
-the folder does not exist at Engine startup, the Engine logs it and continues, and only the
-`/api/*` endpoints are served.
+`index.html` for all unmatched non-API routes (SPA client-side routing). Empty `consolePath` →
+404 "Console UI not configured"; `index.html` missing → 503 "Console UI not built yet", re-checked
+on every request. `/api/*` is always served.
 
 
 ### Duration-walk selectors (idea#166)
@@ -1241,3 +1220,38 @@ fixture IDs (`kolibri-grade5a-001`, `nextcloud-grade5a-001`,
 it loud-fails unless `DURATION_UPDATE_RESTART_FAILED_HOOK` is set, which says the Engine
 under test runs with engine#467's `IDEA_TEST_FAIL_UPDATE_RESTART=<instanceId>` hook
 (testMode only) for the same instance. See `e2e/intents/README.md`.
+
+---
+
+## Legacy: Chrome Extension build
+
+`vite.config.ts` has a second Rollup input, `src/background/background.ts`, written to
+`dist/background.js`; `public/manifest.json` (Manifest V3) is copied into `dist/`. Loading `dist/`
+as an unpacked extension gives the old extension. It is kept building only so the entry does not
+break: it gets no new logic and is not how the Console is deployed. In that context the Console
+keeps settings in `chrome.storage.local` instead of `localStorage` (`isExtensionContext()` in
+`src/store/engine.ts`).
+
+### Permissions
+
+```json
+"permissions": ["storage", "tabs", "sidePanel", "windows"]
+```
+
+### Background service worker (`src/background/background.ts`)
+
+Reads `displayMode` from `chrome.storage.local` and configures Chrome:
+
+| Mode | Mechanism |
+|---|---|
+| `sidePanel` (default) | `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` — native, no service worker dormancy issue |
+| `popup` | `action.setPopup({ popup: 'index.html' })` |
+| `window` | `action.onClicked` handler calls `windows.create()` (960×680) |
+
+Listens to `chrome.storage.onChanged` to apply mode changes in real time.
+
+### Display mode storage
+
+Key: `displayMode` in `chrome.storage.local`. Values: `sidePanel` | `popup` | `window`.
+Default: `sidePanel`. The current UI has no display-mode control any more; `storage.ts` and
+`background.ts` still read the key.
