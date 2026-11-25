@@ -709,6 +709,20 @@ describe('DockerMetricsPanel', () => {
     ));
     fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
     expect(container.textContent).toContain('not running');
+    expect(container.textContent).not.toContain('No metrics yet.');
+  });
+
+  it('does not say the app is not running when it is Running but metrics have not arrived', () => {
+    const { container } = render(() => (
+      <InstanceRow
+        instance={() => makeInstance('Running', null, null)}
+        app={() => mockApp}
+        engine={() => mockEngine}
+      />
+    ));
+    fireEvent.click(container.querySelector('.instance-row__status-btn') as HTMLElement);
+    expect(container.textContent).toContain('No metrics yet.');
+    expect(container.textContent).not.toContain('not running');
   });
 
   it('shows Container metrics heading', () => {
