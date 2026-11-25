@@ -483,7 +483,8 @@ code {
   background: color-mix(in srgb, var(--sidebar-text) 12%, var(--sidebar));
 }
 
-.tree-item--selected {
+.tree-item.tree-item--selected,
+.tree-item.tree-item--selected:hover {
   background: var(--sidebar-sel-bg);
   border-left-color: var(--sidebar-sel-border);
   color: var(--sidebar-sel-text);
