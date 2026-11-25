@@ -24,6 +24,7 @@ import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, eng
 import { instanceCardTitle } from '../store/instanceTitle';
 import { demoPackWarningText, isDemoInstance } from '../store/demoApps';
 import { sharedHiddenInstances, type HiddenInstancesLoader } from '../store/hiddenInstances';
+import { isStartDisabled, isStopDisabled } from '../store/instanceActions';
 import type { Store, Instance, Disk, Engine, Operation } from '../types/store';
 interface MobileAppListProps {
   store: Accessor<Store | null>;
@@ -401,7 +402,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               </Show>
               <Show when={i().status === 'Running'}>
                 <div class="mobile-app-card__actions">
-                  <button class="btn btn--stop" onClick={() => handleStop(i())}>Stop</button>
+                  <button class="btn btn--stop" disabled={isStopDisabled(i().status)} onClick={() => handleStop(i())}>Stop</button>
                   <Show when={engine()}>
                     <Show
                       when={appEngineStatus(engine()) === 'online' && buildAppUrl(engine(), i().port, hostCtx())}
@@ -443,7 +444,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
 
               <Show when={i().status === 'Stopped'}>
                 <div class="mobile-app-card__actions">
-                  <button class="btn btn--start" onClick={() => handleStart(i())}>Start</button>
+                  <button class="btn btn--start" disabled={isStartDisabled(i().status)} onClick={() => handleStart(i())}>Start</button>
                   <Show when={hasBackupDisks()}>
                     <button
                       class="btn btn--backup"
@@ -458,7 +459,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
 
               <Show when={i().status === 'Error'}>
                 <div class="mobile-app-card__actions">
-                  <button class="btn btn--start" onClick={() => handleStart(i())}>Restart</button>
+                  <button class="btn btn--start" disabled={isStartDisabled(i().status)} onClick={() => handleStart(i())}>Restart</button>
                 </div>
               </Show>
             </div>
