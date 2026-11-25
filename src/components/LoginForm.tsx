@@ -1,7 +1,7 @@
 import { createSignal, Show, type Component } from 'solid-js';
 import { bcryptCompare } from '../store/bcryptCompare';
 import { authMode } from '../store/authMode';
-import { signIn } from '../store/auth';
+import { signedOutNotice, signIn } from '../store/auth';
 import type { Store, User } from '../types/store';
 
 interface LoginFormProps {
@@ -115,6 +115,9 @@ const LoginForm: Component<LoginFormProps> = (props) => {
             </div>
           </div>
 
+          <Show when={!error() && signedOutNotice()}>
+            {(why) => <p class="form-notice" role="status" data-testid="login-signed-out">{why()}</p>}
+          </Show>
           {error() && <p class="form-error">{error()}</p>}
 
           <Show when={!canSubmit()}>

@@ -10,6 +10,7 @@
  */
 import { createSignal, Show, type Component } from 'solid-js';
 import {
+  signedOutNotice,
   currentUser,
   isOperator,
   logout,
@@ -166,6 +167,9 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                   </button>
                 </div>
               </div>
+              <Show when={!loginError() && signedOutNotice()}>
+                {(why) => <p class="form-notice" role="status" data-testid="login-signed-out">{why()}</p>}
+              </Show>
               {loginError() && <p class="form-error">{loginError()}</p>}
               <Show when={!canSignIn()}>
                 <p class="form-field__hint" style="color:var(--colour-text-muted)">Waiting for engine to sync…</p>

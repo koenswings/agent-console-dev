@@ -19,7 +19,7 @@ import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
 import type { CommandLogError, CommandLogState } from './commandLog';
 import { apiBase, type EngineApiTransport } from './engineApi';
-import { isEngineAuth, pageAuthEngineId } from './authMode';
+import { pageAuthEngineId, pageHasRelay } from './authMode';
 import { STORAGE_KEY_PORT, formatHostPort, parsePort } from './storage';
 
 /** Fallback WS port when the Engine does not advertise `wsPort` on /api/store-url. */
@@ -411,7 +411,7 @@ export async function createEngineConnection(
       if (!key || disposed) return null;
       // agent-engine-dev#582: with Engine sign-in, another Engine's log URL comes
       // through our Engine's relay; the doc itself still syncs over our socket.
-      const relayed = engineId && isEngineAuth()
+      const relayed = engineId && pageHasRelay()
         ? `${apiBase({ origin: apiTransport.origin, selfEngineId: pageAuthEngineId() }, engineId)}/command-log-url`
         : undefined;
       const cached = remoteLogs.get(key);

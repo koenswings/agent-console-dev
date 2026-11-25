@@ -1,4 +1,5 @@
-import { createSignal, createEffect, createMemo, Show, Switch, Match, onMount, onCleanup, batch, type Component } from 'solid-js';
+import { createSignal, createEffect, createMemo, Show, Switch, Match, onMount, onCleanup, batch, on, untrack, type Component } from 'solid-js';
+import { sessionFor } from './store/engineTokens';
 import pkg from '../package.json';
 import ConnectionManagement from './components/ConnectionManagement';
 import SettingsPanel from './components/SettingsPanel';
@@ -32,6 +33,7 @@ import {
   authTransport,
   beginAuthProbe,
   isEngineAuth,
+  pageHasRelay,
   pageAuthEngineId,
   probeAuthMode,
 } from './store/authMode';
@@ -167,8 +169,9 @@ const App: Component = () => {
 
   // Once per connection: ask the page's Engine which sign-in it has. No answer
   // keeps sign-in and commands waiting and retries; 404 means an older Engine.
-  createEffect(() => {
-    const conn = connection();
+  // Tracks the connection only: the probe itself reads and writes the auth
+  // signals, which must not re-run this effect (that would loop the probe).
+  createEffect(on(connection, (conn) => untrack(() => {
     beginAuthProbe(conn?.apiTransport ?? null);
     resetEngineVersionMismatches();
     clearCommandNotices();
@@ -181,18 +184,34 @@ const App: Component = () => {
     };
     void attempt();
     onCleanup(() => { stopped = true; if (timer) clearTimeout(timer); });
-  });
+  })));
+
+  // The page's own Engine session ended (expired, this operator was removed,
+  // or the password was changed elsewhere): any call that got the 401 dropped
+  // the token. Sign the page out and ask for a new sign-in.
+  createEffect(on(
+    () => {
+      const self = pageAuthEngineId();
+      return isEngineAuth() && isOperator() && self ? sessionFor(self) !== null : null;
+    },
+    (has, prev) => {
+      const self = pageAuthEngineId();
+      if (has === false && prev === true && self) {
+        void handleSessionsEnded([self], store()).then(() => setShowAccount(true));
+      }
+    },
+  ));
 
   // Keep Engine sessions alive while the page is visible (#582 answer 12).
   createEffect(() => {
     if (!isEngineAuth() || !isOperator()) return;
-    const stop = startSessionRenewal({
+    const stop = untrack(() => startSessionRenewal({
       transport: authTransport,
       onSessionsEnded: (ids) => {
         const self = pageAuthEngineId();
         void handleSessionsEnded(ids).then(() => { if (self && ids.includes(self)) setShowAccount(true); });
       },
-    });
+    }));
     onCleanup(stop);
   });
 
@@ -566,7 +585,7 @@ const App: Component = () => {
             discoveryResults={discoveryResults()}
             onDiscoverySelect={handleDiscoverySelect}
             storeEngines={enginesFromStore(store(), localStorage.getItem(STORAGE_KEY_STORE_URL) ?? '')}
-            probe={isProductionWebMode() && isEngineAuth()
+            probe={isProductionWebMode() && pageHasRelay()
               ? () => relayDiscovery(authTransport(), store(), localStorage.getItem(STORAGE_KEY_STORE_URL) ?? '')
               : undefined}
           />

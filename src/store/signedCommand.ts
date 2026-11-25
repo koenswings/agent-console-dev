@@ -95,13 +95,11 @@ const engineName = (engines: SendDeps['engines'], id: string): string =>
 
 /**
  * The Engine that issued (or was asked for) a grant: `issuerEngineId` in the
- * error body, else `engineId`, else `fallback`.
+ * error body (pixel-answers F1: the only field that names it), else `fallback`.
  */
 export const grantIssuer = (err: EngineApiError, fallback: string): string => {
-  const b = err.body;
-  if (typeof b.issuerEngineId === 'string' && b.issuerEngineId) return b.issuerEngineId;
-  if (typeof b.engineId === 'string' && b.engineId) return b.engineId;
-  return fallback;
+  const v = err.body.issuerEngineId;
+  return typeof v === 'string' && v ? v : fallback;
 };
 
 /** Text for a failed grant request to `issuerId` (POST /auth/grant). */
@@ -129,6 +127,8 @@ export const commandErrorText = (err: EngineApiError, engines: SendDeps['engines
       return `Permission from ${engineName(engines, grantIssuer(err, engineId))} expired. Start again.`;
     case 'ENGINE_UNKNOWN':
       return 'This Engine is not in the store.';
+    case 'BODY_TOO_LARGE':
+      return 'That command is too long for the Engine.';
     case 'ENGINE_UNREACHABLE':
       return `${engineName(engines, engineId)} cannot be reached right now.`;
     case 'NETWORK_ERROR':

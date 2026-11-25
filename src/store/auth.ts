@@ -18,10 +18,11 @@ import bcrypt from 'bcryptjs';
 import { bcryptCompare } from './bcryptCompare';
 import type { User, UserID, Store } from '../types/store';
 import { IS_EXTENSION } from './context';
-import { authMode, authTransport, pageAuthEngineId, pageAuthInfo, refreshPageAuthInfo } from './authMode';
+import { authMode, authTransport, pageAuthEngineId, pageAuthInfo, pageHasRelay, refreshPageAuthInfo } from './authMode';
 import {
   addOperator,
   authErrorText,
+  formatWait,
   changePasswordOn,
   listOperators,
   logoutAll,
@@ -248,8 +249,11 @@ export const engineDisplayName = (store: Store | null | undefined, engineId: str
  * sign-in (their commands are switched off).
  */
 export const signInEngineIds = (store: Store | null | undefined, selfId: string): string[] => {
+  // Other Engines are only reachable through the relay.
+  if (!pageHasRelay()) return [selfId];
   const others = Object.values(store?.engineDB ?? {})
-    .filter((e) => String(e.id) !== selfId && engineHasCapability(e, 'signedCommands1'))
+    .filter((e) => String(e.id) !== selfId
+      && (engineHasCapability(e, 'signedCommands1') || engineHasCapability(e, 'engineSignIn1')))
     .map((e) => String(e.id))
     .sort();
   return [selfId, ...others];
@@ -318,6 +322,7 @@ export async function signIn(
   const user = userFrom(session.operator);
   // deferUser: the caller sets the user itself (setAuthenticatedUser) when
   // flipping it here would unmount the calling form mid-handler.
+  setSignedOutNotice(null);
   if (!opts.deferUser) setCurrentUser(user);
   return { ok: true, user, issues };
 }
@@ -344,17 +349,38 @@ export async function setupWithCode(
     setEngineIssues((prev) => prev.filter((i) => i.engineId !== engineId));
     return { ok: true };
   } catch (err) {
-    return { ok: false, message: authErrorText(asApiError(err), engineDisplayName(store, engineId)) };
+    const e = asApiError(err);
+    // 5 wrong setup codes lock setup for 15 minutes (429 with Retry-After).
+    if (e.code === 'LOGIN_RATE_LIMITED') {
+      return {
+        ok: false,
+        message: e.retryAfterS !== null
+          ? `Setup is locked after too many wrong codes. Try again in ${formatWait(e.retryAfterS)}.`
+          : 'Setup is locked after too many wrong codes. Try again later.',
+      };
+    }
+    return { ok: false, message: authErrorText(e, engineDisplayName(store, engineId)) };
   }
 }
 
+const [signedOutNotice, setSignedOutNotice] = createSignal<string | null>(null);
 /**
- * Sessions that ended (renew answered 401). When the page's own session ended
- * the page is signed out and asks for a new sign-in.
+ * Why the page was signed out by an Engine (its session ended: expired, the
+ * operator was removed, or the password was changed elsewhere). Shown on the
+ * sign-in form; cleared by the next sign-in.
  */
-export async function handleSessionsEnded(engineIds: string[]): Promise<void> {
+export { signedOutNotice };
+export const clearSignedOutNotice = (): void => { setSignedOutNotice(null); };
+
+/**
+ * Sessions that ended (any call answered 401 and the token was dropped). When
+ * the page's own session ended the page is signed out and asks for a new sign-in.
+ */
+export async function handleSessionsEnded(engineIds: string[], store: Store | null = null): Promise<void> {
   const self = pageAuthEngineId();
-  if (self && engineIds.includes(self)) await logout();
+  if (!self || !engineIds.includes(self) || !currentUser()) return;
+  setSignedOutNotice(`Your session on ${engineDisplayName(store, self)} ended. Sign in again.`);
+  await logout();
 }
 
 /** Result of a change applied on every signed-in Engine. */

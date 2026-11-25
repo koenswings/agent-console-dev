@@ -8,6 +8,8 @@
  */
 import { createSignal } from 'solid-js';
 import type { ConfirmRequest } from './signedCommand';
+import { contentsLabel } from './clientCards';
+import type { CardContents } from '../types/store';
 
 export interface PendingEngineConfirm {
   req: ConfirmRequest;
@@ -46,7 +48,8 @@ export interface SummaryRow {
 /**
  * Summary fields (agent-engine-dev#582, pixel-answers 5):
  *   eraseDisk / makeBackupDisk: { command, targetId, label, sizeBytes, device, apps: ["<name> <version>"] }
- *   flashCard:                  { command, candidateId, sizeBytes, model, version }
+ *   flashCard:                  { command, candidateId, sizeBytes, model, version, contents }
+ *                               (contents as Engine.clientCards[].contents, pixel-answers F6)
  * Ids and the command name are not shown; unknown keys are shown as they are.
  */
 const LABELS: Record<string, string> = {
@@ -56,6 +59,7 @@ const LABELS: Record<string, string> = {
   apps: 'Apps on it',
   model: 'Card',
   version: 'Image version',
+  contents: 'Now on the card',
 };
 
 const HIDDEN = new Set(['command', 'targetId', 'candidateId']);
@@ -70,6 +74,7 @@ export const formatBytes = (n: number): string => {
 };
 
 const show = (key: string, v: unknown): string => {
+  if (key === 'contents' && v && typeof v === 'object') return contentsLabel(v as CardContents);
   if (v === null || v === undefined || v === '') return '—';
   if (Array.isArray(v)) return v.length === 0 ? 'none' : v.map((x) => (typeof x === 'object' && x ? String((x as { name?: unknown }).name ?? JSON.stringify(x)) : String(x))).join(', ');
   if (typeof v === 'number' && /size/i.test(key)) return formatBytes(v);

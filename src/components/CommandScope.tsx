@@ -12,6 +12,8 @@ interface CommandScopeProps {
   testId?: string;
   /** Smaller reason line, for rows in a list. */
   compact?: boolean;
+  /** Show the reason line (default true). Off when the panel above already shows it. */
+  notice?: boolean;
   children: JSX.Element;
 }
 
@@ -23,7 +25,7 @@ const CommandScope: Component<CommandScopeProps> = (props) => {
   const testId = () => props.testId ?? 'command-scope';
   return (
     <>
-      <Show when={message()}>
+      <Show when={props.notice !== false && message()}>
         {(m) => (
           <p
             class={`command-scope__notice${props.compact ? ' command-scope__notice--compact' : ''}`}

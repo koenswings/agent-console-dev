@@ -113,7 +113,8 @@ const InstanceList: Component<InstanceListProps> = (props) => {
 
               return (
                 <Show when={instance()}>
-                  <CommandScope engineId={() => engine()?.id} testId={`instance-scope-${id}`} compact>
+                  <CommandScope engineId={() => engine()?.id} testId={`instance-scope-${id}`} compact
+                    notice={props.selection.type === 'network'}>
                   <InstanceRow
                     instance={instance}
                     app={app}

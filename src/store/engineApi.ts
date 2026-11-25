@@ -37,6 +37,8 @@ export type EngineApiErrorCode =
   | 'OPERATOR_UNKNOWN'
   /** POST of a username the Engine already has (pixel-answers 14). */
   | 'OPERATOR_EXISTS'
+  /** Console-side: HTTP 413, the body was over the Engine's limit (16 KB). */
+  | 'BODY_TOO_LARGE'
   /** Console-side: the call failed before an Engine answered (network, timeout, not JSON). */
   | 'NETWORK_ERROR'
   /** Console-side: an Engine without the sign-in API (GET /api/auth/info answered 404). */
@@ -163,7 +165,9 @@ export async function apiCall<T>(
 
   const body = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
   const rawCode = typeof body.error === 'string' ? body.error : '';
-  const code: EngineApiErrorCode = KNOWN_CODES.has(rawCode) ? (rawCode as EngineApiErrorCode) : 'UNKNOWN';
+  const code: EngineApiErrorCode = res.status === 413
+    ? 'BODY_TOO_LARGE'
+    : KNOWN_CODES.has(rawCode) ? (rawCode as EngineApiErrorCode) : 'UNKNOWN';
   const message = typeof body.message === 'string' ? body.message : `HTTP ${res.status}`;
   const bodyRetry = typeof body.retryAfterSeconds === 'number' && body.retryAfterSeconds >= 0
     ? Math.ceil(body.retryAfterSeconds)

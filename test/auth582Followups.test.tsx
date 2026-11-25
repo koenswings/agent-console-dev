@@ -40,9 +40,9 @@ describe('grant issuer', () => {
   const engines = { A: { id: 'A', hostname: 'alpha' }, B: { id: 'B', hostname: 'bravo' } } as unknown as Record<string, Engine>;
   const e = (code: string, body: Record<string, unknown>) => new EngineApiError(403, code as never, 'm', body);
 
-  it('reads issuerEngineId first, then engineId, then the fallback', () => {
+  it('reads only issuerEngineId, else the Engine that was asked', () => {
     expect(grantIssuer(e('GRANT_EXPIRED', { issuerEngineId: 'B', engineId: 'A' }), 'X')).toBe('B');
-    expect(grantIssuer(e('GRANT_EXPIRED', { engineId: 'A' }), 'X')).toBe('A');
+    expect(grantIssuer(e('GRANT_EXPIRED', { engineId: 'A' }), 'X')).toBe('X');
     expect(grantIssuer(e('GRANT_EXPIRED', {}), 'X')).toBe('X');
   });
 
@@ -52,7 +52,7 @@ describe('grant issuer', () => {
 
   it('every grant-request failure names the issuer', () => {
     expect(grantErrorText(e('GRANT_EXPIRED', { issuerEngineId: 'B' }), engines, 'A')).toContain('bravo');
-    expect(grantErrorText(new EngineApiError(502, 'ENGINE_UNREACHABLE', 'x', { engineId: 'B' }), engines, 'A'))
+    expect(grantErrorText(new EngineApiError(502, 'ENGINE_UNREACHABLE', 'x', { issuerEngineId: 'B', engineId: 'A' }), engines, 'A'))
       .toBe('bravo cannot be reached right now, so it cannot give permission. Start again later.');
     expect(grantErrorText(new EngineApiError(422, 'COMMAND_REFUSED', 'Not for this command.', {}), engines, 'B'))
       .toBe('bravo did not give permission: Not for this command.');
@@ -124,6 +124,18 @@ describe('command controls switched off per row', () => {
     const disk = s.diskDB[String(s.instanceDB[id]?.storedOn)];
     return disk?.dockedTo ? String(disk.dockedTo) : undefined;
   };
+
+  it('Engine view: rows stay disabled but the reason shows once, above the list', () => {
+    const [s] = createSignal<Store | null>(MOCK_STORE);
+    const sel = { type: 'engine' as const, id: E1 };
+    const { container } = render(() => <InstanceList selection={sel} store={s} />);
+    const ids = getInstanceIdsForSelection(MOCK_STORE, sel);
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      expect((q(container, `instance-scope-${id}`) as HTMLFieldSetElement).disabled).toBe(true);
+      expect(q(container, `instance-scope-${id}-notice`)).toBeNull();
+    }
+  });
 
   it('all-apps list: rows on ENGINE_1 are disabled with the message, others are not', () => {
     const [s] = createSignal<Store | null>(MOCK_STORE);

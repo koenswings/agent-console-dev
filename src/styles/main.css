@@ -4196,3 +4196,13 @@ body {
   border-left-width: 3px;
   font-size: 0.85em;
 }
+
+/* agent-engine-dev#582: why the Engine signed this page out */
+.form-notice {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 4px solid var(--colour-stopped);
+  background: var(--colour-surface);
+  font-size: 0.9em;
+}

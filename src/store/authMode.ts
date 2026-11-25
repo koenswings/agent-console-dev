@@ -12,6 +12,13 @@
  *
  * The mode is decided by the page's Engine only, once per connection. Outside
  * the app (unit tests, components rendered alone) it stays 'legacy'.
+ *
+ * Engines gain the API in steps (docs/COMMAND_AUTH.md in the Engine repo):
+ *   engineSignIn1   — /api/auth/* (sign-in, setup, operators); commands still
+ *                     go into the store queue as before.
+ *   signedCommands1 — POST /api/command; unsigned queue entries are refused.
+ *   relay           — /api/engines/<id>/...; detected by asking the page's
+ *                     Engine for its own info through it (it answers locally).
  */
 import { createSignal } from 'solid-js';
 import { EngineApiError, type EngineApiTransport } from './engineApi';
@@ -22,6 +29,7 @@ export type AuthMode = 'engine' | 'legacy' | 'probing';
 const [mode, setMode] = createSignal<AuthMode>('legacy');
 const [transport, setTransportSignal] = createSignal<EngineApiTransport | null>(null);
 const [pageInfo, setPageInfo] = createSignal<AuthInfo | null>(null);
+const [relay, setRelay] = createSignal(false);
 
 export const authMode = mode;
 /** The API transport of the current connection (selfEngineId filled once probed). */
@@ -33,10 +41,17 @@ export const pageAuthEngineId = (): string | null => pageInfo()?.engineId ?? nul
 
 export const isEngineAuth = (): boolean => mode() === 'engine';
 
+/** The page's Engine has `cap` in its /api/auth/info capabilities (engine mode only). */
+export const pageHasCapability = (cap: string): boolean => (pageInfo()?.capabilities ?? []).includes(cap);
+
+/** The page's Engine relays /api/engines/<id>/... to other Engines. */
+export const pageHasRelay = (): boolean => mode() === 'engine' && relay();
+
 /** A new connection: forget the old answer and wait for the probe. */
 export const beginAuthProbe = (t: EngineApiTransport | null): void => {
   setTransportSignal(t ? { ...t, selfEngineId: null } : null);
   setPageInfo(null);
+  setRelay(false);
   setMode(t ? 'probing' : 'legacy');
 };
 
@@ -54,8 +69,12 @@ export async function probeAuthMode(): Promise<AuthMode> {
   try {
     const info = await fetchAuthInfo({ ...t, selfEngineId: null });
     if (transport() !== t) return mode();
+    // The relay answers for the page's own id locally; an Engine without it answers 404.
+    const viaRelay = await fetchAuthInfo({ ...t, selfEngineId: null }, info.engineId).then(() => true, () => false);
+    if (transport() !== t) return mode();
     setTransportSignal({ ...t, selfEngineId: info.engineId });
     setPageInfo(info);
+    setRelay(viaRelay);
     setMode('engine');
     return 'engine';
   } catch (err) {
@@ -83,8 +102,9 @@ export async function refreshPageAuthInfo(): Promise<AuthInfo | null> {
 }
 
 /** For tests: put the module in a known state. */
-export const setAuthModeForTest = (m: AuthMode, t: EngineApiTransport | null = null, info: AuthInfo | null = null): void => {
+export const setAuthModeForTest = (m: AuthMode, t: EngineApiTransport | null = null, info: AuthInfo | null = null, hasRelay = false): void => {
   setTransportSignal(t);
   setPageInfo(info);
+  setRelay(hasRelay);
   setMode(m);
 };

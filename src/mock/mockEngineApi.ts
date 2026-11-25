@@ -81,8 +81,12 @@ export function createMockEngineFetch(deps: MockEngineApiDeps): FetchFn {
       };
     }
     if (name === 'flashCard') {
+      const card = (store?.engineDB?.[engineId]?.clientCards ?? []).find((c) => String(c.candidateId) === args[0]);
       return {
-        summary: { command: name, candidateId: args[0], sizeBytes: Number(args[2]), model: null, version: args[1] },
+        summary: {
+          command: name, candidateId: args[0], sizeBytes: Number(args[2]),
+          model: card?.model ?? null, version: args[1], contents: card?.contents ?? { kind: 'unknown' },
+        },
         field: 'sizeBytes',
         text: String(Number(args[2])),
       };

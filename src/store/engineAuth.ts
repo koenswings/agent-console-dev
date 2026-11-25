@@ -316,6 +316,10 @@ export function startSessionRenewal(deps: RenewalDeps): () => void {
   };
 }
 
+/** "45 s", "2 min", "15 min": a wait from Retry-After, for messages. */
+export const formatWait = (seconds: number): string =>
+  seconds < 120 ? `${Math.max(1, Math.ceil(seconds))} s` : `${Math.ceil(seconds / 60)} min`;
+
 /** Console text for a sign-in, setup or operator error (§5 error table). */
 export const authErrorText = (err: EngineApiError, engineName: string): string => {
   switch (err.code) {
@@ -323,8 +327,10 @@ export const authErrorText = (err: EngineApiError, engineName: string): string =
       return 'Wrong username or password.';
     case 'LOGIN_RATE_LIMITED':
       return err.retryAfterS !== null
-        ? `Too many attempts. Try again in ${err.retryAfterS} s.`
+        ? `Too many attempts. Try again in ${formatWait(err.retryAfterS)}.`
         : 'Too many attempts. Try again later.';
+    case 'BODY_TOO_LARGE':
+      return 'That is too long for the Engine. Use a shorter name or password.';
     case 'SETUP_REQUIRED':
       return `${engineName} needs its first operator. Enter the setup code shown on this Engine.`;
     case 'SETUP_CODE_INVALID':
