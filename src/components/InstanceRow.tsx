@@ -149,6 +149,8 @@ interface MetricsPanelProps {
   stale?: () => boolean;
   /** Console-clock time the live sample arrived, for the stale note. */
   receivedAt?: () => number | null;
+  /** True when the instance is Running or Starting: missing metrics means no sample yet, not that the app is stopped. */
+  waiting?: () => boolean;
 }
 
 export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
@@ -164,8 +166,8 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
       <Show
         when={m() != null}
         fallback={
-          <p class="docker-metrics__unavailable">
-            No metrics - app is not running.
+          <p class="docker-metrics__unavailable" data-testid="docker-metrics-unavailable">
+            {props.waiting?.() ? 'No metrics yet.' : 'No metrics - app is not running.'}
           </p>
         }
       >
@@ -806,6 +808,10 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             metrics={() => metricsFor(props.instance(), live(), liveNow()).metrics}
             stale={() => metricsFor(props.instance(), live(), liveNow()).stale}
             receivedAt={() => metricsFor(props.instance(), live(), liveNow()).receivedAt}
+            waiting={() => {
+              const status = props.instance()?.status;
+              return status === 'Running' || status === 'Starting';
+            }}
           />
         </div>
       </Show>
