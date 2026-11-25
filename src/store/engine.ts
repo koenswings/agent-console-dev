@@ -19,7 +19,7 @@ import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
 import type { CommandLogError, CommandLogState } from './commandLog';
 import { apiBase, type EngineApiTransport } from './engineApi';
-import { pageAuthEngineId, pageHasRelay } from './authMode';
+import { pageAuthEngineId, remoteLogRoute } from './authMode';
 import { STORAGE_KEY_PORT, formatHostPort, parsePort } from './storage';
 
 /** Fallback WS port when the Engine does not advertise `wsPort` on /api/store-url. */
@@ -411,15 +411,20 @@ export async function createEngineConnection(
       if (!key || disposed) return null;
       // agent-engine-dev#582: with Engine sign-in, another Engine's log URL comes
       // through our Engine's relay; the doc itself still syncs over our socket.
-      const relayed = engineId && pageHasRelay()
+      // Wait for the probe; keep one entry per route, so a log first tried
+      // directly is loaded again through the relay once the relay is known.
+      const route = engineId ? remoteLogRoute() : 'direct';
+      if (!route) return null;
+      const relayed = engineId && route === 'relay'
         ? `${apiBase({ origin: apiTransport.origin, selfEngineId: pageAuthEngineId() }, engineId)}/command-log-url`
         : undefined;
-      const cached = remoteLogs.get(key);
+      const cacheKey = `${key}|${route}`;
+      const cached = remoteLogs.get(cacheKey);
       if (cached) return cached;
       // The inner accessor (a live signal) arrives once the URL is fetched.
       const [inner, setInner] = createSignal<Accessor<CommandLogState> | null>(null);
       const log: Accessor<CommandLogState> = () => inner()?.() ?? null;
-      remoteLogs.set(key, log);
+      remoteLogs.set(cacheKey, log);
       createCommandLogConnection(formatHostPort(otherHost, ownPort), repo, { isDisposed: () => disposed, apiUrl: relayed })
         .then((acc) => setInner(() => acc))
         .catch(() => setInner(() => () => ({ error: true, url: otherHost, status: null })));

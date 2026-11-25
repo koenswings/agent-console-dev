@@ -100,7 +100,8 @@ export type EngineCapability =
   /** agent-engine-dev#582: commands go through POST /api/command (signed queue entries). */
   | 'signedCommands1'
   /** agent-engine-dev#582 step 2: /api/auth/* sign-in; commands still go through the store queue. */
-  | 'engineSignIn1';
+  | 'engineSignIn1'
+  | 'engineRelay1';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';

@@ -64,7 +64,7 @@ const engine1: Engine = {
   lastHalted: null,
   commands: [],
   // idea#201 §10 capabilities (demo: client cards, Flash, images, Initialise)
-  capabilities: ['diskIdArgs', 'unknownDiskReadOnly', 'clientCards', 'flashCard', 'clientImages', 'signedCommands1'],
+  capabilities: ['diskIdArgs', 'unknownDiskReadOnly', 'clientCards', 'flashCard', 'clientImages', 'engineSignIn1', 'signedCommands1', 'engineRelay1'],
   capabilitiesBootedAt: ONE_HOUR_AGO,
   // idea#193 §8.4: a teacher's exFAT stick with a `kolibri` folder, mounted
   // read-only. It also stays in unformattedDisks (same device) so Erase works.
