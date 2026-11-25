@@ -7,6 +7,7 @@ import NetworkTree from './components/NetworkTree';
 import ClientCardsSection from './components/ClientCardsSection';
 import TempBackupsSection from './components/TempBackupsSection';
 import InstanceList from './components/InstanceList';
+import CommandScope from './components/CommandScope';
 import EmptyDiskPanel from './components/EmptyDiskPanel';
 import DiskView from './components/DiskView';
 import UnformattedDiskView from './components/UnformattedDiskView';
@@ -24,7 +25,7 @@ import { createDragCopyMove } from './store/dragCopyMove';
 import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
 import { remoteCommandLog, setRemoteCommandLogFn } from './store/remoteCommandLogs';
 import { setSendCommandFn } from './store/commands';
-import { clearCommandNotices, commandGateForId, configureCommandRouter, dispatchCommand } from './store/commandRouter';
+import { clearCommandNotices, configureCommandRouter, dispatchCommand } from './store/commandRouter';
 import { resetEngineVersionMismatches } from './store/signedCommand';
 import {
   AUTH_PROBE_RETRY_MS,
@@ -456,8 +457,6 @@ const App: Component = () => {
     if (sel.type === 'disk') return store()?.diskDB?.[sel.id]?.dockedTo ?? null;
     return null;
   };
-  /** Command controls for that Engine are switched off with the reason (#582 §5). */
-  const scopeGate = () => commandGateForId(scopeEngineId());
 
   // ── Status-bar dot ────────────────────────────────────────────────────────
   // Store socket liveness (agent-engine-dev#168): only this one accessor of the
@@ -667,10 +666,7 @@ const App: Component = () => {
                 <div class="main-layout__right">
                   <CopyMoveFeedback store={store} ctl={dragCopyMove} />
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
-                  <Show when={!scopeGate().ok ? (scopeGate() as { message: string }).message : null}>
-                    {(msg) => <p class="command-scope__notice" data-testid="command-scope-notice">{msg()}</p>}
-                  </Show>
-                  <fieldset class="command-scope" disabled={!scopeGate().ok}>
+                  <CommandScope engineId={scopeEngineId}>
                   <Switch>
                     <Match when={selection().type === 'unformatted' ? `${selection().engineId}:${selection().id}` : null} keyed>
                       {(key) => {
@@ -738,7 +734,7 @@ const App: Component = () => {
                       </Show>
                     </Match>
                   </Switch>
-                  </fieldset>
+                  </CommandScope>
                 </div>
 
                 {/* Copy/Move modal — shown when an app is dropped onto a disk */}

@@ -11,7 +11,7 @@ import {
   DEFAULT_SHARE_NAME,
   validateShareName,
 } from '../store/commands';
-import { createCommandResult, FILES_TIMEOUT_MESSAGE } from '../store/commandResult';
+import { createCommandResult, FILES_TIMEOUT_MESSAGE, traceBySeq } from '../store/commandResult';
 import { isEngineAuth } from '../store/authMode';
 import { sendResultMessage } from '../store/sendResultText';
 import { traceIdSnapshot } from '../store/ejectResult';
@@ -87,6 +87,13 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
 
   // ── summariseDisk ────────────────────────────────────────────────────────
   let summariseBaseline: Set<string> = new Set();
+  /** The Engine's queue numbers (signed commands, #582); traces carry them. */
+  const [summariseSeq, setSummariseSeq] = createSignal<number | null>(null);
+  const [eraseSeq, setEraseSeq] = createSignal<number | null>(null);
+  /** The trace of `command` for this target: by seq when known, else by target. */
+  const traceFor = (log: CommandLogState, baseline: Set<string>, command: 'summariseDisk' | 'eraseDisk', seq: number | null) =>
+    (seq !== null ? traceBySeq(log, seq, command, baseline) : null)
+      ?? findTargetTrace(log, baseline, command, props.targetId);
   let summariseTimer: ReturnType<typeof setTimeout> | null = null;
   const clearSummariseTimer = () => {
     if (summariseTimer !== null) { clearTimeout(summariseTimer); summariseTimer = null; }
@@ -98,8 +105,10 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     setPhase({ kind: 'summarising' });
     setConfirmName('');
     summariseBaseline = traceIdSnapshot(cls());
+    setSummariseSeq(null);
     // agent-engine-dev#582: a send that was not accepted is the answer at once.
     void Promise.resolve(summariseDisk(props.engineId, props.targetId)).then((r) => {
+      if (r?.kind === 'accepted' && r.seq !== null) setSummariseSeq(r.seq);
       if (r && r.kind !== 'accepted' && phase().kind === 'summarising') {
         clearSummariseTimer();
         setPhase({ kind: 'summary-error', message: sendResultMessage(r) });
@@ -118,7 +127,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   createEffect(() => {
     if (phase().kind !== 'summarising') return;
     const log = cls();
-    const trace = findTargetTrace(log, summariseBaseline, 'summariseDisk', props.targetId);
+    const trace = traceFor(log, summariseBaseline, 'summariseDisk', summariseSeq());
     if (!trace || trace.status === 'running') return;
     clearSummariseTimer();
     if (trace.status === 'error') {
@@ -180,6 +189,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     setSlow(false);
     clearEraseCommandResult();
     eraseBaseline = traceIdSnapshot(cls());
+    setEraseSeq(null);
     if (isEngineAuth()) {
       // The label from the summary goes into the command, so the resend after
       // the Engine's confirmation is the same text (pixel-answers 5).
@@ -192,6 +202,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
         setPhase({ kind: 'error', message: sendResultMessage(r) });
         return;
       }
+      if (r?.kind === 'accepted') setEraseSeq(r.seq);
     } else {
       void eraseDisk(props.engineId, props.targetId, p.traceId, p.summary.label);
     }
@@ -203,7 +214,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
       if (cur.kind !== 'erasing') return;
       const eng = props.store()?.engineDB[props.engineId];
       const progress = eng?.eraseInProgress && String(eng.eraseInProgress.targetId) === props.targetId;
-      const trace = findTargetTrace(cls(), eraseBaseline, 'eraseDisk', props.targetId);
+      const trace = traceFor(cls(), eraseBaseline, 'eraseDisk', eraseSeq());
       if (!progress && !trace) setPhase({ kind: 'error', message: ERASE_NO_RESPONSE_MESSAGE });
     }, ERASE_NO_RESPONSE_MS);
     eraseSlowTimer = setTimeout(() => {
@@ -216,7 +227,7 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     const p = phase();
     if (p.kind !== 'erasing') return;
     const log = cls();
-    const trace = findTargetTrace(log, eraseBaseline, 'eraseDisk', props.targetId);
+    const trace = traceFor(log, eraseBaseline, 'eraseDisk', eraseSeq());
     if (!trace || trace.status === 'running') return;
     clearEraseTimers();
     if (trace.status === 'error') {

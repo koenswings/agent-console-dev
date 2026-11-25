@@ -4189,3 +4189,10 @@ body {
   color: var(--colour-text);
   font-size: 0.85rem;
 }
+
+.command-scope__notice--compact {
+  margin: 4px 0;
+  padding: 4px 8px;
+  border-left-width: 3px;
+  font-size: 0.85em;
+}

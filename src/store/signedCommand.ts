@@ -93,16 +93,40 @@ const MAX_ROUNDS = 4;
 const engineName = (engines: SendDeps['engines'], id: string): string =>
   String(engines[id]?.hostname ?? id);
 
+/**
+ * The Engine that issued (or was asked for) a grant: `issuerEngineId` in the
+ * error body, else `engineId`, else `fallback`.
+ */
+export const grantIssuer = (err: EngineApiError, fallback: string): string => {
+  const b = err.body;
+  if (typeof b.issuerEngineId === 'string' && b.issuerEngineId) return b.issuerEngineId;
+  if (typeof b.engineId === 'string' && b.engineId) return b.engineId;
+  return fallback;
+};
+
+/** Text for a failed grant request to `issuerId` (POST /auth/grant). */
+export const grantErrorText = (err: EngineApiError, engines: SendDeps['engines'], issuerId: string): string => {
+  const name = engineName(engines, grantIssuer(err, issuerId));
+  switch (err.code) {
+    case 'GRANT_INVALID':
+    case 'GRANT_EXPIRED':
+      return `Permission from ${name} expired. Start again.`;
+    case 'ENGINE_UNREACHABLE':
+    case 'NETWORK_ERROR':
+      return `${name} cannot be reached right now, so it cannot give permission. Start again later.`;
+    default:
+      return `${name} did not give permission: ${err.message}`;
+  }
+};
+
 /** Console text for an error code (§5 error table). */
 export const commandErrorText = (err: EngineApiError, engines: SendDeps['engines'], engineId: string): string => {
   switch (err.code) {
     case 'CONFIRM_INVALID':
       return 'The confirmation expired or did not match. Start again.';
     case 'GRANT_INVALID':
-    case 'GRANT_EXPIRED': {
-      const from = typeof err.body.engineId === 'string' ? err.body.engineId : engineId;
-      return `Permission from ${engineName(engines, from)} expired. Start again.`;
-    }
+    case 'GRANT_EXPIRED':
+      return `Permission from ${engineName(engines, grantIssuer(err, engineId))} expired. Start again.`;
     case 'ENGINE_UNKNOWN':
       return 'This Engine is not in the store.';
     case 'ENGINE_UNREACHABLE':
@@ -188,7 +212,7 @@ export async function sendSignedCommand(deps: SendDeps, engineId: string, comman
               noteEngineVersionMismatch(f, v);
               return { kind: 'blocked', engineId: f, message: olderEngineMessage(engineName(deps.engines, f), v) };
             }
-            return { kind: 'error', code: ge.code, message: commandErrorText(ge, deps.engines, f), status: ge.status };
+            return { kind: 'error', code: ge.code, message: grantErrorText(ge, deps.engines, f), status: ge.status };
           }
         }
         body.grants = grants;

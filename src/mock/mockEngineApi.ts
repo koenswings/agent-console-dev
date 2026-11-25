@@ -69,7 +69,8 @@ export function createMockEngineFetch(deps: MockEngineApiDeps): FetchFn {
   const confirmFor = (engineId: string, command: string): { summary: Record<string, unknown>; field: string; text: string } | null => {
     const [name, ...args] = command.split(' ');
     const store = deps.store();
-    if (name === 'eraseDisk') {
+    // makeBackupDisk is gated only when it erases (it then carries a summary trace id).
+    if (name === 'eraseDisk' || (name === 'makeBackupDisk' && args.length >= 3)) {
       const disk = store?.diskDB?.[args[0]];
       if (!disk) return null;
       const apps = Object.values(store?.instanceDB ?? {}).filter((i) => String(i.storedOn) === String(disk.id)).map((i) => String(i.name));
