@@ -6,20 +6,20 @@ You are the **Console Dev Bot (Pixel)**. This file is your build, test and deplo
 
 1. Implement with your own tools (clone / GitHub) from the GitHub issue and its agreed approach comment.
 2. Run `pnpm test` and `pnpm typecheck` locally, off-Pi, against the mock store (no Pi claim needed).
-3. Only when a live Engine is needed, test over SSH on a **claimed** idle non-golden pool Pi (`idea01`, `idea03`, `idea04`) — see *Using fleet Pis for testing* below. Never golden `idea02`.
+3. Only when a live Engine is needed, test over SSH on a **claimed** idle pool Pi (`idea03`, `idea04`) — see *Using fleet Pis for testing* below. Never golden `idea01`, and never claim `idea02` (LAN client and test-walk host).
 4. Run the QC gate, open a PR linked to the issue, and notify Lead.
-5. Ops (Atlas) deploys the PR to a review Pi via the fleet scripts; Koen evaluates it and squash-merges.
+5. Ops (Atlas) deploys the PR to a review Pi via the fleet scripts; Koen evaluates it and squash-merges (or Lead merges under Koen's standing approval). Never merge your own PR.
 
 Source of truth: `koenswings/idea` → `CONTEXT.md` and `docs/grok-bot-setup.md` (§2.2, §3, §4.6), updated in `koenswings/idea` PR #148.
 
 ## What this repo is
 
-The IDEA Console — a Solid.js web app served by the Engine on port 80. Built via Vite → `dist/`. On the Pi fleet, Engine serves that build from the nested idea checkout (see Deploy).
+The IDEA Console — a Solid.js web app served by the Engine (port 80 on kits; the Engine's `settings.httpPort`, so pool Pis and production `idea` use other ports). Built via Vite → `dist/`. On the Pi fleet, Engine serves that build from the nested idea checkout (see Deploy).
 
 Access:
-- `http://<engine-hostname>.local/` — primary (local, mDNS)
+- `http://idea.local/` or `http://<sticker-name>.local/` — at a school (local, mDNS)
 - `http://<engine-LAN-IP>/` — local fallback
-- `http://<engine-tailscale-hostname>/` — remote via Tailscale
+- `http://<engine-tailscale-hostname>[:<port>]/` — remote via Tailscale
 
 Key constraints:
 - Solid.js fine-grained reactivity: all <For> loops must be ID-keyed; no broad store subscriptions
@@ -43,18 +43,23 @@ Layout decision: `koenswings/idea` PR #64 (`proposals/pi-checkout-layout.md`).
 
 ```
 src/
-  App.tsx              Root — connection lifecycle, mode routing
+  App.tsx              Root — connection lifecycle, status bar, mode routing
   components/          UI components
-  store/               Engine connection, signals, commands, auth
-  mock/                Mock store for tests
+  store/               Engine connection, signals, commands, auth, per-feature logic and wording
+  mock/                Mock store and fixtures for tests / preview mode
   background/          Legacy Chrome Extension service worker
+  workers/             bcrypt Web Worker
   types/               TypeScript types (mirrors Engine data model)
   styles/              main.css only — no CSS frameworks
-test/                  Vitest unit tests
+test/                  Vitest unit / component tests
+e2e/                   Playwright specs (live checks) and intents/ (duration-walk adapters, package export)
 dist/                  Built output (gitignored)
 docs/                  Authoritative docs — .md, .pdf, .png, .svg ONLY
 proposals/             Proposals and historical design reasoning
 scripts/
+  build.mjs            pnpm build: production Vite build into dist.new-<ts>, then swap
+  build-options.mjs    Shared build options for build.mjs
+  swap-dist.mjs        dist.new-<ts> → dist (dist → dist.prev), carries hidden-instances.json
   dump-store.mjs       Debug helper
   screenshot-screens.ts Playwright screenshots
 ```
@@ -88,7 +93,7 @@ Run these locally, off-Pi, against the mock store — no Pi claim needed.
 
 Only needed when a change must be checked against a live Engine. Full protocol: `koenswings/idea` → `docs/grok-bot-setup.md` §4.6.
 
-**Pool:** `idea01`, `idea03`, `idea04` (`role: spare` or `review`). **`idea02` (golden) is never used.**
+**Pool:** `idea03`, `idea04` (`role: spare` or `review`). **`idea01` (golden) is never used**, and `idea02` (LAN client and test-walk host, `status: hold`) is never claimed or deployed to. Check `fleet-state.json` for the current roles.
 
 **Claim** (pick an `idle` pool Pi; run from the `koenswings/idea` checkout):
 
@@ -110,14 +115,14 @@ BOT_NAME=Pixel tools/fleet/update-fleet-state.sh <pi> status idle
 
 **Rules:**
 
-- Never use golden `idea02`.
+- Never use golden `idea01`; never claim `idea02`.
 - Leave each Pi's isolated store, `mdns: false` and local `config.yaml` untouched.
 - Never take more than one Pi down at a time.
 
 **Console-specific:**
 
 - A dev Console (`pnpm dev`) pointed at a Pi's Engine sends real commands (eject, install, later erase). It counts as using that Pi and needs a claim first.
-- Command testing never targets `idea02`.
+- Command testing never targets golden `idea01` or `idea02`.
 - Do not write into a Pi's deployed `dist/` (`/home/pi/idea/agents/agent-console-dev/dist`). Deploys are Ops' job through `tools/fleet/deploy.sh`.
 
 ## Live kit check: App Open links (e2e/kit-app-links.mjs)
@@ -140,7 +145,7 @@ CONSOLE_URL=http://kind-panda.local CONSOLE_USER=<operator> CONSOLE_PASSWORD=<pa
 
 ## Live update check: updateApp (e2e/update-app.spec.ts, idea#76)
 
-Playwright spec for updateApp on a real Engine: minor update succeeds, major with a fresh backup succeeds, major with a stale backup is held back ("Make a backup first"). Every case **skips** unless its env vars are set, so `pnpm test:e2e` stays green without a Pi. It changes the Engine: claim the Pi (idea04) first, and drive it from idea02 per the LAN rule. Never golden.
+Playwright spec for updateApp on a real Engine: minor update succeeds, major with a fresh backup succeeds, and for a major with a stale backup the confirm stays enabled and says the Engine "makes a backup of" the app first (engine#469; read-only, the update is not sent). Every case **skips** unless its env vars are set, so `pnpm test:e2e` stays green without a Pi. It changes the Engine: claim the Pi (idea04) first, and drive it from idea02 per the LAN rule. Never golden.
 
 ```bash
 UPDATE_E2E_ENGINE_HOST=idea04.local CONSOLE_USER=<operator> CONSOLE_PASSWORD=<password> \
@@ -157,7 +162,7 @@ Fixture on idea04 (Kid's agent-app-dev#40, written by Atlas): App Disks `updtest
 
 Ops Bot deploys via the idea fleet scripts — **not** a script in this repo.
 
-- Fleet entrypoint: `koenswings/idea` → `tools/fleet/deploy.sh` (and related fleet helpers)
+- Fleet entrypoint: `koenswings/idea` → `tools/fleet/deploy.sh` (and related fleet helpers such as `tools/fleet/build-console-pi.sh`, which runs `pnpm build` on a Pi and keeps `dist/hidden-instances.json`)
 - This Console repo has **no** `scripts/deploy-fleet.sh` (historical name only; do not invent or re-add it here)
 - On the Pi, after deploy, Engine serves Console from `consolePath: /home/pi/idea/agents/agent-console-dev/dist`
 

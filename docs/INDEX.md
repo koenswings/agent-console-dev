@@ -10,14 +10,14 @@ Update this file whenever a doc in `docs/` is added, removed or significantly re
 
 | Doc | Description | Status |
 |---|---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Console architecture: deployment contexts, dual-mode UI, components, store layer, data types, mock mode, build, Engine API contract (the Chrome Extension is legacy) | Current |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Console architecture: deployment contexts, status bar and dual-mode UI (desktop and mobile), components, store layer, data types, mock mode, build, Engine API contract (the Chrome Extension is legacy). Checked against main on 25 Nov 2026 | Current |
 | [INDEX.md](INDEX.md) | This index | Current |
 
 ## Related (outside `docs/`)
 
 | Doc | Description |
 |---|---|
-| [../README.md](../README.md) | What the Console is, its two audiences, and how to run it |
+| [../README.md](../README.md) | What the Console is, its two audiences, how to reach it and how to run it locally |
 | [../AGENTS.md](../AGENTS.md) | Build, test, deploy and QC rules for the Console Dev bot. Read it at the start of every task |
 | [../e2e/intents/README.md](../e2e/intents/README.md) | Duration-test intent adapters (Playwright) and their Engine wiring |
 | [../proposals/INDEX.md](../proposals/INDEX.md) | Proposals and historical design reasoning (not authoritative); format in [../proposals/README.md](../proposals/README.md) |
