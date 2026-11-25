@@ -9,6 +9,7 @@ import type {
   BackupMode,
 } from '../types/store';
 import type { CommandLogStore } from '../types/commandLog';
+import { createMockApiTransport } from './mockEngineApi';
 
 // ---------------------------------------------------------------------------
 // StoreConnection interface — shared by mock and real store implementations
@@ -29,7 +30,9 @@ export interface StoreConnection {
    * Approach (i) for cross-engine commands: another Engine's command log by its
    * hostname, loaded through the same repo (null when unsupported).
    */
-  commandLogFor?: (hostname: string) => Accessor<import('../store/commandLog').CommandLogState> | null;
+  commandLogFor?: (hostname: string, engineId?: string) => Accessor<import('../store/commandLog').CommandLogState> | null;
+  /** Sign-in and command API of the connected Engine (agent-engine-dev#582); absent = legacy only. */
+  apiTransport?: import('../store/engineApi').EngineApiTransport;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +64,7 @@ const engine1: Engine = {
   lastHalted: null,
   commands: [],
   // idea#201 §10 capabilities (demo: client cards, Flash, images, Initialise)
-  capabilities: ['diskIdArgs', 'unknownDiskReadOnly', 'clientCards', 'flashCard', 'clientImages'],
+  capabilities: ['diskIdArgs', 'unknownDiskReadOnly', 'clientCards', 'flashCard', 'clientImages', 'signedCommands1'],
   capabilitiesBootedAt: ONE_HOUR_AGO,
   // idea#193 §8.4: a teacher's exFAT stick with a `kolibri` folder, mounted
   // read-only. It also stays in unformattedDisks (same device) so Erase works.
@@ -678,8 +681,17 @@ export function createMockConnection(): StoreConnection {
 
   const [commandLogStore] = createSignal<CommandLogStore | null>(mockCommandLogData);
 
+  // agent-engine-dev#582: sign-in and commands through an in-page Engine API.
+  const demoAdmin = MOCK_STORE.userDB['user-demo-admin'];
+  const apiTransport = createMockApiTransport({
+    selfEngineId: ENGINE_1_ID,
+    store,
+    send: sendCommand,
+    operators: [{ id: demoAdmin.id, username: demoAdmin.username, passwordHash: demoAdmin.passwordHash, created: 0 }],
+  });
+
   // Demo: the Console is "connected" to ENGINE_1 (appdocker01).
-  return { store, connected, sendCommand, changeDoc, commandLogStore, hostname: engine1.hostname };
+  return { store, connected, sendCommand, changeDoc, commandLogStore, hostname: engine1.hostname, apiTransport };
 }
 
 // ---------------------------------------------------------------------------

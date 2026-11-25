@@ -16,12 +16,26 @@ import HistoryPanel from './components/HistoryPanel';
 import AppBrowser from './components/AppBrowser';
 import MobileLayout from './components/MobileLayout';
 import FirstTimeSetup from './components/FirstTimeSetup';
+import EngineConfirmDialog from './components/EngineConfirmDialog';
+import CommandNotices from './components/CommandNotices';
 import CopyMoveFeedback from './components/CopyMoveFeedback';
 import CopyMoveModal from './components/CopyMoveModal';
 import { createDragCopyMove } from './store/dragCopyMove';
 import { connectedEngineId, connectedEngineName, setConnectedEngineHost } from './store/connectedEngine';
 import { remoteCommandLog, setRemoteCommandLogFn } from './store/remoteCommandLogs';
 import { setSendCommandFn } from './store/commands';
+import { clearCommandNotices, commandGateForId, configureCommandRouter, dispatchCommand } from './store/commandRouter';
+import { resetEngineVersionMismatches } from './store/signedCommand';
+import {
+  AUTH_PROBE_RETRY_MS,
+  authTransport,
+  beginAuthProbe,
+  isEngineAuth,
+  pageAuthEngineId,
+  probeAuthMode,
+} from './store/authMode';
+import { startSessionRenewal } from './store/engineAuth';
+import { relayDiscovery } from './store/relayDiscovery';
 import { connectionIndicator } from './store/connectionIndicator';
 import {
   currentUser,
@@ -29,8 +43,8 @@ import {
   isFirstTimeSetup,
   logout,
   restoreSession,
-  createOperator,
   setAuthenticatedUser,
+  handleSessionsEnded,
 } from './store/auth';
 import { createMockConnection } from './mock/mockStore';
 import type { StoreConnection } from './mock/mockStore';
@@ -109,7 +123,8 @@ const App: Component = () => {
     setConnectedEngineHost(conn?.hostname ?? null);
     setRemoteCommandLogFn((engineId) => {
       const host = store()?.engineDB[engineId]?.hostname;
-      return host && conn?.commandLogFor ? conn.commandLogFor(String(host)) : null;
+      // engineId lets the connection use the relay for the log URL (agent-engine-dev#582).
+      return host && conn?.commandLogFor ? conn.commandLogFor(String(host), String(engineId)) : null;
     });
   });
   // Start loading the other Engines' command logs early, so a later
@@ -129,7 +144,55 @@ const App: Component = () => {
     if (!conn) return;
     setStore(conn.store());
     setConnected(conn.connected());
-    setSendCommandFn(conn.sendCommand);
+  });
+
+  // ── Commands and sign-in mode (agent-engine-dev#582) ──────────────────────
+  // Every command goes through the router: signed (POST /api/command) when
+  // the page's Engine has the sign-in API, the store queue otherwise.
+  createEffect(() => {
+    const conn = connection();
+    configureCommandRouter({
+      legacySend: conn ? conn.sendCommand : null,
+      store: () => store(),
+      onSignInRequired: (ids) => {
+        const self = pageAuthEngineId();
+        if (self && ids.includes(self)) {
+          void handleSessionsEnded([self]).then(() => setShowAccount(true));
+        }
+      },
+    });
+    setSendCommandFn(dispatchCommand);
+  });
+
+  // Once per connection: ask the page's Engine which sign-in it has. No answer
+  // keeps sign-in and commands waiting and retries; 404 means an older Engine.
+  createEffect(() => {
+    const conn = connection();
+    beginAuthProbe(conn?.apiTransport ?? null);
+    resetEngineVersionMismatches();
+    clearCommandNotices();
+    if (!conn?.apiTransport) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = async () => {
+      const m = await probeAuthMode();
+      if (!stopped && m === 'probing') timer = setTimeout(attempt, AUTH_PROBE_RETRY_MS);
+    };
+    void attempt();
+    onCleanup(() => { stopped = true; if (timer) clearTimeout(timer); });
+  });
+
+  // Keep Engine sessions alive while the page is visible (#582 answer 12).
+  createEffect(() => {
+    if (!isEngineAuth() || !isOperator()) return;
+    const stop = startSessionRenewal({
+      transport: authTransport,
+      onSessionsEnded: (ids) => {
+        const self = pageAuthEngineId();
+        void handleSessionsEnded(ids).then(() => { if (self && ids.includes(self)) setShowAccount(true); });
+      },
+    });
+    onCleanup(stop);
   });
 
   createEffect(() => {
@@ -168,22 +231,6 @@ const App: Component = () => {
     return () => clearTimeout(timer);
   });
 
-  // ── Auto-provision admin on fresh engine with empty userDB ───────────────
-  let provisioningRan = false;
-  createEffect(() => {
-    const s = store();
-    const conn = connection();
-    if (!s || !conn || preview() || isOperator() || provisioningRan) return;
-    if (!isFirstTimeSetup(s)) return;
-    provisioningRan = true;
-    createOperator('admin', 'admin911!', s, conn.changeDoc)
-      .then((user) => setAuthenticatedUser(user))
-      .catch((err) => {
-        console.warn('[app] auto-provision skipped:', err.message);
-        provisioningRan = false;
-      });
-  });
-
   // ── Connection management ─────────────────────────────────────────────────
   // Tracks the current in-progress initConnection() call so that if a new one
   // starts before the previous resolves, the stale one can be abandoned.
@@ -200,7 +247,6 @@ const App: Component = () => {
     if (oldConn?.dispose) oldConn.dispose();
 
     sessionRestoreRan = false;
-    provisioningRan = false;
     setSessionRestored(false);
     setStore(null);
     setConnected(false);
@@ -260,6 +306,13 @@ const App: Component = () => {
   };
 
   const handleDiscoverySelect = async (result: DiscoveryResult) => {
+    // agent-engine-dev#582: a page served by an Engine talks only to its own
+    // origin, so switching Engine opens that Engine's own Console.
+    if (isProductionWebMode() && isEngineAuth()) {
+      const port = result.port && result.port !== 80 ? `:${result.port}` : '';
+      navigateTo(`http://${result.hostname}${port}/`);
+      return;
+    }
     await saveHostnameAndStoreUrl(result.hostname, result.storeUrl, result.port);
     pickedTarget = { hostname: result.hostname, port: result.port ?? null };
     // Status bar = the host the connection is actually made to (issue #150).
@@ -395,6 +448,16 @@ const App: Component = () => {
   // need to exclude it; the Switch renders the first matching Match.
   const showMainLayout   = () => isOperator();
   const rightPanel       = () => rightPanelFor(selection(), store());
+  /** Engine the right panel acts on: the selected Engine, the disk's Engine, or the candidate's. */
+  const scopeEngineId = (): string | null => {
+    const sel = selection();
+    if (sel.type === 'engine') return sel.id;
+    if (sel.type === 'unformatted') return sel.engineId ?? null;
+    if (sel.type === 'disk') return store()?.diskDB?.[sel.id]?.dockedTo ?? null;
+    return null;
+  };
+  /** Command controls for that Engine are switched off with the reason (#582 §5). */
+  const scopeGate = () => commandGateForId(scopeEngineId());
 
   // ── Status-bar dot ────────────────────────────────────────────────────────
   // Store socket liveness (agent-engine-dev#168): only this one accessor of the
@@ -414,6 +477,8 @@ const App: Component = () => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div class="app">
+      <EngineConfirmDialog />
+      <CommandNotices />
 
       {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div class="status-bar">
@@ -502,6 +567,9 @@ const App: Component = () => {
             discoveryResults={discoveryResults()}
             onDiscoverySelect={handleDiscoverySelect}
             storeEngines={enginesFromStore(store(), localStorage.getItem(STORAGE_KEY_STORE_URL) ?? '')}
+            probe={isProductionWebMode() && isEngineAuth()
+              ? () => relayDiscovery(authTransport(), store(), localStorage.getItem(STORAGE_KEY_STORE_URL) ?? '')
+              : undefined}
           />
         </Match>
 
@@ -599,6 +667,10 @@ const App: Component = () => {
                 <div class="main-layout__right">
                   <CopyMoveFeedback store={store} ctl={dragCopyMove} />
                   <OperationProgress store={store} commandLogStore={commandLogStore} />
+                  <Show when={!scopeGate().ok ? (scopeGate() as { message: string }).message : null}>
+                    {(msg) => <p class="command-scope__notice" data-testid="command-scope-notice">{msg()}</p>}
+                  </Show>
+                  <fieldset class="command-scope" disabled={!scopeGate().ok}>
                   <Switch>
                     <Match when={selection().type === 'unformatted' ? `${selection().engineId}:${selection().id}` : null} keyed>
                       {(key) => {
@@ -666,6 +738,7 @@ const App: Component = () => {
                       </Show>
                     </Match>
                   </Switch>
+                  </fieldset>
                 </div>
 
                 {/* Copy/Move modal — shown when an app is dropped onto a disk */}

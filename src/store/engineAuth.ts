@@ -263,23 +263,25 @@ export interface RenewalDeps {
 }
 
 /**
- * Keep the page's Engine sessions alive while the page is visible: renew every
- * RENEW_INTERVAL_MS, and right away when the page becomes visible again (a
- * session may have ended while hidden; the 401 then asks for a new sign-in).
- * Returns a stop function.
+ * Keep the page's Engine sessions alive while the page is visible (Axle, #582
+ * review answer 12): a timer runs only while visible and renews every
+ * RENEW_INTERVAL_MS. Hidden, nothing runs; on becoming visible again every
+ * session is renewed at once, and one that ended meanwhile (401) is dropped,
+ * which asks for a new sign-in. Returns a stop function.
  */
 export function startSessionRenewal(deps: RenewalDeps): () => void {
   const visible = deps.isVisible ?? (() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  const intervalMs = deps.intervalMs ?? RENEW_INTERVAL_MS;
   let running = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
 
   const renewAll = async (): Promise<void> => {
     const t = deps.transport();
-    if (!t || running || !visible()) return;
+    if (!t || running) return;
     running = true;
     try {
-      const ids = Object.keys(engineSessions());
       const ended: string[] = [];
-      for (const id of ids) {
+      for (const id of Object.keys(engineSessions())) {
         if (!(await renewEngine(t, id))) ended.push(id);
       }
       if (ended.length > 0) deps.onSessionsEnded?.(ended);
@@ -288,12 +290,63 @@ export function startSessionRenewal(deps: RenewalDeps): () => void {
     }
   };
 
-  const timer = setInterval(() => { void renewAll(); }, deps.intervalMs ?? RENEW_INTERVAL_MS);
-  const onVisibility = (): void => { if (visible()) void renewAll(); };
+  const stopTimer = (): void => {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  };
+  const startTimer = (): void => {
+    if (timer === null) timer = setInterval(() => { void renewAll(); }, intervalMs);
+  };
+
+  const onVisibility = (): void => {
+    if (visible()) {
+      void renewAll();
+      startTimer();
+    } else {
+      stopTimer();
+    }
+  };
+
+  if (visible()) startTimer();
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
 
   return () => {
-    clearInterval(timer);
+    stopTimer();
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
   };
 }
+
+/** Console text for a sign-in, setup or operator error (§5 error table). */
+export const authErrorText = (err: EngineApiError, engineName: string): string => {
+  switch (err.code) {
+    case 'LOGIN_FAILED':
+      return 'Wrong username or password.';
+    case 'LOGIN_RATE_LIMITED':
+      return err.retryAfterS !== null
+        ? `Too many attempts. Try again in ${err.retryAfterS} s.`
+        : 'Too many attempts. Try again later.';
+    case 'SETUP_REQUIRED':
+      return `${engineName} needs its first operator. Enter the setup code shown on this Engine.`;
+    case 'SETUP_CODE_INVALID':
+      return 'That setup code is not right or has expired.';
+    case 'SETUP_DONE':
+      return `${engineName} already has an operator. Sign in instead.`;
+    case 'OPERATOR_EXISTS':
+      return `That username is already taken on ${engineName}.`;
+    case 'OPERATOR_UNKNOWN':
+      return `That operator is no longer on ${engineName}.`;
+    case 'LAST_OPERATOR':
+      return `${engineName} needs at least one operator, so the last one cannot be removed.`;
+    case 'ENGINE_UNREACHABLE':
+    case 'NETWORK_ERROR':
+      return `${engineName} cannot be reached right now.`;
+    case 'ENGINE_UNKNOWN':
+      return 'This Engine is not in the store.';
+    case 'TOKEN_INVALID':
+    case 'TOKEN_EXPIRED':
+    case 'AUTH_REQUIRED':
+      return `Your session on ${engineName} ended. Sign in again.`;
+    default:
+      return err.message;
+  }
+};

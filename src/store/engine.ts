@@ -18,6 +18,8 @@ import type { StoreConnection } from '../mock/mockStore';
 import type { Store } from '../types/store';
 import { createCommandLogConnection } from './commandLog';
 import type { CommandLogError, CommandLogState } from './commandLog';
+import { apiBase, type EngineApiTransport } from './engineApi';
+import { isEngineAuth, pageAuthEngineId } from './authMode';
 import { STORAGE_KEY_PORT, formatHostPort, parsePort } from './storage';
 
 /** Fallback WS port when the Engine does not advertise `wsPort` on /api/store-url. */
@@ -263,6 +265,15 @@ export async function createEngineConnection(
       }
     }
 
+    // agent-engine-dev#582: the sign-in and command API. A page served by this
+    // Engine uses its own origin (relative URLs); the extension, dev mode and a
+    // picked Engine use the Engine's address.
+    const apiTransport: EngineApiTransport = {
+      origin: page.productionWeb && target && !target.picked ? '' : `http://${httpHost}`,
+      selfEngineId: null,
+      fetch: (input, init) => fetch(input, init),
+    };
+
     if (!hostname) storeUrl = null; // no Engine chosen yet (idea#184)
     if (!storeUrl) {
       console.warn('[engine] No store URL available — cannot connect');
@@ -395,22 +406,27 @@ export async function createEngineConnection(
     // Console falls back to store confirmation.
     const remoteLogs = new Map<string, Accessor<CommandLogState>>();
     const ownPort = parsePort(httpHost.includes(':') ? httpHost.split(':').pop() : undefined);
-    const commandLogFor = (otherHost: string): Accessor<CommandLogState> | null => {
+    const commandLogFor = (otherHost: string, engineId?: string): Accessor<CommandLogState> | null => {
       const key = otherHost.trim().toLowerCase();
       if (!key || disposed) return null;
+      // agent-engine-dev#582: with Engine sign-in, another Engine's log URL comes
+      // through our Engine's relay; the doc itself still syncs over our socket.
+      const relayed = engineId && isEngineAuth()
+        ? `${apiBase({ origin: apiTransport.origin, selfEngineId: pageAuthEngineId() }, engineId)}/command-log-url`
+        : undefined;
       const cached = remoteLogs.get(key);
       if (cached) return cached;
       // The inner accessor (a live signal) arrives once the URL is fetched.
       const [inner, setInner] = createSignal<Accessor<CommandLogState> | null>(null);
       const log: Accessor<CommandLogState> = () => inner()?.() ?? null;
       remoteLogs.set(key, log);
-      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo, { isDisposed: () => disposed })
+      createCommandLogConnection(formatHostPort(otherHost, ownPort), repo, { isDisposed: () => disposed, apiUrl: relayed })
         .then((acc) => setInner(() => acc))
         .catch(() => setInner(() => () => ({ error: true, url: otherHost, status: null })));
       return log;
     };
 
-    return { store, connected, socketState, sendCommand, changeDoc, commandLogStore, dispose, hostname, commandLogFor };
+    return { store, connected, socketState, sendCommand, changeDoc, commandLogStore, dispose, hostname, commandLogFor, apiTransport };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // 'Document ... is unavailable' means the peer hasn't synced the doc yet.

@@ -4060,3 +4060,132 @@ body {
   margin: 0 0 0.75rem;
 }
 
+
+/* --------------------------------------------------------
+   Engine sign-in and commands (agent-engine-dev#582)
+   -------------------------------------------------------- */
+.engine-setup__intro,
+.engine-issues__intro {
+  font-size: 0.85rem;
+  color: var(--colour-text-muted);
+  margin: 0;
+}
+
+.engine-setup__code {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.engine-issues__list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.engine-issues__message {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+}
+
+.engine-confirm {
+  width: 400px;
+}
+
+.engine-confirm__message {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+}
+
+.engine-confirm__summary {
+  margin: 0 0 12px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.engine-confirm__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px;
+}
+
+.engine-confirm__row dt {
+  color: var(--colour-text-muted);
+}
+
+.engine-confirm__row dd {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.engine-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.command-notices {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, 90vw);
+}
+
+.command-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--colour-border);
+  border-left: 4px solid var(--colour-error);
+  background: var(--colour-surface);
+  color: var(--colour-text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-size: 0.85rem;
+}
+
+.command-notice--blocked,
+.command-notice--signInRequired {
+  border-left-color: var(--colour-stopped);
+}
+
+.command-notice__text {
+  flex: 1;
+}
+
+.command-notice__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--colour-text-dim);
+  padding: 0 2px;
+}
+
+/* Command controls for an Engine the Console cannot command right now */
+.command-scope {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.command-scope__notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--colour-border);
+  border-left: 4px solid var(--colour-stopped);
+  background: var(--colour-surface);
+  color: var(--colour-text);
+  font-size: 0.85rem;
+}

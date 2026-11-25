@@ -31,6 +31,12 @@ export type EngineApiErrorCode =
   | 'ENGINE_UNKNOWN'
   | 'ENGINE_UNREACHABLE'
   | 'ENGINE_VERSION_MISMATCH'
+  /** DELETE /api/auth/operators/<id> of the last operator (Axle, #582 review answer 14). */
+  | 'LAST_OPERATOR'
+  /** DELETE of an operator id the Engine does not know (pixel-answers 14). */
+  | 'OPERATOR_UNKNOWN'
+  /** POST of a username the Engine already has (pixel-answers 14). */
+  | 'OPERATOR_EXISTS'
   /** Console-side: the call failed before an Engine answered (network, timeout, not JSON). */
   | 'NETWORK_ERROR'
   /** Console-side: an Engine without the sign-in API (GET /api/auth/info answered 404). */
@@ -43,6 +49,7 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<EngineApiErrorCode>([
   'LOGIN_RATE_LIMITED', 'SETUP_REQUIRED', 'SETUP_CODE_INVALID', 'SETUP_DONE',
   'CONFIRM_REQUIRED', 'CONFIRM_INVALID', 'GRANT_REQUIRED', 'GRANT_INVALID', 'GRANT_EXPIRED',
   'COMMAND_REFUSED', 'ENGINE_UNKNOWN', 'ENGINE_UNREACHABLE', 'ENGINE_VERSION_MISMATCH',
+  'LAST_OPERATOR', 'OPERATOR_UNKNOWN', 'OPERATOR_EXISTS',
 ]);
 
 /** A failed call: HTTP status (null when no answer), contract code, message and extra fields. */
@@ -158,5 +165,8 @@ export async function apiCall<T>(
   const rawCode = typeof body.error === 'string' ? body.error : '';
   const code: EngineApiErrorCode = KNOWN_CODES.has(rawCode) ? (rawCode as EngineApiErrorCode) : 'UNKNOWN';
   const message = typeof body.message === 'string' ? body.message : `HTTP ${res.status}`;
-  throw new EngineApiError(res.status, code, message, body, parseRetryAfter(res));
+  const bodyRetry = typeof body.retryAfterSeconds === 'number' && body.retryAfterSeconds >= 0
+    ? Math.ceil(body.retryAfterSeconds)
+    : null;
+  throw new EngineApiError(res.status, code, message, body, parseRetryAfter(res) ?? bodyRetry);
 }

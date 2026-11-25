@@ -1,9 +1,14 @@
 /**
- * Client-side authentication and operator management.
+ * Operator sign-in and operator management.
  *
- * All operations are local — no API calls. Credentials are stored in the
- * Automerge Store (userDB) and compared/written using bcryptjs in the browser.
- * The operator session is held in memory for the current page only.
+ * Two modes (authMode.ts), chosen by the Engine that serves the page:
+ *   - 'engine' (agent-engine-dev#582): operators sign in on the Engines with a
+ *     challenge; one form signs in to every Engine that takes signed commands.
+ *     Accounts live on each Engine; this page only holds session tokens
+ *     (engineTokens.ts). userDB is never read or written.
+ *   - 'legacy' (Engines from before #582): credentials in the store's userDB,
+ *     checked with bcryptjs in the browser, as before.
+ * Either way the session lives in memory for the open page only.
  *
  * Auth state is held in a module-level Solid.js signal, reactive across all
  * components that import it.
@@ -13,6 +18,22 @@ import bcrypt from 'bcryptjs';
 import { bcryptCompare } from './bcryptCompare';
 import type { User, UserID, Store } from '../types/store';
 import { IS_EXTENSION } from './context';
+import { authMode, authTransport, pageAuthEngineId, pageAuthInfo, refreshPageAuthInfo } from './authMode';
+import {
+  addOperator,
+  authErrorText,
+  changePasswordOn,
+  listOperators,
+  logoutAll,
+  removeOperatorOn,
+  setupEngine,
+  signInAll,
+  type OperatorInfo,
+} from './engineAuth';
+import { EngineApiError } from './engineApi';
+import { clearEngineSessions, sessionFor, signedInEngineIds } from './engineTokens';
+import { makePasswordHash } from './loginProof';
+import { engineHasCapability } from './commands';
 
 // ---------------------------------------------------------------------------
 // Auth state signals
@@ -23,8 +44,16 @@ const [currentUser, setCurrentUser] = createSignal<User | null>(null);
 export { currentUser };
 export const isOperator = () => currentUser() !== null;
 
+/**
+ * True when the page's Engine has no operator yet. Engine mode: its
+ * /api/auth/info says setupRequired (a setup code is needed). Legacy: userDB
+ * is empty.
+ */
 export const isFirstTimeSetup = (store: Store | null): boolean => {
   if (!store) return false;
+  const m = authMode();
+  if (m === 'engine') return pageAuthInfo()?.setupRequired === true;
+  if (m === 'probing') return false;
   return Object.keys(store.userDB ?? {}).length === 0;
 };
 
@@ -96,6 +125,10 @@ export async function login(
  */
 export async function logout(): Promise<void> {
   setCurrentUser(null);
+  setEngineIssues([]);
+  const t = authTransport();
+  if (t && signedInEngineIds().length > 0) await logoutAll(t).catch(() => undefined);
+  clearEngineSessions();
   await clearStoredSession();
 }
 
@@ -183,3 +216,238 @@ export async function changePassword(
   });
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Engine sign-in (agent-engine-dev#582), used when authMode() is 'engine'
+// ---------------------------------------------------------------------------
+
+/** An Engine this page could not sign in to, with the reason to show. */
+export interface EngineIssue {
+  engineId: string;
+  engineName: string;
+  code: string;
+  message: string;
+}
+
+const [engineIssues, setEngineIssues] = createSignal<EngineIssue[]>([]);
+
+/** Engines the last sign-in could not reach or that need setup (per Engine). */
+export { engineIssues };
+
+/** Display name of an Engine: its store hostname, or what it reported. */
+export const engineDisplayName = (store: Store | null | undefined, engineId: string): string => {
+  const host = store?.engineDB?.[engineId]?.hostname;
+  if (host) return String(host);
+  if (pageAuthInfo()?.engineId === engineId) return pageAuthInfo()!.engineName;
+  return engineId;
+};
+
+/**
+ * Engines one sign-in covers: the page's Engine first, then every other Engine
+ * in the store that takes signed commands this boot. Older Engines get no
+ * sign-in (their commands are switched off).
+ */
+export const signInEngineIds = (store: Store | null | undefined, selfId: string): string[] => {
+  const others = Object.values(store?.engineDB ?? {})
+    .filter((e) => String(e.id) !== selfId && engineHasCapability(e, 'signedCommands1'))
+    .map((e) => String(e.id))
+    .sort();
+  return [selfId, ...others];
+};
+
+const userFrom = (operator: { id: string; username: string }): User => ({
+  id: operator.id,
+  username: operator.username,
+  passwordHash: '',
+  role: 'operator',
+  created: 0,
+});
+
+const asApiError = (err: unknown): EngineApiError =>
+  err instanceof EngineApiError ? err : new EngineApiError(null, 'UNKNOWN', err instanceof Error ? err.message : String(err));
+
+export type SignInOutcome =
+  | { ok: true; user: User; issues: EngineIssue[] }
+  | { ok: false; message: string; setupRequired?: boolean };
+
+const STILL_CONNECTING = 'Still connecting to the Engine. Try again in a moment.';
+
+/**
+ * Sign in with one form. Engine mode: every Engine of signInEngineIds; the
+ * page's Engine must accept, the others are listed in `issues` when they
+ * could not be signed in to. Legacy mode: the userDB check, as before.
+ * The password is not kept. Legacy mode checks userDB and
+ * sets the user itself.
+ */
+export async function signIn(
+  username: string,
+  password: string,
+  store: Store | null,
+  opts: { deferUser?: boolean } = {},
+): Promise<SignInOutcome> {
+  const m = authMode();
+  if (m === 'probing') return { ok: false, message: STILL_CONNECTING };
+  if (m === 'legacy') {
+    if (!store) return { ok: false, message: STILL_CONNECTING };
+    const ok = await login(username, password, store);
+    const user = currentUser();
+    return ok && user ? { ok: true, user, issues: [] } : { ok: false, message: 'Invalid username or password.' };
+  }
+  const t = authTransport();
+  const self = pageAuthEngineId();
+  if (!t || !self) return { ok: false, message: STILL_CONNECTING };
+
+  const results = await signInAll(t, signInEngineIds(store, self), username, password);
+  const own = results.find((r) => r.engineId === self);
+  if (!own || !own.ok) {
+    clearEngineSessions();
+    const err = own && !own.ok ? own.error : new EngineApiError(null, 'UNKNOWN', 'Sign-in failed.');
+    return { ok: false, message: authErrorText(err, engineDisplayName(store, self)), setupRequired: err.code === 'SETUP_REQUIRED' };
+  }
+  const issues: EngineIssue[] = results
+    .filter((r): r is Extract<typeof r, { ok: false }> => !r.ok)
+    .map((r) => ({
+      engineId: r.engineId,
+      engineName: engineDisplayName(store, r.engineId),
+      code: r.error.code,
+      message: authErrorText(r.error, engineDisplayName(store, r.engineId)),
+    }));
+  setEngineIssues(issues);
+  const session = sessionFor(self);
+  if (!session) return { ok: false, message: 'Sign-in failed.' };
+  const user = userFrom(session.operator);
+  // deferUser: the caller sets the user itself (setAuthenticatedUser) when
+  // flipping it here would unmount the calling form mid-handler.
+  if (!opts.deferUser) setCurrentUser(user);
+  return { ok: true, user, issues };
+}
+
+/**
+ * First operator on one Engine with its setup code. On the page's Engine this
+ * also signs the page in; on another Engine it clears that Engine's issue.
+ */
+export async function setupWithCode(
+  engineId: string,
+  setupCode: string,
+  username: string,
+  password: string,
+  store: Store | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const t = authTransport();
+  if (authMode() !== 'engine' || !t) return { ok: false, message: STILL_CONNECTING };
+  try {
+    const grant = await setupEngine(t, engineId, setupCode, username, password);
+    if (engineId === pageAuthEngineId()) {
+      setCurrentUser(userFrom(grant.operator));
+      await refreshPageAuthInfo();
+    }
+    setEngineIssues((prev) => prev.filter((i) => i.engineId !== engineId));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: authErrorText(asApiError(err), engineDisplayName(store, engineId)) };
+  }
+}
+
+/**
+ * Sessions that ended (renew answered 401). When the page's own session ended
+ * the page is signed out and asks for a new sign-in.
+ */
+export async function handleSessionsEnded(engineIds: string[]): Promise<void> {
+  const self = pageAuthEngineId();
+  if (self && engineIds.includes(self)) await logout();
+}
+
+/** Result of a change applied on every signed-in Engine. */
+export type EverywhereResult =
+  | { ok: true; failed: EngineIssue[] }
+  | { ok: false; message: string };
+
+const issueFor = (store: Store | null, engineId: string, err: unknown): EngineIssue => {
+  const e = asApiError(err);
+  const name = engineDisplayName(store, engineId);
+  return { engineId, engineName: name, code: e.code, message: authErrorText(e, name) };
+};
+
+/** Operators of the page's Engine (engine mode), without hashes. */
+export async function listPageOperators(): Promise<OperatorInfo[]> {
+  const t = authTransport();
+  const self = pageAuthEngineId();
+  if (!t || !self) return [];
+  return listOperators(t, self);
+}
+
+/** Add an operator on every Engine this page is signed in to (one hash for all). */
+export async function addOperatorEverywhere(username: string, password: string, store: Store | null): Promise<EverywhereResult> {
+  const t = authTransport();
+  if (!t) return { ok: false, message: STILL_CONNECTING };
+  const hash = await makePasswordHash(password);
+  const failed: EngineIssue[] = [];
+  for (const id of signedInEngineIds()) {
+    try {
+      await addOperator(t, id, username, hash);
+    } catch (err) {
+      failed.push(issueFor(store, id, err));
+    }
+  }
+  const self = pageAuthEngineId();
+  const own = failed.find((f) => f.engineId === self);
+  return own ? { ok: false, message: own.message } : { ok: true, failed };
+}
+
+/** Remove the operator `username` on every Engine this page is signed in to. */
+export async function removeOperatorEverywhere(username: string, store: Store | null): Promise<EverywhereResult> {
+  const t = authTransport();
+  if (!t) return { ok: false, message: STILL_CONNECTING };
+  const failed: EngineIssue[] = [];
+  for (const id of signedInEngineIds()) {
+    try {
+      const op = (await listOperators(t, id)).find((o) => o.username === username);
+      if (op) await removeOperatorOn(t, id, op.id);
+    } catch (err) {
+      // Already gone on that Engine: nothing to do there.
+      if (!(err instanceof EngineApiError && err.code === 'OPERATOR_UNKNOWN')) failed.push(issueFor(store, id, err));
+    }
+  }
+  const self = pageAuthEngineId();
+  const own = failed.find((f) => f.engineId === self);
+  return own ? { ok: false, message: own.message } : { ok: true, failed };
+}
+
+/**
+ * Change the signed-in operator's own password on every Engine this page is
+ * signed in to. One new hash for all, so a later sign-in needs one bcrypt run.
+ * Legacy mode: the userDB change, as before.
+ */
+export async function changeMyPassword(
+  currentPassword: string,
+  newPassword: string,
+  store: Store | null,
+  changeDoc: ((fn: (doc: Store) => void) => void) | null,
+): Promise<EverywhereResult> {
+  const user = currentUser();
+  if (!user) return { ok: false, message: 'Sign in first.' };
+  if (authMode() !== 'engine') {
+    if (!store || !changeDoc) return { ok: false, message: STILL_CONNECTING };
+    return (await changePassword(user.id, currentPassword, newPassword, store, changeDoc))
+      ? { ok: true, failed: [] }
+      : { ok: false, message: 'Current password is incorrect.' };
+  }
+  const t = authTransport();
+  if (!t) return { ok: false, message: STILL_CONNECTING };
+  const hash = await makePasswordHash(newPassword);
+  const failed: EngineIssue[] = [];
+  for (const id of signedInEngineIds()) {
+    try {
+      await changePasswordOn(t, id, user.username, currentPassword, hash);
+    } catch (err) {
+      failed.push(issueFor(store, id, err));
+    }
+  }
+  const self = pageAuthEngineId();
+  const own = failed.find((f) => f.engineId === self);
+  if (own) return { ok: false, message: own.code === 'LOGIN_FAILED' ? 'Current password is incorrect.' : own.message };
+  return { ok: true, failed };
+}
+
+/** For tests. */
+export const resetEngineIssues = (): void => { setEngineIssues([]); };

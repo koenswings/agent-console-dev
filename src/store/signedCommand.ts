@@ -78,7 +78,8 @@ export interface SendDeps {
 }
 
 export type SendResult =
-  | { kind: 'accepted'; engineId: string; seq: number }
+  /** Sent. `seq` is the Engine's queue number; null on the legacy path (written into the store). */
+  | { kind: 'accepted'; engineId: string; seq: number | null }
   /** Nothing was sent: the Engine runs an older version, or is not in the store. */
   | { kind: 'blocked'; engineId: string; message: string }
   /** A sign-in is needed for these Engines (no token, or the token ended). */

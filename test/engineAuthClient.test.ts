@@ -352,7 +352,7 @@ describe('token store', () => {
 });
 
 describe('session renewal', () => {
-  it('renews on the interval only while visible, and reports ended sessions', async () => {
+  it('runs no timer while hidden; on visible renews at once, then on the interval', async () => {
     vi.useFakeTimers();
     putEngineSession('eng-a', 'ta', { id: 'op1', username: 'k' }, 60_000);
     putEngineSession('eng-b', 'tb', { id: 'op1', username: 'k' }, 60_000);
@@ -362,15 +362,34 @@ describe('session renewal', () => {
     const ended = vi.fn();
     const stop = startSessionRenewal({ transport: () => t, isVisible: () => visible, onSessionsEnded: ended, intervalMs: 1_000 });
 
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(calls).toHaveLength(0);
 
     visible = true;
-    await vi.advanceTimersByTimeAsync(1_000);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
     expect(calls.map((c) => c.url)).toEqual(['/api/auth/renew', '/api/engines/eng-b/auth/renew']);
     expect(ended).toHaveBeenCalledWith(['eng-b']);
     expect(tokenFor('eng-b')).toBeNull();
 
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(3);
+
+    visible = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(calls).toHaveLength(3);
+
+    stop();
+  });
+
+  it('starts the interval at once when the page is already visible', async () => {
+    vi.useFakeTimers();
+    putEngineSession('eng-a', 'ta', { id: 'op1', username: 'k' }, 60_000);
+    const { t, calls } = mockTransport(() => ({ status: 200, body: { expiresInMs: 900_000 } }));
+    const stop = startSessionRenewal({ transport: () => t, isVisible: () => true, intervalMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(calls).toHaveLength(2);
     stop();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(calls).toHaveLength(2);

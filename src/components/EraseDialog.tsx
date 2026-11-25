@@ -12,6 +12,8 @@ import {
   validateShareName,
 } from '../store/commands';
 import { createCommandResult, FILES_TIMEOUT_MESSAGE } from '../store/commandResult';
+import { isEngineAuth } from '../store/authMode';
+import { sendResultMessage } from '../store/sendResultText';
 import { traceIdSnapshot } from '../store/ejectResult';
 import { mergeCommandLogs, remoteCommandLog } from '../store/remoteCommandLogs';
 import {
@@ -96,7 +98,13 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     setPhase({ kind: 'summarising' });
     setConfirmName('');
     summariseBaseline = traceIdSnapshot(cls());
-    summariseDisk(props.engineId, props.targetId);
+    // agent-engine-dev#582: a send that was not accepted is the answer at once.
+    void Promise.resolve(summariseDisk(props.engineId, props.targetId)).then((r) => {
+      if (r && r.kind !== 'accepted' && phase().kind === 'summarising') {
+        clearSummariseTimer();
+        setPhase({ kind: 'summary-error', message: sendResultMessage(r) });
+      }
+    });
     summariseTimer = setTimeout(() => {
       summariseTimer = null;
       if (phase().kind === 'summarising') {
@@ -143,11 +151,17 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
     return isSummaryStale(p.summary, now());
   });
 
+  /**
+   * Legacy: the operator types the label here. With Engine sign-in (#582) the
+   * Engine asks for it once, in its own confirmation dialog, so not here.
+   */
   const labelMatches = createMemo(() => {
     const p = phase();
     if (p.kind !== 'summary') return false;
-    return confirmName() === p.summary.label;
+    return isEngineAuth() || confirmName() === p.summary.label;
   });
+  /** A signed erase is waiting for the Engine's confirmation. */
+  const [sending, setSending] = createSignal(false);
 
   // ── eraseDisk ────────────────────────────────────────────────────────────
   let eraseBaseline: Set<string> = new Set();
@@ -159,16 +173,30 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
   };
   onCleanup(clearEraseTimers);
 
-  const startErase = () => {
+  const startErase = async () => {
     const p = phase();
-    if (p.kind !== 'summary' || stale() || !labelMatches()) return;
+    if (p.kind !== 'summary' || stale() || !labelMatches() || sending()) return;
     clearEraseTimers();
     setSlow(false);
     clearEraseCommandResult();
     eraseBaseline = traceIdSnapshot(cls());
+    if (isEngineAuth()) {
+      // The label from the summary goes into the command, so the resend after
+      // the Engine's confirmation is the same text (pixel-answers 5).
+      setSending(true);
+      const r = await eraseDisk(props.engineId, props.targetId, p.traceId, p.summary.label);
+      setSending(false);
+      if (phase() !== p) return;
+      if (r?.kind === 'cancelled') return;
+      if (r && r.kind !== 'accepted') {
+        setPhase({ kind: 'error', message: sendResultMessage(r) });
+        return;
+      }
+    } else {
+      void eraseDisk(props.engineId, props.targetId, p.traceId, p.summary.label);
+    }
     const startedAt = Date.now();
     setPhase({ kind: 'erasing', summary: p.summary, startedAt });
-    eraseDisk(props.engineId, props.targetId, p.traceId, p.summary.label);
     eraseNoResponseTimer = setTimeout(() => {
       eraseNoResponseTimer = null;
       const cur = phase();
@@ -304,18 +332,20 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                   <p class="edp-form__error" role="alert">{SUMMARY_STALE_MESSAGE}</p>
                 }
               >
-                <label class="edp-form__label" for="erase-confirm-name">
-                  Type <strong>{summary().label}</strong> to confirm
-                </label>
-                <input
-                  id="erase-confirm-name"
-                  data-testid="erase-confirm-name"
-                  class="edp-form__search erase-dialog__confirm"
-                  type="text"
-                  value={confirmName()}
-                  autocomplete="off"
-                  onInput={(e) => setConfirmName((e.target as HTMLInputElement).value)}
-                />
+                <Show when={!isEngineAuth()}>
+                  <label class="edp-form__label" for="erase-confirm-name">
+                    Type <strong>{summary().label}</strong> to confirm
+                  </label>
+                  <input
+                    id="erase-confirm-name"
+                    data-testid="erase-confirm-name"
+                    class="edp-form__search erase-dialog__confirm"
+                    type="text"
+                    value={confirmName()}
+                    autocomplete="off"
+                    onInput={(e) => setConfirmName((e.target as HTMLInputElement).value)}
+                  />
+                </Show>
               </Show>
               <div class="edp-form__actions">
                 <button class="btn" onClick={() => props.onClose()} data-testid="erase-cancel">Cancel</button>
@@ -323,8 +353,8 @@ const EraseDialog: Component<EraseDialogProps> = (props) => {
                   <button
                     class="btn btn--danger"
                     data-testid="erase-confirm-ok"
-                    disabled={!labelMatches()}
-                    onClick={startErase}
+                    disabled={!labelMatches() || sending()}
+                    onClick={() => void startErase()}
                   >
                     {props.mode === 'erase-then-files' ? 'Erase and make a Files Disk' : 'Erase this disk'}
                   </button>
