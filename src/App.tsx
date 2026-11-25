@@ -177,10 +177,7 @@ const App: Component = () => {
     if (!isFirstTimeSetup(s)) return;
     provisioningRan = true;
     createOperator('admin', 'admin911!', s, conn.changeDoc)
-      .then((user) => {
-        console.log('[app] auto-provisioned default operator');
-        setAuthenticatedUser(user);
-      })
+      .then((user) => setAuthenticatedUser(user))
       .catch((err) => {
         console.warn('[app] auto-provision skipped:', err.message);
         provisioningRan = false;
@@ -314,7 +311,6 @@ const App: Component = () => {
     if (host && !everConn && !preview() && !isProductionWebMode()) {
       const timer = setTimeout(() => {
         if (!hasEverConnected() && hostname()) {
-          console.log('[app] Connection timeout — engine unreachable, returning to onboarding');
           handleConnectionFailure();
         }
       }, 15_000);

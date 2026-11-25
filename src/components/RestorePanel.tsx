@@ -8,7 +8,7 @@ import CommandFeedback from './CommandFeedback';
 import BackupModeControls from './BackupModeControls';
 import { confirmNewOperation, remoteWatchFor } from '../store/remoteConfirm';
 import {
-  backupDateText, currentDiskName, isSameDiskRestore, otherDiskButton, otherDiskSummary, type RestoreWords,
+  backupDateText, currentDiskName, isSameDiskRestore, oldDiskGone, otherDiskButton, otherDiskSummary, restoreOutcome, type RestoreWords,
 } from '../store/restoreConfirm';
 import BackupSizingLine from './BackupSizingLine';
 import BackupStatusLines from './BackupStatusLines';
@@ -218,11 +218,14 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                   current: currentDiskName(props.store(), inst()!),
                 });
                 const sameDisk = () => isSameDiskRestore(inst()!, selectedDiskId());
-                // Summary words, captured when sent (the selection is cleared then).
-                const [sentWords, setSentWords] = createSignal<RestoreWords | null>(null);
+                // Summary words, captured when sent (the selection is cleared then),
+                // with the target and whether the old disk was gone (#255).
+                const [sent, setSent] = createSignal<{ w: RestoreWords; targetId: string; diskGone: boolean } | null>(null);
                 const summary = () => {
-                  const w = sentWords();
-                  return w && result.state().kind === 'success' ? otherDiskSummary(w) : null;
+                  const x = sent();
+                  if (!x || result.state().kind !== 'success') return null;
+                  const outcome = restoreOutcome(inst(), x.targetId, x.diskGone);
+                  return outcome ? otherDiskSummary(x.w, outcome) : null;
                 };
 
                 const selectedDiskName = () => {
@@ -303,8 +306,10 @@ const RestorePanel: Component<RestorePanelProps> = (props) => {
                               data-testid={`restore-confirm-${instanceId}`}
                               onClick={() => {
                                 const w = words();
+                                const sentTo = selectedDiskId();
+                                const gone = oldDiskGone(props.store(), inst()!);
                                 const other = !sameDisk();
-                                handleConfirm(inst()!, result, () => setSentWords(other ? w : null));
+                                handleConfirm(inst()!, result, () => setSent(other ? { w, targetId: sentTo, diskGone: gone } : null));
                               }}
                             >
                               {sameDisk() ? 'Restore' : otherDiskButton(words().target)}
