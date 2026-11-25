@@ -221,7 +221,7 @@ onMount:
       1 found          → auto-connect (saveHostnameAndStoreUrl + initConnection)
       0 or 2+ found, or nothing after 5 s → show Connection Management (re-probes every 10 s)
   initConnection() → createMockConnection() (preview) or createEngineConnection() (real)
-  restoreSession(store) → set currentUser if the stored session is still valid
+  restoreSession(store) → remove any stored session entry; the Console starts in user mode
 
 Not connected:
   dev / extension: 15 s without first data, or 15 s disconnected → back to discovery
@@ -459,16 +459,17 @@ Key exports:
 | `currentUser` | Solid.js signal — `User \| null` |
 | `isOperator()` | Derived: `currentUser() !== null` |
 | `isFirstTimeSetup(store)` | `true` when `userDB` is empty |
-| `login(username, password, store)` | bcrypt compare (in `workers/bcrypt.worker.ts`) → set signal + persist session |
-| `setAuthenticatedUser(user)` | Set the signal + persist session (used after first-time setup) |
+| `login(username, password, store)` | bcrypt compare (in `workers/bcrypt.worker.ts`) → set signal |
+| `setAuthenticatedUser(user)` | Set the signal (used after first-time setup) |
 | `logout()` | Clear signal + stored session |
-| `restoreSession(store)` | Validate stored session against `userDB` on mount |
+| `restoreSession(store)` | On mount: remove the `operatorSession` entry earlier versions stored |
 | `createOperator(username, password, store, changeDoc)` | Hash + write to `userDB` |
 | `removeOperator(userId, changeDoc)` | Delete from `userDB` |
 | `changePassword(userId, currentPw, newPw, store, changeDoc)` | Re-validate + re-hash + write |
 
-Session persistence: `operatorSession: { userId, username }` in `chrome.storage.local` /
-`localStorage`. Restored on page load by cross-checking `userId` against the live `userDB`.
+Session lifetime: the operator session is the `currentUser` signal of the open page only. Nothing is
+written to `chrome.storage.local` / `localStorage`, so a reload or a new Console window needs a new
+sign-in. `restoreSession` and `logout` remove the `operatorSession` entry earlier versions stored.
 
 ### `src/store/engine.ts` — real connection
 

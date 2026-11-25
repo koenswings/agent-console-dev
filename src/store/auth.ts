@@ -3,6 +3,7 @@
  *
  * All operations are local — no API calls. Credentials are stored in the
  * Automerge Store (userDB) and compared/written using bcryptjs in the browser.
+ * The operator session is held in memory for the current page only.
  *
  * Auth state is held in a module-level Solid.js signal, reactive across all
  * components that import it.
@@ -28,41 +29,25 @@ export const isFirstTimeSetup = (store: Store | null): boolean => {
 };
 
 // ---------------------------------------------------------------------------
-// Persistent session storage
+// Session storage
 // ---------------------------------------------------------------------------
 
+/**
+ * The operator session lives only in the currentUser signal of this page.
+ * Nothing in browser storage can start one: only login() (password checked
+ * against userDB) or setAuthenticatedUser() right after creating an operator.
+ * A reload or a new Console window therefore needs a new sign-in.
+ *
+ * SESSION_KEY is the entry earlier Console versions wrote; it is removed on
+ * startup and on logout and is never read as a session.
+ */
 const SESSION_KEY = 'operatorSession';
 
-interface OperatorSession {
-  userId: UserID;
-  username: string;
-}
-
-async function persistSession(user: User): Promise<void> {
-  const session: OperatorSession = { userId: String(user.id), username: String(user.username) };
-  if (IS_EXTENSION) {
-    try { await chrome.storage.local.set({ [SESSION_KEY]: session }); return; } catch {}
-  }
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
-
-async function clearPersistedSession(): Promise<void> {
+async function clearStoredSession(): Promise<void> {
   if (IS_EXTENSION) {
     try { await chrome.storage.local.remove(SESSION_KEY); } catch {}
   }
-  localStorage.removeItem(SESSION_KEY);
-}
-
-async function readPersistedSession(): Promise<OperatorSession | null> {
-  if (IS_EXTENSION) {
-    try {
-      const r = await chrome.storage.local.get(SESSION_KEY);
-      if (r[SESSION_KEY]) return r[SESSION_KEY] as OperatorSession;
-    } catch {}
-  }
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw) as OperatorSession; } catch { return null; }
+  try { localStorage.removeItem(SESSION_KEY); } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +55,7 @@ async function readPersistedSession(): Promise<OperatorSession | null> {
 // ---------------------------------------------------------------------------
 
 /**
- * Set the current user directly (after external verification) and persist session.
+ * Set the current user directly (after external verification).
  * Use this when you've already verified the password to avoid running bcrypt twice.
  *
  * Synchronous so callers can use Solid's batch() to co-update other signals
@@ -78,13 +63,11 @@ async function readPersistedSession(): Promise<OperatorSession | null> {
  */
 export function setAuthenticatedUser(user: User): void {
   setCurrentUser(user);
-  // Fire-and-forget — never block login on session persistence
-  persistSession(user).catch(() => {});
 }
 
 /**
  * Attempt login. Returns true on success, false on bad credentials.
- * On success, sets the currentUser signal and persists the session.
+ * On success, sets the currentUser signal for this page.
  */
 export async function login(
   username: string,
@@ -105,7 +88,6 @@ export async function login(
   if (!match) return false;
 
   setCurrentUser(user);
-  await persistSession(user);
   return true;
 }
 
@@ -114,25 +96,18 @@ export async function login(
  */
 export async function logout(): Promise<void> {
   setCurrentUser(null);
-  await clearPersistedSession();
+  await clearStoredSession();
 }
 
 /**
- * Restore a previously persisted session on page load.
- * Cross-checks the stored userId against the current userDB.
- * Clears the session silently if the operator no longer exists.
+ * Start-up session step, run once the store first arrives.
+ * Sessions are not kept across page loads (see Session storage above), so this
+ * only removes a stored entry left by an earlier Console version. The Console
+ * starts in user mode until an operator signs in.
  */
 export async function restoreSession(store: Store | null): Promise<void> {
   if (!store) return;
-  const session = await readPersistedSession();
-  if (!session) return;
-
-  const user = (store.userDB ?? {})[session.userId];
-  if (user) {
-    setCurrentUser(user);
-  } else {
-    await clearPersistedSession();
-  }
+  await clearStoredSession();
 }
 
 /**

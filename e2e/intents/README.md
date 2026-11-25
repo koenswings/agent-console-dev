@@ -505,7 +505,7 @@ for the instance the Intent targets.
 | Kind | `data-kind="failed"` when the outcome node is shown |
 | No CTA | No button named Retry or Resume on the update control or the row |
 | Hint | Collapse the row if expanded, then `instance-error-hint-<id>` must be visible |
-| Reload | `page.reload()`, back to ALL APPS, and the same alert must come back within 60 s from Engine state alone (instance `Error` + newest updateApp op `restartFailed`, console#227); `update-badge-<id>` must be disabled (Start is the next step) |
+| Reload | `page.reload()`, sign in again (the operator session does not outlive the page), back to ALL APPS, and the same alert must come back within 60 s from Engine state alone (instance `Error` + newest updateApp op `restartFailed`, console#227); `update-badge-<id>` must be disabled (Start is the next step) |
 
 Since console#227 the Console reads this state from the store, so every Console and a
 reload show the sentence while the App is stopped; it clears once the App runs again.
