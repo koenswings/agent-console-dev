@@ -519,7 +519,7 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
 
   return (
     <div
-      class="instance-row"
+      class={`instance-row${expanded() ? " instance-row--expanded" : ""}`}
       role="listitem"
       data-testid={`instance-${props.instanceId ?? props.instance()?.id ?? ''}`}
       data-instance-id={props.instanceId ?? props.instance()?.id}
@@ -556,6 +556,9 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             store={() => props.store?.() ?? null}
             commandLog={() => props.commandLogStore?.() ?? null}
           />
+          <Show when={props.app()?.version}>
+            <span class="instance-row__version">{versionLabel(props.app()?.version)}</span>
+          </Show>
           <Show when={isDemoInstance(props.instance())}>
             <span
               class="demo-badge"

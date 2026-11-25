@@ -571,7 +571,7 @@ const EmptyDiskPanel: Component<EmptyDiskPanelProps> = (props) => {
         <Show when={!actionDone() && panel() === 'menu' && !eraseDialog() && props.disk() && canEraseDisk(props.disk()!)}>
           <div class="disk-view__erase">
             <button
-              class="btn-text btn-text--danger"
+              class="btn btn--danger"
               disabled={!!eraseBlocked()}
               title={eraseBlocked()}
               data-testid="erase-this-disk"
