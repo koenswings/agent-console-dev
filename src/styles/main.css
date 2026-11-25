@@ -3716,14 +3716,30 @@ code {
 .disk-view__actions .disk-section {
   padding: 0;
   border: none;
-  flex: 1 1 auto;
-  min-width: 12rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Open Add Files form takes the full row; the closed button stays grouped with Erase. */
+.disk-view__actions .disk-section:has(.disk-section__title) {
+  flex: 1 1 100%;
 }
 
 .disk-view__actions .disk-view__erase {
   margin: 0;
   padding: 0;
   border: none;
+}
+
+/* Default .btn border is transparent; give this action a visible outline so it reads as a button. */
+.disk-view__add-files {
+  border-color: var(--ink-700);
+  color: var(--ink-800);
+  background: var(--paper-card);
+}
+
+.disk-view__add-files:hover:not(:disabled) {
+  background: var(--paper);
 }
 
 .disk-section__title {
