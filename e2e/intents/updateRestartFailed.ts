@@ -29,6 +29,7 @@
 import type { Page } from '@playwright/test';
 import type { IntentFn } from './types';
 import { sel } from './selectors';
+import { sign_in } from './operatorActions';
 
 /** Must stay in lockstep with src/store/updateApp.ts `restartFailedText`. */
 export const restartFailedAlertText = (app: string): string =>
@@ -122,7 +123,8 @@ const collapseRowIfExpanded = async (page: Page, id: string): Promise<void> => {
  * Hook-gated Intent. When the hook is armed, click Update and assert the #217
  * alert, no Retry/Resume, and the InstanceRow error hint.
  */
-export const update_restart_failed: IntentFn = async ({ page, instanceId }) => {
+export const update_restart_failed: IntentFn = async (ctx) => {
+  const { page, instanceId } = ctx;
   if (!restartFailedHookEnabled()) {
     throw new Error(restartFailedMissingHookMessage());
   }
@@ -232,7 +234,9 @@ export const update_restart_failed: IntentFn = async ({ page, instanceId }) => {
 
   // console#227: the sentence comes from Engine state, so it must survive a reload,
   // and the Update badge must not invite a plain retry while the App is stopped.
+  // The operator session does not outlive the page, so sign in again after the reload.
   await page.reload();
+  await sign_in(ctx);
   await ensureOverview(page);
   const allAppsAgain = page.locator(sel.networkAllApps);
   if (await allAppsAgain.isVisible().catch(() => false)) {

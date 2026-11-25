@@ -29,6 +29,7 @@ import {
   changePassword,
   isFirstTimeSetup,
   currentUser,
+  setAuthenticatedUser,
 } from '../src/store/auth';
 import type { Store, User } from '../src/types/store';
 
@@ -66,6 +67,7 @@ const makeChangeDoc = () => {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  localStorage.clear();
   // Ensure we start logged out
   await logout();
 });
@@ -154,6 +156,65 @@ describe('restoreSession', () => {
   it('does nothing for null store', async () => {
     await restoreSession(null);
     expect(currentUser()).toBeNull();
+  });
+
+  it('starts in user mode even when a stored session entry names a real operator', async () => {
+    const store = makeStore([makeUser()]);
+    localStorage.setItem('operatorSession', JSON.stringify({ userId: 'user-001', username: 'admin' }));
+
+    await restoreSession(store);
+
+    expect(currentUser()).toBeNull();
+    expect(bcryptCompare).not.toHaveBeenCalled();
+  });
+
+  it('removes a stored session entry left by an earlier version', async () => {
+    localStorage.setItem('operatorSession', JSON.stringify({ userId: 'user-001', username: 'admin' }));
+
+    await restoreSession(makeStore([makeUser()]));
+
+    expect(localStorage.getItem('operatorSession')).toBeNull();
+  });
+
+  it('keeps an operator signed in within the page after a real sign-in', async () => {
+    vi.mocked(bcryptCompare).mockResolvedValue(true as never);
+    const store = makeStore([makeUser()]);
+    expect(await login('admin', 'correct', store)).toBe(true);
+
+    await restoreSession(store);
+
+    expect(currentUser()?.id).toBe('user-001');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session storage
+// ---------------------------------------------------------------------------
+
+describe('session storage', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('a successful sign-in writes nothing to localStorage', async () => {
+    vi.mocked(bcryptCompare).mockResolvedValue(true as never);
+    await login('admin', 'correct', makeStore([makeUser()]));
+
+    expect(currentUser()?.username).toBe('admin');
+    expect(localStorage.length).toBe(0);
+  });
+
+  it('setAuthenticatedUser after first-time setup writes nothing to localStorage', () => {
+    setAuthenticatedUser(makeUser());
+
+    expect(currentUser()?.id).toBe('user-001');
+    expect(localStorage.length).toBe(0);
+  });
+
+  it('logout removes a stored session entry', async () => {
+    localStorage.setItem('operatorSession', '{}');
+
+    await logout();
+
+    expect(localStorage.getItem('operatorSession')).toBeNull();
   });
 });
 
