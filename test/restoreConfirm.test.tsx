@@ -3,7 +3,7 @@ import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import RestorePanel from '../src/components/RestorePanel';
 import { setSendCommandFn } from '../src/store/commands';
 import {
-  backupDateText, isSameDiskRestore, otherDiskButton, otherDiskPoints, otherDiskQuestion, otherDiskSummary, sameDiskConfirm,
+  backupDateText, isSameDiskRestore, oldDiskGone, otherDiskButton, otherDiskPoints, otherDiskQuestion, otherDiskSummary, restoreOutcome, sameDiskConfirm,
 } from '../src/store/restoreConfirm';
 import type { CommandLogStore } from '../src/types/commandLog';
 import type { Disk, Instance, Store } from '../src/types/store';
@@ -69,18 +69,66 @@ describe('RestorePanel confirm', () => {
     expect(r.queryByTestId('restore-confirm-points-i1')).toBeNull();
     expect(r.getByTestId('restore-confirm-i1').textContent).toBe('Restore');
   });
-  it('after a successful restore to another disk, shows the summary', async () => {
+  // #255: the success line follows the instance's real status once it is on the target.
+  const restoreAndFinish = async (opts: { oldDisk?: Partial<Disk>; before?: Partial<Instance>; after: Partial<Instance> }) => {
     const send = vi.fn();
     setSendCommandFn(send);
-    let traces: CommandLogStore['traces'] = {};
     const { createSignal } = await import('solid-js');
-    const [log, setLog] = createSignal<CommandLogStore>({ traces, recentTraceIds: [] } as unknown as CommandLogStore);
-    const r = panel(log);
+    const base = {
+      ...store,
+      instanceDB: { i1: { ...inst, ...opts.before } },
+      diskDB: { ...store.diskDB, APPS: disk('APPS', 'Old SSD', ['app'], opts.oldDisk) },
+    } as unknown as Store;
+    const [st, setSt] = createSignal<Store>(base);
+    const [log, setLog] = createSignal<CommandLogStore>({ traces: {}, recentTraceIds: [] } as unknown as CommandLogStore);
+    const r = render(() => (
+      <RestorePanel disk={() => backup} store={st} engineId={() => 'ENG1'} commandLogStore={log} />
+    ));
     pick(r, 'NEW');
     fireEvent.click(r.getByTestId('restore-confirm-i1'));
     expect(send).toHaveBeenCalledWith('ENG1', 'restoreApp i1 NEW');
-    traces = { t1: { traceId: 't1', command: 'restoreApp', args: { instanceName: 'i1', targetDiskId: 'NEW' }, status: 'ok', startedAt: T, logs: [] } } as unknown as CommandLogStore['traces'];
-    setLog({ traces, recentTraceIds: ['t1'] } as unknown as CommandLogStore);
-    expect(r.getByTestId('restore-summary-i1').textContent).toBe(otherDiskSummary(w));
+    setLog({ traces: { t1: { traceId: 't1', command: 'restoreApp', args: { instanceName: 'i1', targetDiskId: 'NEW' }, status: 'ok', startedAt: T, logs: [] } }, recentTraceIds: ['t1'] } as unknown as CommandLogStore);
+    // The store has not re-homed the instance yet: no line from the old status.
+    expect(r.queryByTestId('restore-summary-i1')).toBeNull();
+    setSt({ ...base, instanceDB: { i1: { ...base.instanceDB.i1, storedOn: 'NEW', ...opts.after } } } as unknown as Store);
+    return r;
+  };
+  it('after a successful restore to another disk with the app running, says it runs from the new disk', async () => {
+    const r = await restoreAndFinish({ after: { status: 'Running' } });
+    expect(r.getByTestId('restore-summary-i1').textContent).toBe(otherDiskSummary(w, 'running'));
+    expect(r.getByTestId('restore-summary-i1').textContent).toBe(`Kolibri restored from ${date} and now running from New SSD. The old copy on Old SSD was kept.`);
+  });
+  it('after a breakdown restore (old disk gone), says it stays stopped and to press Start', async () => {
+    const r = await restoreAndFinish({ oldDisk: { dockedTo: null, device: null } as Partial<Disk>, before: { status: 'Undocked' }, after: { status: 'Stopped' } });
+    expect(r.getByTestId('restore-summary-i1').textContent).toBe(
+      `Kolibri is restored from ${date} to New SSD but stays stopped because its old disk is gone. Press Start when you're ready.`,
+    );
+  });
+  it('an app that was stopped before stays stopped, as it was', async () => {
+    const r = await restoreAndFinish({ before: { status: 'Stopped' }, after: { status: 'Docked' } });
+    expect(r.getByTestId('restore-summary-i1').textContent).toBe(otherDiskSummary(w, 'stopped'));
+  });
+});
+
+describe('restore outcome (#255)', () => {
+  it('reads the live status once the instance is on the target', () => {
+    expect(restoreOutcome({ status: 'Running', storedOn: 'APPS' } as Instance, 'NEW', false)).toBeNull();
+    expect(restoreOutcome(undefined, 'NEW', false)).toBeNull();
+    expect(restoreOutcome({ status: 'Running', storedOn: 'NEW' } as Instance, 'NEW', true)).toBe('running');
+    expect(restoreOutcome({ status: 'Starting', storedOn: 'NEW' } as Instance, 'NEW', false)).toBe('starting');
+    expect(restoreOutcome({ status: 'Error', storedOn: 'NEW' } as Instance, 'NEW', false)).toBe('starting');
+    expect(restoreOutcome({ status: 'Stopped', storedOn: 'NEW' } as Instance, 'NEW', true)).toBe('stopped-disk-gone');
+    expect(restoreOutcome({ status: 'Undocked', storedOn: 'NEW' } as Instance, 'NEW', true)).toBe('stopped-disk-gone');
+    expect(restoreOutcome({ status: 'Stopped', storedOn: 'NEW' } as Instance, 'NEW', false)).toBe('stopped');
+  });
+  it('old disk gone: missing from the store or not docked', () => {
+    expect(oldDiskGone(store, inst)).toBe(false);
+    const gone = { ...store, diskDB: { ...store.diskDB, APPS: disk('APPS', 'Old SSD', ['app'], { dockedTo: null } as Partial<Disk>) } } as unknown as Store;
+    expect(oldDiskGone(gone, inst)).toBe(true);
+    expect(oldDiskGone(store, { ...inst, storedOn: 'NOPE' } as Instance)).toBe(true);
+  });
+  it('wording for each case', () => {
+    expect(otherDiskSummary(w, 'starting')).toBe(`Kolibri restored from ${date} onto New SSD and is starting. The old copy on Old SSD was kept.`);
+    expect(otherDiskSummary(w, 'stopped')).toBe(`Kolibri is restored from ${date} to New SSD and stays stopped, as it was before. Press Start when you're ready. The old copy on Old SSD was kept.`);
   });
 });

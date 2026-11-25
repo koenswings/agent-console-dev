@@ -645,7 +645,6 @@ export function createMockConnection(): StoreConnection {
   const commandLog: Array<{ engineId: string; command: string }> = [];
 
   const sendCommand = (engineId: string, command: string): void => {
-    console.log(`[Mock] Command → ${engineId}: ${command}`);
     commandLog.push({ engineId, command });
     // Simulate writing the command into the engine's commands array
     setStore((prev) => {

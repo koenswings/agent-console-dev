@@ -35,5 +35,47 @@ export const otherDiskPoints = (w: RestoreWords): string[] => [
 
 export const otherDiskButton = (target: string): string => `Restore to ${target}`;
 
-export const otherDiskSummary = (w: RestoreWords): string =>
-  `${w.app} restored from ${w.date} and now running from ${w.target}. The old copy on ${w.current} was kept.`;
+/**
+ * #255: what the app does after a restore onto another disk, read from its live
+ * status in the store. The Engine starts the restored copy only when it was
+ * Running on a disk docked here (engine#413 / #422); when its old disk is gone it
+ * stays stopped. A start still waiting for the app to answer is Error with
+ * PORT_NOT_READY while the restore is Done (engine#428), so Starting/Error read
+ * as starting.
+ */
+export type RestoreOutcome = 'running' | 'starting' | 'stopped-disk-gone' | 'stopped';
+
+/** True when the disk the app was on is no longer docked anywhere (the breakdown case). */
+export const oldDiskGone = (store: Store | null, inst: Instance): boolean => {
+  const id = inst.storedOn ? String(inst.storedOn) : '';
+  const d = id ? (store?.diskDB?.[id] as Disk | undefined) : undefined;
+  return !d || !d.dockedTo;
+};
+
+/**
+ * Outcome once the restore is ok. Null until the store shows the instance on the
+ * target disk, so the line never reads the status from before the restore.
+ */
+export const restoreOutcome = (
+  inst: Pick<Instance, 'status' | 'storedOn'> | undefined,
+  targetDiskId: string,
+  diskWasGone: boolean,
+): RestoreOutcome | null => {
+  if (!inst || String(inst.storedOn) !== targetDiskId) return null;
+  if (inst.status === 'Running') return 'running';
+  if (inst.status === 'Starting' || inst.status === 'Error') return 'starting';
+  return diskWasGone ? 'stopped-disk-gone' : 'stopped';
+};
+
+export const otherDiskSummary = (w: RestoreWords, outcome: RestoreOutcome = 'running'): string => {
+  switch (outcome) {
+    case 'starting':
+      return `${w.app} restored from ${w.date} onto ${w.target} and is starting. The old copy on ${w.current} was kept.`;
+    case 'stopped-disk-gone':
+      return `${w.app} is restored from ${w.date} to ${w.target} but stays stopped because its old disk is gone. Press Start when you're ready.`;
+    case 'stopped':
+      return `${w.app} is restored from ${w.date} to ${w.target} and stays stopped, as it was before. Press Start when you're ready. The old copy on ${w.current} was kept.`;
+    default:
+      return `${w.app} restored from ${w.date} and now running from ${w.target}. The old copy on ${w.current} was kept.`;
+  }
+};
