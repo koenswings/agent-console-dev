@@ -5,11 +5,13 @@ two audiences in a single application:
 
 - **Users** (students, teachers) — browse available apps and open them with one click. No login
   required. This is the default experience.
-- **Operators** (authenticated users) — manage the system: start/stop instances, eject disks,
-  monitor engine health. Operators log in from within the Console, elevating their session.
+- **Operators** (authenticated users) — manage the system: start/stop/back up/update apps, manage
+  disks and backups, flash classroom computer cards, monitor Engine health. Operators log in from
+  within the Console (👤 Account), elevating their session.
 
-It is built with Solid.js and TypeScript and ships as a Chrome Extension (Manifest V3) with
-an optional production web-app mode served directly from an Engine.
+It is built with Solid.js and TypeScript and ships as a static web app that the Engine serves
+(production web mode, the normal case on every Pi and kit). The Chrome Extension (Manifest V3)
+build is legacy: it still builds, but gets no new logic.
 
 ---
 
@@ -19,9 +21,9 @@ The Console runs in three contexts detected at runtime:
 
 | Context | How it starts | Hostname source | Store URL source |
 |---|---|---|---|
-| **Chrome Extension** | Toolbar icon click | Settings screen → `chrome.storage.local` | Auto-fetch from `GET /api/store-url` or manual entry |
-| **Dev (Tailscale)** | `pnpm dev` → Vite dev server | Settings screen → `localStorage` | `VITE_STORE_URL` env var or manual entry |
-| **Production web** | Engine HTTP server serves `dist/` on configurable port | `window.location.hostname` | `GET /api/store-url` on same origin |
+| **Production web** (normal) | Engine HTTP server serves `dist/` on its `httpPort` (80 on kits; pool Pis and production `idea` use other ports) | `window.location.hostname` (+ `window.location.port`) | `GET /api/store-url` on same origin |
+| **Dev (Tailscale)** | `pnpm dev` → Vite dev server on port 5173 | Connection Management → `localStorage` | `VITE_STORE_URL` env var or `GET /api/store-url` |
+| **Chrome Extension** (legacy) | Toolbar icon click | Connection Management → `chrome.storage.local` | Auto-fetch from `GET /api/store-url` or manual entry |
 
 Context detection (`src/store/engine.ts`):
 
@@ -59,28 +61,62 @@ being served.
 
 ## Dual-Mode UI
 
+### Status bar (always shown)
+
+The top bar shows **IDEA Console v\<version\>**, a connection dot with the connected Engine's
+name (`connectionIndicator.ts`), a yellow **PREVIEW** badge in preview mode, the signed-in
+operator's username, and four icon buttons (each toggles its panel; ✕ closes it):
+
+| Button | Panel | Notes |
+|---|---|---|
+| 🔌 | Connection Management (`ConnectionManagement.tsx`) | Hidden in preview mode. Scan results, Engines from the store, manual `host[:port]` entry |
+| 👤 | Account (`AccountScreen.tsx`) | Signed out: **Operator Login** form (username, password with show/hide eye, **Log in**). Signed in: name, role **Operator**, **Change Password**, **Manage Operators** (`OperatorManagement.tsx`), **Log out** |
+| 📋 | Command History (`HistoryPanel.tsx`) | Recent commands from the Engine's CommandLog with ✓ / ✗ / ℹ and "Ns/m/h ago" |
+| ⚙ | Settings (`SettingsPanel.tsx`) | Tabs: **Engine Connection** (connected Engine, change Engine, preview mode), **Account** (operators only: change password), **Demo apps** (operators only, when an Engine supports demo apps), **About** |
+
+There is no separate "Log in" link: login lives in the 👤 Account panel.
+
 ### User Mode (default — unauthenticated)
 
-The Console opens in user mode when no operator session is active.
+The Console opens in user mode when no operator session is active (`AppBrowser.tsx`, heading
+**Apps**, `data-testid="console-overview"`).
 
-- App browser: grid of all instances across the network
-- Running instances: **Open** button navigates to `http://<engine-hostname>:<port>`
-- Stopped instances: card shown greyed out with "Not available"
-- Small **Log in** link in the status bar
+- One card per instance across the network (`AppCard.tsx`): the instance's display name, the App
+  title, a short description, **on \<engine\>**, a **DEMO** badge for demo apps, and an **Open**
+  button that opens `http://<host>:<port>` in a new tab (`appUrl.ts`).
+- Stopped instances: card greyed out with **Not available**.
+- An instance on an Engine that is offline (or still connecting) keeps its card, but **Open** is
+  disabled with "\<engine\> is offline, so this app can't be opened right now." (or "Connecting to
+  \<engine\>…") (`offlineAppHint` / `connectingAppHint`, console#175 / #191).
+- Cards listed in the served `dist/hidden-instances.json` are left out (idea#212, see AGENTS.md).
 
 ### Operator Mode (after login)
 
 When an operator authenticates, the Console switches to operator mode reactively — no reload.
 
-- Full management UI: NetworkTree (left) + InstanceList (right) with start/stop/eject actions
-- Operator management panel: add/remove operators, change own password
-- Username + **Log out** button in the status bar
+- **Desktop** (`data-testid="op-overview"`): `NetworkTree` on the left (**Network**, **All apps**,
+  each Engine with liveness dot and ↺ Reboot, its disks with role badges and eject, unformatted
+  candidates, USB sticks) and the right pane: `CopyMoveFeedback`, `OperationProgress`
+  (**Operations** cards), then `InstanceList` (All apps / an Engine), `DiskView`,
+  `EmptyDiskPanel` or `UnformattedDiskView` for the selection. An Engine selection also shows
+  **Client cards** (`ClientCardsSection`, card readers + Flash) and the Engine's temporary
+  pre-update backups (`TempBackupsSection`). Drag an app onto a disk to Copy or Move it
+  (`CopyMoveModal`).
+- **Mobile**: when an operator is signed in **and** `window.innerWidth <= 600`, `MobileLayout`
+  replaces the desktop layout, with the tabs **Apps** (`MobileAppList`), **Network**,
+  **Activity** and **History**; copy/move uses a bottom sheet (`MobileCopyMoveSheet`). Signed
+  out, every width gets the AppBrowser card grid.
+- Per app row (`InstanceRow`): status dot (click for details), rename (with the `renameInstance`
+  capability), **Start**, **Stop**, **Back up** (when a Backup Disk links the app), **Update**
+  (with the `updateApp` capability and an offered update), **Open ↗**, and in the expanded
+  details **Remove** (with the `removeInstance` capability).
 
 ### First-time Setup
 
-When `userDB` is empty (fresh install or preview mode before any operator is created), the Console
-shows a setup screen instead of the login form. Any user can create the initial admin account.
-Once the first operator exists, this screen is never shown again.
+When `userDB` is empty and nobody is signed in, the Console shows **Welcome to IDEA Console**
+(`FirstTimeSetup.tsx`) instead of the main view: any user can create the initial operator
+account (username, password, confirm; at least 8 characters). Once the first operator exists,
+this screen is never shown again.
 
 ---
 
@@ -88,51 +124,83 @@ Once the first operator exists, this screen is never shown again.
 
 ```
 src/
-├── App.tsx                      Root component — connection lifecycle, mode routing
+├── App.tsx                      Root component — connection lifecycle, status bar, mode routing
 ├── main.tsx                     Solid.js mount point
 ├── components/
-│   ├── Onboarding.tsx           Settings form — hostname, store URL, preview mode, display mode
-│   ├── EnginePickerPanel.tsx    Engine picker — shown when auto-discovery finds multiple engines
-│   ├── AppBrowser.tsx           User mode — grid of app cards
-│   ├── AppCard.tsx              Single app card (running / greyed-out stopped)
-│   ├── LoginForm.tsx            Operator login modal overlay
-│   ├── FirstTimeSetup.tsx       Initial admin account creation screen
+│   ├── ConnectionManagement.tsx 🔌 panel and onboarding: scanning, Engine picker, manual host[:port]
+│   ├── SettingsPanel.tsx        ⚙ panel: Engine Connection, Account, Demo apps, About
+│   ├── AccountScreen.tsx        👤 panel: Operator Login form, or account + Manage Operators + Log out
 │   ├── OperatorManagement.tsx   Add/remove operators, change own password
-│   ├── NetworkTree.tsx          Operator mode — engine/disk tree with selection state
+│   ├── FirstTimeSetup.tsx       Initial operator account creation screen
+│   ├── HistoryPanel.tsx         📋 Command History (desktop panel and mobile History tab)
+│   ├── AppBrowser.tsx           User mode — grid of app cards
+│   ├── AppCard.tsx              Single app card (running / Not available / offline / connecting, DEMO badge)
+│   ├── NetworkTree.tsx          Operator mode — Engine/disk tree with selection, eject, reboot
+│   ├── UsbStickRow.tsx          Read-only USB stick row under its Engine (idea#193)
 │   ├── InstanceList.tsx         Operator mode — instances filtered by selection
-│   ├── InstanceRow.tsx          Single instance row with start/stop/backup/eject actions
+│   ├── InstanceRow.tsx          One app row: start/stop/backup/update/open, details, op failure line
+│   ├── RenameInstanceName.tsx   Inline rename of the display name (renameInstance capability)
+│   ├── RemoveInstanceControl.tsx Remove app from its disk (removeInstance capability, idea#347)
+│   ├── UpdateAppControl.tsx     updateApp badge, confirm, steps and result (console#168)
+│   ├── StepProgressBar.tsx      Segmented step bar for operations with steps
+│   ├── LogLines.tsx             Engine log lines (ANSI stripped)
+│   ├── TechnicalDetails.tsx     Plain sentence + closed "Technical details" toggle (idea#76)
+│   ├── CommandFeedback.tsx      The Engine's answer to a command a panel sent
+│   ├── OperationProgress.tsx    Operations cards from operationDB (Pending / Running / Failed, Cancel, ✕)
+│   ├── CopyMoveModal.tsx        Copy or Move? dialog after dropping an app on a disk
+│   ├── CopyMoveFeedback.tsx     Copy/move result and cross-Engine Move steps (idea#498)
+│   ├── CrossMoveStatus.tsx      Steps of a cross-Engine Move (idea#79)
 │   ├── DiskView.tsx             Right pane for a disk: role badges, one section per role, Add Files
-│   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files / Backup Disk, Install App
+│   ├── EmptyDiskPanel.tsx       Empty disk: Make this a Files Disk / Make this a Backup Disk / Install App
 │   ├── RestorePanel.tsx         Backups section (restore from a Backup Disk; idea#400 controls, idea#404 status lines)
 │   ├── BackupModeControls.tsx   setBackupMode: mode + daily time, gated on scheduledBackups (idea#400)
-│   ├── DemoAppsSection.tsx      Settings → Demo apps: setupDemo / removeDemo and progress, operators only (idea#235)
 │   ├── BackupStatusLines.tsx    Schedule, last run, missed runs, clock, full/cleaning, interrupted
+│   ├── BackupSizingLine.tsx     How much App data this Pi holds (engine#441)
+│   ├── TempBackupsSection.tsx   Per Engine: own disk space and temporary pre-update backups (console#230)
+│   ├── DemoAppsSection.tsx      Settings → Demo apps: setupDemo / removeDemo and progress, operators only (idea#235)
+│   ├── ClientCardsSection.tsx   Per Engine: card readers, client image, Flash…, Initialise (idea#201)
+│   ├── FlashDialog.tsx          Flash client card: pick → confirm → steps → "Done – safe to remove"
 │   ├── FilesSection.tsx         Files section: share name, size, "available in", Not mounted, Eject
 │   ├── FilesRoleForm.tsx        Share name field + createFilesDisk result (Make this a Files Disk / Add Files)
 │   ├── RoleBadges.tsx           One badge per disk role, fixed order app, backup, files
 │   ├── EjectConfirm.tsx         Eject confirmation for combined disks: roles + everything affected
 │   ├── EraseDialog.tsx          summariseDisk → typed label → eraseDisk (and Files erase-first)
 │   ├── UnformattedDiskView.tsx  Right pane for Engine.unformattedDisks candidates
-│   └── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
-├── store/
+│   ├── MobileLayout.tsx         Signed-in phone layout: Apps / Network / Activity / History tabs
+│   ├── MobileAppList.tsx        Mobile Apps tab
+│   ├── MobileCopyMoveSheet.tsx  Mobile ⋯ bottom sheet for Copy / Move
+│   ├── StatusDot.tsx            Coloured status indicator (Running / Stopped / Error / …)
+│   ├── LoginForm.tsx            Legacy login modal; not rendered (login is in AccountScreen)
+│   └── CommandHistory.tsx       Legacy history list; not rendered (HistoryPanel replaced it)
+├── store/                       Connection, signals, commands, auth and per-feature wording/logic
 │   ├── engine.ts                Real Automerge WebSocket connection
+│   ├── commandLog.ts            CommandLog doc via /api/command-log-url (daily rotation, idea#183)
 │   ├── signals.ts               Pure helper functions for deriving data from a Store snapshot
 │   ├── commands.ts              Command builders and dispatcher, per-Engine capability helpers
-│   ├── setBackupMode.ts         setBackupMode validation, error wording, success copy (idea#400)
-│   ├── demoApps.ts              Demo apps gating, targets, step/error wording (idea#235, engine#369)
-│   ├── backupStatus.ts          Backup Disk status-line copy (idea#404 / Engine f114a28)
-│   ├── commandResult.ts         Wait for a command's result (new trace ID + args.diskId/targetId, 15 s)
-│   ├── traceInstance.ts         Which trace arg names the instance (instanceId / instanceName) + the sent-name second match (engine#399)
+│   ├── commandResult.ts         Wait for a command's result (new trace ID + args, store confirmation)
+│   ├── traceInstance.ts         Which trace arg names the instance + the sent-name second match (engine#399)
+│   ├── discovery.ts             Engine discovery — probes the page host and Engines used before
+│   ├── prodFailover.ts          Served from an Engine: reconnect, or open another live Engine's Console (idea#203)
+│   ├── appUrl.ts                App link construction, offline / connecting hints
+│   ├── auth.ts                  Client-side authentication and operator management
 │   ├── diskRoles.ts             Role badges, canEject, Add Files, "available in", low space, right pane
-│   ├── discovery.ts             Engine hostname discovery — probes candidate names on the LAN
-│   └── auth.ts                  Client-side authentication and operator management
+│   ├── setBackupMode.ts, backupStatus.ts, backupSizing.ts, backupDiskSizeGate.ts   Backup Disk logic and wording
+│   ├── moveApp.ts, moveChecking.ts, parkedMove.ts, dragCopyMove.ts                 Copy / Move
+│   ├── updateApp.ts, tempBackups.ts, removeInstance.ts, renameInstance.ts           App lifecycle
+│   ├── clientCards.ts, usbSticks.ts, erase.ts, demoApps.ts                          Cards, sticks, erase, demo apps
+│   └── …                        One module per concern (see the file header of each)
 ├── mock/
 │   ├── mockStore.ts             In-memory mock store + StoreConnection interface
-│   └── filesFixtures.ts         Files Disk fixtures: every Files state and combined disks
+│   ├── filesFixtures.ts         Files Disk fixtures: every Files state and combined disks
+│   └── eraseFixtures.ts         Erase fixtures
 ├── background/
-│   └── background.ts            Chrome Extension service worker — display mode control
+│   └── background.ts            Legacy Chrome Extension service worker — display mode control
+├── workers/
+│   └── bcrypt.worker.ts         bcrypt compare off the main thread
 ├── types/
-│   └── store.ts                 TypeScript mirror of Engine data types
+│   ├── store.ts                 TypeScript mirror of Engine data types
+│   ├── commandLog.ts            CommandLog trace types
+│   └── drag.ts                  Drag payload types
 └── styles/
     └── main.css                 All styles (no external CSS frameworks)
 ```
@@ -143,20 +211,31 @@ src/
 
 ```
 onMount:
-  read storage (hostname, previewMode)
-  if preview or hostname known → initConnection() immediately
-  else → runDiscovery() — probe LAN for engines
-    0 found  → show Onboarding form
-    1 found  → auto-connect (saveHostname + initConnection)
-    2+ found → show EnginePickerPanel
+  production web mode (served by an Engine)?
+    → hostname = window.location.hostname; initConnection() at once
+      (an Engine picked in Connection Management overrides the page host, issue #150)
+  else (dev / legacy extension):
+    read stored hostname + previewMode
+    if preview or hostname known → initConnection()
+    else → runDiscovery() — probe the page host and Engines used before
+      1 found          → auto-connect (saveHostnameAndStoreUrl + initConnection)
+      0 or 2+ found, or nothing after 5 s → show Connection Management (re-probes every 10 s)
   initConnection() → createMockConnection() (preview) or createEngineConnection() (real)
-  restoreSession(store) → set currentUser if stored session is still valid
+  restoreSession(store) → set currentUser if the stored session is still valid
 
-Render:
-  shouldShowOnboarding?   → <Onboarding /> (with discovery results passed in)
-  isFirstTimeSetup?       → <FirstTimeSetup />
-  isOperator()?           → <OperatorLayout /> (NetworkTree + InstanceList + OperatorManagement)
-  else                    → <AppBrowser />    (user mode — no login required)
+Not connected:
+  dev / extension: 15 s without first data, or 15 s disconnected → back to discovery
+  production web: prodFailover — reconnect when the page host answers again, else open another
+                  live Engine's Console (idea#203)
+
+Render (status bar, then exactly one of):
+  🔌 open or onboarding needed → <ConnectionManagement />
+  ⚙ open                       → <SettingsPanel />
+  👤 open                       → <AccountScreen />
+  📋 open                       → <HistoryPanel />
+  isFirstTimeSetup?            → <FirstTimeSetup />
+  isOperator()?                → desktop main layout, or <MobileLayout /> at ≤ 600 px
+  else                         → <AppBrowser />    (user mode — no login required)
 ```
 
 Mode switching is fully reactive — login/logout updates a Solid.js signal and the UI follows
@@ -172,14 +251,21 @@ Both the real and mock connections satisfy the same interface:
 
 ```ts
 interface StoreConnection {
-  store:      Accessor<Store | null>;              // reactive — updates on every Automerge change
-  connected:  Accessor<boolean>;
-  sendCommand: (engineId: string, command: string) => void;
-  changeDoc:   (fn: (doc: Store) => void) => void; // general-purpose Store mutation
+  store:           Accessor<Store | null>;              // reactive — updates on every Automerge change
+  connected:       Accessor<boolean>;
+  socketState?:    Accessor<SocketState>;               // store socket liveness (socketLiveness.ts); absent = 'live'
+  sendCommand:     (engineId: string, command: string) => void;
+  changeDoc:       (fn: (doc: Store) => void) => void;  // general-purpose Store mutation
+  commandLogStore: Accessor<CommandLogState>;           // the Engine's CommandLog doc (commandLog.ts)
+  dispose?:        () => void;                          // tear down sockets and timers
+  hostname?:       string;                              // host the Console connected to (connectedEngine.ts)
+  commandLogFor?:  (hostname: string) => Accessor<CommandLogState> | null; // another Engine's CommandLog
 }
 ```
 
-`changeDoc` is used by `auth.ts` to write operator accounts to `userDB`.
+`changeDoc` is used by `auth.ts` to write operator accounts to `userDB`. `commandLogStore` is
+loaded from `GET /api/command-log-url` and re-read every 60 s to follow the Engine's daily
+CommandLog rotation (idea#183); command results, History and operation logs read it.
 
 ### `src/store/signals.ts` — pure store helpers
 
@@ -210,8 +296,14 @@ Automerge document. The commands module:
 
 - Holds a module-level `sendCommand` function set by `App.tsx` after connection.
 - Exports typed command builders (`buildStartInstanceCommand`, etc.) as pure functions.
-- Exports dispatching functions (`startInstance`, `stopInstance`, `ejectDisk`, `backupApp`,
-  `createBackupDisk`).
+- Exports dispatching functions: `startInstance`, `stopInstance`, `ejectDisk`, `rebootEngine`,
+  `cancelOperation`, `backupApp`, `restoreApp`, `createBackupDisk`, `setBackupMode`,
+  `createFilesDisk`, `summariseDisk`, `eraseDisk`, `copyApp`, `moveApp`, `installApp`,
+  `renameInstance`, `removeInstance`, `deleteTempBackup`, `setupDemo`, `removeDemo`, and
+  `sendRawCommand` (used by updateApp). `clientCards.ts` sends `initialiseDisk`, `flashCard` and
+  `cancelFlash` through the same dispatcher (`getSendCommandFn`).
+- Exports `engineHasCapability` (fresh `Engine.capabilities` flags) so newer actions are
+  greyed out or hidden on older Engines.
 
 Command string format: `"<commandName> <arg1> <arg2>"` — mirrors Engine's `commandUtils.ts`.
 
@@ -329,11 +421,13 @@ mDNS, so the Console never guesses names: it probes only the host the page was s
 (the operator opened `http://<sticker-name>.local:<port>`) plus Engines used before (history),
 via `GET /api/store-url`. Once connected, every Engine is listed from the network database
 (`enginesFromStore(store)` → `engineDB[*].hostname` as `<name>.local`). Used by `App.tsx` on
-first load when no hostname is stored:
+first load when no hostname is stored (dev / legacy extension; served from an Engine the Console
+connects to its page host straight away):
 
-- 0 results → show Onboarding form
 - 1 result → auto-connect silently
-- 2+ results → show `EnginePickerPanel` for the operator to choose
+- 0 or 2+ results, or no single result after 5 s → show Connection Management, which lists the
+  results and the store's Engines and accepts a typed sticker name or `host[:port]`; while it is
+  open the scan repeats every 10 s (`DISCOVERY_REFRESH_INTERVAL_MS`) and adds new Engines
 
 ### `src/store/appUrl.ts` — App link construction
 
@@ -365,7 +459,8 @@ Key exports:
 | `currentUser` | Solid.js signal — `User \| null` |
 | `isOperator()` | Derived: `currentUser() !== null` |
 | `isFirstTimeSetup(store)` | `true` when `userDB` is empty |
-| `login(username, password, store)` | bcrypt compare → set signal + persist session |
+| `login(username, password, store)` | bcrypt compare (in `workers/bcrypt.worker.ts`) → set signal + persist session |
+| `setAuthenticatedUser(user)` | Set the signal + persist session (used after first-time setup) |
 | `logout()` | Clear signal + stored session |
 | `restoreSession(store)` | Validate stored session against `userDB` on mount |
 | `createOperator(username, password, store, changeDoc)` | Hash + write to `userDB` |
@@ -388,9 +483,11 @@ Session persistence: `operatorSession: { userId, username }` in `chrome.storage.
    `handle.change()` mutations.
 
 Store URL discovery order:
-1. `VITE_STORE_URL` env var (dev only)
-2. `storeUrl` key in `chrome.storage.local` / `localStorage`
-3. Auto-fetch from `GET /api/store-url` on the Engine
+- Production web mode, or an Engine picked in Connection Management: `GET /api/store-url` on
+  that Engine (retried when picked), then the saved `storeUrl` in `localStorage` as fallback.
+- Dev / legacy extension: `VITE_STORE_URL` env var, then the saved `storeUrl` key in
+  `chrome.storage.local` / `localStorage`, then `GET /api/store-url` on the Engine (always asked,
+  for `wsPort`).
 
 HTTP calls (`/api/store-url`, `/api/command-log-url`) go to `http://<hostname>[:<port>]`.
 The port comes from a manual `host:port` entry in Connection Management (persisted as
@@ -399,7 +496,10 @@ The port comes from a manual `host:port` entry in Connection Management (persist
 
 ---
 
-## Chrome Extension (Manifest V3)
+## Chrome Extension (Manifest V3, legacy)
+
+Legacy: it still builds (`background.js` entry) but gets no new logic, and is not how the
+Console is deployed.
 
 ### Permissions
 
@@ -422,7 +522,8 @@ Listens to `chrome.storage.onChanged` to apply mode changes in real time.
 ### Display mode storage
 
 Key: `displayMode` in `chrome.storage.local`. Values: `sidePanel` | `popup` | `window`.
-Default: `sidePanel`. Saved immediately on radio-button change (not deferred to form submit).
+Default: `sidePanel`. The current UI has no display-mode control any more; `storage.ts` and
+`background.ts` still read the key.
 
 ---
 
@@ -434,11 +535,12 @@ reads and displays data; strict type safety at the Engine is sufficient. **Keep 
 
 ```
 Store {
-  engineDB:   Record<EngineID,   Engine>
-  diskDB:     Record<DiskID,     Disk>
-  appDB:      Record<AppID,      App>
-  instanceDB: Record<InstanceID, Instance>
-  userDB:     Record<UserID,     User>
+  engineDB:    Record<EngineID,    Engine>
+  diskDB:      Record<DiskID,      Disk>
+  appDB:       Record<AppID,       App>
+  instanceDB:  Record<InstanceID,  Instance>
+  userDB:      Record<UserID,      User>
+  operationDB: Record<OperationID, Operation>   // long-running ops (backup, restore, copy, move, update, flash, …)
 }
 
 Disk {
@@ -1015,17 +1117,22 @@ same dialog then `createFilesDisk` once the empty disk appears.
 ## Preview / Mock Mode
 
 `createMockConnection()` (`src/mock/mockStore.ts`) returns a `StoreConnection` backed by an
-in-memory store: 2 engines, 3 disks (Kolibri, Nextcloud, Wikipedia), 5 instances in varied
-states (Running, Stopped, Error, Docked). `userDB` starts empty.
+in-memory store: 2 Engines, 6 disks (Kolibri, Nextcloud, Wikipedia, a Backup Disk, an empty
+disk, a Channel Builder disk), 6 apps and 6 instances in varied states (Running, Stopped, Docked,
+Error), an empty `operationDB` and a mock CommandLog with a few traces. `userDB` holds one
+pre-provisioned operator (below).
 
-Preview mode activates when `previewMode` is `true` in `chrome.storage.local` / `localStorage`.
+Preview mode activates when `previewMode` is `true` in `chrome.storage.local` / `localStorage`
+(Settings → Engine Connection → Preview mode). It is refused in production web mode: a Console
+served by an Engine always stays on that Engine's store.
 A leftover `demoMode` key is read once, copied to `previewMode`, and then removed.
 
 When active:
 - A yellow **PREVIEW** badge appears in the status bar.
 - `createEngineConnection` is never imported (no WebSocket attempt, no Automerge loaded).
-- The mock store includes a pre-provisioned operator (`admin` / `admin911!`) so the Console
-  opens directly to the app browser — no first-time setup required in preview mode.
+- The mock store includes a pre-provisioned operator (`admin`; its password is in the hash
+  comment in `mockStore.ts`) so there is no first-time setup in preview mode; the Console opens
+  on the app browser and the operator logs in through 👤.
 - `changeDoc` mutations (operator creation/removal) apply to the in-memory store and are
   persisted to `localStorage` under `ideaConsole_demoUserDB` — operators survive page reloads.
   If persisted operators exist, they replace the pre-provisioned admin.
@@ -1038,7 +1145,8 @@ When active:
 |---|---|
 | Vite | Dev server + production bundler |
 | pnpm | Package manager |
-| Vitest + Testing Library | Unit tests (131 tests) |
+| Vitest + Testing Library | Unit and component tests under `test/` (`pnpm test`) |
+| Playwright | Live/e2e specs and duration-walk intents under `e2e/` (`pnpm test:e2e`, `pnpm e2e:kit`) |
 | TypeScript strict | Type checking |
 | bcryptjs | Client-side bcrypt (pure JS — no native bindings) |
 
@@ -1057,8 +1165,12 @@ previous tree is kept for rollback. A failed build leaves the live `dist/` in pl
 Engine never serves an empty or half-written Console. The Chrome Extension entry
 (`src/background/background.ts` → `background.js`) is unchanged.
 
-`pnpm package`: builds, zips `dist/` to `/tmp/idea-console-pkg/extension.zip`, serves on
-port 8080 for download from the Pi.
+`pnpm package` (legacy extension only): builds, zips `dist/` to
+`/tmp/idea-console-pkg/extension.zip`, serves on port 8080 for download from the Pi.
+
+Fleet deploys are not done from this repo: Ops runs `koenswings/idea` → `tools/fleet/deploy.sh`
+(or `tools/fleet/build-console-pi.sh`), which runs `pnpm build` in
+`/home/pi/idea/agents/agent-console-dev` (see AGENTS.md).
 
 ---
 
@@ -1091,14 +1203,22 @@ User mutations replicate to all peers via Automerge sync.
 
 ### 3. Store URL discovery
 
-- **Endpoint:** `GET /api/store-url` on Engine HTTP server (port configurable, default 80)
-- **Response:** `{ "url": "automerge:<hash>", "wsPort"?: <number> }` (`wsPort` optional;
-  Console falls back to `4321` when missing or invalid)
+- **Endpoint:** `GET /api/store-url` on Engine HTTP server (`settings.httpPort`, default 80)
+- **Response:** `{ "url": "automerge:<hash>", "wsPort"?: <number>, "engineId"?: <string> }`
+  (`wsPort` optional; Console falls back to `4321` when missing or invalid. `engineId`, when
+  present, tells the Console which Engine serves the page)
 - Returns 503 if the store is not yet initialised.
 - CORS header included for dev-mode cross-origin requests.
 - Implemented in Engine `httpMonitor.ts` (PR #26 / PR #28 merged).
 
-### 4. Console static file serving
+### 4. CommandLog discovery
+
+- **Endpoint:** `GET /api/command-log-url` → `{ "url": "automerge:<hash>" }`, the Engine's
+  current CommandLog document (traces of every command: args, status, result, logs).
+- The Console opens it on the same repo and re-reads the endpoint every 60 s, because the Engine
+  starts a fresh CommandLog each local day and carries open traces into it (idea#183).
+
+### 5. Console static file serving
 
 The Engine's `httpMonitor.ts` serves Console `dist/` as a single-page app from `consolePath`
 in `config.yaml` (default `/home/pi/idea/agents/agent-console-dev/dist`). Falls back to
