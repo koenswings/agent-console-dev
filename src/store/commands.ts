@@ -73,7 +73,9 @@ export type EngineCapability =
    * engine#399 / agent-engine-dev#403: instance command traces carry the
    * resolved `instanceId` plus the display `instanceName` (see traceInstance.ts).
    */
-  | 'traceInstanceId';
+  | 'traceInstanceId'
+  /** agent-engine-dev#582: commands go through POST /api/command (signed queue entries). */
+  | 'signedCommands1';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
