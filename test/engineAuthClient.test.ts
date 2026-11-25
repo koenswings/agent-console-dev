@@ -150,6 +150,15 @@ describe('login proof', () => {
     expect(proof).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('matches the shared test vector (for the Engine side to check against)', async () => {
+    const proof = await computeLoginProof(
+      'idea-test',
+      { salt: '$2b$10$abcdefghijklmnopqrstuu', challengeId: 'ch1', nonce: 'n1' },
+      'eng-test',
+    );
+    expect(proof).toBe('cd1abc0204f9362e41dfe9733db7e9206385588aece117f80ab3e6ea2e94d538');
+  });
+
   it('is bound to the Engine id', () => {
     expect(loginProofFromHash(H, 'eng-a', 'c', 'n')).not.toBe(loginProofFromHash(H, 'eng-b', 'c', 'n'));
   });
