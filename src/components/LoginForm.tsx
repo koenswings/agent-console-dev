@@ -1,6 +1,7 @@
 import { createSignal, Show, type Component } from 'solid-js';
 import { bcryptCompare } from '../store/bcryptCompare';
 import type { Store, User } from '../types/store';
+import PasswordToggle from './PasswordToggle';
 
 interface LoginFormProps {
   store: Store | null;
@@ -86,15 +87,7 @@ const LoginForm: Component<LoginFormProps> = (props) => {
                 onInput={(e) => setPassword(e.currentTarget.value)}
                 required
               />
-              <button
-                type="button"
-                class="form-field__show-pw"
-                onClick={() => setShowPassword((v) => !v)}
-                title={showPassword() ? 'Hide password' : 'Show password'}
-                aria-label={showPassword() ? 'Hide password' : 'Show password'}
-              >
-                {showPassword() ? '🙈' : '👁'}
-              </button>
+              <PasswordToggle shown={showPassword()} onToggle={() => setShowPassword((v) => !v)} />
             </div>
           </div>
 

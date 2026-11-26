@@ -14,3 +14,5 @@ Only the SVG paths the Console uses are kept, in `tabler.tsx`, so they are bundl
 | `package` | Mobile tab bar: Apps |
 | `network` | Mobile tab bar: Network |
 | `bolt` | Mobile tab bar: Activity |
+| `eye` | Password field: Show password |
+| `eye-off` | Password field: Hide password |

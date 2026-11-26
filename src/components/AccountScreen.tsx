@@ -20,6 +20,7 @@ import {
 import OperatorManagement from './OperatorManagement';
 import type { Store, User } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
+import PasswordToggle from './PasswordToggle';
 
 interface AccountScreenProps {
   store: Store | null;
@@ -166,15 +167,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                     onInput={(e) => setPassword(e.currentTarget.value)}
                     required
                   />
-                  <button
-                    type="button"
-                    class="form-field__show-pw"
-                    onClick={() => setShowPassword((v) => !v)}
-                    title={showPassword() ? 'Hide password' : 'Show password'}
-                    aria-label={showPassword() ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword() ? '🙈' : '👁'}
-                  </button>
+                  <PasswordToggle shown={showPassword()} onToggle={() => setShowPassword((v) => !v)} />
                 </div>
               </div>
               {loginError() && <p class="form-error">{loginError()}</p>}
