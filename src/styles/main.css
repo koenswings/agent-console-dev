@@ -1,6 +1,6 @@
 /* ============================================================
    IDEA Console — main.css
-   Savanna sunset. Fonts bundled locally. No CDN. No CSS frameworks.
+   Savanna sunset with a Cameroon sash accent. Fonts bundled locally. No CDN. No CSS frameworks.
    ============================================================ */
 
 @font-face {
@@ -53,7 +53,6 @@
   /* Layout */
   --sidebar-width: 288px;
   --header-height: 56px;
-  --sunset-band: 4px;
 
   /* Ink */
   --ink-900: #1F160C;
@@ -79,7 +78,6 @@
   --sidebar-muted: #5A4A3A;
   --sidebar-sel-bg: #F8E4A8;
   --sidebar-sel-text: #1F160C;
-  --sidebar-sel-border: #E8B63A;
 
   /* Accent — ochre fills, deep ochre text and lines */
   --accent-800: #E8B63A;
@@ -127,7 +125,30 @@
   --disabled: #A39888;
   --pre-key: #E8B63A;
 
-  /* Decorative sunset band (cards and dialogs only) */
+  /* Cameroon sash: decorative accent band (top edge of the window,
+     sign-in / account cards, dialogs, selected sidebar marker).
+     Flag green, red and yellow stripes, each separated by a 1px
+     deep-brown keyline, with a deep-brown keyline along the inner
+     edge, so all three colours read on saffron, cream and white
+     (flag yellow alone is 1.1:1 on saffron). Text never sits on it. */
+  --flag-green: #007A5E;
+  --flag-red: #CE1126;
+  --flag-yellow: #FCD116;
+  --flag-keyline: #1F160C;
+  --flag-band: 5px;
+  --flag-card-band: 8px;
+  --flag-sash: repeating-linear-gradient(
+    135deg,
+    var(--flag-green) 0 4px,
+    var(--flag-keyline) 4px 5px,
+    var(--flag-red) 5px 9px,
+    var(--flag-keyline) 9px 10px,
+    var(--flag-yellow) 10px 14px,
+    var(--flag-keyline) 14px 15px
+  );
+  --flag-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='38' height='7' viewBox='0 0 38 7'%3E%3Crect width='38' height='7' fill='%231F160C'/%3E%3Crect width='12' height='7' fill='%23007A5E'/%3E%3Crect x='13' width='12' height='7' fill='%23CE1126'/%3E%3Crect x='26' width='12' height='7' fill='%23FCD116'/%3E%3Cpath d='M19 0.9 L19.76 2.86 L21.85 2.9 L20.2 4.18 L20.78 6.2 L19 5.02 L17.22 6.2 L17.8 4.18 L16.15 2.9 L18.24 2.86Z' fill='%23FCD116'/%3E%3C/svg%3E");
+
+  /* Sunset tones (Open button hover) */
   --sunset-1: #F0C44C;
   --sunset-2: #E8B63A;
   --sunset-3: #D9822B;
@@ -264,8 +285,11 @@ code {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 16px;
-  background: var(--chrome);
+  padding: var(--flag-band) 16px 0;
+  background:
+    linear-gradient(var(--flag-keyline), var(--flag-keyline)) 0 calc(var(--flag-band) - 1px) / 100% 1px no-repeat,
+    var(--flag-sash) 0 0 / 100% calc(var(--flag-band) - 1px) no-repeat,
+    var(--chrome);
   border-bottom: 1px solid var(--accent-800);
   font-size: var(--font-size-sm);
   color: var(--chrome-muted);
@@ -498,7 +522,16 @@ code {
 .tree-item.tree-item--selected,
 .tree-item.tree-item--selected:hover {
   background: var(--sidebar-sel-bg);
-  border-left-color: var(--sidebar-sel-border);
+  border-left: 3px solid var(--flag-keyline);
+  border-image: linear-gradient(
+    to bottom,
+    var(--flag-green) 0 32%,
+    var(--flag-keyline) 32% 34%,
+    var(--flag-red) 34% 66%,
+    var(--flag-keyline) 66% 68%,
+    var(--flag-yellow) 68% 100%
+  ) 1;
+  box-shadow: inset 1px 0 0 var(--flag-keyline);
   color: var(--sidebar-sel-text);
   font-weight: 600;
 }
@@ -1781,15 +1814,12 @@ code {
 .modal::before {
   content: '';
   display: block;
-  height: var(--sunset-band);
+  height: var(--flag-card-band);
   margin: 0 -28px 20px;
-  background: linear-gradient(
-    90deg,
-    var(--sunset-1) 0%,
-    var(--sunset-2) 35%,
-    var(--sunset-3) 70%,
-    var(--sunset-4) 100%
-  );
+  background:
+    linear-gradient(var(--flag-keyline), var(--flag-keyline)) left bottom / 100% 1px no-repeat,
+    var(--flag-star) center top / 38px calc(var(--flag-card-band) - 1px) no-repeat,
+    var(--flag-sash) 0 0 / 100% calc(var(--flag-card-band) - 1px) no-repeat;
 }
 
 .modal__header {
@@ -4413,15 +4443,12 @@ code {
 }
 
 .account-screen__band {
-  height: var(--sunset-band);
+  height: var(--flag-card-band);
   margin: 0 -28px 20px;
-  background: linear-gradient(
-    90deg,
-    var(--sunset-1) 0%,
-    var(--sunset-2) 35%,
-    var(--sunset-3) 70%,
-    var(--sunset-4) 100%
-  );
+  background:
+    linear-gradient(var(--flag-keyline), var(--flag-keyline)) left bottom / 100% 1px no-repeat,
+    var(--flag-star) center top / 38px calc(var(--flag-card-band) - 1px) no-repeat,
+    var(--flag-sash) 0 0 / 100% calc(var(--flag-card-band) - 1px) no-repeat;
 }
 
 .account-screen__heading {
