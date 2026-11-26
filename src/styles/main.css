@@ -1993,6 +1993,23 @@ code {
   cursor: not-allowed;
 }
 
+/* Secondary: white with deep-brown text and a deep-ochre outline
+   (text 17.8:1 on white, 16.6:1 on the cream hover; outline 6.8:1). */
+.btn--secondary {
+  background: var(--paper-card);
+  color: var(--ink-900);
+  border-color: var(--accent-700);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--paper-tint);
+}
+
+.btn--secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn--small {
   padding: 3px 10px;
   font-size: 0.78rem;
