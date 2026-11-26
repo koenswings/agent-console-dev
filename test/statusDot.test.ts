@@ -4,14 +4,14 @@ import type { Status } from '../src/types/store';
 
 describe('statusColour', () => {
   const cases: Array<[Status, string]> = [
-    ['Running', '#22c55e'],
-    ['Starting', '#3b82f6'],
-    ['Stopped', '#eab308'],
-    ['Docked', '#eab308'],
-    ['Error', '#ef4444'],
-    ['Undocked', '#9ca3af'],
-    ['Pauzed', '#f97316'],
-    ['Missing', '#9ca3af'],
+    ['Running', '#3A6B28'],
+    ['Starting', '#1A5F56'],
+    ['Stopped', '#8A6A3A'],
+    ['Docked', '#8A6A3A'],
+    ['Error', '#DC3C32'],
+    ['Undocked', '#5A4A3A'],
+    ['Pauzed', '#8A6A3A'],
+    ['Missing', '#5A4A3A'],
   ];
 
   it.each(cases)('returns %s → %s', (status, expected) => {
@@ -23,29 +23,29 @@ describe('statusStyle', () => {
   it('returns a className and colour for Running', () => {
     const result = statusStyle('Running');
     expect(result.className).toBe('status-dot--running');
-    expect(result.colour).toBe('#22c55e');
+    expect(result.colour).toBe('#3A6B28');
   });
 
   it('returns a className and colour for Error', () => {
     const result = statusStyle('Error');
     expect(result.className).toBe('status-dot--error');
-    expect(result.colour).toBe('#ef4444');
+    expect(result.colour).toBe('#DC3C32');
   });
 
-  it('returns yellow for Stopped', () => {
-    expect(statusStyle('Stopped').colour).toBe('#eab308');
+  it('returns dusty umber for Stopped', () => {
+    expect(statusStyle('Stopped').colour).toBe('#8A6A3A');
   });
 
-  it('returns yellow for Docked (same as Stopped)', () => {
-    expect(statusStyle('Docked').colour).toBe('#eab308');
+  it('returns dusty umber for Docked (same as Stopped)', () => {
+    expect(statusStyle('Docked').colour).toBe('#8A6A3A');
   });
 
-  it('returns orange for Pauzed', () => {
-    expect(statusStyle('Pauzed').colour).toBe('#f97316');
+  it('returns dusty umber for Pauzed', () => {
+    expect(statusStyle('Pauzed').colour).toBe('#8A6A3A');
   });
 
-  it('returns grey for Undocked', () => {
-    expect(statusStyle('Undocked').colour).toBe('#9ca3af');
+  it('returns ink for Undocked', () => {
+    expect(statusStyle('Undocked').colour).toBe('#5A4A3A');
   });
 
   it('covers all Status values', () => {
@@ -54,7 +54,7 @@ describe('statusStyle', () => {
     ];
     allStatuses.forEach((s) => {
       expect(() => statusStyle(s)).not.toThrow();
-      expect(statusStyle(s).colour).toMatch(/^#[0-9a-f]{6}$/);
+      expect(statusStyle(s).colour).toMatch(/^#[0-9A-Fa-f]{6}$/);
     });
   });
 });

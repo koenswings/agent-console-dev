@@ -121,7 +121,9 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
 
       {/* ── Operator Management sub-view ───────────────────────────────────── */}
       <Show when={subView() === 'operator-mgmt' && isOperator() && props.store && props.connection}>
-        <div class="account-screen__subview">
+        <div class="account-screen__card account-screen__card--wide">
+          <div class="account-screen__band" aria-hidden="true"></div>
+          <div class="account-screen__subview">
           <button
             class="account-screen__back-btn"
             onClick={() => setSubView('main')}
@@ -129,6 +131,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
             ← Back
           </button>
           <OperatorManagement store={props.store!} connection={props.connection!} />
+          </div>
         </div>
       </Show>
 
@@ -137,7 +140,8 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
 
         {/* NOT logged in: show inline login form */}
         <Show when={!isOperator()}>
-          <div class="account-screen__section">
+          <div class="account-screen__card">
+            <div class="account-screen__band" aria-hidden="true"></div>
             <h2 class="account-screen__heading">Operator Login</h2>
             <form class="modal__form" data-testid="login-form" onSubmit={handleLogin}>
               <label class="form-field">
@@ -186,6 +190,8 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
 
         {/* Logged in: show user info + controls */}
         <Show when={isOperator()}>
+          <div class="account-screen__card">
+            <div class="account-screen__band" aria-hidden="true"></div>
           <div class="account-screen__section">
             <h2 class="account-screen__heading">Account</h2>
             <p class="account-screen__username">{currentUser()?.username}</p>
@@ -251,6 +257,7 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
             <button class="btn btn--danger" data-testid="log-out" onClick={handleLogout}>
               Log out
             </button>
+          </div>
           </div>
         </Show>
 
