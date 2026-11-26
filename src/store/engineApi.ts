@@ -37,6 +37,12 @@ export type EngineApiErrorCode =
   | 'OPERATOR_UNKNOWN'
   /** POST of a username the Engine already has (pixel-answers 14). */
   | 'OPERATOR_EXISTS'
+  /** 503 from POST /api/command while the Engine has not loaded its store (pixel-answers F10). */
+  | 'STORE_NOT_READY'
+  /** 413 code from the Engine; the Console maps any 413 to BODY_TOO_LARGE. */
+  | 'PAYLOAD_TOO_LARGE'
+  /** 404 for an API route the Engine does not have. */
+  | 'NOT_FOUND'
   /** Console-side: HTTP 413, the body was over the Engine's limit (16 KB). */
   | 'BODY_TOO_LARGE'
   /** Console-side: the call failed before an Engine answered (network, timeout, not JSON). */
@@ -51,7 +57,7 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<EngineApiErrorCode>([
   'LOGIN_RATE_LIMITED', 'SETUP_REQUIRED', 'SETUP_CODE_INVALID', 'SETUP_DONE',
   'CONFIRM_REQUIRED', 'CONFIRM_INVALID', 'GRANT_REQUIRED', 'GRANT_INVALID', 'GRANT_EXPIRED',
   'COMMAND_REFUSED', 'ENGINE_UNKNOWN', 'ENGINE_UNREACHABLE', 'ENGINE_VERSION_MISMATCH',
-  'LAST_OPERATOR', 'OPERATOR_UNKNOWN', 'OPERATOR_EXISTS',
+  'LAST_OPERATOR', 'OPERATOR_UNKNOWN', 'OPERATOR_EXISTS', 'STORE_NOT_READY', 'PAYLOAD_TOO_LARGE', 'NOT_FOUND',
 ]);
 
 /** A failed call: HTTP status (null when no answer), contract code, message and extra fields. */

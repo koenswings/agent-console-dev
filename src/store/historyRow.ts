@@ -10,7 +10,7 @@ import type { CommandTrace } from '../types/commandLog';
 import { plainEngineText } from './plainError';
 import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
 import { logJson, logText } from './logText';
-import { traceInstanceRefs } from './commandResult';
+import { traceErrorCode, traceInstanceRefs } from './commandResult';
 import {
   appTitleOf, COMMAND as UPDATE_COMMAND, friendlyUpdateError, isTempBackupRefusal, restartFailedFromTraceResult, restartFailedText,
   UNKNOWN_APP_NAME,
@@ -88,8 +88,31 @@ export const historyUpdate456Text = (trace: CommandTrace, appTitle?: string | nu
 export const historyUpdatePlainText = (trace: CommandTrace, appTitle?: string | null): string | null =>
   historyRestartFailedText(trace, appTitle) ?? historyTempBackupText(trace, appTitle) ?? historyUpdate456Text(trace, appTitle);
 
+/**
+ * agent-engine-dev#582 (pixel-answers F11): a follow-up the other Engine refused because it no
+ * longer knows the permission (6 h passed, or it restarted). The trace result names that Engine
+ * in `issuerEngineId` (else `dispatchedTo`). Null for any other trace.
+ */
+export const historyGrantText = (trace: CommandTrace, engineName: (id: string) => string = (id) => id): string | null => {
+  if (trace.status !== 'error') return null;
+  const code = traceErrorCode(trace);
+  if (code !== 'GRANT_EXPIRED' && code !== 'GRANT_INVALID') return null;
+  const r = parseTraceResult(trace);
+  const issuer = typeof r?.issuerEngineId === 'string' && r.issuerEngineId
+    ? r.issuerEngineId
+    : typeof r?.dispatchedTo === 'string' && r.dispatchedTo ? r.dispatchedTo : null;
+  const who = issuer ? engineName(issuer) : 'the other Engine';
+  return `Permission from ${who} expired, so this step did not run there. Start the copy, move or update again.`;
+};
+
 /** Icon, tone and collapsed-row message for a finished command trace. */
-export const historyRowView = (trace: CommandTrace, appTitle?: string | null): HistoryRowView => {
+export const historyRowView = (
+  trace: CommandTrace,
+  appTitle?: string | null,
+  engineName?: (id: string) => string,
+): HistoryRowView => {
+  const grant = historyGrantText(trace, engineName);
+  if (grant) return { tone: 'error', icon: '✗', message: grant };
   const updatePlain = historyUpdatePlainText(trace, appTitle);
   if (updatePlain) return { tone: 'error', icon: '✗', message: updatePlain };
   if (trace.command === 'setBackupMode') {

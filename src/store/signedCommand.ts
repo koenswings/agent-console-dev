@@ -117,6 +117,14 @@ export const grantErrorText = (err: EngineApiError, engines: SendDeps['engines']
   }
 };
 
+/** 503 STORE_NOT_READY (pixel-answers F10): like an unreachable Engine, try again. */
+export const storeNotReadyText = (engineName: string): string =>
+  `${engineName} is still starting and is not ready for commands yet. Try again in a moment.`;
+
+/** 422 COMMAND_REFUSED reason local-only (createInstance, pixel-answers F8). */
+export const localOnlyText = (engineName: string): string =>
+  `This can only be run on ${engineName} itself, not from the Console. To add an app, install it from the app list.`;
+
 /** Console text for an error code (§5 error table). */
 export const commandErrorText = (err: EngineApiError, engines: SendDeps['engines'], engineId: string): string => {
   switch (err.code) {
@@ -131,6 +139,10 @@ export const commandErrorText = (err: EngineApiError, engines: SendDeps['engines
       return 'That command is too long for the Engine.';
     case 'ENGINE_UNREACHABLE':
       return `${engineName(engines, engineId)} cannot be reached right now.`;
+    case 'STORE_NOT_READY':
+      return storeNotReadyText(engineName(engines, engineId));
+    case 'COMMAND_REFUSED':
+      return err.body.reason === 'local-only' ? localOnlyText(engineName(engines, engineId)) : err.message;
     case 'NETWORK_ERROR':
       return `${engineName(engines, engineId)} cannot be reached right now.`;
     default:
