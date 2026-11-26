@@ -95,7 +95,7 @@ const HistoryPanel: Component<HistoryPanelProps> = (props) => {
                     <Show when={trace()}>
                       {(t) => {
                         const appTitle = () => traceAppTitle(props.store?.() ?? null, t());
-                        const engineName = (eid: string): string => String(props.store?.()?.engineDB?.[eid]?.hostname ?? eid);
+                        const engineName = (eid: string): string | null => { const h = props.store?.()?.engineDB?.[eid]?.hostname; return h ? String(h) : null; };
                         const view = () => historyRowView(t(), appTitle(), engineName);
                         return (
                           <div class="history-entry" data-testid={`history-entry-${id}`}>

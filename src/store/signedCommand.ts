@@ -183,9 +183,12 @@ export async function sendSignedCommand(deps: SendDeps, engineId: string, comman
       }
 
       if (e.code === 'ENGINE_VERSION_MISMATCH') {
+        // The 409 names the outdated Engine (for example the follow-up target), which is not
+        // always the Engine the command went to. Fall back to that Engine only when absent.
         const version = typeof e.body.version === 'string' ? e.body.version : 'unknown';
-        noteEngineVersionMismatch(id, version);
-        return { kind: 'blocked', engineId: id, message: olderEngineMessage(engineName(deps.engines, id), version) };
+        const outdated = typeof e.body.engineId === 'string' && e.body.engineId ? e.body.engineId : id;
+        noteEngineVersionMismatch(outdated, version);
+        return { kind: 'blocked', engineId: outdated, message: olderEngineMessage(engineName(deps.engines, outdated), version) };
       }
 
       if (e.code === 'CONFIRM_REQUIRED' && !confirmed && deps.confirm) {
@@ -221,8 +224,9 @@ export async function sendSignedCommand(deps: SendDeps, engineId: string, comman
             if (isTokenGone(ge)) return { kind: 'signInRequired', engineIds: [f] };
             if (ge.code === 'ENGINE_VERSION_MISMATCH') {
               const v = typeof ge.body.version === 'string' ? ge.body.version : 'unknown';
-              noteEngineVersionMismatch(f, v);
-              return { kind: 'blocked', engineId: f, message: olderEngineMessage(engineName(deps.engines, f), v) };
+              const old = typeof ge.body.engineId === 'string' && ge.body.engineId ? ge.body.engineId : f;
+              noteEngineVersionMismatch(old, v);
+              return { kind: 'blocked', engineId: old, message: olderEngineMessage(engineName(deps.engines, old), v) };
             }
             return { kind: 'error', code: ge.code, message: grantErrorText(ge, deps.engines, f), status: ge.status };
           }

@@ -6,9 +6,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EngineApiTransport } from '../src/store/engineApi';
 import { clearEngineSessions, putEngineSession } from '../src/store/engineTokens';
-import { localOnlyText, resetEngineVersionMismatches, sendSignedCommand, storeNotReadyText } from '../src/store/signedCommand';
+import { commandGateFor, localOnlyText, olderEngineMessage, resetEngineVersionMismatches, sendSignedCommand, storeNotReadyText } from '../src/store/signedCommand';
 import { historyGrantText, historyRowView } from '../src/store/historyRow';
-import { GENERIC_ERROR_TEXT, plainEngineText } from '../src/store/plainError';
+import { GENERIC_ERROR_TEXT, plainEngineText, withEngineNames } from '../src/store/plainError';
 import type { CommandTrace } from '../src/types/commandLog';
 import type { Engine } from '../src/types/store';
 
@@ -79,7 +79,7 @@ describe('GRANT_EXPIRED on a follow-up trace (F11)', () => {
 
   it('falls back to dispatchedTo, then to a neutral name', () => {
     expect(historyGrantText(trace({ result: JSON.stringify({ dispatchedTo: 'eng-b' }) }), name)).toContain('Permission from box-engine-b');
-    expect(historyGrantText(trace({ result: null }), name)).toContain('Permission from the other Engine');
+    expect(historyGrantText(trace({ result: null }), name)).toContain('Permission from another Engine');
   });
 
   it('only for grant codes on error traces', () => {
@@ -106,5 +106,55 @@ describe('plainEngineText hides Node fs errors (#582 pool proof)', () => {
   });
   it('keeps plain sentences that mention permission', () => {
     expect(plainEngineText('Permission from idea03 expired. Start again.')).toBe('Permission from idea03 expired. Start again.');
+  });
+});
+
+describe('409 ENGINE_VERSION_MISMATCH names the Engine in the body (console#265)', () => {
+  const POOL: Record<string, Engine> = {
+    ENGINE_idea04: engine('ENGINE_idea04', 'idea04'),
+    ENGINE_idea01: engine('ENGINE_idea01', 'idea01'),
+  };
+  beforeEach(() => { putEngineSession('ENGINE_idea04', 't4', { id: 'op1', username: 'k' }, 900_000); });
+
+  it('idea04 → idea01: blames and marks idea01, not idea04', async () => {
+    const t = answer(409, { error: 'ENGINE_VERSION_MISMATCH', message: 'Engine ENGINE_idea01 runs an older Engine version (1.0).', engineId: 'ENGINE_idea01', version: '1.0' });
+    const r = await sendSignedCommand({ transport: t, engines: POOL }, 'ENGINE_idea04', 'copyApp i1 d-a d-b');
+    expect(r).toEqual({ kind: 'blocked', engineId: 'ENGINE_idea01', message: olderEngineMessage('idea01', '1.0') });
+    expect(commandGateFor(POOL.ENGINE_idea04)).toEqual({ ok: true });
+    expect(commandGateFor(POOL.ENGINE_idea01)).toEqual({ ok: false, message: olderEngineMessage('idea01', '1.0') });
+  });
+
+  it('without engineId in the body, falls back to the Engine the command went to', async () => {
+    const t = answer(409, { error: 'ENGINE_VERSION_MISMATCH', message: 'Older Engine.', version: '0.9' });
+    const r = await sendSignedCommand({ transport: t, engines: POOL }, 'ENGINE_idea04', 'disks');
+    expect(r).toEqual({ kind: 'blocked', engineId: 'ENGINE_idea04', message: olderEngineMessage('idea04', '0.9') });
+    expect(commandGateFor(POOL.ENGINE_idea04).ok).toBe(false);
+  });
+});
+
+describe('History shows Engine hostnames, never raw ids (console#265)', () => {
+  const name = (id: string) => ({ ENGINE_5vyahbut147hw5dp4e1: 'idea04', ENGINE_AA000000000000055000: 'idea01' } as Record<string, string>)[id] ?? null;
+  const failed = (errorMessage: string): CommandTrace => ({
+    traceId: 't9', command: 'copyApp', args: '[]', startedAt: 1, completedAt: 2, status: 'error', errorMessage, result: null, logs: [],
+  } as unknown as CommandTrace);
+
+  it('replaces a known id with its hostname', () => {
+    expect(historyRowView(failed('Engine ENGINE_AA000000000000055000 runs an older Engine version (1.0).'), null, name).message)
+      .toBe('Engine idea01 runs an older Engine version (1.0).');
+  });
+  it('uses a neutral phrase for an unknown id, never the raw id', () => {
+    const msg = historyRowView(failed('Engine ENGINE_zz9unknown01 is not reachable.'), null, name).message ?? '';
+    expect(msg).toBe('Another Engine is not reachable.');
+    expect(msg).not.toMatch(/ENGINE_/);
+    expect(historyRowView(failed('Could not reach ENGINE_5vyahbut147hw5dp4e1.'), null).message).toBe('Could not reach another Engine.');
+  });
+  it('names the grant issuer by hostname, else another Engine', () => {
+    const g = (issuer: string): CommandTrace => ({ ...failed('expired'), errorCode: 'GRANT_EXPIRED', result: JSON.stringify({ issuerEngineId: issuer }) } as unknown as CommandTrace);
+    expect(historyGrantText(g('ENGINE_5vyahbut147hw5dp4e1'), name)).toContain('Permission from idea04 expired');
+    expect(historyGrantText(g('ENGINE_qq1unknown'), name)).toContain('Permission from another Engine expired');
+    expect(historyGrantText(g('ENGINE_qq1unknown'))).not.toMatch(/ENGINE_/);
+  });
+  it('withEngineNames handles several ids', () => {
+    expect(withEngineNames('Engines ENGINE_5vyahbut147hw5dp4e1, ENGINE_AA000000000000055000', name)).toBe('Engines idea04, idea01');
   });
 });
