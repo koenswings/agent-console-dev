@@ -196,6 +196,9 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                   title={liveness() === 'online' ? 'Online' : liveness() === 'offline' ? 'Offline' : 'Connecting'}
                   aria-label={liveness() === 'online' ? 'Online' : liveness() === 'offline' ? 'Offline' : 'Connecting'}
                 />
+                <span class="tree-item__liveness">
+                  {liveness() === 'online' ? 'Online' : liveness() === 'offline' ? 'Offline' : 'Connecting'}
+                </span>
               </div>
 
               <CommandFeedback

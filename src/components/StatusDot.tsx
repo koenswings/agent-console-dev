@@ -14,26 +14,26 @@ export interface StatusStyle {
 export const statusStyle = (status: Status): StatusStyle => {
   switch (status) {
     case 'Running':
-      return { className: 'status-dot--running', colour: '#22c55e' };
+      return { className: 'status-dot--running', colour: '#3A6B28' };
     case 'Starting':
-      return { className: 'status-dot--starting', colour: '#3b82f6' };
+      return { className: 'status-dot--starting', colour: '#1A5F56' };
     case 'Stopped':
-      return { className: 'status-dot--stopped', colour: '#eab308' };
+      return { className: 'status-dot--stopped', colour: '#8A6A3A' };
     case 'Docked':
-      return { className: 'status-dot--docked', colour: '#eab308' };
+      return { className: 'status-dot--docked', colour: '#8A6A3A' };
     case 'Error':
-      return { className: 'status-dot--error', colour: '#ef4444' };
+      return { className: 'status-dot--error', colour: '#DC3C32' };
     case 'Undocked':
-      return { className: 'status-dot--undocked', colour: '#9ca3af' };
+      return { className: 'status-dot--undocked', colour: '#5A4A3A' };
     case 'Pauzed':
-      return { className: 'status-dot--pauzed', colour: '#f97316' };
+      return { className: 'status-dot--pauzed', colour: '#8A6A3A' };
     case 'Missing':
-      return { className: 'status-dot--missing', colour: '#9ca3af' };
+      return { className: 'status-dot--missing', colour: '#5A4A3A' };
     default: {
       // Exhaustive check — TypeScript will error if a new Status is added
       // without updating this function.
       const _exhaustive: never = status;
-      return { className: 'status-dot--undocked', colour: '#9ca3af' };
+      return { className: 'status-dot--undocked', colour: '#5A4A3A' };
     }
   }
 };

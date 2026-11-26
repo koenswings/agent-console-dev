@@ -203,6 +203,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
           </section>
         </Show>
 
+        <div class="disk-view__actions">
         <Show when={offerAddFiles() || addFilesOpen()}>
           <section class="disk-section disk-section--add-files" aria-label="Add Files">
             <Show
@@ -251,7 +252,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
         <Show when={offerErase()}>
           <div class="disk-view__erase">
             <button
-              class="btn-text btn-text--danger"
+              class="btn btn--danger"
               disabled={!!eraseBlocked()}
               title={eraseBlocked()}
               data-testid="erase-this-disk"
@@ -261,6 +262,7 @@ const DiskView: Component<DiskViewProps> = (props) => {
             </button>
           </div>
         </Show>
+        </div>
       </Show>
 
       <Show when={dialog()}>

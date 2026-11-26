@@ -6,6 +6,7 @@ import MobileAppList from './MobileAppList';
 import type { Store } from '../types/store';
 import type { DragAppData } from '../types/drag';
 import type { Selection } from './NetworkTree';
+import Icon from '../icons/tabler';
 
 // Redefined locally — mirrors PendingMove in App.tsx
 interface PendingMove {
@@ -83,21 +84,21 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
           class={`mobile-tab-bar__item${activeTab() === 'apps' ? ' mobile-tab-bar__item--active' : ''}`}
           onClick={() => setActiveTab('apps')}
         >
-          <span class="mobile-tab-bar__icon">📦</span>
+          <Icon name="package" class="mobile-tab-bar__icon" />
           <span>Apps</span>
         </button>
         <button
           class={`mobile-tab-bar__item${activeTab() === 'network' ? ' mobile-tab-bar__item--active' : ''}`}
           onClick={() => setActiveTab('network')}
         >
-          <span class="mobile-tab-bar__icon">🌐</span>
+          <Icon name="network" class="mobile-tab-bar__icon" />
           <span>Network</span>
         </button>
         <button
           class={`mobile-tab-bar__item${activeTab() === 'activity' ? ' mobile-tab-bar__item--active' : ''}`}
           onClick={() => setActiveTab('activity')}
         >
-          <span class="mobile-tab-bar__icon">⚡</span>
+          <Icon name="bolt" class="mobile-tab-bar__icon" />
           <Show when={activeOpCount() > 0}>
             <span class="mobile-tab-bar__badge">{activeOpCount()}</span>
           </Show>
@@ -107,7 +108,7 @@ const MobileLayout: Component<MobileLayoutProps> = (props) => {
           class={`mobile-tab-bar__item${activeTab() === 'history' ? ' mobile-tab-bar__item--active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
-          <span class="mobile-tab-bar__icon">📋</span>
+          <Icon name="history" class="mobile-tab-bar__icon" />
           <span>History</span>
         </button>
       </div>
