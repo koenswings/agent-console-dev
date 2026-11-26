@@ -295,6 +295,8 @@ code {
   color: var(--chrome-muted);
   flex-shrink: 0;
   min-height: var(--header-height);
+  position: relative;
+  z-index: 50;
 }
 
 @media (max-width: 600px) {
@@ -397,30 +399,6 @@ code {
   flex-shrink: 0;
 }
 
-.status-bar__history-btn,
-.status-bar__settings-btn,
-.status-bar__connection-btn,
-.status-bar__account-btn,
-.status-bar__login-btn {
-  background: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--chrome-muted);
-  padding: 2px 6px;
-  min-width: 32px;
-  min-height: 32px;
-  border-radius: var(--radius);
-  line-height: 1;
-  transition: color 0.1s, background 0.1s, border-color 0.1s;
-}
-
-.status-bar__history-btn:hover {
-  color: var(--chrome-text);
-  background: var(--topbar-conn-bg);
-  border-color: var(--topbar-conn-border);
-}
-
 .status-bar__actions {
   margin-left: auto;
   display: flex;
@@ -428,15 +406,85 @@ code {
   gap: 4px;
 }
 
-/* settings / connection / account share history-btn icon styles */
+/* Top-bar icon buttons (Connections, Account, History, Settings):
+   Tabler line icon + short label; full name in a tooltip on hover and
+   keyboard focus. Labels hide on narrow screens; the aria-label and
+   tooltip stay. */
+.status-bar__icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--chrome-muted);
+  padding: 4px 10px 4px 8px;
+  min-width: 36px;
+  min-height: 34px;
+  border-radius: var(--radius);
+  line-height: 1;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
 
-.status-bar__settings-btn:hover,
-.status-bar__connection-btn:hover,
-.status-bar__account-btn:hover,
-.status-bar__login-btn:hover {
+.status-bar__icon-btn:hover,
+.status-bar__icon-btn--open {
   color: var(--chrome-text);
   background: var(--topbar-conn-bg);
   border-color: var(--topbar-conn-border);
+}
+
+.status-bar__icon-btn .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.status-bar__icon-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 300;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  background: var(--ink-900);
+  color: var(--paper);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s;
+}
+
+.status-bar__icon-btn:hover::after,
+.status-bar__icon-btn:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 900px) {
+  .status-bar__btn-label {
+    display: none;
+  }
+
+  .status-bar__icon-btn {
+    padding: 4px 8px;
+  }
+}
+
+/* Shared line-icon defaults (Tabler outline icons, src/icons). */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  stroke-width: 1.75;
+  vertical-align: middle;
 }
 
 /* --------------------------------------------------------
@@ -1949,12 +1997,26 @@ code {
 }
 
 .first-time-setup__card {
-  background: var(--colour-surface);
-  border: 1px solid var(--colour-border);
+  background: var(--paper-card);
+  border: 1px solid var(--rule);
   border-radius: var(--radius-card);
-  padding: 28px 24px;
-  width: 340px;
-  max-width: 90vw;
+  padding: 0 28px 28px;
+  width: 400px;
+  max-width: 100%;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--ink-900) 12%, transparent);
+  overflow: hidden;
+}
+
+/* Same Cameroon sash as the sign-in card. */
+.first-time-setup__card::before {
+  content: '';
+  display: block;
+  height: var(--flag-card-band);
+  margin: 0 -28px 20px;
+  background:
+    linear-gradient(var(--flag-keyline), var(--flag-keyline)) left bottom / 100% 1px no-repeat,
+    var(--flag-star) center top / 38px calc(var(--flag-card-band) - 1px) no-repeat,
+    var(--flag-sash) 0 0 / 100% calc(var(--flag-card-band) - 1px) no-repeat;
 }
 
 .first-time-setup__title {
@@ -3399,8 +3461,8 @@ code {
 }
 
 .mobile-tab-bar__icon {
-  font-size: 20px;
-  line-height: 1;
+  width: 22px;
+  height: 22px;
 }
 
 .mobile-tab-bar__badge {

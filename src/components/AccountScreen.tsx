@@ -1,12 +1,12 @@
 /**
- * AccountScreen — full content-area panel opened by the 👤 status bar button.
+ * AccountScreen — full content-area panel opened by the Account button in the status bar.
  *
  * When NOT logged in: shows an inline login form.
  * When logged in: shows username, role, change password form,
  *   "Manage Operators" button (drills into OperatorManagement inline),
  *   and a "Log out" danger button at the bottom.
  *
- * No close button inside the panel — the 👤 button in the status bar toggles it.
+ * No close button inside the panel — the Account button in the status bar toggles it.
  */
 import { createSignal, Show, type Component } from 'solid-js';
 import { bcryptCompare } from '../store/bcryptCompare';

@@ -3,6 +3,7 @@ import pkg from '../package.json';
 import ConnectionManagement from './components/ConnectionManagement';
 import SettingsPanel from './components/SettingsPanel';
 import AccountScreen from './components/AccountScreen';
+import TopBarButton from './components/TopBarButton';
 import NetworkTree from './components/NetworkTree';
 import ClientCardsSection from './components/ClientCardsSection';
 import TempBackupsSection from './components/TempBackupsSection';
@@ -432,69 +433,76 @@ const App: Component = () => {
         </Show>
 
         <div class="status-bar__actions">
-          {/* 🔌 Connection Management — hidden in preview mode */}
+          {/* Connection Management: hidden in preview mode */}
           <Show when={!preview()}>
-            <button
+            <TopBarButton
               class="status-bar__connection-btn"
-              data-testid="connection-mgmt-btn"
-              title="Connection Management"
+              testId="connection-mgmt-btn"
+              icon="plug-connected"
+              label="Connections"
+              name="Connection Management"
+              open={showConnectionMgmt()}
               onClick={() => {
                 setShowConnectionMgmt((v) => !v);
                 setShowAccount(false);
                 setShowSettings(false);
                 setShowHistory(false);
               }}
-            >
-              {showConnectionMgmt() ? '✕' : '🔌'}
-            </button>
+            />
           </Show>
 
-          {/* 👤 Account — always visible */}
-          <button
-            class="status-bar__account-btn" data-testid="account-btn"
-            title="Account"
+          {/* Account: always visible */}
+          <TopBarButton
+            class="status-bar__account-btn"
+            testId="account-btn"
+            icon="user"
+            label="Account"
+            name="Account"
+            open={showAccount()}
             onClick={() => {
               setShowAccount((v) => !v);
               setShowConnectionMgmt(false);
               setShowSettings(false);
               setShowHistory(false);
             }}
-          >
-            {showAccount() ? '✕' : '👤'}
-          </button>
+          />
 
-          <button
+          <TopBarButton
             class="status-bar__history-btn"
-            title="Command History"
+            testId="history-btn"
+            icon="history"
+            label="History"
+            name="Command History"
+            open={showHistory()}
             onClick={() => {
               setShowHistory((v) => !v);
               setShowConnectionMgmt(false);
               setShowAccount(false);
               setShowSettings(false);
             }}
-          >
-            {showHistory() ? '✕' : '📋'}
-          </button>
+          />
 
-          <button
-            class="status-bar__settings-btn" data-testid="settings-btn"
-            title="Settings"
+          <TopBarButton
+            class="status-bar__settings-btn"
+            testId="settings-btn"
+            icon="settings"
+            label="Settings"
+            name="Settings"
+            open={showSettings()}
             onClick={() => {
               setShowSettings((v) => !v);
               setShowConnectionMgmt(false);
               setShowAccount(false);
               setShowHistory(false);
             }}
-          >
-            {showSettings() ? '✕' : '⚙'}
-          </button>
+          />
         </div>
       </div>
 
       {/* ── Page content — exactly one Match renders at a time ────────────── */}
       <Switch>
 
-        {/* Connection Management — toggled by 🔌 or auto-shown when discovery failed */}
+        {/* Connection Management — toggled by the Connections button or auto-shown when discovery failed */}
         <Match when={showConnectionMgmt() || showOnboarding()}>
           <ConnectionManagement
             onComplete={handleOnboardingComplete}
@@ -557,7 +565,7 @@ const App: Component = () => {
           />
         </Match>
 
-        {/* Account screen — always accessible via 👤 button */}
+        {/* Account screen — always accessible via the Account button */}
         <Match when={showAccount()}>
           <AccountScreen store={store()} connection={connection()} />
         </Match>
