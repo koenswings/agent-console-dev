@@ -8,20 +8,43 @@
  * The Engine processes these strings from engine.commands[] via its command loop.
  */
 import type { Disk, Engine } from '../types/store';
+import type { SendResult } from './signedCommand';
 
 // ---------------------------------------------------------------------------
 // Module-level sendCommand fn — set by App.tsx after connection is initialised
 // ---------------------------------------------------------------------------
-let _sendCommand: (engineId: string, command: string) => void = (e, c) => {
+
+/**
+ * Sends one command. App sets commandRouter.dispatchCommand (agent-engine-dev#582),
+ * which resolves with the outcome; a plain function returning nothing (tests,
+ * older wiring) counts as sent.
+ */
+export type SendCommandFn = (engineId: string, command: string) => Promise<SendResult> | void;
+
+let _rawSend: SendCommandFn = (e, c) => {
   console.warn(`[commands] No connection — command dropped: '${c}' → engine '${e}'`);
+  return Promise.resolve<SendResult>({ kind: 'error', code: 'NETWORK_ERROR', message: 'Not connected to an Engine.', status: null });
 };
 
-export function setSendCommandFn(fn: (engineId: string, command: string) => void): void {
-  _sendCommand = fn;
+/** Every command goes through here; resolves with the outcome, never rejects. */
+const _sendCommand = (engineId: string, command: string): Promise<SendResult> => {
+  try {
+    const r = _rawSend(engineId, command);
+    return Promise.resolve(r).then(
+      (v): SendResult => v ?? { kind: 'accepted', engineId: String(engineId), seq: null },
+      (err): SendResult => ({ kind: 'error', code: 'UNKNOWN', message: err instanceof Error ? err.message : String(err), status: null }),
+    );
+  } catch (err) {
+    return Promise.resolve({ kind: 'error', code: 'UNKNOWN', message: err instanceof Error ? err.message : String(err), status: null });
+  }
+};
+
+export function setSendCommandFn(fn: SendCommandFn): void {
+  _rawSend = fn;
 }
 
-/** Access the raw sendCommand for testing purposes. */
-export function getSendCommandFn(): (engineId: string, command: string) => void {
+/** The send function every command helper uses (resolves with the outcome). */
+export function getSendCommandFn(): (engineId: string, command: string) => Promise<SendResult> {
   return _sendCommand;
 }
 
@@ -73,7 +96,12 @@ export type EngineCapability =
    * engine#399 / agent-engine-dev#403: instance command traces carry the
    * resolved `instanceId` plus the display `instanceName` (see traceInstance.ts).
    */
-  | 'traceInstanceId';
+  | 'traceInstanceId'
+  /** agent-engine-dev#582: commands go through POST /api/command (signed queue entries). */
+  | 'signedCommands1'
+  /** agent-engine-dev#582 step 2: /api/auth/* sign-in; commands still go through the store queue. */
+  | 'engineSignIn1'
+  | 'engineRelay1';
 
 /** Tooltip for an action an old Engine can't be sent safely. */
 export const UPDATE_ENGINE_TOOLTIP = 'Update this Engine to manage this disk';
@@ -165,23 +193,20 @@ export const startInstance = (
   engineId: string,
   instanceName: string,
   diskId: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildStartInstanceCommand(instanceName, diskId));
-};
 
 /** Stop a named instance stored on disk `diskId` (its storedOn), addressed to the given engine. */
 export const stopInstance = (
   engineId: string,
   instanceName: string,
   diskId: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildStopInstanceCommand(instanceName, diskId));
-};
 
 /** Eject a disk (by disk ID) from the given engine. */
-export const ejectDisk = (engineId: string, diskId: string): void => {
+export const ejectDisk = (engineId: string, diskId: string): Promise<SendResult> =>
   _sendCommand(engineId, buildEjectDiskCommand(diskId));
-};
 
 // ---------------------------------------------------------------------------
 // Reboot engine
@@ -191,9 +216,8 @@ export const ejectDisk = (engineId: string, diskId: string): void => {
  * Send the "reboot" command to the given engine.
  * The engine will reboot the host OS.
  */
-export const rebootEngine = (engineId: string): void => {
+export const rebootEngine = (engineId: string): Promise<SendResult> =>
   _sendCommand(engineId, 'reboot');
-};
 
 // ---------------------------------------------------------------------------
 // Cancel operation
@@ -205,9 +229,8 @@ export const rebootEngine = (engineId: string): void => {
  * does (idea#498, store/dismissedOps.ts).
  * Format: "cancelOperation <operationId>"
  */
-export const cancelOperation = (engineId: string, operationId: string): void => {
+export const cancelOperation = (engineId: string, operationId: string): Promise<SendResult> =>
   _sendCommand(engineId, `cancelOperation ${operationId}`);
-};
 
 // ---------------------------------------------------------------------------
 // Backup commands
@@ -243,9 +266,8 @@ export const backupApp = (
   engineId: string,
   instanceId: string,
   backupDiskId: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildBackupAppCommand(instanceId, backupDiskId));
-};
 
 /**
  * Build the "createFilesDisk" command string (pure, no side effects).
@@ -297,9 +319,8 @@ export const setBackupMode = (
   backupDiskId: string,
   mode: string,
   time?: string,
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildSetBackupModeCommand(backupDiskId, mode, time));
-};
 
 /** Configure an empty disk as a Backup Disk on the given engine. */
 export const createBackupDisk = (
@@ -307,18 +328,16 @@ export const createBackupDisk = (
   diskArg: string,
   mode: string,
   instanceNames: string[]
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildCreateBackupDiskCommand(diskArg, mode, instanceNames));
-};
 
 /** Add the Files role to a disk (empty, App or Backup Disk) on the given engine. */
 export const createFilesDisk = (
   engineId: string,
   diskId: string,
   shareName?: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildCreateFilesDiskCommand(diskId, shareName));
-};
 
 /**
  * Build "summariseDisk <targetId>" (idea#136). targetId is a disk ID or an
@@ -338,9 +357,8 @@ export const buildEraseDiskCommand = (
 ): string => `eraseDisk ${targetId} ${summaryTraceId} ${confirmName}`;
 
 /** Ask the Engine for a content summary of a disk or unformatted candidate. */
-export const summariseDisk = (engineId: string, targetId: string): void => {
+export const summariseDisk = (engineId: string, targetId: string): Promise<SendResult> =>
   _sendCommand(engineId, buildSummariseDiskCommand(targetId));
-};
 
 /** Erase a disk (or unformatted candidate) after a fresh summary and typed label. */
 export const eraseDisk = (
@@ -348,9 +366,8 @@ export const eraseDisk = (
   targetId: string,
   summaryTraceId: string,
   confirmName: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildEraseDiskCommand(targetId, summaryTraceId, confirmName));
-};
 
 
 // ---------------------------------------------------------------------------
@@ -383,9 +400,8 @@ export const copyApp = (
   instanceName: string,
   sourceDiskId: string,
   targetDiskId: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildCopyAppCommand(instanceName, sourceDiskId, targetDiskId));
-};
 
 /** Move an instance to a target disk (same InstanceID). */
 export const moveApp = (
@@ -393,9 +409,8 @@ export const moveApp = (
   instanceName: string,
   sourceDiskId: string,
   targetDiskId: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildMoveAppCommand(instanceName, sourceDiskId, targetDiskId));
-};
 
 // ---------------------------------------------------------------------------
 // Install App command
@@ -423,9 +438,8 @@ export const installApp = (
   appId: string,
   targetDiskArg: string,
   opts?: { source?: string; name?: string }
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildInstallAppCommand(appId, targetDiskArg, opts));
-};
 
 // ---------------------------------------------------------------------------
 // Restore App command
@@ -447,14 +461,12 @@ export const restoreApp = (
   engineId: string,
   instanceId: string,
   targetDiskId: string
-): void => {
+): Promise<SendResult> =>
   _sendCommand(engineId, buildRestoreAppCommand(instanceId, targetDiskId));
-};
 
 /** Send a prebuilt command string (adapters own their command shapes). */
-export const sendRawCommand = (engineId: string, command: string): void => {
+export const sendRawCommand = (engineId: string, command: string): Promise<SendResult> =>
   _sendCommand(engineId, command);
-};
 
 /**
  * Build the "renameInstance" command string (agent-engine-dev#220, PR #266).
@@ -464,9 +476,8 @@ export const sendRawCommand = (engineId: string, command: string): void => {
 export const buildRenameInstanceCommand = (instanceId: string, newName: string): string =>
   `renameInstance ${instanceId} ${newName.trim().split(/\s+/).join(' ')}`;
 
-export const renameInstance = (engineId: string, instanceId: string, newName: string): void => {
+export const renameInstance = (engineId: string, instanceId: string, newName: string): Promise<SendResult> =>
   _sendCommand(engineId, buildRenameInstanceCommand(instanceId, newName));
-};
 
 /**
  * Build the "removeInstance" command string (idea#347, option A).
@@ -477,9 +488,8 @@ export const renameInstance = (engineId: string, instanceId: string, newName: st
 export const buildRemoveInstanceCommand = (instanceId: string): string =>
   `removeInstance ${instanceId}`;
 
-export const removeInstance = (engineId: string, instanceId: string): void => {
+export const removeInstance = (engineId: string, instanceId: string): Promise<SendResult> =>
   _sendCommand(engineId, buildRemoveInstanceCommand(instanceId));
-};
 
 /**
  * Build the "deleteTempBackup" command string (console#230 option A / engine#501).
@@ -490,9 +500,8 @@ export const DELETE_TEMP_BACKUP_COMMAND = 'deleteTempBackup';
 export const buildDeleteTempBackupCommand = (instanceId: string, stamp: string): string =>
   `${DELETE_TEMP_BACKUP_COMMAND} ${instanceId} ${stamp}`;
 
-export const deleteTempBackup = (engineId: string, instanceId: string, stamp: string): void => {
+export const deleteTempBackup = (engineId: string, instanceId: string, stamp: string): Promise<SendResult> =>
   _sendCommand(engineId, buildDeleteTempBackupCommand(instanceId, stamp));
-};
 
 /**
  * Build the "setupDemo" command string (engine#369 §2, idea#235).
@@ -503,9 +512,8 @@ export const deleteTempBackup = (engineId: string, instanceId: string, stamp: st
 export const buildSetupDemoCommand = (targetDiskId: string, apps?: readonly string[]): string =>
   apps && apps.length > 0 ? `setupDemo ${targetDiskId} --apps ${apps.join(',')}` : `setupDemo ${targetDiskId}`;
 
-export const setupDemo = (engineId: string, targetDiskId: string, apps?: readonly string[]): void => {
+export const setupDemo = (engineId: string, targetDiskId: string, apps?: readonly string[]): Promise<SendResult> =>
   _sendCommand(engineId, buildSetupDemoCommand(targetDiskId, apps));
-};
 
 /**
  * Build the "removeDemo" command string (engine#369 §2, idea#235).
@@ -516,6 +524,5 @@ export const setupDemo = (engineId: string, targetDiskId: string, apps?: readonl
 export const buildRemoveDemoCommand = (instanceIds: readonly string[]): string =>
   ['removeDemo', ...instanceIds].join(' ');
 
-export const removeDemo = (engineId: string, instanceIds: readonly string[]): void => {
+export const removeDemo = (engineId: string, instanceIds: readonly string[]): Promise<SendResult> =>
   _sendCommand(engineId, buildRemoveDemoCommand(instanceIds));
-};

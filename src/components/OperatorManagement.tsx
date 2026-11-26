@@ -1,12 +1,26 @@
-import { createSignal, For, Show, type Component } from 'solid-js';
+import { createEffect, createSignal, For, Show, type Component } from 'solid-js';
 import {
   currentUser,
   createOperator,
   removeOperator,
-  changePassword,
+  changeMyPassword,
+  addOperatorEverywhere,
+  removeOperatorEverywhere,
+  listPageOperators,
+  type EngineIssue,
 } from '../store/auth';
-import type { Store, User } from '../types/store';
+import { isEngineAuth } from '../store/authMode';
+import type { Store } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
+
+/** One operator row: from userDB (legacy) or the page's Engine (agent-engine-dev#582). */
+interface OperatorRow {
+  id: string;
+  username: string;
+}
+
+const notOn = (failed: EngineIssue[]): string =>
+  failed.length === 0 ? '' : ` Not applied on: ${failed.map((f) => `${f.engineName} (${f.message})`).join('; ')}`;
 
 interface OperatorManagementProps {
   store: Store;
@@ -29,7 +43,27 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
   const [pwSuccess, setPwSuccess] = createSignal('');
   const [pwLoading, setPwLoading] = createSignal(false);
 
-  const operators = (): User[] => Object.values(props.store.userDB ?? {});
+  // Engine mode: the page's Engine lists its operators (no hashes); reloaded after a change.
+  const [engineOps, setEngineOps] = createSignal<OperatorRow[]>([]);
+  const [listError, setListError] = createSignal('');
+  const reloadEngineOps = async (): Promise<void> => {
+    try {
+      const list = await listPageOperators();
+      setEngineOps(list.map((o) => ({ id: String(o.id), username: String(o.username) })));
+      setListError('');
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : 'Could not load the operators.');
+    }
+  };
+  createEffect(() => {
+    if (isEngineAuth()) void reloadEngineOps();
+  });
+
+  const operators = (): OperatorRow[] => isEngineAuth()
+    ? engineOps()
+    : Object.values(props.store.userDB ?? {}).map((u) => ({ id: String(u.id), username: String(u.username) }));
+  const operatorIds = () => operators().map((o) => o.id);
+  const operatorById = (id: string) => operators().find((o) => o.id === id);
 
   const handleAddOperator = async (e: Event) => {
     e.preventDefault();
@@ -41,13 +75,24 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
     }
     setAddLoading(true);
     try {
-      await createOperator(
-        newUsername(),
-        newPassword(),
-        props.store,
-        props.connection.changeDoc
-      );
-      setAddSuccess(`Operator "${newUsername()}" created.`);
+      if (isEngineAuth()) {
+        // agent-engine-dev#582: on every Engine this page is signed in to.
+        const r = await addOperatorEverywhere(newUsername(), newPassword(), props.store);
+        if (!r.ok) {
+          setAddError(r.message);
+          return;
+        }
+        setAddSuccess(`Operator "${newUsername()}" created.${notOn(r.failed)}`);
+        await reloadEngineOps();
+      } else {
+        await createOperator(
+          newUsername(),
+          newPassword(),
+          props.store,
+          props.connection.changeDoc
+        );
+        setAddSuccess(`Operator "${newUsername()}" created.`);
+      }
       setNewUsername('');
       setNewPassword('');
     } catch (err) {
@@ -57,13 +102,24 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
     }
   };
 
-  const handleRemove = (userId: string, username: string) => {
+  const [removeError, setRemoveError] = createSignal('');
+
+  const handleRemove = async (userId: string, username: string) => {
     if (userId === currentUser()?.id) {
       alert('You cannot remove yourself.');
       return;
     }
     if (!confirm(`Remove operator "${username}"?`)) return;
-    removeOperator(userId, props.connection.changeDoc);
+    setRemoveError('');
+    if (!isEngineAuth()) {
+      removeOperator(userId, props.connection.changeDoc);
+      return;
+    }
+    // Accounts are per Engine: matched by username on each one.
+    const r = await removeOperatorEverywhere(username, props.store);
+    if (!r.ok) setRemoveError(r.message);
+    else if (r.failed.length > 0) setRemoveError(`Removed.${notOn(r.failed)}`);
+    await reloadEngineOps();
   };
 
   const handleChangePassword = async (e: Event) => {
@@ -78,28 +134,20 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
       setPwError('New password must be at least 8 characters.');
       return;
     }
-    const userId = currentUser()?.id;
-    if (!userId) return;
+    if (!currentUser()) return;
     setPwLoading(true);
-    let ok = false;
     try {
-      ok = await changePassword(
-        userId,
-        currentPw(),
-        newPw(),
-        props.store,
-        props.connection.changeDoc
-      );
+      const r = await changeMyPassword(currentPw(), newPw(), props.store, props.connection.changeDoc);
+      if (r.ok) {
+        setPwSuccess(`Password changed.${notOn(r.failed)}`);
+        setCurrentPw('');
+        setNewPw('');
+        setConfirmPw('');
+      } else {
+        setPwError(r.message);
+      }
     } finally {
       setPwLoading(false);
-    }
-    if (ok) {
-      setPwSuccess('Password changed.');
-      setCurrentPw('');
-      setNewPw('');
-      setConfirmPw('');
-    } else {
-      setPwError('Current password is incorrect.');
     }
   };
 
@@ -113,24 +161,24 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
           fallback={<p class="operator-mgmt__empty">No operators yet.</p>}
         >
           <ul class="operator-mgmt__list">
-            <For each={operators()}>
-              {(op) => (
+            <For each={operatorIds()}>
+              {(id) => (
                 <li
                   class="operator-mgmt__item"
-                  data-testid={`operator-row-${op.id}`}
-                  data-username={op.username}
+                  data-testid={`operator-row-${id}`}
+                  data-username={operatorById(id)?.username}
                 >
                   <span class="operator-mgmt__name">
-                    {op.username}
-                    {op.id === currentUser()?.id && (
+                    {operatorById(id)?.username}
+                    {id === currentUser()?.id && (
                       <span class="operator-mgmt__you"> (you)</span>
                     )}
                   </span>
                   <button
                     class="btn btn--danger btn--small"
-                    data-testid={`remove-operator-${op.id}`}
-                    onClick={() => handleRemove(op.id, op.username)}
-                    disabled={op.id === currentUser()?.id}
+                    data-testid={`remove-operator-${id}`}
+                    onClick={() => handleRemove(id, operatorById(id)?.username ?? '')}
+                    disabled={id === currentUser()?.id}
                   >
                     Remove
                   </button>
@@ -139,6 +187,8 @@ const OperatorManagement: Component<OperatorManagementProps> = (props) => {
             </For>
           </ul>
         </Show>
+        {listError() && <p class="form-error" data-testid="operator-list-error">{listError()}</p>}
+        {removeError() && <p class="form-error" data-testid="remove-operator-error">{removeError()}</p>}
       </section>
 
       {/* Add operator */}

@@ -9,16 +9,18 @@
  * No close button inside the panel — the 👤 button in the status bar toggles it.
  */
 import { createSignal, Show, type Component } from 'solid-js';
-import { bcryptCompare } from '../store/bcryptCompare';
 import {
+  signedOutNotice,
   currentUser,
   isOperator,
   logout,
-  changePassword,
-  setAuthenticatedUser,
+  changeMyPassword,
+  signIn,
 } from '../store/auth';
+import { authMode } from '../store/authMode';
 import OperatorManagement from './OperatorManagement';
-import type { Store, User } from '../types/store';
+import EngineIssues from './EngineIssues';
+import type { Store } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
 
 interface AccountScreenProps {
@@ -46,26 +48,24 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
   const [pwSuccess, setPwSuccess] = createSignal('');
   const [pwLoading, setPwLoading] = createSignal(false);
 
+  /** Engine sign-in needs no store; the legacy userDB check does. */
+  const canSignIn = () => authMode() === 'engine' || (authMode() === 'legacy' && !!props.store);
+
   const handleLogin = async (e: Event) => {
     e.preventDefault();
-    if (!props.store) return;
+    if (!canSignIn()) return;
     setLoginError('');
     setLoginLoading(true);
     try {
-      const users = Object.values(props.store.userDB ?? {}) as User[];
-      const user = users.find((u) => String(u.username) === username());
-      if (!user) {
-        setLoginError('Invalid username or password.');
+      // AccountScreen stays mounted on auth change (it's controlled by showAccount),
+      // so signIn may set the user itself. Engine mode signs in on every Engine
+      // (agent-engine-dev#582); legacy checks userDB.
+      const r = await signIn(username(), password(), props.store);
+      if (!r.ok) {
+        setLoginError(r.message);
         return;
       }
-      const match = await bcryptCompare(password(), String(user.passwordHash));
-      if (!match) {
-        setLoginError('Invalid username or password.');
-        return;
-      }
-      // AccountScreen stays mounted — calling setAuthenticatedUser here is safe because
-      // the panel doesn't get unmounted on auth change (it's controlled by showAccount).
-      setAuthenticatedUser(user);
+      setPassword('');
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : 'Login failed.');
     } finally {
@@ -85,28 +85,22 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
       setPwError('New password must be at least 8 characters.');
       return;
     }
-    const userId = currentUser()?.id;
-    if (!userId || !props.store || !props.connection) return;
+    if (!currentUser()) return;
     setPwLoading(true);
-    let ok = false;
     try {
-      ok = await changePassword(
-        userId,
-        currentPw(),
-        newPw(),
-        props.store,
-        props.connection.changeDoc,
-      );
+      const r = await changeMyPassword(currentPw(), newPw(), props.store, props.connection?.changeDoc ?? null);
+      if (r.ok) {
+        setPwSuccess(r.failed.length === 0
+          ? 'Password changed.'
+          : `Password changed. Not changed on: ${r.failed.map((f) => `${f.engineName} (${f.message})`).join('; ')}`);
+        setCurrentPw('');
+        setNewPw('');
+        setConfirmPw('');
+      } else {
+        setPwError(r.message);
+      }
     } finally {
       setPwLoading(false);
-    }
-    if (ok) {
-      setPwSuccess('Password changed.');
-      setCurrentPw('');
-      setNewPw('');
-      setConfirmPw('');
-    } else {
-      setPwError('Current password is incorrect.');
     }
   };
 
@@ -173,12 +167,15 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
                   </button>
                 </div>
               </div>
+              <Show when={!loginError() && signedOutNotice()}>
+                {(why) => <p class="form-notice" role="status" data-testid="login-signed-out">{why()}</p>}
+              </Show>
               {loginError() && <p class="form-error">{loginError()}</p>}
-              <Show when={!props.store}>
+              <Show when={!canSignIn()}>
                 <p class="form-field__hint" style="color:var(--colour-text-muted)">Waiting for engine to sync…</p>
               </Show>
-              <button class="btn btn--primary" type="submit" data-testid="sign-in" disabled={loginLoading() || !props.store}>
-                {loginLoading() ? 'Verifying…' : !props.store ? 'Connecting…' : 'Log in'}
+              <button class="btn btn--primary" type="submit" data-testid="sign-in" disabled={loginLoading() || !canSignIn()}>
+                {loginLoading() ? 'Verifying…' : !canSignIn() ? 'Connecting…' : 'Log in'}
               </button>
             </form>
           </div>
@@ -191,6 +188,8 @@ const AccountScreen: Component<AccountScreenProps> = (props) => {
             <p class="account-screen__username">{currentUser()?.username}</p>
             <p class="account-screen__role">Operator</p>
           </div>
+
+          <EngineIssues store={props.store} />
 
           <div class="account-screen__section">
             <h2 class="account-screen__heading">Change Password</h2>

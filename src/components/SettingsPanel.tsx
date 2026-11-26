@@ -1,6 +1,6 @@
 import { createMemo, createSignal, Show, For, type Component } from 'solid-js';
 import pkg from '../../package.json';
-import { currentUser, isOperator, changePassword } from '../store/auth';
+import { currentUser, isOperator, changeMyPassword } from '../store/auth';
 import type { Store } from '../types/store';
 import { engineHasCapability } from '../store/commands';
 import { DEMO_APPS_CAPABILITY } from '../store/demoApps';
@@ -46,28 +46,23 @@ const SettingsPanel: Component<SettingsPanelProps> = (props) => {
       setPwError('New password must be at least 8 characters.');
       return;
     }
-    const userId = currentUser()?.id;
-    if (!userId || !props.store || !props.connection) return;
+    if (!currentUser()) return;
     setPwLoading(true);
-    let ok = false;
     try {
-      ok = await changePassword(
-        userId,
-        currentPw(),
-        newPw(),
-        props.store,
-        props.connection.changeDoc,
-      );
+      // agent-engine-dev#582: on every signed-in Engine; legacy: userDB.
+      const r = await changeMyPassword(currentPw(), newPw(), props.store, props.connection?.changeDoc ?? null);
+      if (r.ok) {
+        setPwSuccess(r.failed.length === 0
+          ? 'Password changed.'
+          : `Password changed. Not changed on: ${r.failed.map((f) => `${f.engineName} (${f.message})`).join('; ')}`);
+        setCurrentPw('');
+        setNewPw('');
+        setConfirmPw('');
+      } else {
+        setPwError(r.message);
+      }
     } finally {
       setPwLoading(false);
-    }
-    if (ok) {
-      setPwSuccess('Password changed.');
-      setCurrentPw('');
-      setNewPw('');
-      setConfirmPw('');
-    } else {
-      setPwError('Current password is incorrect.');
     }
   };
 

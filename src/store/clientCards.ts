@@ -6,6 +6,7 @@
 import { engineHasCapability, getSendCommandFn } from './commands';
 import { plainEngineText } from './plainError';
 import type { CommandTrace } from '../types/commandLog';
+import type { SendResult } from './signedCommand';
 import type {
   CardContents,
   CardReader,
@@ -257,13 +258,13 @@ export const buildFlashCardCommand = (candidateId: string, version: string, conf
 export const buildCancelFlashCommand = (operationId: string): string =>
   `cancelFlash ${assertId('operationId', operationId)}`;
 
-export const initialiseDisk = (engineId: string, candidateId: string, diskType: InitialiseType = 'empty'): void =>
+export const initialiseDisk = (engineId: string, candidateId: string, diskType: InitialiseType = 'empty'): Promise<SendResult> =>
   getSendCommandFn()(engineId, buildInitialiseDiskCommand(candidateId, diskType));
 
-export const flashCard = (engineId: string, candidateId: string, version: string, confirmSizeBytes: number): void =>
+export const flashCard = (engineId: string, candidateId: string, version: string, confirmSizeBytes: number): Promise<SendResult> =>
   getSendCommandFn()(engineId, buildFlashCardCommand(candidateId, version, confirmSizeBytes));
 
-export const cancelFlash = (engineId: string, operationId: string): void =>
+export const cancelFlash = (engineId: string, operationId: string): Promise<SendResult> =>
   getSendCommandFn()(engineId, buildCancelFlashCommand(operationId));
 
 /** Trace commands, for following the target Engine's command log. */

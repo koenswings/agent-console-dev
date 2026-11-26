@@ -2,6 +2,7 @@ import { createSignal, createEffect, createMemo, For, Show, onCleanup, type Acce
 import StatusDot from './StatusDot';
 import MobileCopyMoveSheet from './MobileCopyMoveSheet';
 import CommandFeedback from './CommandFeedback';
+import CommandScope from './CommandScope';
 import { startInstance, stopInstance, backupApp } from '../store/commands';
 import { createCommandResult, type CommandResult, type CommandResultTarget, type TraceAltMatch, type TraceArgKey } from '../store/commandResult';
 import { traceInstanceMatch } from '../store/traceInstance';
@@ -315,6 +316,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
               data-engine-hostname={engineName() || undefined}
               data-engine-lan={engine()?.lanAddress ?? ''}
             >
+              <CommandScope engineId={() => engine()?.id} testId={`mobile-instance-scope-${id}`} compact>
               <div class="mobile-app-card__top">
                 <StatusDot status={i().status} size={9} />
                 <span class="mobile-app-card__name">
@@ -462,6 +464,7 @@ const MobileAppList: Component<MobileAppListProps> = (props) => {
                   <button class="btn btn--start" disabled={isStartDisabled(i().status)} onClick={() => handleStart(i())}>Restart</button>
                 </div>
               </Show>
+              </CommandScope>
             </div>
               )}
             </Show>

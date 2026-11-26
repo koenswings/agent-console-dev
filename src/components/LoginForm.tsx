@@ -1,5 +1,7 @@
 import { createSignal, Show, type Component } from 'solid-js';
 import { bcryptCompare } from '../store/bcryptCompare';
+import { authMode } from '../store/authMode';
+import { signedOutNotice, signIn } from '../store/auth';
 import type { Store, User } from '../types/store';
 
 interface LoginFormProps {
@@ -17,14 +19,29 @@ const LoginForm: Component<LoginFormProps> = (props) => {
   const [error, setError] = createSignal('');
   const [loading, setLoading] = createSignal(false);
 
+  /** Engine sign-in needs no store; the legacy userDB check does. */
+  const canSubmit = () => authMode() === 'engine' || (authMode() === 'legacy' && !!props.store);
+
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
-    if (!props.store) return;
+    if (!canSubmit()) return;
 
     setError('');
     setLoading(true);
 
     try {
+      if (authMode() === 'engine') {
+        // agent-engine-dev#582: sign in on the Engines; the parent sets the user.
+        const r = await signIn(username(), password(), props.store, { deferUser: true });
+        if (!r.ok) {
+          setError(r.message);
+          return;
+        }
+        setPassword('');
+        props.onSuccess(r.user);
+        return;
+      }
+      if (!props.store) return;
       const users = Object.values(props.store.userDB ?? {}) as User[];
       const user = users.find((u) => String(u.username) === username());
       if (!user) {
@@ -98,13 +115,16 @@ const LoginForm: Component<LoginFormProps> = (props) => {
             </div>
           </div>
 
+          <Show when={!error() && signedOutNotice()}>
+            {(why) => <p class="form-notice" role="status" data-testid="login-signed-out">{why()}</p>}
+          </Show>
           {error() && <p class="form-error">{error()}</p>}
 
-          <Show when={!props.store}>
+          <Show when={!canSubmit()}>
             <p class="form-field__hint" style="color:var(--colour-text-muted)">Waiting for engine to sync…</p>
           </Show>
-          <button class="btn btn--primary" type="submit" disabled={loading() || !props.store}>
-            {loading() ? 'Verifying…' : !props.store ? 'Connecting…' : 'Log in'}
+          <button class="btn btn--primary" type="submit" disabled={loading() || !canSubmit()}>
+            {loading() ? 'Verifying…' : !canSubmit() ? 'Connecting…' : 'Log in'}
           </button>
         </form>
       </div>
