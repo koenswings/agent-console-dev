@@ -1,5 +1,6 @@
 import { For, Show, createMemo, type Accessor, type Component } from 'solid-js';
 import InstanceRow from './InstanceRow';
+import CommandScope from './CommandScope';
 import { getInstanceIdsForSelection } from '../store/signals';
 import type { Selection } from './NetworkTree';
 import type { Instance, Engine, Disk, Store } from '../types/store';
@@ -112,6 +113,8 @@ const InstanceList: Component<InstanceListProps> = (props) => {
 
               return (
                 <Show when={instance()}>
+                  <CommandScope engineId={() => engine()?.id} testId={`instance-scope-${id}`} compact
+                    notice={props.selection.type === 'network'}>
                   <InstanceRow
                     instance={instance}
                     app={app}
@@ -123,6 +126,7 @@ const InstanceList: Component<InstanceListProps> = (props) => {
                     onDragStart={props.onDragStart}
                     onDragEnd={props.onDragEnd}
                   />
+                  </CommandScope>
                 </Show>
               );
             }}

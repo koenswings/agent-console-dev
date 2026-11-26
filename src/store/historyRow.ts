@@ -7,10 +7,10 @@
  * green success check and not a red error.
  */
 import type { CommandTrace } from '../types/commandLog';
-import { plainEngineText } from './plainError';
+import { plainEngineText, UNKNOWN_ENGINE_TEXT, type EngineNameOf } from './plainError';
 import { plainSetBackupModeSuccess, setBackupModeErrorText } from './setBackupMode';
 import { logJson, logText } from './logText';
-import { traceInstanceRefs } from './commandResult';
+import { traceErrorCode, traceInstanceRefs } from './commandResult';
 import {
   appTitleOf, COMMAND as UPDATE_COMMAND, friendlyUpdateError, isTempBackupRefusal, restartFailedFromTraceResult, restartFailedText,
   UNKNOWN_APP_NAME,
@@ -88,8 +88,31 @@ export const historyUpdate456Text = (trace: CommandTrace, appTitle?: string | nu
 export const historyUpdatePlainText = (trace: CommandTrace, appTitle?: string | null): string | null =>
   historyRestartFailedText(trace, appTitle) ?? historyTempBackupText(trace, appTitle) ?? historyUpdate456Text(trace, appTitle);
 
+/**
+ * agent-engine-dev#582 (pixel-answers F11): a follow-up the other Engine refused because it no
+ * longer knows the permission (6 h passed, or it restarted). The trace result names that Engine
+ * in `issuerEngineId` (else `dispatchedTo`). Null for any other trace.
+ */
+export const historyGrantText = (trace: CommandTrace, engineName?: EngineNameOf): string | null => {
+  if (trace.status !== 'error') return null;
+  const code = traceErrorCode(trace);
+  if (code !== 'GRANT_EXPIRED' && code !== 'GRANT_INVALID') return null;
+  const r = parseTraceResult(trace);
+  const issuer = typeof r?.issuerEngineId === 'string' && r.issuerEngineId
+    ? r.issuerEngineId
+    : typeof r?.dispatchedTo === 'string' && r.dispatchedTo ? r.dispatchedTo : null;
+  const who = (issuer ? engineName?.(issuer) : null) || UNKNOWN_ENGINE_TEXT;
+  return `Permission from ${who} expired, so this step did not run there. Start the copy, move or update again.`;
+};
+
 /** Icon, tone and collapsed-row message for a finished command trace. */
-export const historyRowView = (trace: CommandTrace, appTitle?: string | null): HistoryRowView => {
+export const historyRowView = (
+  trace: CommandTrace,
+  appTitle?: string | null,
+  engineName?: EngineNameOf,
+): HistoryRowView => {
+  const grant = historyGrantText(trace, engineName);
+  if (grant) return { tone: 'error', icon: '✗', message: grant };
   const updatePlain = historyUpdatePlainText(trace, appTitle);
   if (updatePlain) return { tone: 'error', icon: '✗', message: updatePlain };
   if (trace.command === 'setBackupMode') {
@@ -116,5 +139,5 @@ export const historyRowView = (trace: CommandTrace, appTitle?: string | null): H
     return { tone: 'ok', icon: '✓', message: null };
   }
   const raw = stripAnsi(logText(trace.errorMessage) ?? '').trim();
-  return { tone: 'error', icon: '✗', message: raw ? plainEngineText(raw) : null };
+  return { tone: 'error', icon: '✗', message: raw ? plainEngineText(raw, engineName) : null };
 };

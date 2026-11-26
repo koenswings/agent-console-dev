@@ -12,7 +12,7 @@ import type { StoreConnection } from '../src/mock/mockStore';
 vi.mock('../src/store/auth', () => ({
   isOperator: vi.fn(() => false),
   currentUser: vi.fn(() => null),
-  changePassword: vi.fn(() => Promise.resolve(true)),
+  changeMyPassword: vi.fn(() => Promise.resolve({ ok: true, failed: [] })),
 }));
 
 // Stub storage to avoid chrome.storage calls
@@ -26,7 +26,7 @@ vi.mock('../src/store/storage', () => ({
 // Prevent real network probes in tests
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no fetch in tests'))));
 
-import { isOperator, currentUser, changePassword } from '../src/store/auth';
+import { isOperator, currentUser, changeMyPassword } from '../src/store/auth';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,7 +73,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(isOperator).mockReturnValue(false);
   vi.mocked(currentUser).mockReturnValue(null);
-  vi.mocked(changePassword).mockResolvedValue(true);
+  vi.mocked(changeMyPassword).mockResolvedValue({ ok: true, failed: [] });
 });
 
 // ---------------------------------------------------------------------------
@@ -144,11 +144,11 @@ describe('SettingsPanel', () => {
     expect(screen.queryByText('Side panel')).not.toBeInTheDocument();
   });
 
-  it('calls changePassword with correct args on submit', async () => {
+  it('calls changeMyPassword with correct args on submit', async () => {
     const user = makeUser();
     vi.mocked(isOperator).mockReturnValue(true);
     vi.mocked(currentUser).mockReturnValue(user);
-    vi.mocked(changePassword).mockResolvedValue(true);
+    vi.mocked(changeMyPassword).mockResolvedValue({ ok: true, failed: [] });
 
     const store = makeStore([user]);
     const connection = makeConnection();
@@ -171,8 +171,7 @@ describe('SettingsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
 
     await waitFor(() => {
-      expect(changePassword).toHaveBeenCalledWith(
-        user.id,
+      expect(changeMyPassword).toHaveBeenCalledWith(
         'oldpass123',
         'newpass456',
         store,
@@ -185,7 +184,7 @@ describe('SettingsPanel', () => {
     const user = makeUser();
     vi.mocked(isOperator).mockReturnValue(true);
     vi.mocked(currentUser).mockReturnValue(user);
-    vi.mocked(changePassword).mockResolvedValue(true);
+    vi.mocked(changeMyPassword).mockResolvedValue({ ok: true, failed: [] });
 
     render(() => <SettingsPanel {...defaultProps()} store={makeStore([user])} />);
     fireEvent.click(screen.getByText('Account'));
@@ -206,7 +205,7 @@ describe('SettingsPanel', () => {
     const user = makeUser();
     vi.mocked(isOperator).mockReturnValue(true);
     vi.mocked(currentUser).mockReturnValue(user);
-    vi.mocked(changePassword).mockResolvedValue(false);
+    vi.mocked(changeMyPassword).mockResolvedValue({ ok: false, message: 'Current password is incorrect.' });
 
     render(() => <SettingsPanel {...defaultProps()} store={makeStore([user])} />);
     fireEvent.click(screen.getByText('Account'));
@@ -240,7 +239,7 @@ describe('SettingsPanel', () => {
     await waitFor(() => {
       expect(screen.getByText('Passwords do not match.')).toBeInTheDocument();
     });
-    expect(changePassword).not.toHaveBeenCalled();
+    expect(changeMyPassword).not.toHaveBeenCalled();
   });
 
   it('exposes settings-engine-status and Change Engine… when onChangeEngine set', () => {

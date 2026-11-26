@@ -3,12 +3,13 @@
  * wipe warning) → progress (Cancel while allowed) → "Done – safe to remove".
  * Follows the target Engine's command log; Engine access via ../store/clientCards.
  */
-import { For, Match, Show, Switch, createMemo, createSignal, type Accessor, type Component } from 'solid-js';
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, type Accessor, type Component } from 'solid-js';
 import CommandFeedback from './CommandFeedback';
 import { createCommandResult, findCommandTrace, type CommandResult } from '../store/commandResult';
 import { traceIdSnapshot } from '../store/ejectResult';
 import { mergeCommandLogs, remoteCommandLog } from '../store/remoteCommandLogs';
 import { formatBytes } from '../store/diskRoles';
+import { isEngineAuth } from '../store/authMode';
 import type { CommandLogState } from '../store/commandLog';
 import type { Store } from '../types/store';
 import {
@@ -157,6 +158,12 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
     raw.start(props.candidateId, () => flashCard(props.engineId, props.candidateId, v, seen.sizeBytes));
   };
 
+  // Engine sign-in (#582): the Engine's own summary (428) is the only confirm.
+  // Cancelling it there sends nothing: back to the version step.
+  createEffect(on(() => raw.state().kind, (kind) => {
+    if (kind === 'idle' && phase() === 'running' && isEngineAuth()) setPhase('pick');
+  }, { defer: true }));
+
   const doCancel = () => {
     const o = op();
     if (!o || cancelSent()) return;
@@ -214,9 +221,9 @@ const FlashDialog: Component<FlashDialogProps> = (props) => {
                 class="btn"
                 data-testid="flash-next"
                 disabled={!!flashBlocked() || !version() || tooSmall()}
-                onClick={() => setPhase('confirm')}
+                onClick={() => (isEngineAuth() ? startFlash() : setPhase('confirm'))}
               >
-                Next
+                {isEngineAuth() ? 'Wipe and flash…' : 'Next'}
               </button>
             </div>
           </div>

@@ -48,6 +48,12 @@ interface ConnectionManagementProps {
   onDiscoverySelect?: (result: DiscoveryResult) => void;
   /** Engines from the network database (enginesFromStore), when connected. */
   storeEngines?: DiscoveryResult[];
+  /**
+   * Replaces the host scan (agent-engine-dev#582): on a page served by an
+   * Engine with the sign-in API, other hosts are not probed directly; the
+   * page's Engine relays. A manual entry is then opened as is.
+   */
+  probe?: () => Promise<DiscoveryResult[]>;
 }
 
 type ScanState = 'scanning' | 'done' | 'refreshing';
@@ -70,7 +76,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   const runScan = async () => {
     setScanState('scanning');
     setResults(dedupeEngines(props.storeEngines ?? []));
-    const found = await discoverAllEngines();
+    const found = await (props.probe ?? discoverAllEngines)();
     mergeResults(found);
     setScanState('done');
   };
@@ -83,7 +89,7 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
   createEffect(() => {
     const interval = setInterval(async () => {
       setScanState('refreshing');
-      const fresh = await discoverAllEngines();
+      const fresh = await (props.probe ?? discoverAllEngines)();
       mergeResults(fresh);
       setScanState('done');
     }, DISCOVERY_REFRESH_INTERVAL_MS);
@@ -151,6 +157,12 @@ const ConnectionManagement: Component<ConnectionManagementProps> = (props) => {
       const isIp = /^[\d.]+$/.test(rawHost);
       const bare = rawHost.replace(/\.local$/i, '');
       const candidates = isIp ? [bare] : [bare, `${bare}.local`];
+      if (props.probe) {
+        // Relay mode (#582): no cross-origin probe; open that Engine's Console.
+        setShowManual(false);
+        handleConnect({ hostname: isIp ? bare : `${bare}.local`, storeUrl: '', ...portProp });
+        return;
+      }
       const result = await probeFirst(candidates, port);
       if (result) {
         setShowManual(false);

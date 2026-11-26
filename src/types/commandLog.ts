@@ -38,6 +38,8 @@ export interface CommandTrace {
    * JSON text as a string or ImmutableString (engine#471 b). Read with logJson.
    */
   result?: LogTextValue | Record<string, unknown> | null;
+  /** Queue number of a signed entry (agent-engine-dev#582); unique per Engine. */
+  seq?: number;
 }
 
 /** Parsed command-log trace result for an updateApp error (engine#442 / #445). */

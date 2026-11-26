@@ -75,6 +75,15 @@ pnpm typecheck      # TypeScript check only
 `pnpm build` runs `scripts/build.mjs`, which always calls Vite `build()` with `mode: 'production'` and sets `NODE_ENV=production` so a stray env (for example `test`) cannot change the bundle. `pnpm dev` is unchanged. Vite writes into a fresh `dist.new-<timestamp>/` and, only if that build succeeds, the new tree is swapped into `dist/`: live `dist/` is renamed to `dist.prev` (exactly one previous tree is kept, for rollback), then the new folder is renamed to `dist/`. A failed or incomplete build leaves the live `dist/` untouched, so the Engine never serves an empty or half-written Console. Always use `pnpm build` on a Pi; do not `rm -rf dist`, and do not use `pnpm exec vite build` as a substitute. Vite is configured with `emptyOutDir: false`, so a direct `vite build` will not wipe live `dist/`, but it also will not do the swap.
 A live `dist/hidden-instances.json` is copied into the new tree before the swap, unless the build already produced a file of that name.
 
+## Dev setup against a live Engine (sign-in, agent-engine-dev#582)
+
+`pnpm dev` serves the Console from the Vite origin (`http://localhost:5173`, or `http://<dev-host>:5173`), not from the Engine. Engines with operator sign-in check the browser's `Origin`:
+
+- **Store WebSocket and `/api/...` (CORS):** allowed for the Engine's own Console origins (hosts `<hostname>`, `<hostname>.local`, `idea.local`, `localhost`, `127.0.0.1` and the Engine's LAN IPv4 addresses, on its HTTP ports) and for `chrome-extension://` origins. Any other origin gets HTTP 401 on the WebSocket handshake and no CORS headers.
+- **Dev:** the Vite origin is only allowed when it is listed in the test Engine's `settings.devConsoleOrigins`, for example `settings.devConsoleOrigins: ['http://localhost:5173']` (use the exact origin the browser shows, port included). Without it the dev Console cannot open the store or sign in.
+- Claim the Pi before changing its settings (see the claim protocol). Remove the entry when you are done.
+- An Engine from before #582 has no Origin check; the Console then runs its previous sign-in (see `src/store/authMode.ts`).
+
 ## Test (required before any PR)
 
 ```bash

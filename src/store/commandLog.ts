@@ -20,6 +20,12 @@ export interface CommandLogConnectionOptions {
   isDisposed?: () => boolean;
   /** Called after the followed doc URL changed (rotation or another Engine behind the host). */
   onUrlChange?: (url: string) => void;
+  /**
+   * Full URL of the command-log-url endpoint, instead of `http://<host>/api/command-log-url`.
+   * Used for another Engine's log through the page Engine's relay
+   * (`/api/engines/<id>/command-log-url`, agent-engine-dev#582).
+   */
+  apiUrl?: string;
 }
 
 /**
@@ -41,7 +47,7 @@ export async function createCommandLogConnection(
   repo: any,
   options: CommandLogConnectionOptions = {},
 ): Promise<Accessor<CommandLogState>> {
-  const apiUrl = `http://${host}/api/command-log-url`;
+  const apiUrl = options.apiUrl ?? `http://${host}/api/command-log-url`;
   const pollMs = options.pollMs ?? COMMAND_LOG_URL_POLL_MS;
   const isDisposed = options.isDisposed ?? (() => false);
   const [commandLogStore, setCommandLogStore] = createSignal<CommandLogState>(null);

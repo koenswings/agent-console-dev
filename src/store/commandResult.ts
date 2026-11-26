@@ -30,6 +30,9 @@ import { traceIdSnapshot } from './ejectResult';
 import { noteConnectedEngine } from './connectedEngine';
 import { formatWait, type RemoteWatch } from './remoteConfirm';
 import { isImmutableString, logJson, logText } from './logText';
+import type { SendResult } from './signedCommand';
+import { sendResultMessage } from './sendResultText';
+import { pendingEngineConfirm } from './engineConfirm';
 
 /** How long to wait for the Engine's answer. */
 export const COMMAND_RESULT_TIMEOUT_MS = 15_000;
@@ -358,10 +361,34 @@ export interface CommandResult {
   state: Accessor<CommandResultState>;
   /** The command the current state belongs to (set by the last `start`). */
   command: Accessor<string | null>;
-  /** Record the baseline, then call `send`, then wait for the answer. */
-  start: (argValue: string, send: () => void, target?: CommandResultTarget) => void;
+  /**
+   * Record the baseline, then call `send`, then wait for the answer. When
+   * `send` resolves with a SendResult (agent-engine-dev#582) that was not
+   * accepted, that is the answer at once (cancelled → idle, else error). The
+   * timeout does not fire while the Engine's own confirmation dialog is open,
+   * and starts again once a signed command was accepted.
+   */
+  start: (argValue: string, send: () => void | Promise<SendResult>, target?: CommandResultTarget) => void;
   reset: () => void;
 }
+
+/**
+ * The trace of the signed queue entry `seq` (agent-engine-dev#582: every trace
+ * of a signed entry carries it), when it is in `log` and is `command`.
+ */
+export const traceBySeq = (
+  log: CommandLogState,
+  seq: number,
+  command: string,
+  baseline: Set<string> = new Set(),
+): CommandTrace | null => {
+  if (!log || 'error' in log) return null;
+  for (const t of Object.values(log.traces ?? {})) {
+    // New traces only: a merged view holds several Engines' logs, and seq is unique per Engine.
+    if (t && !baseline.has(t.traceId) && Number(t.seq) === seq && (!command || logText(t.command) === command)) return t;
+  }
+  return null;
+};
 
 /** Solid primitive around findCommandOutcome with the timeout. Call inside a component. */
 export function createCommandResult(opts: CommandResultOptions): CommandResult {
@@ -378,6 +405,8 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     remoteBaseline: Set<string>;
     settle: ((o: TraceOutcome) => TraceOutcome) | null;
     confirm: (() => 'ok' | null) | null;
+    /** The Engine's queue number from the 202 (signed commands), once known. */
+    seq: number | null;
   };
   const [pending, setPending] = createSignal<Pending | null>(null);
   const [state, setState] = createSignal<CommandResultState>({ kind: 'idle' });
@@ -390,7 +419,9 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
   const found = createMemo(() => {
     const p = pending();
     if (!p) return null;
-    const trace = findCommandTrace(opts.commandLog(), p.baseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
+    const log = opts.commandLog();
+    const trace = (p.seq !== null ? traceBySeq(log, p.seq, p.command, p.baseline) : null)
+      ?? findCommandTrace(log, p.baseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
     if (!trace) return null;
     return { accepted: true, outcome: traceOutcome(trace, p.command) };
   });
@@ -407,7 +438,9 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     const p = pending();
     if (!p?.remote) return null;
     if (p.remote.log) {
-      const t = findCommandTrace(p.remote.log(), p.remoteBaseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
+      const rl = p.remote.log();
+      const t = (p.seq !== null ? traceBySeq(rl, p.seq, p.command, p.remoteBaseline) : null)
+        ?? findCommandTrace(rl, p.remoteBaseline, p.command, p.argKey, p.argValue, p.matchMode, p.altMatch);
       const o = t ? traceOutcome(t, p.command) : null;
       if (o) return o;
     }
@@ -468,8 +501,11 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
     finish(o);
   });
 
-  const start = (argValue: string, send: () => void, target?: CommandResultTarget) => {
+  let generation = 0;
+
+  const start = (argValue: string, send: () => void | Promise<SendResult>, target?: CommandResultTarget) => {
     clearTimer();
+    const gen = ++generation;
     const cmd = target?.command ?? opts.command ?? '';
     setCommand(cmd);
     const remote = target?.remote ?? null;
@@ -486,34 +522,56 @@ export function createCommandResult(opts: CommandResultOptions): CommandResult {
       remoteBaseline: remote?.log ? traceIdSnapshot(remote.log()) : new Set(),
       settle: target?.settle ?? null,
       confirm: target?.confirm ?? null,
+      seq: null,
     });
-    if (remote) {
-      // Neutral until confirmed; red only on a real error or the long timeout.
-      setState({ kind: 'sent', engine: remote.engineLabel });
-      timer = setTimeout(() => {
-        timer = null;
-        if (pending()) {
-          setPending(null);
-          setState({
-            kind: 'error',
-            message: `No confirmation from ${remote.engineLabel} after ${formatWait(remote.timeoutMs)}. Check History on ${remote.engineLabel}.`,
-          });
-        }
-      }, remote.timeoutMs);
-    } else {
-      setState({ kind: 'pending' });
-      timer = setTimeout(() => {
-        timer = null;
-        if (pending()) {
-          setPending(null);
-          setState({ kind: 'timeout' });
-        }
-      }, opts.timeoutMs ?? COMMAND_RESULT_TIMEOUT_MS);
-    }
-    send();
+    const arm = () => {
+      clearTimer();
+      if (remote) {
+        timer = setTimeout(() => {
+          timer = null;
+          if (pending() && pendingEngineConfirm()) { arm(); return; }
+          if (pending()) {
+            setPending(null);
+            setState({
+              kind: 'error',
+              message: `No confirmation from ${remote.engineLabel} after ${formatWait(remote.timeoutMs)}. Check History on ${remote.engineLabel}.`,
+            });
+          }
+        }, remote.timeoutMs);
+      } else {
+        timer = setTimeout(() => {
+          timer = null;
+          if (pending() && pendingEngineConfirm()) { arm(); return; }
+          if (pending()) {
+            setPending(null);
+            setState({ kind: 'timeout' });
+          }
+        }, opts.timeoutMs ?? COMMAND_RESULT_TIMEOUT_MS);
+      }
+    };
+    // Neutral until confirmed; red only on a real error or the long timeout.
+    setState(remote ? { kind: 'sent', engine: remote.engineLabel } : { kind: 'pending' });
+    arm();
+    const sent = send();
+    if (!sent || typeof (sent as Promise<SendResult>).then !== 'function') return;
+    void (sent as Promise<SendResult>).then((r) => {
+      if (gen !== generation || !pending()) return;
+      if (r && r.kind !== 'accepted') {
+        clearTimer();
+        setPending(null);
+        setState(r.kind === 'cancelled' ? { kind: 'idle' } : { kind: 'error', message: sendResultMessage(r) });
+        return;
+      }
+      const seq = r && r.kind === 'accepted' ? r.seq : null;
+      if (seq === null) return;
+      setPending((prev) => (prev ? { ...prev, seq } : prev));
+      // A signed command was accepted now: the wait for its trace starts here.
+      arm();
+    });
   };
 
   const reset = () => {
+    generation++;
     clearTimer();
     setPending(null);
     setState({ kind: 'idle' });

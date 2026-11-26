@@ -23,6 +23,10 @@ export const stripCommandPrefix = (message: string): string =>
   message.trim().replace(COMMAND_PREFIX_RE, '');
 
 const CLI_RE = /\busage:|\b(too many|insufficient) arguments\b|\bunknown command\b|<[a-z][\w|-]*>|\[[a-z-]+\]|\bat \S+\.(ts|js):\d+|\berrno\b/i;
+/** Stack frames, file URLs, shell failures and exit codes (#582 box retest). */
+const TRACE_RE = /\.m?[jt]s:\d+(:\d+)?\b|\bfile:\/\/|\bcommand not found\b|\bexit code:? ?\d+/i;
+/** Node fs errors with the errno code already dropped: `permission denied, mkdir '<path>'` (#582 pool proof). */
+const FS_CALL_RE = /\b(permission denied|no such file or directory|file already exists|operation not permitted|no space left on device|read-only file system|directory not empty|resource busy or locked), (open|mkdir|rmdir|rename|unlink|scandir|stat|lstat|copyfile|access|chmod|chown|symlink|readdir|cp|rm)\b/i;
 /** errno names such as ENOENT, EACCES (case-sensitive). */
 const ERRNO_RE = /\bE(NOENT|ACCES|PERM|BUSY|EXIST|NOSPC|IO|INVAL|CONNREFUSED|TIMEDOUT)\b/;
 /** Quoted ids ('DISK_LIVE_BOOT') are names, not codes. */
@@ -32,7 +36,7 @@ const ANSI_RE = /\u001b\[[0-9;]*m/g;
 /** True when `text` would show CLI wording or an Engine code to a teacher. */
 export const looksLikeCli = (text: string): boolean => {
   const t = text.replace(QUOTED_RE, "''");
-  return FLAG_RE.test(t) || CODE_RE.test(t) || CLI_RE.test(t) || ERRNO_RE.test(t);
+  return FLAG_RE.test(t) || CODE_RE.test(t) || CLI_RE.test(t) || ERRNO_RE.test(t) || TRACE_RE.test(t) || FS_CALL_RE.test(t);
 };
 
 /**
@@ -40,8 +44,28 @@ export const looksLikeCli = (text: string): boolean => {
  * already plain (an optional `<command>: ` prefix and a leading `CODE:` are
  * dropped), otherwise GENERIC_ERROR_TEXT.
  */
-export const plainEngineText = (raw: string | null | undefined): string => {
-  const msg = stripCommandPrefix(String(raw ?? '').replace(ANSI_RE, ''));
+/** Resolves an Engine id to its hostname; null/undefined when unknown. */
+export type EngineNameOf = (engineId: string) => string | null | undefined;
+
+/** Neutral name for an Engine whose hostname is not known (never the raw id). */
+export const UNKNOWN_ENGINE_TEXT = 'another Engine';
+
+const ENGINE_ID_RE = /\b(Engines?\s+)?(ENGINE_[A-Za-z0-9_-]+)/g;
+
+/**
+ * Replace raw Engine ids (`ENGINE_…`) with hostnames from `engineName`, or with
+ * UNKNOWN_ENGINE_TEXT when the id is not known (console#265).
+ */
+export const withEngineNames = (text: string, engineName?: EngineNameOf): string => {
+  const out = text.replace(ENGINE_ID_RE, (_m, prefix: string | undefined, id: string) => {
+    const host = engineName?.(id);
+    return host ? `${prefix ?? ''}${host}` : UNKNOWN_ENGINE_TEXT;
+  });
+  return out.startsWith(UNKNOWN_ENGINE_TEXT) ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+};
+
+export const plainEngineText = (raw: string | null | undefined, engineName?: EngineNameOf): string => {
+  const msg = stripCommandPrefix(withEngineNames(String(raw ?? '').replace(ANSI_RE, ''), engineName));
   if (!msg) return GENERIC_ERROR_TEXT;
   const body = msg.replace(LEADING_CODE_RE, '').trim();
   if (!body || looksLikeCli(body) || /^[A-Z][A-Z0-9_]*$/.test(body)) return GENERIC_ERROR_TEXT;

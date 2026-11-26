@@ -3,6 +3,7 @@ import { sameIds } from '../store/sameIds';
 import { engineLiveness } from '../store/signals';
 import { liveNow } from '../store/live';
 import { ejectDisk, rebootEngine } from '../store/commands';
+import { commandGateForId } from '../store/commandRouter';
 import { isDiskLocked } from '../store/operations';
 import { EJECT_TIMEOUT_MS, findEjectOutcome, traceIdSnapshot } from '../store/ejectResult';
 import { clearEjectCommandResult, publishEjectCommandResult } from '../store/ejectCommandResult';
@@ -20,6 +21,12 @@ import { candidateForStick, stickForCandidate } from '../store/usbSticks';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
 import { plainEngineText } from '../store/plainError';
+
+/** Why commands to this Engine are switched off (#582), or null. */
+const gateMessage = (engineId: string | null | undefined): string | null => {
+  const g = commandGateForId(engineId);
+  return g.ok ? null : g.message;
+};
 
 // Eject rule and role badges live in ../store/diskRoles (idea#132).
 export { canEject };
@@ -168,7 +175,8 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                 <button
                   class="tree-item__reboot-btn"
                   data-testid={`reboot-engine-${engineId}`}
-                  title={`Reboot ${engine()?.hostname}`}
+                  disabled={!commandGateForId(engineId).ok}
+                  title={gateMessage(engineId) ?? `Reboot ${engine()?.hostname}`}
                   aria-label={`Reboot engine ${engine()?.hostname}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -399,11 +407,11 @@ const NetworkTree: Component<NetworkTreeProps> = (props) => {
                           <button
                             class="tree-item__eject-btn"
                             data-testid={`eject-${diskId}`}
-                            disabled={isDiskLocked(props.store(), diskId)}
+                            disabled={isDiskLocked(props.store(), diskId) || !!gateMessage(engineId)}
                             title={
-                              isDiskLocked(props.store(), diskId)
+                              gateMessage(engineId) ?? (isDiskLocked(props.store(), diskId)
                                 ? 'Operation in progress — cannot eject'
-                                : `Eject ${disk()?.name}`
+                                : `Eject ${disk()?.name}`)
                             }
                             aria-label={`Eject disk ${disk()?.name}`}
                             onClick={(e) => {

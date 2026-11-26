@@ -1,5 +1,7 @@
-import { createSignal, type Component } from 'solid-js';
-import { createOperator } from '../store/auth';
+import { createSignal, Show, type Component } from 'solid-js';
+import { createOperator, engineDisplayName } from '../store/auth';
+import { isEngineAuth, pageAuthEngineId } from '../store/authMode';
+import EngineSetupForm from './EngineSetupForm';
 import type { Store, User } from '../types/store';
 import type { StoreConnection } from '../mock/mockStore';
 
@@ -55,58 +57,73 @@ const FirstTimeSetup: Component<FirstTimeSetupProps> = (props) => {
     <div class="first-time-setup" data-testid="first-time-setup">
       <div class="first-time-setup__card">
         <h1 class="first-time-setup__title">Welcome to IDEA Console</h1>
-        <p class="first-time-setup__subtitle">
-          Create the first operator account to get started.
-        </p>
-
-        <form class="modal__form" data-testid="first-time-setup-form" onSubmit={handleSubmit}>
-          <label class="form-field">
-            <span class="form-field__label">Username</span>
-            <input
-              class="form-field__input"
-              type="text"
-              autocomplete="username"
-              value={username()}
-              onInput={(e) => setUsername(e.currentTarget.value)}
-              required
+        <Show
+          when={isEngineAuth() && pageAuthEngineId()}
+          fallback={
+            <p class="first-time-setup__subtitle">
+              Create the first operator account to get started.
+            </p>
+          }
+        >
+          {(engineId) => (
+            <EngineSetupForm
+              engineId={engineId()}
+              engineName={engineDisplayName(props.store, engineId())}
+              store={props.store}
             />
-          </label>
+          )}
+        </Show>
 
-          <label class="form-field">
-            <span class="form-field__label">Password</span>
-            <input
-              class="form-field__input"
-              type="password"
-              autocomplete="new-password"
-              value={password()}
-              onInput={(e) => setPassword(e.currentTarget.value)}
-              required
-              minLength={8}
-            />
-          </label>
+        <Show when={!isEngineAuth()}>
+          <form class="modal__form" data-testid="first-time-setup-form" onSubmit={handleSubmit}>
+            <label class="form-field">
+              <span class="form-field__label">Username</span>
+              <input
+                class="form-field__input"
+                type="text"
+                autocomplete="username"
+                value={username()}
+                onInput={(e) => setUsername(e.currentTarget.value)}
+                required
+              />
+            </label>
 
-          <label class="form-field">
-            <span class="form-field__label">Confirm Password</span>
-            <input
-              class="form-field__input"
-              type="password"
-              autocomplete="new-password"
-              value={confirm()}
-              onInput={(e) => setConfirm(e.currentTarget.value)}
-              required
-            />
-          </label>
+            <label class="form-field">
+              <span class="form-field__label">Password</span>
+              <input
+                class="form-field__input"
+                type="password"
+                autocomplete="new-password"
+                value={password()}
+                onInput={(e) => setPassword(e.currentTarget.value)}
+                required
+                minLength={8}
+              />
+            </label>
 
-          {error() && <p class="form-error">{error()}</p>}
+            <label class="form-field">
+              <span class="form-field__label">Confirm Password</span>
+              <input
+                class="form-field__input"
+                type="password"
+                autocomplete="new-password"
+                value={confirm()}
+                onInput={(e) => setConfirm(e.currentTarget.value)}
+                required
+              />
+            </label>
 
-          <button
-            class="btn btn--primary"
-            type="submit"
-            disabled={loading()}
-          >
-            {loading() ? 'Creating account…' : 'Create account'}
-          </button>
-        </form>
+            {error() && <p class="form-error">{error()}</p>}
+
+            <button
+              class="btn btn--primary"
+              type="submit"
+              disabled={loading()}
+            >
+              {loading() ? 'Creating account…' : 'Create account'}
+            </button>
+          </form>
+        </Show>
       </div>
     </div>
   );
