@@ -27,7 +27,6 @@ import { getActiveOpsForInstance, isInstanceLocked } from '../store/operations';
 import { parkedMoveStatusText, sourceStoppedMoveFor, SOURCE_STOPPED_HINT } from '../store/parkedMove';
 import { buildAppUrl, appHostContextFor, appEngineStatus, connectingAppHint, offlineAppHint } from '../store/appUrl';
 import type { Instance, App, Engine, Disk, DockerMetrics, Store, Operation, OperationKind } from '../types/store';
-import type { Status } from '../types/store';
 import type { CommandLogStore, CommandTrace } from '../types/commandLog';
 import type { DragAppData } from '../types/drag';
 import { DRAG_TYPE } from '../types/drag';
@@ -41,6 +40,7 @@ import {
   engineShowsBackupStatus,
   instanceBackupStatusLines,
 } from '../store/backupStatus';
+import { isBackupDisabled, isStartDisabled, isStopDisabled } from '../store/instanceActions';
 
 interface InstanceRowProps {
   instance:         () => Instance | undefined;
@@ -119,18 +119,6 @@ const formatBytes = (bytes: number | null): string => {
 const formatPercent = (p: number | null): string =>
   p == null ? '-' : `${p.toFixed(2)}%`;
 
-/** Returns true when the Start button should be disabled. */
-export const isStartDisabled = (status: Status): boolean =>
-  status === 'Running' || status === 'Starting';
-
-/** Returns true when the Backup button should be disabled. */
-export const isBackupDisabled = (status: Status): boolean =>
-  status !== 'Running';
-
-/** Returns true when the Stop button should be disabled. */
-export const isStopDisabled = (status: Status): boolean =>
-  status === 'Stopped' || status === 'Docked' || status === 'Undocked';
-
 // ---------------------------------------------------------------------------
 // Operation progress helpers
 // ---------------------------------------------------------------------------
@@ -161,6 +149,8 @@ interface MetricsPanelProps {
   stale?: () => boolean;
   /** Console-clock time the live sample arrived, for the stale note. */
   receivedAt?: () => number | null;
+  /** True when the instance is Running or Starting: missing metrics means no sample yet, not that the app is stopped. */
+  waiting?: () => boolean;
 }
 
 export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
@@ -176,8 +166,8 @@ export const DockerMetricsPanel: Component<MetricsPanelProps> = (props) => {
       <Show
         when={m() != null}
         fallback={
-          <p class="docker-metrics__unavailable">
-            No metrics - app is not running.
+          <p class="docker-metrics__unavailable" data-testid="docker-metrics-unavailable">
+            {props.waiting?.() ? 'No metrics yet.' : 'No metrics - app is not running.'}
           </p>
         }
       >
@@ -818,6 +808,10 @@ const InstanceRow: Component<InstanceRowProps> = (props) => {
             metrics={() => metricsFor(props.instance(), live(), liveNow()).metrics}
             stale={() => metricsFor(props.instance(), live(), liveNow()).stale}
             receivedAt={() => metricsFor(props.instance(), live(), liveNow()).receivedAt}
+            waiting={() => {
+              const status = props.instance()?.status;
+              return status === 'Running' || status === 'Starting';
+            }}
           />
         </div>
       </Show>
