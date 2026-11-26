@@ -97,3 +97,14 @@ describe('plainEngineText hides stack traces and shell failures (#582 box retest
     expect(plainEngineText('The disk was removed before the erase finished.')).toBe('The disk was removed before the erase finished.');
   });
 });
+
+describe('plainEngineText hides Node fs errors (#582 pool proof)', () => {
+  it('maps a failed Restore mkdir to the generic text', () => {
+    expect(plainEngineText("permission denied, mkdir '/disks/sdb3/instances'")).toBe(GENERIC_ERROR_TEXT);
+    expect(plainEngineText("EACCES: permission denied, mkdir '/disks/sdb3/instances'")).toBe(GENERIC_ERROR_TEXT);
+    expect(plainEngineText("no such file or directory, open '/disks/sdb1/META.yaml'")).toBe(GENERIC_ERROR_TEXT);
+  });
+  it('keeps plain sentences that mention permission', () => {
+    expect(plainEngineText('Permission from idea03 expired. Start again.')).toBe('Permission from idea03 expired. Start again.');
+  });
+});
